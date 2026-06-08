@@ -124,10 +124,10 @@ SELF-SUFFICIENCY:
 - Only escalate when you genuinely don't know the answer and can't derive it from your context.
 
 ESCALATION — when you truly don't know something:
-- Say naturally: "Good question — let me check that detail for you, I'll get back to you shortly."
-- Do NOT mention teams, staff, guides, or other people.
-- Do NOT give a phone number or redirect.
+- Tell the customer naturally, IN THEIR EXACT LANGUAGE, that you're checking on that and will get back to them shortly. Do NOT use English if they wrote in Spanish, French, etc.
+- Do NOT mention teams, staff, guides, or other people. Do NOT give a phone number.
 - Just set [INTENT:escalate] — the system handles the rest silently.
+- EXCEPTION — "the link/URL doesn't work": never escalate for this. Resend the raw URL as plain text on its own line and tell them to copy-paste it in their browser.
 
 CLOSING A BOOKING:
 - When you have: tour, package, number of riders, and approximate dates → send the Stripe link. Full stop.
@@ -337,4 +337,9 @@ app.post("/webhook", async (req, res) => {
 app.get("/", (req, res) => res.send(`${PROJECT_NAME || "Bot"} activo ✅`));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`[${PROJECT_NAME}] Bot escuchando en puerto ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`[${PROJECT_NAME}] Bot escuchando en puerto ${PORT}`);
+  console.log(`[${PROJECT_NAME}] OWNER_PHONE: ${OWNER_PHONE ? normalizePhone(OWNER_PHONE) : "⚠️  NO CONFIGURADO"}`);
+  console.log(`[${PROJECT_NAME}] SHEET_ID: ${SHEET_ID ? SHEET_ID.slice(0, 10) + "..." : "⚠️  NO CONFIGURADO"}`);
+  console.log(`[${PROJECT_NAME}] Redis: ${redisClient ? "conectado" : "RAM fallback"}`);
+});
