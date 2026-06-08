@@ -3,23 +3,24 @@ import Anthropic from "@anthropic-ai/sdk";
 import { google } from "googleapis";
 import axios from "axios";
 import fs from "fs";
+import { createClient } from "redis";
 
 const app = express();
 app.use(express.json());
 
 // ─── CONFIGURACIÓN (variables de entorno — distintas por proyecto) ──
 const {
-  PROJECT_NAME,             // "B2K" o "Sumba Rental" — solo para logs
-  WHATSAPP_TOKEN,           // Access token permanente de Meta
-  WHATSAPP_PHONE_ID,        // ID del número de teléfono
-  WHATSAPP_VERIFY_TOKEN,    // texto secreto que tú inventas
-  ANTHROPIC_API_KEY,        // sk-ant-...
-  GOOGLE_CREDENTIALS,       // JSON de credenciales (string)
-  GOOGLE_TOKEN,             // JSON del token (string)
-  SHEET_ID,                 // ID del Google Sheet del CRM
-  OWNER_PHONE,              // tu número para avisos de reserva
-  BOT_CONTEXT,              // EL CONTEXTO DEL NEGOCIO (system prompt)
-  BOT_MODEL,                // modelo de Claude (opcional)
+  PROJECT_NAME,               // "B2K" o "Sumba Rental" — solo para logs
+  WHATSAPP_TOKEN,             // Access token permanente de Meta
+  WHATSAPP_PHONE_ID,          // ID del número de teléfono
+  WHATSAPP_VERIFY_TOKEN,      // texto secreto que tú inventas
+  ANTHROPIC_API_KEY,          // sk-ant-...
+  GOOGLE_SERVICE_ACCOUNT,     // JSON de service account (string)
+  SHEET_ID,                   // ID del Google Sheet del CRM
+  OWNER_PHONE,                // tu número para avisos de reserva
+  BOT_CONTEXT,                // fallback si no existe context.md
+  BOT_MODEL,                  // modelo de Claude (opcional)
+  REDIS_URL,                  // URL de Redis (Railway lo inyecta automáticamente)
 } = process.env;
 
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
@@ -30,9 +31,25 @@ const CONTEXT = fs.existsSync("context.md")
   ? fs.readFileSync("context.md", "utf8")
   : BOT_CONTEXT;
 
+// ─── REDIS (memoria persistente de conversaciones) ────────────────
+const redis = createClient({ url: REDIS_URL });
+redis.on("error", (e) => console.error(`[${PROJECT_NAME}] Redis error:`, e.message));
+await redis.connect();
+console.log(`[${PROJECT_NAME}] Redis conectado`);
+
+const CONV_TTL = 7 * 24 * 60 * 60; // 7 días en segundos
+
+async function getConversation(phone) {
+  const data = await redis.get(`conv:${phone}`);
+  return data ? JSON.parse(data) : [];
+}
+
+async function saveConversation(phone, messages) {
+  const trimmed = messages.slice(-20); // máximo 20 mensajes por conversación
+  await redis.setEx(`conv:${phone}`, CONV_TTL, JSON.stringify(trimmed));
+}
+
 // ─── INSTRUCCIONES BASE (iguales para todos los bots) ─────────────
-// El contexto específico del negocio viene de BOT_CONTEXT.
-// Estas instrucciones de comportamiento son universales.
 const BASE_INSTRUCTIONS = `
 CHANNEL AWARENESS (critical):
 - You are inside WhatsApp. The customer is ALREADY talking to you here.
@@ -84,16 +101,13 @@ function buildSystemPrompt() {
   return `${CONTEXT}\n\n${BASE_INSTRUCTIONS}`;
 }
 
-// ─── MEMORIA DE CONVERSACIONES (en RAM, por número) ───────────────
-const conversations = {};
-
-// ─── GOOGLE SHEETS (CRM) ──────────────────────────────────────────
+// ─── GOOGLE SHEETS (CRM) — Service Account ────────────────────────
 async function getSheetsClient() {
-  const credentials = JSON.parse(GOOGLE_CREDENTIALS);
-  const token = JSON.parse(GOOGLE_TOKEN);
-  const { client_secret, client_id } = credentials.installed;
-  const auth = new google.auth.OAuth2(client_id, client_secret, "http://localhost:3000");
-  auth.setCredentials(token);
+  const credentials = JSON.parse(GOOGLE_SERVICE_ACCOUNT);
+  const auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  });
   return google.sheets({ version: "v4", auth });
 }
 
@@ -195,17 +209,14 @@ app.post("/webhook", async (req, res) => {
     const text = message.text.body;
     const profileName = change.value.contacts?.[0]?.profile?.name || "";
 
-    if (!conversations[from]) conversations[from] = [];
-    conversations[from].push({ role: "user", content: text });
-    if (conversations[from].length > 10) {
-      conversations[from] = conversations[from].slice(-10);
-    }
+    const history = await getConversation(from);
+    history.push({ role: "user", content: text });
 
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 500,
       system: buildSystemPrompt(),
-      messages: conversations[from],
+      messages: history,
     });
 
     let reply = response.content[0].text;
@@ -213,7 +224,8 @@ app.post("/webhook", async (req, res) => {
     const intent = intentMatch ? intentMatch[1] : "exploring";
     reply = reply.replace(/\[INTENT:\w+\]/g, "").trim();
 
-    conversations[from].push({ role: "assistant", content: reply });
+    history.push({ role: "assistant", content: reply });
+    await saveConversation(from, history);
 
     await sendWhatsApp(from, reply);
     await saveLead(from, profileName, text, intent);
