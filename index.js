@@ -4,6 +4,7 @@ import { google } from "googleapis";
 import axios from "axios";
 import fs from "fs";
 import { createClient } from "redis";
+import Stripe from "stripe";
 
 const app = express();
 app.use(express.json());
@@ -21,7 +22,12 @@ const {
   BOT_CONTEXT,
   BOT_MODEL,
   REDIS_URL,
+  STRIPE_SECRET_KEY,
+  STRIPE_SUCCESS_URL,
+  STRIPE_CANCEL_URL,
 } = process.env;
+
+const stripeClient = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 const MODEL = BOT_MODEL || "claude-sonnet-4-6";
@@ -136,13 +142,17 @@ CLOSING A BOOKING:
 - Do NOT say "I'll check availability", "confirm with the team", or anything similar before sending the link.
 - If you have a concern about very short-notice dates, use [INTENT:escalate] silently — never say "contact the team".
 
-INTENT TAGGING (critical):
-At the very end of your response, on a NEW LINE, add ONE of these tags:
+INTENT AND RIDERS TAGGING (critical):
+At the very end of your response, on a NEW LINE, add ONE intent tag:
 [INTENT:exploring] — just asking general questions, not yet committed
 [INTENT:interested] — showing real interest in a specific tour/package
 [INTENT:booking] — wants to reserve, pay, or commit now
 [INTENT:escalate] — you genuinely don't know the answer and cannot derive it from your context
-This tag is stripped before sending. NEVER mention it or explain it to the customer.
+
+When intent is booking AND you know the total number of riders, also add on the same line:
+[RIDERS:N] — where N is the total number of riders (e.g. [RIDERS:4])
+When you output [RIDERS:N], do NOT include any Stripe URL in your message — the system appends the payment link automatically.
+All tags are stripped before sending. NEVER mention them to the customer.
 `;
 
 function buildSystemPrompt() {
@@ -205,6 +215,35 @@ async function saveLead(phone, name, lastMessage, intent) {
   } catch (e) {
     const detail = e.errors ? JSON.stringify(e.errors) : e.message;
     console.error(`[${PROJECT_NAME}] Error guardando lead — HTTP ${e.code || '?'}: ${detail}`);
+  }
+}
+
+// ─── STRIPE CHECKOUT SESSION ─────────────────────────────────────
+async function createStripeSession(numRiders) {
+  if (!stripeClient) return null;
+  try {
+    const session = await stripeClient.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [{
+        price_data: {
+          currency: "usd",
+          product_data: {
+            name: `${PROJECT_NAME || "Tour"} — Booking Deposit`,
+            description: `$1,000 deposit × ${numRiders} rider${numRiders > 1 ? "s" : ""}`,
+          },
+          unit_amount: 100000, // $1,000 in cents
+        },
+        quantity: numRiders,
+      }],
+      mode: "payment",
+      success_url: STRIPE_SUCCESS_URL || "https://balimotoadventures.com/?booking=confirmed",
+      cancel_url: STRIPE_CANCEL_URL || "https://balimotoadventures.com/",
+    });
+    console.log(`[${PROJECT_NAME}] Stripe session: ${numRiders} riders → $${numRiders * 1000}`);
+    return session.url;
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] Stripe session error:`, e.message);
+    return null;
   }
 }
 
@@ -301,10 +340,19 @@ app.post("/webhook", async (req, res) => {
     let reply = response.content[0].text;
     const intentMatch = reply.match(/\[INTENT:(\w+)\]/);
     const intent = intentMatch ? intentMatch[1] : "exploring";
-    reply = reply.replace(/\[INTENT:\w+\]/g, "").trim();
+    const ridersMatch = reply.match(/\[RIDERS:(\d+)\]/);
+    const numRiders = ridersMatch ? parseInt(ridersMatch[1]) : null;
+    reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").trim();
     // Strip markdown that WhatsApp sends literally (breaks URLs)
     reply = reply.replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1"); // **URL** → URL
     reply = reply.replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
+
+    // ── Stripe checkout session dinámica ──────────────────────────
+    if (numRiders && stripeClient) {
+      reply = reply.replace(/https?:\/\/book\.stripe\.com\/[^\s]*/g, "").trim();
+      const sessionUrl = await createStripeSession(numRiders);
+      if (sessionUrl) reply = reply + "\n\n" + sessionUrl;
+    }
 
     history.push({ role: "assistant", content: reply });
     await saveConversation(from, history);
