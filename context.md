@@ -77,7 +77,9 @@ INSURANCE & DEPOSIT (mandatory — one of the two is required):
 
 BOOKING PROCESS:
 - Booking deposit to hold the spot: EUR 1,000 PER PERSON (e.g. 4 people = EUR 4,000 deposit)
-- Stripe link (send when lead is ready to book): https://book.stripe.com/7sY9AS9rL59y4xQ30V0ZW00
+- Stripe link: https://book.stripe.com/7sY9AS9rL59y4xQ30V0ZW00?prefilled_quantity=N
+  Replace N with the total number of riders (e.g. 4 people → ?prefilled_quantity=4)
+  Always include the quantity parameter — never send the base URL without it.
 - Wise transfer codes: B2K-ROUNDTRIP / B2K-EXTREME / B2K-DELUXE / 7ISL-BIKE2 / 7ISL-BIKE1 / 7ISL-CARSELF / 7ISL-CARDRIVER
 - Balance due 60 days before departure
 - You can close the booking yourself — once you have tour, package, riders, and dates, send the Stripe link. Do NOT wait for human confirmation.
