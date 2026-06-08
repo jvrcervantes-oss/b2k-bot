@@ -32,21 +32,35 @@ const CONTEXT = fs.existsSync("context.md")
   : BOT_CONTEXT;
 
 // ─── REDIS (memoria persistente de conversaciones) ────────────────
-const redis = createClient({ url: REDIS_URL });
-redis.on("error", (e) => console.error(`[${PROJECT_NAME}] Redis error:`, e.message));
-await redis.connect();
-console.log(`[${PROJECT_NAME}] Redis conectado`);
-
 const CONV_TTL = 7 * 24 * 60 * 60; // 7 días en segundos
+const fallbackMemory = {}; // RAM fallback si Redis no está disponible
+let redisClient = null;
+
+try {
+  redisClient = createClient({ url: REDIS_URL });
+  redisClient.on("error", (e) => console.error(`[${PROJECT_NAME}] Redis error:`, e.message));
+  await redisClient.connect();
+  console.log(`[${PROJECT_NAME}] Redis conectado`);
+} catch (e) {
+  console.warn(`[${PROJECT_NAME}] Redis no disponible, usando memoria RAM:`, e.message);
+  redisClient = null;
+}
 
 async function getConversation(phone) {
-  const data = await redis.get(`conv:${phone}`);
-  return data ? JSON.parse(data) : [];
+  if (redisClient) {
+    const data = await redisClient.get(`conv:${phone}`);
+    return data ? JSON.parse(data) : [];
+  }
+  return fallbackMemory[phone] || [];
 }
 
 async function saveConversation(phone, messages) {
-  const trimmed = messages.slice(-20); // máximo 20 mensajes por conversación
-  await redis.setEx(`conv:${phone}`, CONV_TTL, JSON.stringify(trimmed));
+  const trimmed = messages.slice(-20);
+  if (redisClient) {
+    await redisClient.setEx(`conv:${phone}`, CONV_TTL, JSON.stringify(trimmed));
+  } else {
+    fallbackMemory[phone] = trimmed;
+  }
 }
 
 // ─── INSTRUCCIONES BASE (iguales para todos los bots) ─────────────
