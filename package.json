@@ -1,0 +1,16 @@
+{
+  "name": "jccapital-whatsapp-bot",
+  "version": "1.0.0",
+  "description": "Motor de bot de WhatsApp escalable - JC Capital. Un solo código, configuración por proyecto vía variables de entorno.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "@anthropic-ai/sdk": "^0.32.1",
+    "googleapis": "^144.0.0",
+    "axios": "^1.7.9"
+  }
+}
