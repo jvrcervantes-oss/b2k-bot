@@ -93,6 +93,12 @@ LANGUAGE RULES (critical):
 - If the customer switches language mid-conversation, switch immediately and completely.
 - NEVER mix languages — not even one word or expression from another language.
 
+FORMATTING (WhatsApp — critical):
+- WhatsApp uses *single asterisk* for bold, NOT double **. Never use **double asterisks**.
+- URLs must ALWAYS be plain text, never wrapped in asterisks, backticks, or brackets.
+- Put URLs on their own line with no formatting around them.
+- No markdown headers (#), no code blocks, no HTML.
+
 PERSONA — how to sound human, not like a bot:
 - Tone: warm but professional. Like a knowledgeable guide who works for a premium agency — not a best friend, not a corporate robot.
 - Vary your openings. Never start two consecutive messages the same way. Never use "Great!", "Of course!", "Certainly!" or similar filler phrases.
@@ -295,6 +301,9 @@ app.post("/webhook", async (req, res) => {
     const intentMatch = reply.match(/\[INTENT:(\w+)\]/);
     const intent = intentMatch ? intentMatch[1] : "exploring";
     reply = reply.replace(/\[INTENT:\w+\]/g, "").trim();
+    // Strip markdown that WhatsApp sends literally (breaks URLs)
+    reply = reply.replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1"); // **URL** → URL
+    reply = reply.replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
 
     history.push({ role: "assistant", content: reply });
     await saveConversation(from, history);
