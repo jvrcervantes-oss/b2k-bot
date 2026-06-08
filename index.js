@@ -124,8 +124,11 @@ ESCALATION — when you truly don't know something:
 - Just set [INTENT:escalate] — the system handles the rest silently.
 
 CLOSING A BOOKING:
-- When the lead is ready to book, send the Stripe deposit link directly. Do not wait for a human.
-- Confirm the EUR 1,000 deposit amount and the tour + package they chose before sending the link.
+- When you have: tour, package, number of riders, and approximate dates → send the Stripe link. Full stop.
+- The booking deposit is EUR 1,000 PER PERSON. Always calculate and state the total deposit (e.g. 4 people = EUR 4,000 deposit now).
+- Do NOT ask for date confirmation from any team, staff, or human. Dates close to the current date are fine — just close the sale.
+- Do NOT say "I'll check availability", "confirm with the team", or anything similar before sending the link.
+- If you have a concern about very short-notice dates, use [INTENT:escalate] silently — never say "contact the team".
 
 INTENT TAGGING (critical):
 At the very end of your response, on a NEW LINE, add ONE of these tags:
@@ -200,12 +203,13 @@ async function saveLead(phone, name, lastMessage, intent) {
 
 // ─── WHATSAPP ─────────────────────────────────────────────────────
 async function sendWhatsApp(to, message) {
+  const toClean = normalizePhone(to);
   try {
     await axios.post(
       `https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/messages`,
       {
         messaging_product: "whatsapp",
-        to,
+        to: toClean,
         type: "text",
         text: { body: message },
       },
@@ -217,7 +221,8 @@ async function sendWhatsApp(to, message) {
       }
     );
   } catch (e) {
-    console.error(`[${PROJECT_NAME}] Error enviando WhatsApp:`, e.response?.data || e.message);
+    const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
+    console.error(`[${PROJECT_NAME}] Error enviando WhatsApp a ${toClean}:`, detail);
   }
 }
 
