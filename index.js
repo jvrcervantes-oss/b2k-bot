@@ -203,7 +203,8 @@ async function saveLead(phone, name, lastMessage, intent) {
       });
     }
   } catch (e) {
-    console.error(`[${PROJECT_NAME}] Error guardando lead:`, e.message);
+    const detail = e.errors ? JSON.stringify(e.errors) : e.message;
+    console.error(`[${PROJECT_NAME}] Error guardando lead — HTTP ${e.code || '?'}: ${detail}`);
   }
 }
 
@@ -337,9 +338,22 @@ app.post("/webhook", async (req, res) => {
 app.get("/", (req, res) => res.send(`${PROJECT_NAME || "Bot"} activo ✅`));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`[${PROJECT_NAME}] Bot escuchando en puerto ${PORT}`);
   console.log(`[${PROJECT_NAME}] OWNER_PHONE: ${OWNER_PHONE ? normalizePhone(OWNER_PHONE) : "⚠️  NO CONFIGURADO"}`);
   console.log(`[${PROJECT_NAME}] SHEET_ID: ${SHEET_ID ? SHEET_ID.slice(0, 10) + "..." : "⚠️  NO CONFIGURADO"}`);
   console.log(`[${PROJECT_NAME}] Redis: ${redisClient ? "conectado" : "RAM fallback"}`);
+
+  // Test Google Sheets connection at startup
+  if (SHEET_ID && GOOGLE_SERVICE_ACCOUNT) {
+    try {
+      const sheets = await getSheetsClient();
+      await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
+      console.log(`[${PROJECT_NAME}] Google Sheets: ✅ conectado`);
+    } catch (e) {
+      console.error(`[${PROJECT_NAME}] Google Sheets: ❌ HTTP ${e.code || '?'} — ${e.message}`);
+    }
+  } else {
+    console.warn(`[${PROJECT_NAME}] Google Sheets: ⚠️  SHEET_ID o GOOGLE_SERVICE_ACCOUNT no configurados`);
+  }
 });
