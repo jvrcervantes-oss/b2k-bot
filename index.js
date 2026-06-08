@@ -2,6 +2,7 @@ import express from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { google } from "googleapis";
 import axios from "axios";
+import fs from "fs";
 
 const app = express();
 app.use(express.json());
@@ -23,6 +24,11 @@ const {
 
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 const MODEL = BOT_MODEL || "claude-sonnet-4-6";
+
+// Lee el contexto desde context.md si existe; si no, usa la variable de entorno
+const CONTEXT = fs.existsSync("context.md")
+  ? fs.readFileSync("context.md", "utf8")
+  : BOT_CONTEXT;
 
 // ─── INSTRUCCIONES BASE (iguales para todos los bots) ─────────────
 // El contexto específico del negocio viene de BOT_CONTEXT.
@@ -56,7 +62,7 @@ This tag is removed before sending. NEVER mention it or explain it to the custom
 `;
 
 function buildSystemPrompt() {
-  return `${BOT_CONTEXT}\n\n${BASE_INSTRUCTIONS}`;
+  return `${CONTEXT}\n\n${BASE_INSTRUCTIONS}`;
 }
 
 // ─── MEMORIA DE CONVERSACIONES (en RAM, por número) ───────────────
