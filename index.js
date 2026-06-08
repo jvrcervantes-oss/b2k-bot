@@ -10,30 +10,30 @@ app.use(express.json());
 
 // ─── CONFIGURACIÓN (variables de entorno — distintas por proyecto) ──
 const {
-  PROJECT_NAME,               // "B2K" o "Sumba Rental" — solo para logs
-  WHATSAPP_TOKEN,             // Access token permanente de Meta
-  WHATSAPP_PHONE_ID,          // ID del número de teléfono
-  WHATSAPP_VERIFY_TOKEN,      // texto secreto que tú inventas
-  ANTHROPIC_API_KEY,          // sk-ant-...
-  GOOGLE_SERVICE_ACCOUNT,     // JSON de service account (string)
-  SHEET_ID,                   // ID del Google Sheet del CRM
-  OWNER_PHONE,                // tu número para avisos de reserva
-  BOT_CONTEXT,                // fallback si no existe context.md
-  BOT_MODEL,                  // modelo de Claude (opcional)
-  REDIS_URL,                  // URL de Redis (Railway lo inyecta automáticamente)
+  PROJECT_NAME,
+  WHATSAPP_TOKEN,
+  WHATSAPP_PHONE_ID,
+  WHATSAPP_VERIFY_TOKEN,
+  ANTHROPIC_API_KEY,
+  GOOGLE_SERVICE_ACCOUNT,
+  SHEET_ID,
+  OWNER_PHONE,
+  BOT_CONTEXT,
+  BOT_MODEL,
+  REDIS_URL,
 } = process.env;
 
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 const MODEL = BOT_MODEL || "claude-sonnet-4-6";
 
-// Lee el contexto desde context.md si existe; si no, usa la variable de entorno
 const CONTEXT = fs.existsSync("context.md")
   ? fs.readFileSync("context.md", "utf8")
   : BOT_CONTEXT;
 
-// ─── REDIS (memoria persistente de conversaciones) ────────────────
-const CONV_TTL = 7 * 24 * 60 * 60; // 7 días en segundos
-const fallbackMemory = {}; // RAM fallback si Redis no está disponible
+// ─── REDIS ────────────────────────────────────────────────────────
+const CONV_TTL = 7 * 24 * 60 * 60;
+const fallbackMemory = {};
+const fallbackEscQueue = [];
 let redisClient = null;
 
 try {
@@ -63,13 +63,30 @@ async function saveConversation(phone, messages) {
   }
 }
 
-// ─── INSTRUCCIONES BASE (iguales para todos los bots) ─────────────
+async function escPush(customerPhone, customerName, question) {
+  const entry = JSON.stringify({ customerPhone, customerName, question });
+  if (redisClient) {
+    await redisClient.lPush("esc_queue", entry);
+  } else {
+    fallbackEscQueue.unshift(entry);
+  }
+}
+
+async function escPop() {
+  if (redisClient) {
+    const raw = await redisClient.rPop("esc_queue");
+    return raw ? JSON.parse(raw) : null;
+  }
+  const raw = fallbackEscQueue.pop();
+  return raw ? JSON.parse(raw) : null;
+}
+
+// ─── INSTRUCCIONES BASE ───────────────────────────────────────────
 const BASE_INSTRUCTIONS = `
 CHANNEL AWARENESS (critical):
 - You are inside WhatsApp. The customer is ALREADY talking to you here.
 - NEVER ask for their WhatsApp number — you already have it.
 - NEVER redirect them to WhatsApp, Instagram, or any other channel.
-- If you need to mention contact, say "reply here" or "let me know here".
 
 LANGUAGE RULES (critical):
 - Always respond in the EXACT language the customer writes in.
@@ -96,26 +113,34 @@ SALES FLOW — always follow this order before quoting a final price:
 
 SELF-SUFFICIENCY:
 - Answer all pricing, route, and logistics questions yourself using your context.
-- NEVER say "let me check with the team" for information you already have.
-- Only involve a human for: confirming specific date availability, or exceptional requests outside your context.
+- NEVER say "let me check with the team" or "I'll forward this to the team".
+- NEVER suggest contacting another number or channel.
+- Only escalate when you genuinely don't know the answer and can't derive it from your context.
+
+ESCALATION — when you truly don't know something:
+- Say naturally: "Good question — let me check that detail for you, I'll get back to you shortly."
+- Do NOT mention teams, staff, guides, or other people.
+- Do NOT give a phone number or redirect.
+- Just set [INTENT:escalate] — the system handles the rest silently.
 
 CLOSING A BOOKING:
 - When the lead is ready to book, send the Stripe deposit link directly. Do not wait for a human.
 - Confirm the EUR 1,000 deposit amount and the tour + package they chose before sending the link.
 
 INTENT TAGGING (critical):
-At the very end of your response, on a NEW LINE, add a hidden tag:
-[INTENT:exploring] — just asking general questions
-[INTENT:interested] — showing real interest in a specific product/tour
+At the very end of your response, on a NEW LINE, add ONE of these tags:
+[INTENT:exploring] — just asking general questions, not yet committed
+[INTENT:interested] — showing real interest in a specific tour/package
 [INTENT:booking] — wants to reserve, pay, or commit now
-This tag is removed before sending. NEVER mention it or explain it to the customer.
+[INTENT:escalate] — you genuinely don't know the answer and cannot derive it from your context
+This tag is stripped before sending. NEVER mention it or explain it to the customer.
 `;
 
 function buildSystemPrompt() {
   return `${CONTEXT}\n\n${BASE_INSTRUCTIONS}`;
 }
 
-// ─── GOOGLE SHEETS (CRM) — Service Account ────────────────────────
+// ─── GOOGLE SHEETS ────────────────────────────────────────────────
 async function getSheetsClient() {
   const credentials = JSON.parse(GOOGLE_SERVICE_ACCOUNT);
   const auth = new google.auth.GoogleAuth({
@@ -173,7 +198,7 @@ async function saveLead(phone, name, lastMessage, intent) {
   }
 }
 
-// ─── ENVIAR MENSAJE WHATSAPP ──────────────────────────────────────
+// ─── WHATSAPP ─────────────────────────────────────────────────────
 async function sendWhatsApp(to, message) {
   try {
     await axios.post(
@@ -194,6 +219,18 @@ async function sendWhatsApp(to, message) {
   } catch (e) {
     console.error(`[${PROJECT_NAME}] Error enviando WhatsApp:`, e.response?.data || e.message);
   }
+}
+
+function normalizePhone(p) {
+  return (p || "").replace(/\D/g, "");
+}
+
+function isOwner(from) {
+  if (!OWNER_PHONE) return false;
+  const ownerClean = normalizePhone(OWNER_PHONE);
+  const fromClean = normalizePhone(from);
+  // Compare last 9 digits (covers different country code formats)
+  return ownerClean.slice(-9) === fromClean.slice(-9);
 }
 
 // ─── WEBHOOK VERIFICATION ─────────────────────────────────────────
@@ -223,6 +260,22 @@ app.post("/webhook", async (req, res) => {
     const text = message.text.body;
     const profileName = change.value.contacts?.[0]?.profile?.name || "";
 
+    // ── Mensaje del dueño: reenviar al cliente pendiente ──────────
+    if (isOwner(from)) {
+      const pending = await escPop();
+      if (pending) {
+        console.log(`[${PROJECT_NAME}] Owner respondió escalación → reenviando a ${pending.customerName || pending.customerPhone}`);
+        await sendWhatsApp(
+          pending.customerPhone,
+          text
+        );
+      } else {
+        console.log(`[${PROJECT_NAME}] Mensaje del owner pero no hay escalaciones pendientes`);
+      }
+      return;
+    }
+
+    // ── Mensaje normal del cliente ────────────────────────────────
     const history = await getConversation(from);
     history.push({ role: "user", content: text });
 
@@ -244,10 +297,21 @@ app.post("/webhook", async (req, res) => {
     await sendWhatsApp(from, reply);
     await saveLead(from, profileName, text, intent);
 
+    // ── Escalación: notificar al dueño en silencio ────────────────
+    if (intent === "escalate" && OWNER_PHONE) {
+      await escPush(from, profileName, text);
+      await sendWhatsApp(
+        OWNER_PHONE,
+        `❓ ${PROJECT_NAME} — pregunta sin respuesta\n\n*${profileName || from}* pregunta:\n"${text}"\n\nResponde a este mensaje y se lo reenviaré.`
+      );
+      console.log(`[${PROJECT_NAME}] Escalación registrada — ${profileName || from}: "${text.slice(0, 60)}"`);
+    }
+
+    // ── Lead caliente: avisar al dueño ───────────────────────────
     if (intent === "booking" && OWNER_PHONE) {
       await sendWhatsApp(
         OWNER_PHONE,
-        `🔔 LEAD CALIENTE — ${PROJECT_NAME}\n\n${profileName || from} quiere reservar.\nÚltimo mensaje: "${text}"\n\nEntra a responderle personalmente.`
+        `🔔 LEAD CALIENTE — ${PROJECT_NAME}\n\n${profileName || from} quiere reservar.\nÚltimo mensaje: "${text}"`
       );
     }
   } catch (e) {
