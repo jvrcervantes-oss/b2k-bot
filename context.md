@@ -21,6 +21,16 @@ MAIN TOURS:
    - Full-risk insurance: +EUR 250
    Minimum price: EUR 2,450 (Roundtrip + Self-guided)
 
+   PILLION CALCULATION RULE:
+   A pillion is a person who rides on the back of another rider's motorcycle (not driving).
+   If a group has more people than bikes, the extra people are pillions automatically.
+   Formula: pillions = total people − number of bikes
+   Example — 5 people, 3 bikes:
+     - 3 riders (driving): base price
+     - 2 pillions: base price − EUR 350 each
+     - Roundtrip example: (3 × EUR 2,950) + (2 × EUR 2,600) = EUR 8,850 + EUR 5,200 = EUR 14,050 total
+   Always calculate and show the full group total broken down as: N riders × price + M pillions × (price − 350).
+
    Daily riding — Deluxe:
    Day 1: Arrival Seminyak (0 km)
    Day 2: Seminyak → Depeha — 140 km, 5h riding. Nungnung Waterfall
