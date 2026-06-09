@@ -10,11 +10,11 @@ MAIN TOURS:
 
 1. BALI TO KOMODO CHALLENGE — 12 days, 4 islands
    Route: Bali → Lombok → Sumbawa → Komodo
-   Packages:
-   - Roundtrip EUR 2,950 — best value, 1,440 km, returns to Bali by road
-   - Extreme EUR 3,650 — standard hotels, 1,826 km, hardest pace
-   - Deluxe EUR 3,950 — luxury hotels, 1,259 km, helicopter tour over Komodo, 3 massages, support car
-   Price modifiers (cumulative, apply to all packages):
+   Packages (prices are PER PERSON — always multiply by number of riders):
+   - Roundtrip EUR 2,950 per person — best value, 1,440 km, returns to Bali by road
+   - Extreme EUR 3,650 per person — standard hotels, 1,826 km, hardest pace
+   - Deluxe EUR 3,950 per person — luxury hotels, 1,259 km, helicopter tour over Komodo, 3 massages, support car
+   Price modifiers (cumulative, apply to all packages, per person):
    - Self-guided (no guide): -EUR 500
    - Pillion (co-rider on same bike): -EUR 350
    - Single room: +EUR 500
@@ -45,11 +45,11 @@ MAIN TOURS:
    Max group: 12 motorcycles / 24 people. Dates are flexible.
 
 2. 7 ISLANDS HOPPING — 13 days, 7 islands: Bali (6 days) → Gilis x3 (2 days) → Nusa Penida → Nusa Lembongan → Nusa Ceningan
-   Transport options:
-   - Bike × 2 (shared motorcycle): EUR 1,718
-   - Bike × 1 (solo motorcycle): EUR 1,787
-   - Car self-drive: EUR 1,925
-   - Car + driver: EUR 2,195
+   Transport options (prices are PER PERSON — always multiply by number of riders/passengers):
+   - Bike × 2 (shared motorcycle, 2 people on 1 bike): EUR 1,718 per person
+   - Bike × 1 (solo motorcycle, 1 person): EUR 1,787 per person
+   - Car self-drive: EUR 1,925 per person
+   - Car + driver: EUR 2,195 per person
 
    Daily riding — lighter pace than Bali to Komodo:
    Day 1: Arrival Seminyak (0 km)
