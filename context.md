@@ -59,10 +59,10 @@ MAIN TOURS:
 
 2. 7 ISLANDS HOPPING — 13 days, 7 islands: Bali (6 days) → Gilis x3 (2 days) → Nusa Penida → Nusa Lembongan → Nusa Ceningan
    Transport options (prices are PER PERSON — always multiply by number of riders/passengers):
-   - Bike × 2 (shared motorcycle, 2 people on 1 bike): EUR 1,718 per person
-   - Bike × 1 (solo motorcycle, 1 person): EUR 1,787 per person
-   - Car self-drive: EUR 1,925 per person
-   - Car + driver: EUR 2,195 per person
+   - Bike × 2 (shared motorcycle, 2 people on 1 bike): USD 1,873 per person
+   - Bike × 1 (solo motorcycle, 1 person): USD 1,950 per person
+   - Car self-drive: USD 2,100 per person
+   - Car + driver: USD 2,395 per person
 
    Daily riding — lighter pace than Bali to Komodo:
    Day 1: Arrival Seminyak (0 km)
