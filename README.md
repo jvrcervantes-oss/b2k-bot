@@ -1,4 +1,4 @@
-# Motor de Bot de WhatsApp — JC Capital
+# Motor de Bot de WhatsApp — AxisWorks
 
 Motor único y reutilizable para bots de WhatsApp de todos los proyectos.
 Un solo código, configuración por proyecto mediante variables de entorno.
@@ -15,7 +15,7 @@ Un solo código, configuración por proyecto mediante variables de entorno.
 ```
 infraestructura/bot-whatsapp/   ← ESTE motor (código único)
 proyectos/B2K/bot-config/        ← config de B2K (contexto + credenciales)
-proyectos/Sumba/bot-config/      ← config de Sumba (contexto + credenciales)
+proyectos/SumbaRental/bot-config/ ← config de Sumba (contexto + credenciales)
 ```
 
 El mismo `index.js` sirve para todos los proyectos. Lo único que cambia
@@ -39,12 +39,13 @@ un servicio separado que apunta a este mismo repo con su propia config.
 | `WHATSAPP_PHONE_ID` | ID del número de teléfono en WhatsApp Manager | `992420763958806` |
 | `WHATSAPP_VERIFY_TOKEN` | Texto secreto que inventas para verificar el webhook | `b2k_secreto_2026` |
 | `ANTHROPIC_API_KEY` | API key de console.anthropic.com | `sk-ant-...` |
-| `GOOGLE_CREDENTIALS` | Contenido completo de credentials.json (string) | `{"installed":{...}}` |
-| `GOOGLE_TOKEN` | Contenido completo de token.json (string) | `{"access_token":...}` |
+| `GOOGLE_SERVICE_ACCOUNT` | JSON completo de la Service Account (string). El bot usa Service Account, NO OAuth de usuario | `{"type":"service_account","client_email":"...","private_key":"..."}` |
 | `SHEET_ID` | ID del Google Sheet del CRM | `1D4ub_...` |
 | `OWNER_PHONE` | Tu número para recibir avisos de reserva | `34601170044` |
 | `BOT_CONTEXT` | El contexto del negocio (system prompt completo) | ver bot-config del proyecto |
 | `BOT_MODEL` | (Opcional) modelo de Claude | `claude-sonnet-4-6` |
+
+> ⚠️ **El Sheet del CRM debe estar COMPARTIDO con el `client_email` de la Service Account (permiso Editor).** Si no, la API responde `404 — Requested entity was not found` aunque la autenticación sea correcta. Las variables `GOOGLE_CREDENTIALS` / `GOOGLE_TOKEN` de versiones antiguas ya **no se usan** — se pueden borrar.
 
 ## Cómo añadir un proyecto nuevo
 
