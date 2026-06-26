@@ -25,6 +25,10 @@ const {
   STRIPE_SECRET_KEY,
   STRIPE_SUCCESS_URL,
   STRIPE_CANCEL_URL,
+  ADMIN_PASSWORD,
+  ALERT_TEMPLATE_NAME,
+  ALERT_TEMPLATE_LANG,
+  ALERT_TEMPLATE_VARS,
 } = process.env;
 
 const stripeClient = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
@@ -85,6 +89,53 @@ async function escPop() {
   }
   const raw = fallbackEscQueue.pop();
   return raw ? JSON.parse(raw) : null;
+}
+
+// ─── ÍNDICE DE LEADS (para el panel web) ──────────────────────────
+const fallbackLeads = {};      // phone → { phone, name, intent, lastMessage, updatedAt }
+const fallbackNotified = {};   // phone → "interested" | "booking"
+
+async function recordLead(phone, name, intent, lastMessage) {
+  const info = {
+    phone,
+    name: name || "",
+    intent: intent || "exploring",
+    lastMessage: (lastMessage || "").slice(0, 200),
+    updatedAt: Date.now(),
+  };
+  if (redisClient) {
+    await redisClient.set(`lead:${phone}`, JSON.stringify(info));
+    await redisClient.zAdd("leads_index", { score: info.updatedAt, value: phone });
+  } else {
+    fallbackLeads[phone] = info;
+  }
+}
+
+async function listLeads() {
+  if (redisClient) {
+    const phones = await redisClient.zRange("leads_index", 0, -1, { REV: true });
+    if (!phones.length) return [];
+    const raws = await Promise.all(phones.map((p) => redisClient.get(`lead:${p}`)));
+    return raws.filter(Boolean).map((r) => JSON.parse(r));
+  }
+  return Object.values(fallbackLeads).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+// Nivel de aviso ya enviado al owner para ese lead (anti-spam).
+// Orden: exploring < interested < booking
+const NOTIFY_RANK = { interested: 1, booking: 2 };
+
+async function getNotifiedLevel(phone) {
+  if (redisClient) return (await redisClient.get(`notified:${phone}`)) || null;
+  return fallbackNotified[phone] || null;
+}
+
+async function setNotifiedLevel(phone, level) {
+  if (redisClient) {
+    await redisClient.setEx(`notified:${phone}`, CONV_TTL, level);
+  } else {
+    fallbackNotified[phone] = level;
+  }
 }
 
 // ─── INSTRUCCIONES BASE ───────────────────────────────────────────
@@ -270,6 +321,54 @@ async function sendWhatsApp(to, message) {
   }
 }
 
+// Mensaje de PLANTILLA (única forma de escribir al owner fuera de su ventana de 24h)
+async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams = []) {
+  const toClean = normalizePhone(to);
+  const clean = (s) => String(s).replace(/[\r\n\t]+/g, " ").replace(/ {4,}/g, "   ").trim();
+  const components = bodyParams.length
+    ? [{ type: "body", parameters: bodyParams.map((t) => ({ type: "text", text: clean(t) || "-" })) }]
+    : [];
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: toClean,
+        type: "template",
+        template: { name: templateName, language: { code: langCode || "es" }, components },
+      },
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" } }
+    );
+    console.log(`[${PROJECT_NAME}] Aviso (plantilla "${templateName}") enviado al owner`);
+  } catch (e) {
+    const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
+    console.error(`[${PROJECT_NAME}] Error enviando plantilla al owner:`, detail);
+  }
+}
+
+// Avisa al owner. Usa plantilla si está configurada; si no, texto libre (solo llega si su ventana 24h está abierta).
+async function notifyOwner(kind, lead) {
+  if (!OWNER_PHONE) return;
+  const label = kind === "booking" ? "🔔 LEAD CALIENTE — quiere reservar" : "🟡 Nuevo cliente interesado";
+  const who = lead.name || lead.phone;
+  const msg = lead.lastMessage || "";
+
+  if (ALERT_TEMPLATE_NAME) {
+    const vars = ALERT_TEMPLATE_VARS != null ? parseInt(ALERT_TEMPLATE_VARS) : 2;
+    let params = [];
+    if (vars === 1) params = [`${label}: ${who} — "${msg}"`];
+    else if (vars === 2) params = [who, msg];
+    else if (vars >= 3) params = [label, who, msg];
+    await sendWhatsAppTemplate(OWNER_PHONE, ALERT_TEMPLATE_NAME, ALERT_TEMPLATE_LANG, params);
+  } else {
+    // Fallback: texto libre (puede fallar si el owner no escribió al bot en las últimas 24h)
+    await sendWhatsApp(
+      OWNER_PHONE,
+      `${label} — ${PROJECT_NAME}\n\n${who}\nÚltimo mensaje: "${msg}"\n\n(Configura ALERT_TEMPLATE_NAME para recibir esto siempre.)`
+    );
+  }
+}
+
 function normalizePhone(p) {
   return (p || "").replace(/\D/g, "");
 }
@@ -357,6 +456,7 @@ app.post("/webhook", async (req, res) => {
 
     await sendWhatsApp(from, reply);
     await saveLead(from, profileName, text, intent);
+    await recordLead(from, profileName, intent, text);  // índice para el panel web
 
     // ── Escalación: notificar al dueño en silencio ────────────────
     if (intent === "escalate" && OWNER_PHONE) {
@@ -368,16 +468,91 @@ app.post("/webhook", async (req, res) => {
       console.log(`[${PROJECT_NAME}] Escalación registrada — ${profileName || from}: "${text.slice(0, 60)}"`);
     }
 
-    // ── Lead caliente: avisar al dueño ───────────────────────────
-    if (intent === "booking" && OWNER_PHONE) {
-      await sendWhatsApp(
-        OWNER_PHONE,
-        `🔔 LEAD CALIENTE — ${PROJECT_NAME}\n\n${profileName || from} quiere reservar.\nÚltimo mensaje: "${text}"`
-      );
+    // ── Aviso al owner: interesado (1ª vez) y caliente (1ª vez) ────
+    // Panel = todos los leads · Ping WhatsApp = solo interested + booking, una vez cada uno.
+    const rank = NOTIFY_RANK[intent] || 0;
+    if (rank > 0 && OWNER_PHONE) {
+      const alreadyRank = NOTIFY_RANK[await getNotifiedLevel(from)] || 0;
+      if (rank > alreadyRank) {
+        await notifyOwner(intent, { name: profileName, phone: from, lastMessage: text });
+        await setNotifiedLevel(from, intent);
+      }
     }
   } catch (e) {
     console.error(`[${PROJECT_NAME}] Error procesando mensaje:`, e.message);
   }
+});
+
+// ─── PANEL WEB (control de chats del bot) ─────────────────────────
+const ADMIN_HTML = `<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Panel — Bot</title>
+<style>
+ *{box-sizing:border-box;margin:0;padding:0}
+ body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#0f1311;color:#e8eae8;height:100vh;display:flex}
+ #list{width:340px;border-right:1px solid #2a322d;overflow-y:auto;flex-shrink:0}
+ #list h1{font-size:13px;padding:16px;letter-spacing:.12em;text-transform:uppercase;color:#9fb3a5;border-bottom:1px solid #2a322d}
+ .lead{padding:12px 16px;border-bottom:1px solid #1c2420;cursor:pointer}
+ .lead:hover{background:#171d1a}.lead.active{background:#1f2a24}
+ .lead .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+ .lead .name{font-weight:600;font-size:14px}
+ .lead .msg{font-size:12px;color:#8b988f;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .badge{font-size:10px;padding:2px 8px;border-radius:99px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+ .b-exploring{background:#1e3a2a;color:#7fd99f}.b-interested{background:#443a1f;color:#e8c569}
+ .b-booking{background:#4a2020;color:#f08a8a}.b-escalate{background:#333;color:#bbb}
+ #chat{flex:1;display:flex;flex-direction:column;min-width:0}
+ #chat header{padding:16px;border-bottom:1px solid #2a322d;font-weight:600}
+ #msgs{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:10px}
+ .m{max-width:75%;padding:10px 14px;border-radius:14px;font-size:14px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
+ .m.user{align-self:flex-start;background:#222b26;border-bottom-left-radius:4px}
+ .m.assistant{align-self:flex-end;background:#1d6b45;border-bottom-right-radius:4px}
+ .empty{color:#6b766e;padding:40px;text-align:center;margin:auto}
+</style></head>
+<body>
+<div id="list"><h1>Leads · Bot</h1><div id="leads"></div></div>
+<div id="chat"><header id="chatHead">Selecciona un lead</header><div id="msgs"><div class="empty">—</div></div></div>
+<script>
+var key=new URLSearchParams(location.search).get('key')||'';var active=null;
+function esc(s){var d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
+function ago(ts){var s=Math.floor((Date.now()-ts)/1000);if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'m';if(s<86400)return Math.floor(s/3600)+'h';return Math.floor(s/86400)+'d';}
+function loadLeads(){
+ fetch('/admin/api/leads?key='+encodeURIComponent(key)).then(function(r){if(!r.ok)throw 0;return r.json();}).then(function(L){
+  document.getElementById('leads').innerHTML=L.map(function(l){var b='b-'+(l.intent||'exploring');
+   return '<div class="lead'+(l.phone===active?' active':'')+'" onclick="openLead(\\''+l.phone+'\\')">'+
+    '<div class="top"><span class="name">'+esc(l.name||l.phone)+'</span><span class="badge '+b+'">'+esc(l.intent||'')+'</span></div>'+
+    '<div class="msg">'+esc(l.lastMessage||'')+'</div>'+
+    '<div class="msg" style="color:#5d685f">'+esc(l.phone)+' · '+ago(l.updatedAt)+'</div></div>';
+  }).join('')||'<div class="empty">Sin leads todavía</div>';
+ }).catch(function(){document.getElementById('leads').innerHTML='<div class="empty">Clave incorrecta o panel sin configurar</div>';});
+}
+function openLead(p){active=p;loadLeads();document.getElementById('chatHead').textContent=p;
+ fetch('/admin/api/conv/'+encodeURIComponent(p)+'?key='+encodeURIComponent(key)).then(function(r){return r.json();}).then(function(C){
+  var box=document.getElementById('msgs');box.innerHTML=C.map(function(m){return '<div class="m '+m.role+'">'+esc(m.content)+'</div>';}).join('')||'<div class="empty">Sin mensajes</div>';box.scrollTop=box.scrollHeight;
+ });
+}
+loadLeads();setInterval(loadLeads,10000);
+</script></body></html>`;
+
+function adminAuth(req, res) {
+  if (!ADMIN_PASSWORD) { res.status(503).json({ error: "panel no configurado (falta ADMIN_PASSWORD)" }); return false; }
+  if (req.query.key !== ADMIN_PASSWORD) { res.status(403).json({ error: "forbidden" }); return false; }
+  return true;
+}
+
+app.get("/admin", (req, res) => {
+  if (!ADMIN_PASSWORD) return res.status(503).send("Panel no configurado: define ADMIN_PASSWORD en Railway.");
+  res.type("html").send(ADMIN_HTML);
+});
+
+app.get("/admin/api/leads", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try { res.json(await listLeads()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get("/admin/api/conv/:phone", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try { res.json(await getConversation(req.params.phone)); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ─── HEALTH CHECK ─────────────────────────────────────────────────
