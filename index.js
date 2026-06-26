@@ -247,20 +247,20 @@ ESCALATION — when you truly don't know something:
 - Just set [INTENT:escalate] — the system handles the rest silently.
 - EXCEPTION — "the link/URL doesn't work": never escalate for this. Resend the raw URL as plain text on its own line and tell them to copy-paste it in their browser.
 
-CLOSING A BOOKING:
-- When you have: tour, package, number of riders, and approximate dates → send the Stripe link. Full stop.
-- The booking/reservation deposit amount, currency and basis (per person vs per bike) are defined in your context. Always calculate and state the TOTAL deposit clearly (e.g. 3 people at the per-person amount = state the full total).
-- Do NOT confuse the booking/reservation deposit with any refundable damage/security deposit — follow exactly what your context says about each.
-- Do NOT ask for date confirmation from any team, staff, or human. Dates close to the current date are fine — just close the sale.
-- Do NOT say "I'll check availability", "confirm with the team", or anything similar before sending the link.
-- If you have a concern about very short-notice dates, use [INTENT:escalate] silently — never say "contact the team".
+CLOSING — YOUR #1 GOAL IS TO BOOK A FREE 30-MINUTE VIDEO CALL (read carefully — this is the main objective):
+- For a trip this size, nobody pays a big deposit cold off a chat. So your primary goal is NOT to send a payment link — it's to get the customer onto a free, no-pressure 30-minute video call with the team, who walk them through everything and close the sale properly.
+- Once the customer shows real interest (asked about price, dates, what's included, gave group size), steer warmly toward the call as the natural next step: "Want to hop on a quick video call with the team? It's free, about 30 minutes, zero pressure — they'll walk you through everything and answer all your questions."
+- Keep selling the call, not the deposit. Frame it as the easy, no-commitment way to get all their answers and see if it's right for them.
+- THE PAYMENT LINK IS THE EXCEPTION, NOT THE CLOSE: only send the deposit/Stripe link if the customer EXPLICITLY insists on paying right now ("I want to pay", "send me the link", "how do I pay the deposit"). Only then use [INTENT:booking][RIDERS:N]. Otherwise NEVER push payment — push the call.
+- Never stall ("I'll check availability", "confirm with the team") — just offer the call and lock a time.
 
-SCHEDULING A CALL / VIDEO CALL (appointments):
-- If the customer wants to schedule a call or video call (not the trip booking itself), agree on a specific date and time with them.
+SCHEDULING THE CALL — THIS IS YOUR MAIN CONVERSION PATH (appointments):
+- Agree on a specific date and time, and ALWAYS ask their timezone (riders are international — AU, US, UK). Propose a slot or ask what suits them.
 - Only once you BOTH agree on a concrete date AND time, confirm it naturally in your message AND add at the very end, on a NEW line:
-  [APPT:YYYY-MM-DDTHH:MM|Short title]
-  Example: [APPT:2026-07-15T10:00|Call with John about Bali-Komodo]
+  [APPT:YYYY-MM-DDTHH:MM|Short title incl. timezone]
+  Example: [APPT:2026-07-15T10:00|Call w/ John re Bali-Komodo — 10:00 AEST]
 - NEVER invent a date/time. Output the APPT tag only when a precise day and hour are agreed. The tag is stripped before sending — never mention it to the customer.
+- After locking the call, set [INTENT:booking] (it's a hot lead) but do NOT output [RIDERS:N] — a call must never trigger a payment link.
 
 INTENT AND RIDERS TAGGING (critical):
 At the very end of your response, on a NEW LINE, add ONE intent tag:
@@ -543,12 +543,13 @@ app.post("/webhook", async (req, res) => {
       .trim();
     if (hadFakeLink) console.warn(`[${PROJECT_NAME}] Stripe URL alucinada eliminada del reply del modelo`);
 
-    // Adjuntar SOLO el link real generado por el servidor
-    if (numRiders && stripeClient) {
+    // Adjuntar el link real SOLO si el cliente pide pagar ya (intent booking + riders).
+    // El cierre por defecto es la LLAMADA, no el pago — el link es la excepción.
+    if (numRiders && stripeClient && intent === "booking") {
       const sessionUrl = await createStripeSession(numRiders);
       if (sessionUrl) reply = reply + "\n\n" + sessionUrl;
       else console.error(`[${PROJECT_NAME}] booking detectado pero no se pudo crear la sesión Stripe`);
-    } else if (numRiders && !stripeClient) {
+    } else if (numRiders && intent === "booking" && !stripeClient) {
       console.error(`[${PROJECT_NAME}] booking detectado pero stripeClient es null — falta STRIPE_SECRET_KEY en el entorno`);
     }
 
@@ -564,6 +565,13 @@ app.post("/webhook", async (req, res) => {
       try {
         const appt = await createAppt({ phone: from, name: profileName, when: apptMatch[1].trim(), title: apptMatch[2].trim() });
         console.log(`[${PROJECT_NAME}] Cita agendada por el bot: ${appt.when} — ${appt.title} (${from})`);
+        // Avisar al owner en el momento para que llame (el panel/calendario es el respaldo)
+        if (OWNER_PHONE) {
+          await sendWhatsApp(
+            OWNER_PHONE,
+            `📞 ${PROJECT_NAME} — LLAMADA AGENDADA\n\n*${profileName || from}*\nTel: ${from}\nCuándo: ${appt.when}\n${appt.title}\n\nLlámale por WhatsApp a esa hora.`
+          );
+        }
       } catch (e) { console.error(`[${PROJECT_NAME}] Error creando cita:`, e.message); }
     }
 
