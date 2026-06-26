@@ -498,55 +498,10 @@ app.post("/webhook", async (req, res) => {
 });
 
 // ─── PANEL WEB (control de chats del bot) ─────────────────────────
-const ADMIN_HTML = `<!doctype html>
-<html lang="es"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Panel — Bot</title>
-<style>
- *{box-sizing:border-box;margin:0;padding:0}
- body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#0f1311;color:#e8eae8;height:100vh;display:flex}
- #list{width:340px;border-right:1px solid #2a322d;overflow-y:auto;flex-shrink:0}
- #list h1{font-size:13px;padding:16px;letter-spacing:.12em;text-transform:uppercase;color:#9fb3a5;border-bottom:1px solid #2a322d}
- .lead{padding:12px 16px;border-bottom:1px solid #1c2420;cursor:pointer}
- .lead:hover{background:#171d1a}.lead.active{background:#1f2a24}
- .lead .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
- .lead .name{font-weight:600;font-size:14px}
- .lead .msg{font-size:12px;color:#8b988f;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
- .badge{font-size:10px;padding:2px 8px;border-radius:99px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
- .b-exploring{background:#1e3a2a;color:#7fd99f}.b-interested{background:#443a1f;color:#e8c569}
- .b-booking{background:#4a2020;color:#f08a8a}.b-escalate{background:#333;color:#bbb}
- #chat{flex:1;display:flex;flex-direction:column;min-width:0}
- #chat header{padding:16px;border-bottom:1px solid #2a322d;font-weight:600}
- #msgs{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:10px}
- .m{max-width:75%;padding:10px 14px;border-radius:14px;font-size:14px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
- .m.user{align-self:flex-start;background:#222b26;border-bottom-left-radius:4px}
- .m.assistant{align-self:flex-end;background:#1d6b45;border-bottom-right-radius:4px}
- .empty{color:#6b766e;padding:40px;text-align:center;margin:auto}
-</style></head>
-<body>
-<div id="list"><h1>Leads · Bot</h1><div id="leads"></div></div>
-<div id="chat"><header id="chatHead">Selecciona un lead</header><div id="msgs"><div class="empty">—</div></div></div>
-<script>
-var key=new URLSearchParams(location.search).get('key')||'';var active=null;
-function esc(s){var d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
-function ago(ts){var s=Math.floor((Date.now()-ts)/1000);if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'m';if(s<86400)return Math.floor(s/3600)+'h';return Math.floor(s/86400)+'d';}
-function loadLeads(){
- fetch('/admin/api/leads?key='+encodeURIComponent(key)).then(function(r){if(!r.ok)throw 0;return r.json();}).then(function(L){
-  document.getElementById('leads').innerHTML=L.map(function(l){var b='b-'+(l.intent||'exploring');
-   return '<div class="lead'+(l.phone===active?' active':'')+'" onclick="openLead(\\''+l.phone+'\\')">'+
-    '<div class="top"><span class="name">'+esc(l.name||l.phone)+'</span><span class="badge '+b+'">'+esc(l.intent||'')+'</span></div>'+
-    '<div class="msg">'+esc(l.lastMessage||'')+'</div>'+
-    '<div class="msg" style="color:#5d685f">'+esc(l.phone)+' · '+ago(l.updatedAt)+'</div></div>';
-  }).join('')||'<div class="empty">Sin leads todavía</div>';
- }).catch(function(){document.getElementById('leads').innerHTML='<div class="empty">Clave incorrecta o panel sin configurar</div>';});
-}
-function openLead(p){active=p;loadLeads();document.getElementById('chatHead').textContent=p;
- fetch('/admin/api/conv/'+encodeURIComponent(p)+'?key='+encodeURIComponent(key)).then(function(r){return r.json();}).then(function(C){
-  var box=document.getElementById('msgs');box.innerHTML=C.map(function(m){return '<div class="m '+m.role+'">'+esc(m.content)+'</div>';}).join('')||'<div class="empty">Sin mensajes</div>';box.scrollTop=box.scrollHeight;
- });
-}
-loadLeads();setInterval(loadLeads,10000);
-</script></body></html>`;
+// HTML del panel en panel.html (estilo HighLevel). Fallback mínimo si falta el archivo.
+const ADMIN_HTML = fs.existsSync("panel.html")
+  ? fs.readFileSync("panel.html", "utf8")
+  : "<!doctype html><meta charset='utf-8'><body style='font-family:sans-serif;padding:40px'>Panel: falta panel.html en el despliegue.</body>";
 
 function adminAuth(req, res) {
   if (!ADMIN_PASSWORD) { res.status(503).json({ error: "panel no configurado (falta ADMIN_PASSWORD)" }); return false; }
@@ -556,7 +511,7 @@ function adminAuth(req, res) {
 
 app.get("/admin", (req, res) => {
   if (!ADMIN_PASSWORD) return res.status(503).send("Panel no configurado: define ADMIN_PASSWORD en Railway.");
-  res.type("html").send(ADMIN_HTML);
+  res.type("html").send(ADMIN_HTML.replace(/__PROJECT__/g, PROJECT_NAME || "Bot"));
 });
 
 app.get("/admin/api/leads", async (req, res) => {

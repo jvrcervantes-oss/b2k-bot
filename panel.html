@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__PROJECT__ · Conversaciones</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --nav:#161e2e; --nav-2:#0f1623; --bg:#f5f6f8; --card:#ffffff;
+    --line:#e6e8ee; --line-2:#eef0f4; --ink:#1c2433; --ink-soft:#6b7488;
+    --accent:#2563eb; --accent-soft:#e8f0fe;
+    --green:#16a34a; --amber:#d97706; --red:#dc2626;
+    --bot:#2563eb;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:'Inter',-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;-webkit-font-smoothing:antialiased}
+  button{font-family:inherit;cursor:pointer}
+
+  /* ── LOGIN ── */
+  #login{position:fixed;inset:0;background:linear-gradient(135deg,#0f1623,#1b2740);display:flex;align-items:center;justify-content:center;z-index:50}
+  #login .box{background:#fff;border-radius:18px;padding:36px 34px;width:340px;box-shadow:0 30px 70px -30px rgba(0,0,0,.6)}
+  #login .logo{width:42px;height:42px;border-radius:11px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:20px;margin-bottom:18px}
+  #login h1{font-size:19px;font-weight:700;margin-bottom:4px}
+  #login p{color:var(--ink-soft);font-size:13px;margin-bottom:20px}
+  #login input{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:14px;margin-bottom:12px;outline:none}
+  #login input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  #login button{width:100%;padding:12px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;font-size:14px}
+  #login .err{color:var(--red);font-size:12.5px;height:16px;margin-top:2px}
+
+  /* ── SHELL ── */
+  #app{display:none;height:100vh;display:none;grid-template-columns:64px 340px 1fr 300px}
+  #app.on{display:grid}
+  @media(max-width:1100px){#app.on{grid-template-columns:64px 320px 1fr}#detail{display:none}}
+  @media(max-width:760px){#app.on{grid-template-columns:64px 1fr}#list{display:none}#app.on.showchat #list{display:none}}
+
+  /* nav rail */
+  nav{background:var(--nav);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:6px}
+  nav .brand{width:38px;height:38px;border-radius:10px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;margin-bottom:10px}
+  nav .ic{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#8893a8}
+  nav .ic.on{background:rgba(255,255,255,.08);color:#fff}
+  nav .ic svg{width:20px;height:20px}
+  nav .spacer{flex:1}
+
+  /* list column */
+  #list{background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  #list .head{padding:18px 18px 12px}
+  #list .head h2{font-size:18px;font-weight:700;display:flex;align-items:center;gap:8px}
+  #list .head .count{font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:2px 9px}
+  .search{margin:4px 18px 10px;position:relative}
+  .search input{width:100%;padding:9px 12px 9px 34px;border:1px solid var(--line);border-radius:9px;font-size:13px;outline:none;background:#fafbfc}
+  .search input:focus{border-color:var(--accent);background:#fff}
+  .search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--ink-soft)}
+  .chips{display:flex;gap:7px;padding:0 18px 12px;flex-wrap:wrap}
+  .chip{font-size:12px;font-weight:500;padding:5px 11px;border-radius:999px;border:1px solid var(--line);color:var(--ink-soft);background:#fff}
+  .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  #leads{flex:1;overflow-y:auto}
+  .row{display:flex;gap:11px;padding:12px 18px;border-bottom:1px solid var(--line-2);cursor:pointer;align-items:center}
+  .row:hover{background:#fafbfc}
+  .row.active{background:var(--accent-soft)}
+  .av{width:42px;height:42px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:15px}
+  .row .mid{flex:1;min-width:0}
+  .row .nm{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .ms{font-size:12.5px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .row .rt{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+  .row .tm{font-size:11px;color:#9aa3b5}
+  .dot{width:9px;height:9px;border-radius:50%}
+  .empty{padding:50px 24px;text-align:center;color:#9aa3b5;font-size:13px}
+
+  .badge{font-size:10.5px;font-weight:600;padding:2px 9px;border-radius:999px;text-transform:capitalize}
+  .i-exploring{background:#dcfce7;color:#15803d}
+  .i-interested{background:#fef3c7;color:#b45309}
+  .i-booking{background:#fee2e2;color:#b91c1c}
+  .i-escalate{background:#e5e7eb;color:#4b5563}
+
+  /* chat column */
+  #chat{display:flex;flex-direction:column;min-width:0;background:#f0f2f5}
+  #chat .top{background:var(--card);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;gap:12px}
+  #chat .top .back{display:none;border:0;background:none;color:var(--ink-soft);font-size:20px;padding:0 6px 0 0}
+  @media(max-width:760px){#chat .top .back{display:block}}
+  #chat .top .nm{font-weight:600;font-size:15px}
+  #chat .top .ph{font-size:12px;color:var(--ink-soft)}
+  #msgs{flex:1;overflow-y:auto;padding:22px 26px;display:flex;flex-direction:column;gap:8px}
+  .m{max-width:62%;padding:9px 13px;border-radius:14px;font-size:13.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 1px rgba(0,0,0,.04)}
+  .m.user{align-self:flex-start;background:#fff;border-bottom-left-radius:4px}
+  .m.assistant{align-self:flex-end;background:var(--bot);color:#fff;border-bottom-right-radius:4px}
+  .composer{background:var(--card);border-top:1px solid var(--line);padding:13px 20px;display:flex;align-items:center;gap:10px;color:var(--ink-soft);font-size:12.5px}
+  .composer .fake{flex:1;background:#f0f2f5;border-radius:999px;padding:10px 16px;color:#9aa3b5}
+  .nochat{margin:auto;text-align:center;color:#9aa3b5}
+  .nochat svg{width:54px;height:54px;opacity:.4;margin-bottom:10px}
+
+  /* detail column */
+  #detail{background:var(--card);border-left:1px solid var(--line);padding:26px 22px;overflow-y:auto}
+  #detail .big{width:74px;height:74px;border-radius:50%;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:27px}
+  #detail .dn{text-align:center;font-size:17px;font-weight:700}
+  #detail .dp{text-align:center;font-size:13px;color:var(--ink-soft);margin-top:2px}
+  #detail .dbadge{text-align:center;margin:12px 0 18px}
+  #detail .wa{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px;border-radius:10px;background:#25d366;color:#fff;font-weight:600;text-decoration:none;font-size:13.5px;margin-bottom:20px}
+  #detail .field{border-top:1px solid var(--line-2);padding:13px 2px}
+  #detail .field .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#9aa3b5;font-weight:600}
+  #detail .field .v{font-size:14px;margin-top:3px}
+  #detail .ph-detail{color:var(--ink-soft);text-align:center;margin-top:90px;font-size:13px}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login">
+  <div class="box">
+    <div class="logo">A</div>
+    <h1>Panel de conversaciones</h1>
+    <p>__PROJECT__ · acceso del estudio</p>
+    <input id="pw" type="password" placeholder="Contraseña" autocomplete="current-password">
+    <button id="enter">Entrar</button>
+    <div class="err" id="err"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <nav>
+    <div class="brand">A</div>
+    <div class="ic on" title="Conversaciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" title="Contactos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" title="Estadísticas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="spacer"></div>
+    <div class="ic" title="Salir" id="logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  </nav>
+
+  <!-- list -->
+  <div id="list">
+    <div class="head"><h2>Conversaciones <span class="count" id="count">0</span></h2></div>
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg>
+      <input id="q" placeholder="Buscar lead…">
+    </div>
+    <div class="chips">
+      <button class="chip on" data-f="all">Todos</button>
+      <button class="chip" data-f="interested">🟡 Interesados</button>
+      <button class="chip" data-f="booking">🔴 Reserva</button>
+    </div>
+    <div id="leads"></div>
+  </div>
+
+  <!-- chat -->
+  <div id="chat">
+    <div class="top">
+      <button class="back" id="back">‹</button>
+      <div class="av" id="ctAv" style="width:38px;height:38px;font-size:14px;display:none"></div>
+      <div><div class="nm" id="ctName">Selecciona un lead</div><div class="ph" id="ctPhone"></div></div>
+    </div>
+    <div id="msgs"><div class="nochat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg><br>Elige una conversación de la izquierda</div></div>
+    <div class="composer"><div class="fake">El bot responde automáticamente a este lead 🤖</div></div>
+  </div>
+
+  <!-- detail -->
+  <div id="detail"><div class="ph-detail">Selecciona un lead para ver su ficha</div></div>
+</div>
+
+<script>
+  // ── auth ──
+  var KEY = new URLSearchParams(location.search).get('key') || sessionStorage.getItem('botpanel_key') || '';
+  var leads = [], filter = 'all', search = '', active = null;
+
+  function api(path){ return fetch('/admin/api/' + path + (path.indexOf('?')>-1?'&':'?') + 'key=' + encodeURIComponent(KEY)); }
+
+  function tryAuth(k){
+    KEY = k;
+    return fetch('/admin/api/leads?key=' + encodeURIComponent(k)).then(function(r){
+      if(!r.ok) throw 0;
+      return r.json();
+    }).then(function(L){
+      sessionStorage.setItem('botpanel_key', k);
+      document.getElementById('login').style.display = 'none';
+      document.getElementById('app').classList.add('on');
+      leads = L; render(); start();
+      return true;
+    });
+  }
+
+  document.getElementById('enter').onclick = function(){
+    var k = document.getElementById('pw').value.trim();
+    tryAuth(k).catch(function(){ document.getElementById('err').textContent = 'Contraseña incorrecta'; });
+  };
+  document.getElementById('pw').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('enter').click(); });
+  document.getElementById('logout').onclick = function(){ sessionStorage.removeItem('botpanel_key'); location.href = location.pathname; };
+
+  // ── helpers ──
+  function esc(s){ var d=document.createElement('div'); d.textContent = s==null?'':s; return d.innerHTML; }
+  function initials(n){ n=(n||'').trim(); if(!n) return '#'; var p=n.split(/\s+/); return (p[0][0]+(p[1]?p[1][0]:'')).toUpperCase(); }
+  var PALETTE=['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d'];
+  function color(s){ var h=0; s=s||''; for(var i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return PALETTE[h%PALETTE.length]; }
+  function ago(ts){ var s=Math.floor((Date.now()-ts)/1000); if(s<60)return 'ahora'; if(s<3600)return Math.floor(s/60)+'m'; if(s<86400)return Math.floor(s/3600)+'h'; var d=Math.floor(s/86400); return d===1?'ayer':d+'d'; }
+  var LABEL={exploring:'explorando',interested:'interesado',booking:'reserva',escalate:'duda'};
+
+  // ── render list ──
+  function render(){
+    var f = leads.filter(function(l){
+      if(filter==='interested' && l.intent!=='interested' && l.intent!=='booking') return false;
+      if(filter==='booking' && l.intent!=='booking') return false;
+      if(search){ var hay=((l.name||'')+' '+l.phone+' '+(l.lastMessage||'')).toLowerCase(); if(hay.indexOf(search)<0) return false; }
+      return true;
+    });
+    document.getElementById('count').textContent = leads.length;
+    var box = document.getElementById('leads');
+    if(!f.length){ box.innerHTML = '<div class="empty">'+(leads.length?'Sin resultados':'Aún no hay conversaciones')+'</div>'; return; }
+    box.innerHTML = f.map(function(l){
+      var c = color(l.name||l.phone), it = l.intent||'exploring';
+      var dotc = it==='booking'?'var(--red)':it==='interested'?'var(--amber)':it==='escalate'?'#9ca3af':'var(--green)';
+      return '<div class="row'+(l.phone===active?' active':'')+'" onclick="open_(\''+l.phone+'\')">'
+        + '<div class="av" style="background:'+c+'">'+esc(initials(l.name||l.phone))+'</div>'
+        + '<div class="mid"><div class="nm">'+esc(l.name||l.phone)+'</div><div class="ms">'+esc(l.lastMessage||'')+'</div></div>'
+        + '<div class="rt"><span class="tm">'+ago(l.updatedAt)+'</span><span class="dot" style="background:'+dotc+'"></span></div></div>';
+    }).join('');
+  }
+
+  document.getElementById('q').oninput = function(e){ search = e.target.value.toLowerCase().trim(); render(); };
+  Array.prototype.forEach.call(document.querySelectorAll('.chip'), function(ch){
+    ch.onclick = function(){ document.querySelectorAll('.chip').forEach(function(c){c.classList.remove('on');}); ch.classList.add('on'); filter = ch.dataset.f; render(); };
+  });
+  document.getElementById('back').onclick = function(){ document.getElementById('app').classList.remove('showchat'); };
+
+  // ── open conversation ──
+  function open_(phone){
+    active = phone; render();
+    document.getElementById('app').classList.add('showchat');
+    var l = leads.filter(function(x){return x.phone===phone;})[0] || {phone:phone};
+    var c = color(l.name||phone), it = l.intent||'exploring';
+
+    var av = document.getElementById('ctAv'); av.style.display='flex'; av.style.background=c; av.textContent=initials(l.name||phone);
+    document.getElementById('ctName').textContent = l.name || phone;
+    document.getElementById('ctPhone').textContent = '+' + phone;
+
+    api('conv/' + encodeURIComponent(phone)).then(function(r){return r.json();}).then(function(C){
+      var box = document.getElementById('msgs');
+      box.innerHTML = C.length ? C.map(function(m){ return '<div class="m '+m.role+'">'+esc(m.content)+'</div>'; }).join('') : '<div class="nochat">Sin mensajes guardados</div>';
+      box.scrollTop = box.scrollHeight;
+
+      document.getElementById('detail').innerHTML =
+        '<div class="big" style="background:'+c+'">'+esc(initials(l.name||phone))+'</div>'
+        + '<div class="dn">'+esc(l.name||phone)+'</div><div class="dp">+'+esc(phone)+'</div>'
+        + '<div class="dbadge"><span class="badge i-'+it+'">'+(LABEL[it]||it)+'</span></div>'
+        + '<a class="wa" href="https://wa.me/'+esc(phone)+'" target="_blank"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.5 15.3L2 22l4.8-1.4A10 10 0 1 0 12 2zm0 18a8 8 0 0 1-4.1-1.1l-.3-.2-2.8.8.8-2.8-.2-.3A8 8 0 1 1 12 20z"/></svg>Abrir en WhatsApp</a>'
+        + '<div class="field"><div class="k">Intención</div><div class="v">'+(LABEL[it]||it)+'</div></div>'
+        + '<div class="field"><div class="k">Última actividad</div><div class="v">'+ago(l.updatedAt)+'</div></div>'
+        + '<div class="field"><div class="k">Mensajes</div><div class="v">'+C.length+'</div></div>';
+    });
+  }
+  window.open_ = open_;
+
+  // ── refresco ──
+  var timer = null;
+  function start(){ if(timer) clearInterval(timer); timer = setInterval(function(){
+    api('leads').then(function(r){return r.json();}).then(function(L){ leads = L; render(); });
+  }, 10000); }
+
+  // auto-login si viene ?key= o hay sesión
+  if(KEY){ tryAuth(KEY).catch(function(){ /* mostrar login */ }); }
+</script>
+</body>
+</html>
