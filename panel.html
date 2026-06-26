@@ -111,6 +111,47 @@
   #detail .field .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#9aa3b5;font-weight:600}
   #detail .field .v{font-size:14px;margin-top:3px}
   #detail .ph-detail{color:var(--ink-soft);text-align:center;margin-top:90px;font-size:13px}
+
+  /* ── calendario ── */
+  #calView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
+  #app.calmode #list,#app.calmode #chat,#app.calmode #detail{display:none}
+  #app.calmode #calView{display:flex}
+  .cal-top{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;background:var(--card);border-bottom:1px solid var(--line)}
+  .cal-nav{display:flex;align-items:center;gap:12px}
+  .cal-nav h2{font-size:18px;font-weight:700;min-width:170px;text-align:center;text-transform:capitalize}
+  .cal-nav button{width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:#fff;font-size:18px;color:var(--ink-soft)}
+  .cal-new{border:0;background:var(--accent);color:#fff;font-weight:600;padding:9px 16px;border-radius:9px;font-size:13.5px}
+  .cal-wrap{flex:1;display:flex;min-height:0}
+  .cal-cal{flex:1;display:flex;flex-direction:column;padding:14px 20px;min-width:0}
+  .cal-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px}
+  .cal-dow span{font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;text-align:center;letter-spacing:.04em}
+  .cal-grid{flex:1;display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;gap:6px;min-height:0}
+  .cal-day{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:6px;display:flex;flex-direction:column;gap:3px;overflow:hidden;min-height:0}
+  .cal-day.out{background:#f0f1f4;opacity:.5}
+  .cal-day .dnum{font-size:12px;font-weight:600;color:var(--ink-soft);align-self:flex-start}
+  .cal-day.today .dnum{background:var(--accent);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center}
+  .appt{font-size:11px;background:var(--accent-soft);color:#1d4ed8;border-radius:5px;padding:2px 6px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid var(--accent)}
+  .cal-side{width:280px;border-left:1px solid var(--line);background:var(--card);padding:18px;overflow-y:auto;flex-shrink:0}
+  .cal-side h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:12px}
+  .up{position:relative;border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:8px}
+  .up .ut{font-weight:600;font-size:13.5px;padding-right:16px}
+  .up .uw{font-size:12px;color:var(--accent);margin-top:2px}
+  .up .un{font-size:12px;color:var(--ink-soft);margin-top:2px}
+  .up .del{position:absolute;right:10px;top:8px;color:#c0c6d0;cursor:pointer;font-size:15px;line-height:1}
+  .up .del:hover{color:var(--red)}
+  @media(max-width:900px){.cal-side{display:none}}
+
+  /* ── modal ── */
+  .modal{position:fixed;inset:0;background:rgba(10,16,28,.55);display:flex;align-items:center;justify-content:center;z-index:40}
+  .modal-box{background:#fff;border-radius:16px;padding:26px;width:360px;box-shadow:0 30px 70px -30px rgba(0,0,0,.6)}
+  .modal-box h3{font-size:18px;font-weight:700;margin-bottom:10px}
+  .modal-box label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin:10px 0 5px}
+  .modal-box input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:14px;outline:none;font-family:inherit}
+  .modal-box input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .modal-err{color:var(--red);font-size:12.5px;min-height:16px;margin-top:8px}
+  .modal-actions{display:flex;gap:10px;margin-top:6px}
+  .btn-ghost{flex:1;padding:11px;border:1px solid var(--line);background:#fff;border-radius:9px;font-weight:600;color:var(--ink-soft)}
+  .btn-primary{flex:2;padding:11px;border:0;background:var(--accent);color:#fff;border-radius:9px;font-weight:600}
 </style>
 </head>
 <body>
@@ -131,9 +172,8 @@
 <div id="app">
   <nav>
     <div class="brand">A</div>
-    <div class="ic on" title="Conversaciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="ic" title="Contactos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="ic" title="Estadísticas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic on" id="navConv" title="Conversaciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" id="navCal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="spacer"></div>
     <div class="ic" title="Salir" id="logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
   </nav>
@@ -172,12 +212,47 @@
 
   <!-- detail -->
   <div id="detail"><div class="ph-detail">Selecciona un lead para ver su ficha</div></div>
+
+  <!-- calendario -->
+  <div id="calView">
+    <div class="cal-top">
+      <div class="cal-nav"><button id="calPrev">‹</button><h2 id="calMonth"></h2><button id="calNext">›</button></div>
+      <button id="newAppt" class="cal-new">+ Nueva cita</button>
+    </div>
+    <div class="cal-wrap">
+      <div class="cal-cal">
+        <div class="cal-dow"><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span></div>
+        <div class="cal-grid" id="calGrid"></div>
+      </div>
+      <div class="cal-side">
+        <h3>Próximas citas</h3>
+        <div id="upList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- modal nueva cita -->
+<div id="apptModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <h3>Nueva cita</h3>
+    <label>Lead</label>
+    <input id="amLead" list="leadsDL" placeholder="Nombre o teléfono (opcional)">
+    <datalist id="leadsDL"></datalist>
+    <label>Fecha y hora</label>
+    <input id="amWhen" type="datetime-local">
+    <label>Título</label>
+    <input id="amTitle" placeholder="Llamada con…">
+    <div class="modal-err" id="amErr"></div>
+    <div class="modal-actions"><button id="amCancel" class="btn-ghost">Cancelar</button><button id="amSave" class="btn-primary">Guardar cita</button></div>
+  </div>
 </div>
 
 <script>
   // ── auth ──
   var KEY = new URLSearchParams(location.search).get('key') || sessionStorage.getItem('botpanel_key') || '';
   var leads = [], filter = 'all', search = '', active = null, curLead = null;
+  var appts = [], calY = null, calM = null;
 
   function api(path){ return fetch('/admin/api/' + path + (path.indexOf('?')>-1?'&':'?') + 'key=' + encodeURIComponent(KEY)); }
   function apiPost(path, body){ return fetch('/admin/api/' + path + '?key=' + encodeURIComponent(KEY), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }); }
@@ -272,7 +347,8 @@
         + '<a class="wa" href="https://wa.me/'+esc(phone)+'" target="_blank"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.5 15.3L2 22l4.8-1.4A10 10 0 1 0 12 2zm0 18a8 8 0 0 1-4.1-1.1l-.3-.2-2.8.8.8-2.8-.2-.3A8 8 0 1 1 12 20z"/></svg>Abrir en WhatsApp</a>'
         + '<div class="field"><div class="k">Intención</div><div class="v">'+(LABEL[it]||it)+'</div></div>'
         + '<div class="field"><div class="k">Última actividad</div><div class="v">'+ago(l.updatedAt)+'</div></div>'
-        + '<div class="field"><div class="k">Mensajes</div><div class="v">'+C.length+'</div></div>';
+        + '<div class="field"><div class="k">Mensajes</div><div class="v">'+C.length+'</div></div>'
+        + apptFieldHTML(phone);
     });
   }
   window.open_ = open_;
@@ -318,11 +394,72 @@
     ta.addEventListener('keydown', function(e){ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendMsg(); } });
   })();
 
+  // ── CALENDARIO ──
+  function loadAppts(cb){ api('appts').then(function(r){return r.json();}).then(function(A){ appts = A; if(cb) cb(); }).catch(function(){}); }
+  function sameDay(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+  function timeOf(iso){ var d=new Date(iso); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+  function fmtWhen(iso){ var d=new Date(iso); return d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric',month:'short'})+' · '+timeOf(iso); }
+  function nextApptFor(phone){ var now=Date.now()-3600000; return appts.filter(function(a){ return a.phone===phone && new Date(a.when).getTime()>=now; }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); })[0]; }
+  function apptFieldHTML(phone){ var a=nextApptFor(phone); if(!a) return ''; return '<div class="field"><div class="k">Próxima cita</div><div class="v">'+esc(a.title)+'<br><span style="color:var(--accent);font-size:13px">'+fmtWhen(a.when)+'</span></div></div>'; }
+
+  function renderCal(){
+    if(calY==null){ var n=new Date(); calY=n.getFullYear(); calM=n.getMonth(); }
+    document.getElementById('calMonth').textContent = new Date(calY,calM,1).toLocaleDateString('es-ES',{month:'long',year:'numeric'});
+    var startDow=(new Date(calY,calM,1).getDay()+6)%7, daysInMonth=new Date(calY,calM+1,0).getDate(), today=new Date();
+    var html='';
+    for(var i=0;i<42;i++){
+      var d=new Date(calY,calM,i-startDow+1);
+      var out=d.getMonth()!==calM, isToday=sameDay(d,today);
+      var da=appts.filter(function(a){ return sameDay(new Date(a.when),d); }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); });
+      var chips=da.slice(0,3).map(function(a){ return '<div class="appt" onclick="cancelAppt(event,\''+a.id+'\')" title="'+esc(a.title)+'">'+timeOf(a.when)+' '+esc(a.title)+'</div>'; }).join('');
+      if(da.length>3) chips+='<div class="appt" style="background:none;border:0;color:#9aa3b5">+'+(da.length-3)+' más</div>';
+      html+='<div class="cal-day'+(out?' out':'')+(isToday?' today':'')+'"><span class="dnum">'+d.getDate()+'</span>'+chips+'</div>';
+    }
+    document.getElementById('calGrid').innerHTML=html;
+    var now=Date.now()-3600000;
+    var up=appts.filter(function(a){ return new Date(a.when).getTime()>=now; }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); }).slice(0,12);
+    document.getElementById('upList').innerHTML = up.length ? up.map(function(a){
+      return '<div class="up"><span class="del" onclick="cancelAppt(event,\''+a.id+'\')">✕</span><div class="ut">'+esc(a.title)+'</div><div class="uw">'+fmtWhen(a.when)+'</div>'+((a.name||a.phone)?'<div class="un">'+esc(a.name||('+'+a.phone))+'</div>':'')+'</div>';
+    }).join('') : '<div style="color:#9aa3b5;font-size:13px">Sin citas próximas</div>';
+  }
+
+  function cancelAppt(e,id){ e.stopPropagation(); if(!confirm('¿Cancelar esta cita?')) return; fetch('/admin/api/appts/'+id+'?key='+encodeURIComponent(KEY),{method:'DELETE'}).then(function(){ loadAppts(renderCal); }); }
+  window.cancelAppt=cancelAppt;
+
+  function buildLeadsDL(){ document.getElementById('leadsDL').innerHTML = leads.map(function(l){ return '<option value="'+esc((l.name||l.phone)+' (+'+l.phone+')')+'">'; }).join(''); }
+  function setNav(id){ ['navConv','navCal'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
+
+  document.getElementById('navConv').onclick=function(){ document.getElementById('app').classList.remove('calmode'); setNav('navConv'); };
+  document.getElementById('navCal').onclick=function(){ document.getElementById('app').classList.add('calmode'); setNav('navCal'); buildLeadsDL(); loadAppts(renderCal); };
+  document.getElementById('calPrev').onclick=function(){ calM--; if(calM<0){calM=11;calY--;} renderCal(); };
+  document.getElementById('calNext').onclick=function(){ calM++; if(calM>11){calM=0;calY++;} renderCal(); };
+  document.getElementById('newAppt').onclick=function(){ buildLeadsDL(); document.getElementById('amErr').textContent=''; document.getElementById('apptModal').style.display='flex'; };
+  document.getElementById('amCancel').onclick=function(){ document.getElementById('apptModal').style.display='none'; };
+  document.getElementById('amSave').onclick=function(){
+    var when=document.getElementById('amWhen').value;
+    if(!when){ document.getElementById('amErr').textContent='Pon fecha y hora'; return; }
+    var lv=document.getElementById('amLead').value.trim(), phone='', name='', m=lv.match(/\((\+?\d[\d ]*)\)/);
+    if(m){ phone=m[1].replace(/\D/g,''); name=lv.replace(/\s*\(.*\)\s*/,'').trim(); }
+    else if(/^\+?\d[\d ]*$/.test(lv)){ phone=lv.replace(/\D/g,''); }
+    else { name=lv; }
+    var title=document.getElementById('amTitle').value.trim()||'Cita';
+    apiPost('appts',{phone:phone,name:name,title:title,when:when}).then(function(r){return r.json();}).then(function(){
+      document.getElementById('apptModal').style.display='none';
+      document.getElementById('amWhen').value=''; document.getElementById('amTitle').value=''; document.getElementById('amLead').value='';
+      loadAppts(renderCal);
+    });
+  };
+
   // ── refresco ──
   var timer = null;
-  function start(){ if(timer) clearInterval(timer); timer = setInterval(function(){
-    api('leads').then(function(r){return r.json();}).then(function(L){ leads = L; render(); });
-  }, 10000); }
+  function start(){
+    loadAppts();
+    if(timer) clearInterval(timer);
+    timer = setInterval(function(){
+      api('leads').then(function(r){return r.json();}).then(function(L){ leads = L; render(); });
+      loadAppts(function(){ if(document.getElementById('app').classList.contains('calmode')) renderCal(); });
+    }, 10000);
+  }
 
   // auto-login si viene ?key= o hay sesión
   if(KEY){ tryAuth(KEY).catch(function(){ /* mostrar login */ }); }

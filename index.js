@@ -164,6 +164,44 @@ async function getLead(phone) {
   return fallbackLeads[phone] || null;
 }
 
+// ─── CITAS / APPOINTMENTS (calendario del panel) ──────────────────
+// Fase 1: almacén propio. La sincronización con Google Calendar se engancha
+// después en createAppt (crear evento vía Service Account + CALENDAR_ID).
+const fallbackAppts = {};
+function apptTs(when) { const t = Date.parse(when); return isNaN(t) ? Date.now() : t; }
+
+async function createAppt(a) {
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const appt = { id, phone: a.phone || "", name: a.name || "", title: a.title || "Cita", when: a.when, createdAt: Date.now() };
+  if (redisClient) {
+    await redisClient.set(`appt:${id}`, JSON.stringify(appt));
+    await redisClient.zAdd("appts_index", { score: apptTs(a.when), value: id });
+  } else {
+    fallbackAppts[id] = appt;
+  }
+  // TODO Google Calendar: si CALENDAR_ID está, crear evento con getCalendarClient()
+  return appt;
+}
+
+async function listAppts() {
+  if (redisClient) {
+    const ids = await redisClient.zRange("appts_index", 0, -1);
+    if (!ids.length) return [];
+    const raws = await Promise.all(ids.map((i) => redisClient.get(`appt:${i}`)));
+    return raws.filter(Boolean).map((r) => JSON.parse(r));
+  }
+  return Object.values(fallbackAppts).sort((x, y) => apptTs(x.when) - apptTs(y.when));
+}
+
+async function deleteAppt(id) {
+  if (redisClient) {
+    await redisClient.del(`appt:${id}`);
+    await redisClient.zRem("appts_index", id);
+  } else {
+    delete fallbackAppts[id];
+  }
+}
+
 // ─── INSTRUCCIONES BASE ───────────────────────────────────────────
 const BASE_INSTRUCTIONS = `
 CHANNEL AWARENESS (critical):
@@ -216,6 +254,13 @@ CLOSING A BOOKING:
 - Do NOT ask for date confirmation from any team, staff, or human. Dates close to the current date are fine — just close the sale.
 - Do NOT say "I'll check availability", "confirm with the team", or anything similar before sending the link.
 - If you have a concern about very short-notice dates, use [INTENT:escalate] silently — never say "contact the team".
+
+SCHEDULING A CALL / VIDEO CALL (appointments):
+- If the customer wants to schedule a call or video call (not the trip booking itself), agree on a specific date and time with them.
+- Only once you BOTH agree on a concrete date AND time, confirm it naturally in your message AND add at the very end, on a NEW line:
+  [APPT:YYYY-MM-DDTHH:MM|Short title]
+  Example: [APPT:2026-07-15T10:00|Call with John about Bali-Komodo]
+- NEVER invent a date/time. Output the APPT tag only when a precise day and hour are agreed. The tag is stripped before sending — never mention it to the customer.
 
 INTENT AND RIDERS TAGGING (critical):
 At the very end of your response, on a NEW LINE, add ONE intent tag:
@@ -480,7 +525,8 @@ app.post("/webhook", async (req, res) => {
     const intent = intentMatch ? intentMatch[1] : "exploring";
     const ridersMatch = reply.match(/\[RIDERS:(\d+)\]/);
     const numRiders = ridersMatch ? parseInt(ridersMatch[1]) : null;
-    reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").trim();
+    const apptMatch = reply.match(/\[APPT:([^\]|]+)\|([^\]]+)\]/);
+    reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").trim();
     // Strip markdown that WhatsApp sends literally (breaks URLs)
     reply = reply.replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1"); // **URL** → URL
     reply = reply.replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
@@ -512,6 +558,14 @@ app.post("/webhook", async (req, res) => {
     await sendWhatsApp(from, reply);
     await saveLead(from, profileName, text, intent);
     await recordLead(from, profileName, intent, text);  // índice para el panel web
+
+    // ── Cita agendada por el bot en la conversación ───────────────
+    if (apptMatch) {
+      try {
+        const appt = await createAppt({ phone: from, name: profileName, when: apptMatch[1].trim(), title: apptMatch[2].trim() });
+        console.log(`[${PROJECT_NAME}] Cita agendada por el bot: ${appt.when} — ${appt.title} (${from})`);
+      } catch (e) { console.error(`[${PROJECT_NAME}] Error creando cita:`, e.message); }
+    }
 
     // ── Escalación: notificar al dueño en silencio ────────────────
     if (intent === "escalate" && OWNER_PHONE) {
@@ -588,6 +642,22 @@ app.post("/admin/api/pause", async (req, res) => {
   if (!phone) return res.status(400).json({ error: "phone requerido" });
   await setPaused(phone, !!paused);
   res.json({ ok: true, paused: !!paused });
+});
+
+// ── Citas / calendario ──
+app.get("/admin/api/appts", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try { res.json(await listAppts()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/admin/api/appts", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, name, title, when } = req.body || {};
+  if (!when) return res.status(400).json({ error: "when (fecha/hora) requerido" });
+  try { res.json(await createAppt({ phone, name, title, when })); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.delete("/admin/api/appts/:id", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try { await deleteAppt(req.params.id); res.json({ ok: true }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ─── HEALTH CHECK ─────────────────────────────────────────────────
