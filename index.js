@@ -200,7 +200,7 @@ At the very end of your response, on a NEW LINE, add ONE intent tag:
 
 When intent is booking AND you know the total number of riders, also add on the same line:
 [RIDERS:N] — where N is the total number of riders (e.g. [RIDERS:4])
-When you output [RIDERS:N], do NOT include any Stripe URL in your message — the system appends the payment link automatically.
+When you output [RIDERS:N], NEVER type a link, a URL, or the word "https" yourself. You do NOT have the real payment link — the server creates it and appends it automatically below your message. Any URL you write is FAKE and will break the customer's payment. Just say you're sending the link and stop.
 All tags are stripped before sending. NEVER mention them to the customer.
 `;
 
@@ -445,10 +445,24 @@ app.post("/webhook", async (req, res) => {
     reply = reply.replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
 
     // ── Stripe checkout session dinámica ──────────────────────────
+    // SIEMPRE quitar cualquier link de pago que el modelo haya alucinado.
+    // El modelo NO conoce sesiones reales (book.stripe.com / checkout.stripe.com/cs_live…):
+    // cualquier URL que escriba es FALSA. Limpiar incondicionalmente, no solo con Stripe activo.
+    const hadFakeLink = /https?:\/\/(book|checkout|pay)\.stripe\.com\/\S*/i.test(reply);
+    reply = reply
+      .replace(/https?:\/\/(book|checkout|pay)\.stripe\.com\/\S*/gi, "")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    if (hadFakeLink) console.warn(`[${PROJECT_NAME}] Stripe URL alucinada eliminada del reply del modelo`);
+
+    // Adjuntar SOLO el link real generado por el servidor
     if (numRiders && stripeClient) {
-      reply = reply.replace(/https?:\/\/book\.stripe\.com\/[^\s]*/g, "").trim();
       const sessionUrl = await createStripeSession(numRiders);
       if (sessionUrl) reply = reply + "\n\n" + sessionUrl;
+      else console.error(`[${PROJECT_NAME}] booking detectado pero no se pudo crear la sesión Stripe`);
+    } else if (numRiders && !stripeClient) {
+      console.error(`[${PROJECT_NAME}] booking detectado pero stripeClient es null — falta STRIPE_SECRET_KEY en el entorno`);
     }
 
     history.push({ role: "assistant", content: reply });
