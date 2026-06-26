@@ -87,8 +87,16 @@
   .m{max-width:62%;padding:9px 13px;border-radius:14px;font-size:13.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 1px rgba(0,0,0,.04)}
   .m.user{align-self:flex-start;background:#fff;border-bottom-left-radius:4px}
   .m.assistant{align-self:flex-end;background:var(--bot);color:#fff;border-bottom-right-radius:4px}
-  .composer{background:var(--card);border-top:1px solid var(--line);padding:13px 20px;display:flex;align-items:center;gap:10px;color:var(--ink-soft);font-size:12.5px}
-  .composer .fake{flex:1;background:#f0f2f5;border-radius:999px;padding:10px 16px;color:#9aa3b5}
+  .stats{display:flex;gap:16px;padding:0 18px 10px;font-size:12px;color:var(--ink-soft)}
+  .stats b{color:var(--ink);font-weight:700}
+  .pausebtn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 12px;font-size:12.5px;font-weight:600;color:var(--ink-soft);white-space:nowrap}
+  .pausebtn.paused{background:#fef3c7;border-color:#fcd34d;color:#b45309}
+  .composer{background:var(--card);border-top:1px solid var(--line);padding:12px 16px;display:flex;align-items:flex-end;gap:10px}
+  .composer textarea{flex:1;border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-family:inherit;font-size:13.5px;resize:none;outline:none;max-height:120px;line-height:1.4}
+  .composer textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .composer button{border:0;background:var(--accent);color:#fff;width:40px;height:40px;border-radius:50%;font-size:17px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+  .composer button:disabled{opacity:.45;cursor:default}
+  .sendhint{font-size:11px;color:#9aa3b5;padding:0 20px 8px}
   .nochat{margin:auto;text-align:center;color:#9aa3b5}
   .nochat svg{width:54px;height:54px;opacity:.4;margin-bottom:10px}
 
@@ -133,6 +141,7 @@
   <!-- list -->
   <div id="list">
     <div class="head"><h2>Conversaciones <span class="count" id="count">0</span></h2></div>
+    <div class="stats"><span><b id="stInt">0</b> interesados</span><span><b id="stBook">0</b> en reserva</span><span><b id="stNew">0</b> hoy</span></div>
     <div class="search">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg>
       <input id="q" placeholder="Buscar lead…">
@@ -150,10 +159,15 @@
     <div class="top">
       <button class="back" id="back">‹</button>
       <div class="av" id="ctAv" style="width:38px;height:38px;font-size:14px;display:none"></div>
-      <div><div class="nm" id="ctName">Selecciona un lead</div><div class="ph" id="ctPhone"></div></div>
+      <div style="flex:1"><div class="nm" id="ctName">Selecciona un lead</div><div class="ph" id="ctPhone"></div></div>
+      <button class="pausebtn" id="pauseBtn" style="display:none"></button>
     </div>
     <div id="msgs"><div class="nochat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg><br>Elige una conversación de la izquierda</div></div>
-    <div class="composer"><div class="fake">El bot responde automáticamente a este lead 🤖</div></div>
+    <div class="sendhint" id="sendHint" style="display:none"></div>
+    <div class="composer" id="composer" style="display:none">
+      <textarea id="reply" rows="1" placeholder="Escribe para tomar el control…"></textarea>
+      <button id="sendBtn" title="Enviar">➤</button>
+    </div>
   </div>
 
   <!-- detail -->
@@ -163,9 +177,10 @@
 <script>
   // ── auth ──
   var KEY = new URLSearchParams(location.search).get('key') || sessionStorage.getItem('botpanel_key') || '';
-  var leads = [], filter = 'all', search = '', active = null;
+  var leads = [], filter = 'all', search = '', active = null, curLead = null;
 
   function api(path){ return fetch('/admin/api/' + path + (path.indexOf('?')>-1?'&':'?') + 'key=' + encodeURIComponent(KEY)); }
+  function apiPost(path, body){ return fetch('/admin/api/' + path + '?key=' + encodeURIComponent(KEY), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }); }
 
   function tryAuth(k){
     KEY = k;
@@ -205,6 +220,11 @@
       return true;
     });
     document.getElementById('count').textContent = leads.length;
+    var ni=0, nb=0, nt=0, dayAgo=Date.now()-86400000;
+    leads.forEach(function(l){ if(l.intent==='interested')ni++; if(l.intent==='booking')nb++; if(l.updatedAt>dayAgo)nt++; });
+    document.getElementById('stInt').textContent=ni;
+    document.getElementById('stBook').textContent=nb;
+    document.getElementById('stNew').textContent=nt;
     var box = document.getElementById('leads');
     if(!f.length){ box.innerHTML = '<div class="empty">'+(leads.length?'Sin resultados':'Aún no hay conversaciones')+'</div>'; return; }
     box.innerHTML = f.map(function(l){
@@ -234,6 +254,12 @@
     document.getElementById('ctName').textContent = l.name || phone;
     document.getElementById('ctPhone').textContent = '+' + phone;
 
+    curLead = l;
+    document.getElementById('pauseBtn').style.display = 'block';
+    document.getElementById('composer').style.display = 'flex';
+    document.getElementById('sendHint').style.display = 'block';
+    updatePauseUI(!!l.paused);
+
     api('conv/' + encodeURIComponent(phone)).then(function(r){return r.json();}).then(function(C){
       var box = document.getElementById('msgs');
       box.innerHTML = C.length ? C.map(function(m){ return '<div class="m '+m.role+'">'+esc(m.content)+'</div>'; }).join('') : '<div class="nochat">Sin mensajes guardados</div>';
@@ -250,6 +276,47 @@
     });
   }
   window.open_ = open_;
+
+  // ── toma de control: responder a mano + pausar el bot ──
+  function appendBubble(role, content){
+    var box = document.getElementById('msgs');
+    if(box.querySelector('.nochat')) box.innerHTML = '';
+    var d = document.createElement('div'); d.className = 'm ' + role; d.textContent = content;
+    box.appendChild(d); box.scrollTop = box.scrollHeight;
+  }
+  function updatePauseUI(paused){
+    var btn = document.getElementById('pauseBtn'), hint = document.getElementById('sendHint');
+    if(paused){ btn.textContent = '🤖 Reactivar bot'; btn.classList.add('paused'); hint.textContent = 'Tú tienes el control · el bot está en pausa para este lead'; }
+    else { btn.textContent = '✋ Pausar bot'; btn.classList.remove('paused'); hint.textContent = 'El bot responde solo · si escribes tú, tomas el control'; }
+  }
+  function togglePause(){
+    if(!curLead) return;
+    var ns = !curLead.paused;
+    apiPost('pause', { phone: curLead.phone, paused: ns }).then(function(r){ return r.json(); }).then(function(){
+      curLead.paused = ns; updatePauseUI(ns);
+      var L = leads.filter(function(x){ return x.phone === curLead.phone; })[0]; if(L) L.paused = ns;
+    });
+  }
+  function sendMsg(){
+    if(!curLead) return;
+    var ta = document.getElementById('reply'), txt = ta.value.trim(); if(!txt) return;
+    var btn = document.getElementById('sendBtn'); btn.disabled = true;
+    apiPost('send', { phone: curLead.phone, text: txt }).then(function(r){
+      if(!r.ok) return r.json().then(function(e){ throw e; });
+      ta.value = ''; ta.style.height = 'auto'; appendBubble('assistant', txt);
+      curLead.paused = true; updatePauseUI(true);
+      var L = leads.filter(function(x){ return x.phone === curLead.phone; })[0]; if(L) L.paused = true;
+    }).catch(function(e){
+      alert('No se pudo enviar: ' + ((e && e.error) || 'error') + '\n\nSi han pasado +24h desde el último mensaje del cliente, WhatsApp no permite texto libre (haría falta plantilla).');
+    }).then(function(){ btn.disabled = false; });
+  }
+  document.getElementById('pauseBtn').onclick = togglePause;
+  document.getElementById('sendBtn').onclick = sendMsg;
+  (function(){
+    var ta = document.getElementById('reply');
+    ta.addEventListener('input', function(){ ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'; });
+    ta.addEventListener('keydown', function(e){ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendMsg(); } });
+  })();
 
   // ── refresco ──
   var timer = null;

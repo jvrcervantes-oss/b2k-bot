@@ -112,13 +112,16 @@ async function recordLead(phone, name, intent, lastMessage) {
 }
 
 async function listLeads() {
+  let list;
   if (redisClient) {
     const phones = await redisClient.zRange("leads_index", 0, -1, { REV: true });
     if (!phones.length) return [];
     const raws = await Promise.all(phones.map((p) => redisClient.get(`lead:${p}`)));
-    return raws.filter(Boolean).map((r) => JSON.parse(r));
+    list = raws.filter(Boolean).map((r) => JSON.parse(r));
+  } else {
+    list = Object.values(fallbackLeads).sort((a, b) => b.updatedAt - a.updatedAt);
   }
-  return Object.values(fallbackLeads).sort((a, b) => b.updatedAt - a.updatedAt);
+  return Promise.all(list.map(async (l) => ({ ...l, paused: await isPaused(l.phone) })));
 }
 
 // Nivel de aviso ya enviado al owner para ese lead (anti-spam).
@@ -136,6 +139,29 @@ async function setNotifiedLevel(phone, level) {
   } else {
     fallbackNotified[phone] = level;
   }
+}
+
+// ─── PAUSA DEL BOT POR LEAD (control humano / takeover desde el panel) ──
+const fallbackPaused = {};
+async function setPaused(phone, val) {
+  if (redisClient) {
+    if (val) await redisClient.set(`paused:${phone}`, "1");
+    else await redisClient.del(`paused:${phone}`);
+  } else {
+    if (val) fallbackPaused[phone] = true;
+    else delete fallbackPaused[phone];
+  }
+}
+async function isPaused(phone) {
+  if (redisClient) return (await redisClient.get(`paused:${phone}`)) === "1";
+  return !!fallbackPaused[phone];
+}
+async function getLead(phone) {
+  if (redisClient) {
+    const d = await redisClient.get(`lead:${phone}`);
+    return d ? JSON.parse(d) : null;
+  }
+  return fallbackLeads[phone] || null;
 }
 
 // ─── INSTRUCCIONES BASE ───────────────────────────────────────────
@@ -297,7 +323,7 @@ async function createStripeSession(numRiders) {
 }
 
 // ─── WHATSAPP ─────────────────────────────────────────────────────
-async function sendWhatsApp(to, message) {
+async function sendWhatsAppResult(to, message) {
   const toClean = normalizePhone(to);
   try {
     await axios.post(
@@ -315,10 +341,16 @@ async function sendWhatsApp(to, message) {
         },
       }
     );
+    return { ok: true };
   } catch (e) {
     const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
-    console.error(`[${PROJECT_NAME}] Error enviando WhatsApp a ${toClean}:`, detail);
+    return { ok: false, error: detail };
   }
+}
+
+async function sendWhatsApp(to, message) {
+  const r = await sendWhatsAppResult(to, message);
+  if (!r.ok) console.error(`[${PROJECT_NAME}] Error enviando WhatsApp a ${normalizePhone(to)}:`, r.error);
 }
 
 // Mensaje de PLANTILLA (única forma de escribir al owner fuera de su ventana de 24h)
@@ -427,6 +459,15 @@ app.post("/webhook", async (req, res) => {
     const history = await getConversation(from);
     history.push({ role: "user", content: text });
 
+    // ── Control humano: si el bot está en pausa para este lead, guarda y calla ──
+    if (await isPaused(from)) {
+      await saveConversation(from, history);
+      const prev = await getLead(from);
+      await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "interested", text);
+      console.log(`[${PROJECT_NAME}] Lead ${from} en pausa (control humano) — mensaje guardado, bot NO responde`);
+      return;
+    }
+
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 500,
@@ -522,6 +563,31 @@ app.get("/admin/api/leads", async (req, res) => {
 app.get("/admin/api/conv/:phone", async (req, res) => {
   if (!adminAuth(req, res)) return;
   try { res.json(await getConversation(req.params.phone)); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Responder a mano (toma de control). Envía por WhatsApp y pausa el bot para ese lead.
+app.post("/admin/api/send", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, text } = req.body || {};
+  if (!phone || !text) return res.status(400).json({ error: "phone y text requeridos" });
+  const r = await sendWhatsAppResult(phone, text);
+  if (!r.ok) return res.status(502).json({ error: r.error });
+  const history = await getConversation(phone);
+  history.push({ role: "assistant", content: text });
+  await saveConversation(phone, history);
+  await setPaused(phone, true); // al responder a mano, el bot deja de contestar a ese lead
+  const prev = await getLead(phone);
+  await recordLead(phone, prev && prev.name, (prev && prev.intent) || "interested", text);
+  res.json({ ok: true });
+});
+
+// Pausar / reanudar el bot para un lead
+app.post("/admin/api/pause", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, paused } = req.body || {};
+  if (!phone) return res.status(400).json({ error: "phone requerido" });
+  await setPaused(phone, !!paused);
+  res.json({ ok: true, paused: !!paused });
 });
 
 // ─── HEALTH CHECK ─────────────────────────────────────────────────
