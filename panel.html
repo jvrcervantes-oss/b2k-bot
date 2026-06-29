@@ -15,6 +15,32 @@
     --green:#16a34a; --amber:#d97706; --red:#dc2626;
     --bot:#2563eb;
   }
+  /* ── MODO OSCURO ── (redefine variables + corrige colores claros fijos) */
+  body.dark{
+    --nav:#0b111c; --nav-2:#0b111c; --bg:#0d1420; --card:#161e2e;
+    --line:#28324a; --line-2:#202a3e; --ink:#e7ebf3; --ink-soft:#9aa6bd;
+    --accent:#3b82f6; --accent-soft:#1e2c47;
+    --bot:#2563eb;
+  }
+  body.dark #chat{background:#0b111c}
+  body.dark .row:hover{background:rgba(255,255,255,.04)}
+  body.dark .search input{background:#0d1420}
+  body.dark .search input:focus{background:var(--card)}
+  body.dark .chip{background:var(--card)}
+  body.dark .chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  body.dark .m.user{background:#1f293d;color:var(--ink)}
+  body.dark .pausebtn,body.dark .cannedbtn,body.dark .cannedpop{background:var(--card)}
+  body.dark .cannedpop .cedit:hover{background:rgba(255,255,255,.04)}
+  body.dark #detail .edit input,body.dark #detail .edit select,body.dark #detail .edit textarea{background:#0d1420}
+  body.dark .cal-day.out{background:rgba(255,255,255,.03)}
+  body.dark .cal-nav button{background:var(--card)}
+  body.dark .modal-box{background:var(--card)}
+  body.dark .modal-box input,body.dark #cannedText{background:#0d1420;color:var(--ink)}
+  body.dark .btn-ghost{background:var(--card)}
+  body.dark .row.wait{background:rgba(217,119,6,.14)}
+  body.dark .row.wait:hover{background:rgba(217,119,6,.22)}
+  body.dark .wininfo.open{background:rgba(22,163,74,.14);color:#4ade80}
+  body.dark .wininfo.closed{background:rgba(220,38,38,.14);color:#f87171}
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
   body{font-family:'Inter',-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;-webkit-font-smoothing:antialiased}
@@ -208,6 +234,7 @@
     <div class="ic on" id="navConv" title="Conversaciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="ic" id="navCal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="spacer"></div>
+    <div class="ic" title="Cambiar tema" id="themeToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="ic" title="Salir" id="logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
   </nav>
 
@@ -326,6 +353,16 @@
   };
   document.getElementById('pw').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('enter').click(); });
   document.getElementById('logout').onclick = function(){ sessionStorage.removeItem('botpanel_key'); location.href = location.pathname; };
+
+  // ── tema claro/oscuro (persistente) ──
+  var theme = localStorage.getItem('botpanel_theme') || 'light';
+  function applyTheme(t){ document.body.classList.toggle('dark', t === 'dark'); }
+  applyTheme(theme);
+  document.getElementById('themeToggle').onclick = function(){
+    theme = (theme === 'dark' ? 'light' : 'dark');
+    localStorage.setItem('botpanel_theme', theme);
+    applyTheme(theme);
+  };
 
   // ── helpers ──
   function esc(s){ var d=document.createElement('div'); d.textContent = s==null?'':s; return d.innerHTML; }
