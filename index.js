@@ -29,6 +29,11 @@ const {
   ALERT_TEMPLATE_NAME,
   ALERT_TEMPLATE_LANG,
   ALERT_TEMPLATE_VARS,
+  CALENDAR_ID,
+  CALENDAR_TZ,
+  REMINDER_LEAD_MIN,
+  REMINDER_TEMPLATE_NAME,
+  REMINDER_TEMPLATE_LANG,
 } = process.env;
 
 const stripeClient = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
@@ -121,7 +126,14 @@ async function listLeads() {
   } else {
     list = Object.values(fallbackLeads).sort((a, b) => b.updatedAt - a.updatedAt);
   }
-  return Promise.all(list.map(async (l) => ({ ...l, paused: await isPaused(l.phone) })));
+  return Promise.all(list.map(async (l) => ({
+    ...l,
+    paused: await isPaused(l.phone),
+    waiting: await isWaiting(l.phone),
+    lastInboundAt: await getInbound(l.phone),
+    notes: await getNotes(l.phone),
+    status: await getStatus(l.phone),
+  })));
 }
 
 // Nivel de aviso ya enviado al owner para ese lead (anti-spam).
@@ -156,6 +168,37 @@ async function isPaused(phone) {
   if (redisClient) return (await redisClient.get(`paused:${phone}`)) === "1";
   return !!fallbackPaused[phone];
 }
+
+// ─── "POR RESPONDER" (el cliente escribió y nadie le ha contestado) ──
+// Se enciende cuando llega un mensaje del cliente con el bot en pausa (control humano)
+// y se apaga cuando el bot responde solo o cuando el estudio responde a mano.
+const fallbackWaiting = {};
+async function setWaiting(phone, val) {
+  if (redisClient) {
+    if (val) await redisClient.set(`waiting:${phone}`, "1");
+    else await redisClient.del(`waiting:${phone}`);
+  } else {
+    if (val) fallbackWaiting[phone] = true;
+    else delete fallbackWaiting[phone];
+  }
+}
+async function isWaiting(phone) {
+  if (redisClient) return (await redisClient.get(`waiting:${phone}`)) === "1";
+  return !!fallbackWaiting[phone];
+}
+
+// ─── ÚLTIMO MENSAJE ENTRANTE (ventana de 24h de WhatsApp) ───────────
+// Marca cuándo escribió el cliente por última vez; el panel calcula si la ventana sigue abierta.
+const fallbackInbound = {};
+async function setInbound(phone, ts) {
+  if (redisClient) await redisClient.setEx(`inbound:${phone}`, CONV_TTL, String(ts));
+  else fallbackInbound[phone] = ts;
+}
+async function getInbound(phone) {
+  if (redisClient) { const v = await redisClient.get(`inbound:${phone}`); return v ? parseInt(v) : null; }
+  return fallbackInbound[phone] || null;
+}
+
 async function getLead(phone) {
   if (redisClient) {
     const d = await redisClient.get(`lead:${phone}`);
@@ -164,22 +207,107 @@ async function getLead(phone) {
   return fallbackLeads[phone] || null;
 }
 
+// ─── CRM MANUAL DESDE EL PANEL: notas, estado de pipeline, campos editables ──
+const fallbackNotes = {}, fallbackStatus = {};
+async function setNotes(phone, notes) {
+  if (redisClient) await redisClient.set(`notes:${phone}`, notes || "");
+  else fallbackNotes[phone] = notes || "";
+}
+async function getNotes(phone) {
+  if (redisClient) return (await redisClient.get(`notes:${phone}`)) || "";
+  return fallbackNotes[phone] || "";
+}
+async function setStatus(phone, status) {
+  if (redisClient) await redisClient.set(`status:${phone}`, status || "");
+  else fallbackStatus[phone] = status || "";
+}
+async function getStatus(phone) {
+  if (redisClient) return (await redisClient.get(`status:${phone}`)) || "";
+  return fallbackStatus[phone] || "";
+}
+// Fusiona campos extra (country/email/tour/travelDate/name) sobre el lead del índice.
+async function updateLeadFields(phone, fields) {
+  const prev = (await getLead(phone)) || { phone, intent: "interested", lastMessage: "", updatedAt: Date.now() };
+  const info = { ...prev, ...fields, phone };
+  if (redisClient) {
+    await redisClient.set(`lead:${phone}`, JSON.stringify(info));
+    await redisClient.zAdd("leads_index", { score: info.updatedAt || Date.now(), value: phone });
+  } else {
+    fallbackLeads[phone] = info;
+  }
+  return info;
+}
+
+// ─── RESPUESTAS RÁPIDAS (canned replies, compartidas por proyecto) ──
+let fallbackCanned = null;
+const DEFAULT_CANNED = [
+  { title: "Saludo", text: "Hey! Thanks for reaching out 🙌 How can I help you plan your ride?" },
+  { title: "Pedir datos", text: "To give you an exact quote — which tour, how many riders, and roughly when were you thinking of traveling?" },
+  { title: "Proponer videollamada", text: "Want to hop on a quick video call with the team? It's free, about 30 minutes, zero pressure — they'll walk you through everything." },
+];
+async function getCanned() {
+  if (redisClient) { const v = await redisClient.get("canned"); return v ? JSON.parse(v) : DEFAULT_CANNED; }
+  return fallbackCanned || DEFAULT_CANNED;
+}
+async function setCanned(list) {
+  if (redisClient) await redisClient.set("canned", JSON.stringify(list));
+  else fallbackCanned = list;
+}
+
 // ─── CITAS / APPOINTMENTS (calendario del panel) ──────────────────
 // Fase 1: almacén propio. La sincronización con Google Calendar se engancha
 // después en createAppt (crear evento vía Service Account + CALENDAR_ID).
 const fallbackAppts = {};
 function apptTs(when) { const t = Date.parse(when); return isNaN(t) ? Date.now() : t; }
 
+// Suma minutos a una fecha "naive" (sin zona) y devuelve otra naive — para el fin del evento.
+function addMinutesNaive(naive, mins) {
+  const base = naive.length === 16 ? naive + ":00" : naive;
+  const d = new Date(base + "Z"); // tratar como UTC para no arrastrar la zona del servidor
+  return new Date(d.getTime() + mins * 60000).toISOString().slice(0, 19);
+}
+
+async function persistAppt(appt) {
+  if (redisClient) {
+    await redisClient.set(`appt:${appt.id}`, JSON.stringify(appt));
+    await redisClient.zAdd("appts_index", { score: apptTs(appt.when), value: appt.id });
+  } else {
+    fallbackAppts[appt.id] = appt;
+  }
+}
+
+async function getCalendarClient() {
+  const credentials = JSON.parse(GOOGLE_SERVICE_ACCOUNT);
+  const auth = new google.auth.GoogleAuth({ credentials, scopes: ["https://www.googleapis.com/auth/calendar"] });
+  return google.calendar({ version: "v3", auth });
+}
+
 async function createAppt(a) {
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const appt = { id, phone: a.phone || "", name: a.name || "", title: a.title || "Cita", when: a.when, createdAt: Date.now() };
-  if (redisClient) {
-    await redisClient.set(`appt:${id}`, JSON.stringify(appt));
-    await redisClient.zAdd("appts_index", { score: apptTs(a.when), value: id });
-  } else {
-    fallbackAppts[id] = appt;
+  await persistAppt(appt);
+
+  // Sincroniza con Google Calendar si está configurado (Service Account + CALENDAR_ID).
+  if (CALENDAR_ID && GOOGLE_SERVICE_ACCOUNT) {
+    try {
+      const cal = await getCalendarClient();
+      const tz = CALENDAR_TZ || "Europe/Madrid";
+      const startNaive = appt.when.length === 16 ? appt.when + ":00" : appt.when;
+      const ev = await cal.events.insert({
+        calendarId: CALENDAR_ID,
+        requestBody: {
+          summary: appt.title,
+          description: `Lead: ${appt.name || ""}${appt.phone ? " (+" + appt.phone + ")" : ""}`.trim(),
+          start: { dateTime: startNaive, timeZone: tz },
+          end: { dateTime: addMinutesNaive(appt.when, 30), timeZone: tz },
+        },
+      });
+      appt.eventId = ev.data.id;
+      await persistAppt(appt);
+    } catch (e) {
+      console.error(`[${PROJECT_NAME}] Calendar insert error: ${e.message}`);
+    }
   }
-  // TODO Google Calendar: si CALENDAR_ID está, crear evento con getCalendarClient()
   return appt;
 }
 
@@ -193,7 +321,17 @@ async function listAppts() {
   return Object.values(fallbackAppts).sort((x, y) => apptTs(x.when) - apptTs(y.when));
 }
 
+async function getAppt(id) {
+  if (redisClient) { const r = await redisClient.get(`appt:${id}`); return r ? JSON.parse(r) : null; }
+  return fallbackAppts[id] || null;
+}
+
 async function deleteAppt(id) {
+  const appt = await getAppt(id);
+  if (appt && appt.eventId && CALENDAR_ID && GOOGLE_SERVICE_ACCOUNT) {
+    try { const cal = await getCalendarClient(); await cal.events.delete({ calendarId: CALENDAR_ID, eventId: appt.eventId }); }
+    catch (e) { console.error(`[${PROJECT_NAME}] Calendar delete error: ${e.message}`); }
+  }
   if (redisClient) {
     await redisClient.del(`appt:${id}`);
     await redisClient.zRem("appts_index", id);
@@ -201,6 +339,45 @@ async function deleteAppt(id) {
     delete fallbackAppts[id];
   }
 }
+
+// ─── RECORDATORIO AUTOMÁTICO AL CLIENTE (antes de la videollamada) ──
+const fallbackReminded = {};
+async function isReminded(id) {
+  if (redisClient) return (await redisClient.get(`reminded:${id}`)) === "1";
+  return !!fallbackReminded[id];
+}
+async function setReminded(id) {
+  if (redisClient) await redisClient.setEx(`reminded:${id}`, 7 * 24 * 3600, "1");
+  else fallbackReminded[id] = true;
+}
+async function reminderTick() {
+  try {
+    const now = Date.now();
+    const leadMs = (parseInt(REMINDER_LEAD_MIN) || 60) * 60000;
+    const list = await listAppts();
+    for (const a of list) {
+      if (!a.phone) continue;
+      const diff = apptTs(a.when) - now;
+      if (diff <= 0 || diff > leadMs) continue;       // solo citas dentro de la ventana de aviso
+      if (await isReminded(a.id)) continue;
+      const lastIn = await getInbound(a.phone);
+      const within24h = lastIn && (now - lastIn) < 24 * 3600000;
+      if (within24h) {
+        await sendWhatsApp(a.phone, `Hey! Quick reminder about our call: ${a.title}. Talk soon 🙌`);
+        await setReminded(a.id);
+      } else if (REMINDER_TEMPLATE_NAME) {
+        await sendWhatsAppTemplate(a.phone, REMINDER_TEMPLATE_NAME, REMINDER_TEMPLATE_LANG, [a.title]);
+        await setReminded(a.id);
+      } else {
+        await setReminded(a.id); // sin forma de enviar (ventana cerrada y sin plantilla) → no reintentar en bucle
+        console.warn(`[${PROJECT_NAME}] Recordatorio omitido (ventana 24h cerrada, sin plantilla) para ${a.phone}`);
+      }
+    }
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] reminderTick error: ${e.message}`);
+  }
+}
+setInterval(reminderTick, 5 * 60000); // revisar cada 5 minutos
 
 // ─── INSTRUCCIONES BASE ───────────────────────────────────────────
 const BASE_INSTRUCTIONS = `
@@ -335,6 +512,36 @@ async function saveLead(phone, name, lastMessage, intent) {
   } catch (e) {
     const detail = e.errors ? JSON.stringify(e.errors) : e.message;
     console.error(`[${PROJECT_NAME}] Error guardando lead — HTTP ${e.code || '?'}: ${detail}`);
+  }
+}
+
+// Mapeo de campos editables → columnas fijas del CRM (cabeceras del Sheet)
+const SHEET_COL = { name: "A", country: "B", email: "D", tour: "E", status: "H", travelDate: "K", notes: "O" };
+const STATUS_SHEET_LABEL = { new: "New", quoted: "Quoted", won: "Won ✅", lost: "Lost", noshow: "No-show" };
+
+async function updateLeadCells(sheets, row, vals) {
+  const data = Object.keys(vals)
+    .filter((k) => SHEET_COL[k] != null && vals[k] != null)
+    .map((k) => ({ range: `${SHEET_COL[k]}${row}`, values: [[vals[k]]] }));
+  if (!data.length) return;
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: SHEET_ID,
+    requestBody: { valueInputOption: "USER_ENTERED", data },
+  });
+}
+
+// Escribe los campos editados de un lead en su fila del CRM.
+// Depende de que el Sheet esté compartido con la Service Account (si no, falla controlado).
+async function writeLeadToSheet(phone, vals) {
+  if (!SHEET_ID || !GOOGLE_SERVICE_ACCOUNT) return;
+  try {
+    const sheets = await getSheetsClient();
+    const row = await findLeadRow(sheets, phone);
+    if (!row) { console.warn(`[${PROJECT_NAME}] writeLeadToSheet: lead ${phone} no está en el Sheet todavía`); return; }
+    await updateLeadCells(sheets, row, vals);
+  } catch (e) {
+    const detail = e.errors ? JSON.stringify(e.errors) : e.message;
+    console.error(`[${PROJECT_NAME}] writeLeadToSheet error — HTTP ${e.code || '?'}: ${detail}`);
   }
 }
 
@@ -509,9 +716,13 @@ app.post("/webhook", async (req, res) => {
       await saveConversation(from, history);
       const prev = await getLead(from);
       await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "interested", text);
+      await setInbound(from, Date.now());
+      await setWaiting(from, true); // el cliente espera respuesta humana → marcar en el panel
       console.log(`[${PROJECT_NAME}] Lead ${from} en pausa (control humano) — mensaje guardado, bot NO responde`);
       return;
     }
+
+    await setInbound(from, Date.now()); // reinicia la ventana de 24h de WhatsApp
 
     const response = await anthropic.messages.create({
       model: MODEL,
@@ -557,6 +768,7 @@ app.post("/webhook", async (req, res) => {
     await saveConversation(from, history);
 
     await sendWhatsApp(from, reply);
+    await setWaiting(from, false); // el bot ya respondió → no queda pendiente
     await saveLead(from, profileName, text, intent);
     await recordLead(from, profileName, intent, text);  // índice para el panel web
 
@@ -608,7 +820,9 @@ const ADMIN_HTML = fs.existsSync("panel.html")
 
 function adminAuth(req, res) {
   if (!ADMIN_PASSWORD) { res.status(503).json({ error: "panel no configurado (falta ADMIN_PASSWORD)" }); return false; }
-  if (req.query.key !== ADMIN_PASSWORD) { res.status(403).json({ error: "forbidden" }); return false; }
+  // La key viaja por cabecera (X-Admin-Key); se acepta ?key= como fallback retrocompatible.
+  const key = req.get("x-admin-key") || req.query.key;
+  if (key !== ADMIN_PASSWORD) { res.status(403).json({ error: "forbidden" }); return false; }
   return true;
 }
 
@@ -638,6 +852,7 @@ app.post("/admin/api/send", async (req, res) => {
   history.push({ role: "assistant", content: text });
   await saveConversation(phone, history);
   await setPaused(phone, true); // al responder a mano, el bot deja de contestar a ese lead
+  await setWaiting(phone, false); // ya respondido por el estudio → quitar el pendiente
   const prev = await getLead(phone);
   await recordLead(phone, prev && prev.name, (prev && prev.intent) || "interested", text);
   res.json({ ok: true });
@@ -650,6 +865,53 @@ app.post("/admin/api/pause", async (req, res) => {
   if (!phone) return res.status(400).json({ error: "phone requerido" });
   await setPaused(phone, !!paused);
   res.json({ ok: true, paused: !!paused });
+});
+
+// ── CRM: notas internas del lead (se escriben también en el Sheet, col. Javier Notes) ──
+app.post("/admin/api/note", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, notes } = req.body || {};
+  if (!phone) return res.status(400).json({ error: "phone requerido" });
+  await setNotes(phone, notes || "");
+  writeLeadToSheet(phone, { notes: notes || "" }); // best-effort, no bloquea la respuesta
+  res.json({ ok: true });
+});
+
+// ── CRM: estado de pipeline manual (new/quoted/won/lost/noshow) ──
+app.post("/admin/api/status", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, status } = req.body || {};
+  if (!phone) return res.status(400).json({ error: "phone requerido" });
+  await setStatus(phone, status || "");
+  if (STATUS_SHEET_LABEL[status]) writeLeadToSheet(phone, { status: STATUS_SHEET_LABEL[status] });
+  res.json({ ok: true });
+});
+
+// ── CRM: campos editables de la ficha (name/country/email/tour/travelDate) ──
+app.post("/admin/api/lead", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, name, country, email, tour, travelDate } = req.body || {};
+  if (!phone) return res.status(400).json({ error: "phone requerido" });
+  const fields = {};
+  ["name", "country", "email", "tour", "travelDate"].forEach((k) => {
+    if (req.body[k] != null) fields[k] = req.body[k];
+  });
+  await updateLeadFields(phone, fields);
+  writeLeadToSheet(phone, fields); // best-effort
+  res.json({ ok: true });
+});
+
+// ── Respuestas rápidas: listar / guardar ──
+app.get("/admin/api/canned", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try { res.json(await getCanned()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/admin/api/canned", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const list = req.body && req.body.list;
+  if (!Array.isArray(list)) return res.status(400).json({ error: "list (array) requerido" });
+  await setCanned(list);
+  res.json({ ok: true });
 });
 
 // ── Citas / calendario ──
