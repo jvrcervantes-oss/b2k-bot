@@ -34,6 +34,11 @@ const {
   REMINDER_LEAD_MIN,
   REMINDER_TEMPLATE_NAME,
   REMINDER_TEMPLATE_LANG,
+  FOLLOWUP_TEMPLATE_NAME,
+  FOLLOWUP_TEMPLATE_LANG,
+  FOLLOWUP_MAX,
+  FOLLOWUP_SCHEDULE,
+  FOLLOWUP_TEMPLATE_VARS,
 } = process.env;
 
 const stripeClient = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
@@ -133,6 +138,7 @@ async function listLeads() {
     lastInboundAt: await getInbound(l.phone),
     notes: await getNotes(l.phone),
     status: await getStatus(l.phone),
+    followups: await getFollowupCount(l.phone),
   })));
 }
 
@@ -197,6 +203,23 @@ async function setInbound(phone, ts) {
 async function getInbound(phone) {
   if (redisClient) { const v = await redisClient.get(`inbound:${phone}`); return v ? parseInt(v) : null; }
   return fallbackInbound[phone] || null;
+}
+
+// ─── SEGUIMIENTO AUTOMÁTICO TRAS 24h (re-enganche de ventas) ────────
+// Cuenta cuántas plantillas de follow-up se han mandado en la racha "fría" actual.
+// Se reinicia en cuanto el cliente responde (vuelve a abrir la ventana de 24h).
+const fallbackFollowup = {};
+async function getFollowupCount(phone) {
+  if (redisClient) { const v = await redisClient.get(`followup:${phone}`); return v ? parseInt(v) : 0; }
+  return fallbackFollowup[phone] || 0;
+}
+async function setFollowupCount(phone, n) {
+  if (redisClient) await redisClient.setEx(`followup:${phone}`, 30 * 24 * 3600, String(n));
+  else fallbackFollowup[phone] = n;
+}
+async function resetFollowup(phone) {
+  if (redisClient) await redisClient.del(`followup:${phone}`);
+  else delete fallbackFollowup[phone];
 }
 
 async function getLead(phone) {
@@ -378,6 +401,46 @@ async function reminderTick() {
   }
 }
 setInterval(reminderTick, 5 * 60000); // revisar cada 5 minutos
+
+// ─── RE-ENGANCHE DE VENTAS TRAS LA VENTANA DE 24h ──────────────────
+// Pasadas las 24h, WhatsApp solo permite PLANTILLAS aprobadas (no texto libre).
+// Este tick busca leads "fríos" aún vendibles y les envía la plantilla de seguimiento
+// según la cadencia (FOLLOWUP_SCHEDULE = horas de frío para cada intento), con un tope.
+// Cuando el cliente responde, resetFollowup() reinicia la cadencia y el bot retoma la venta.
+const FOLLOWUP_SKIP_INTENT = new Set(["escalate"]);          // pregunta pendiente del owner
+const FOLLOWUP_SKIP_STATUS = new Set(["won", "lost", "noshow"]); // ya cerrado
+async function followupTick() {
+  try {
+    if (!FOLLOWUP_TEMPLATE_NAME) return; // sin plantilla aprobada no se puede contactar fuera de 24h
+    const schedule = (FOLLOWUP_SCHEDULE || "24,72").split(",").map((s) => parseFloat(s)).filter((n) => !isNaN(n) && n >= 24);
+    if (!schedule.length) return;
+    const maxN = parseInt(FOLLOWUP_MAX) || schedule.length;
+    const nVars = FOLLOWUP_TEMPLATE_VARS != null ? parseInt(FOLLOWUP_TEMPLATE_VARS) : 1;
+    const now = Date.now();
+    const leads = await listLeads();
+    for (const l of leads) {
+      if (isOwner(l.phone)) continue;
+      if (l.paused) continue;                              // humano al mando
+      if (FOLLOWUP_SKIP_STATUS.has(l.status)) continue;    // cerrado (ganado/perdido/no-show)
+      if (FOLLOWUP_SKIP_INTENT.has(l.intent)) continue;    // hay una duda escalada al owner
+      if (!l.lastInboundAt) continue;
+      const coldH = (now - l.lastInboundAt) / 3600000;
+      if (coldH < 24) continue;                            // ventana abierta → el bot ya responde solo
+      const sent = await getFollowupCount(l.phone);
+      if (sent >= maxN) continue;                          // tope de intentos alcanzado
+      const dueH = schedule[sent] != null ? schedule[sent] : schedule[schedule.length - 1];
+      if (coldH < dueH) continue;                          // aún no toca el siguiente intento
+      const firstName = (l.name || "").trim().split(/\s+/)[0] || "there";
+      const params = nVars >= 1 ? [firstName] : [];
+      await sendWhatsAppTemplate(l.phone, FOLLOWUP_TEMPLATE_NAME, FOLLOWUP_TEMPLATE_LANG, params);
+      await setFollowupCount(l.phone, sent + 1);
+      console.log(`[${PROJECT_NAME}] Follow-up ${sent + 1}/${maxN} enviado a ${l.phone} (frío ${coldH.toFixed(0)}h)`);
+    }
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] followupTick error: ${e.message}`);
+  }
+}
+setInterval(followupTick, 30 * 60000); // revisar cada 30 minutos
 
 // ─── INSTRUCCIONES BASE ───────────────────────────────────────────
 const BASE_INSTRUCTIONS = `
@@ -717,12 +780,14 @@ app.post("/webhook", async (req, res) => {
       const prev = await getLead(from);
       await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "interested", text);
       await setInbound(from, Date.now());
+      await resetFollowup(from);    // respondió → reinicia la cadencia de seguimiento
       await setWaiting(from, true); // el cliente espera respuesta humana → marcar en el panel
       console.log(`[${PROJECT_NAME}] Lead ${from} en pausa (control humano) — mensaje guardado, bot NO responde`);
       return;
     }
 
     await setInbound(from, Date.now()); // reinicia la ventana de 24h de WhatsApp
+    await resetFollowup(from);           // respondió → reinicia la cadencia de seguimiento
 
     const response = await anthropic.messages.create({
       model: MODEL,

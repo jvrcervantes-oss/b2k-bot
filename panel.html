@@ -439,6 +439,7 @@
         + '<div class="field"><div class="k">Intención</div><div class="v">'+(LABEL[it]||it)+'</div></div>'
         + '<div class="field"><div class="k">Última actividad</div><div class="v">'+ago(l.updatedAt)+'</div></div>'
         + '<div class="field"><div class="k">Mensajes</div><div class="v">'+C.length+'</div></div>'
+        + (l.followups ? '<div class="field"><div class="k">Seguimientos enviados</div><div class="v">'+l.followups+' tras 24h</div></div>' : '')
         + apptFieldHTML(phone)
         + crmEditorHTML(l);
     });
