@@ -282,6 +282,8 @@ const LEAD_KEYMAP = {
   package: "package", pkg: "package", paquete: "package",
   riders: "riders", pillions: "pillions",
   dates: "travelDate", date: "travelDate", traveldate: "travelDate", travel: "travelDate",
+  tags: "tags", tag: "tags",
+  followup: "nextFollowUp", nextfollowup: "nextFollowUp", followupdate: "nextFollowUp",
 };
 
 // 1) El formulario de Instagram llega como el PRIMER mensaje de WhatsApp (texto plano).
@@ -312,6 +314,7 @@ function parseLeadTag(reply) {
     let v = pair.slice(i + 1).trim();
     if (!k || !v || /^(unknown|n\/?a|tbd|\?+)$/i.test(v)) return;
     if (k === "riders" || k === "pillions") { const n = parseInt(v, 10); if (!isNaN(n)) out[k] = n; }
+    else if (k === "tags") { out.tags = (out.tags || []).concat(v.split(",").map((s) => s.trim()).filter(Boolean)); }
     else out[k] = v.slice(0, 120);
   });
   return Object.keys(out).length ? out : null;
@@ -320,6 +323,13 @@ function parseLeadTag(reply) {
 // Guarda los campos extraídos en la BD (Redis) + Sheet, sin pisar con vacíos.
 async function captureLeadData(phone, fields) {
   if (!fields || !Object.keys(fields).length) return;
+  // Las etiquetas se UNEN con las existentes (no pisan las que puso el estudio a mano).
+  if (Array.isArray(fields.tags)) {
+    const prev = (await getLead(phone)) || {};
+    const set = new Set([...(Array.isArray(prev.tags) ? prev.tags : []), ...fields.tags].map((s) => String(s).trim()).filter(Boolean));
+    fields = { ...fields, tags: Array.from(set).slice(0, 20) };
+    if (fields.tags.length) logEvent(phone, "tag", { to: fields.tags[fields.tags.length - 1] });
+  }
   await updateLeadFields(phone, { ...fields, updatedAt: Date.now() });
   writeLeadToSheet(phone, fields); // best-effort (solo escribe las llaves con columna mapeada)
 }
@@ -719,10 +729,12 @@ LEAD DATA TAGGING — fill the CRM as you learn things (do this consistently):
 - Whenever you LEARN or CONFIRM a concrete fact about the lead, append a SILENT data tag at the very end of your message, on its own new line:
   [LEAD key=value; key=value]
 - It is stripped before sending — the customer NEVER sees it. Include ONLY the fields you are now sure of; omit anything you don't know yet. NEVER guess or invent a value.
-- Valid keys: tour (e.g. Bali to Komodo / 7 Islands) · package (Roundtrip / Extreme / Deluxe) · riders (a number) · pillions (a number) · dates (their travel window, e.g. "late 2027" or "October 2026") · country · name · email.
+- Valid keys: tour (e.g. Bali to Komodo / 7 Islands) · package (Roundtrip / Extreme / Deluxe) · riders (a number) · pillions (a number) · dates (their travel window, e.g. "late 2027" or "October 2026") · country · name · email · tags (short labels, comma-separated) · followup (a date YYYY-MM-DD for the next time the team should reach out).
 - Send it the moment you learn each thing, and again (with the fuller set) as more is confirmed — re-sending a known field is fine, it just updates the record.
 - Note: leads who arrived via the Instagram form already have their name, email and package band captured automatically — you don't need to re-tag those, but DO tag what you learn in the chat (chosen package, exact riders, dates, country, pillions).
+- WHEN YOU PROMISE TO "make a note" / "let them know" / waitlist them, you MUST back it with the tag — otherwise the note is lost. Use tags + followup. Examples of tags: "guided-waitlist", "waitlist-2027", "price-objection", "VIP", "needs-IDP". Set followup to a sensible date (e.g. for a 2027 guided waitlist, followup=2026-09-01 so the team contacts them when 2027 dates are likely set).
 - Example: a UK rider confirms 4 of them want Extreme for late 2027 → end your message with: [LEAD tour=Bali to Komodo; package=Extreme; riders=4; dates=late 2027; country=UK]
+- Example (waitlist): group of 4 wants a GUIDED 2027 departure (none open yet) → [LEAD tour=Bali to Komodo; riders=4; dates=late 2027; tags=guided-waitlist,2027; followup=2026-09-01]
 
 All tags are stripped before sending. NEVER mention them to the customer.
 `;
