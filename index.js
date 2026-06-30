@@ -312,6 +312,79 @@ async function captureLeadData(phone, fields) {
   writeLeadToSheet(phone, fields); // best-effort (solo escribe las llaves con columna mapeada)
 }
 
+// ─── ENRIQUECIMIENTO: rellena la ficha leyendo la conversación con el LLM ──────
+// Para leads antiguos (p.ej. Keith) cuyos datos están en el chat pero no en la ficha.
+const EXTRACT_MODEL = process.env.EXTRACT_MODEL || MODEL;
+const KEY_FIELDS = ["email", "country", "tour", "package", "riders", "pillions", "travelDate"];
+function leadMissingKeyFields(l) {
+  if (!l) return true;
+  return KEY_FIELDS.some((k) => l[k] == null || l[k] === "");
+}
+
+async function enrichLeadFromConversation(phone, { force = false } = {}) {
+  const lead = (await getLead(phone)) || { phone };
+  // No repetir si ya está completo o se enriqueció hace poco (salvo force).
+  if (!force && lead.enrichedAt && Date.now() - lead.enrichedAt < 12 * 3600 * 1000) return null;
+  if (!force && !leadMissingKeyFields(lead)) return null;
+  const history = await getConversation(phone);
+  if (!history || history.length < 2) return null;
+  const transcript = history
+    .map((m) => `${m.role === "user" ? "Customer" : "Daniel"}: ${m.content}`)
+    .join("\n")
+    .slice(-6000);
+  let data = null;
+  try {
+    const r = await anthropic.messages.create({
+      model: EXTRACT_MODEL,
+      max_tokens: 300,
+      system:
+        'You extract CRM fields from a WhatsApp sales chat for a motorcycle tour company. ' +
+        'Return ONLY a compact JSON object — no prose, no code fences. Keys: ' +
+        'name, email, country, tour ("Bali to Komodo" or "7 Islands"), ' +
+        'package ("Roundtrip" | "Extreme" | "Deluxe"), riders (integer), pillions (integer), ' +
+        'travelDate (free text like "late 2027"). Use null for anything not clearly stated by the customer. Never guess.',
+      messages: [{ role: "user", content: transcript }],
+    });
+    let txt = ((r.content[0] && r.content[0].text) || "").trim();
+    txt = txt.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+    data = JSON.parse(txt);
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] enrich ${phone}: fallo extracción — ${e.message}`);
+    return null;
+  }
+  // Solo rellenar campos VACÍOS: nunca pisar lo que ya hay (p.ej. ediciones manuales).
+  const fields = {};
+  ["name", "email", "country", "tour", "package", "travelDate"].forEach((k) => {
+    if (data[k] && (lead[k] == null || lead[k] === "")) fields[k] = String(data[k]).slice(0, 120);
+  });
+  ["riders", "pillions"].forEach((k) => {
+    const n = parseInt(data[k], 10);
+    if (data[k] != null && !isNaN(n) && (lead[k] == null || lead[k] === "")) fields[k] = n;
+  });
+  fields.enrichedAt = Date.now();
+  await updateLeadFields(phone, fields); // no toca updatedAt → no reordena el lead como "actividad nueva"
+  if (Object.keys(fields).length > 1) writeLeadToSheet(phone, fields);
+  return fields;
+}
+
+// Barrido: enriquece leads incompletos (cap para no disparar costes de LLM).
+async function enrichSweep(limit = 20) {
+  try {
+    const all = await listLeads();
+    const targets = all.filter(leadMissingKeyFields).slice(0, limit);
+    let n = 0;
+    for (const l of targets) {
+      const f = await enrichLeadFromConversation(l.phone);
+      if (f && Object.keys(f).length > 1) n++;
+    }
+    if (n) console.log(`[${PROJECT_NAME}] enrichSweep: ${n}/${targets.length} leads enriquecidos`);
+    return n;
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] enrichSweep error: ${e.message}`);
+    return 0;
+  }
+}
+
 // ─── RESPUESTAS RÁPIDAS (canned replies, compartidas por proyecto) ──
 let fallbackCanned = null;
 const DEFAULT_CANNED = [
@@ -945,6 +1018,14 @@ app.post("/webhook", async (req, res) => {
         await setNotifiedLevel(from, intent);
       }
     }
+
+    // ── Enriquecimiento oportunista (no bloquea): si a la ficha le faltan datos
+    //    que el chat ya tiene, los extrae en segundo plano. Debounce 15 min. ──
+    const freshLead = await getLead(from);
+    if (leadMissingKeyFields(freshLead) &&
+        (!freshLead.enrichedAt || Date.now() - freshLead.enrichedAt > 15 * 60 * 1000)) {
+      enrichLeadFromConversation(from).catch(() => {});
+    }
   } catch (e) {
     console.error(`[${PROJECT_NAME}] Error procesando mensaje:`, e.message);
   }
@@ -972,6 +1053,22 @@ app.get("/admin", (req, res) => {
 app.get("/admin/api/leads", async (req, res) => {
   if (!adminAuth(req, res)) return;
   try { res.json(await listLeads()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Enriquecer un lead: extrae de su conversación los datos que falten en la ficha.
+app.post("/admin/api/enrich", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone } = req.body || {};
+  if (!phone) return res.status(400).json({ error: "phone requerido" });
+  try { const f = await enrichLeadFromConversation(phone, { force: true }); res.json({ ok: true, fields: f || {} }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Enriquecer todos los leads incompletos de golpe (botón "Actualizar desde chats").
+app.post("/admin/api/enrich-all", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try { const n = await enrichSweep(40); res.json({ ok: true, enriched: n }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Estado del almacén: si la "base de datos" persiste (Redis) o es volátil (RAM), y cuántos leads hay.
@@ -1101,4 +1198,8 @@ app.listen(PORT, async () => {
   } else {
     console.warn(`[${PROJECT_NAME}] Google Sheets: ⚠️  SHEET_ID o GOOGLE_SERVICE_ACCOUNT no configurados`);
   }
+
+  // Auto-relleno de la BD: barrido inicial (tras conectar Redis) + periódico cada 30 min.
+  setTimeout(() => enrichSweep(20), 8000);
+  setInterval(() => enrichSweep(10), 30 * 60 * 1000);
 });

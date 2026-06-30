@@ -183,7 +183,15 @@
   .db-search{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:7px 12px}
   .db-search input{border:0;background:none;outline:none;font-size:13.5px;color:inherit;width:190px}
   .db-csv{border:0;background:var(--accent);color:#fff;font-weight:600;padding:9px 16px;border-radius:9px;font-size:13.5px;cursor:pointer}
+  .db-ghost{border:1px solid var(--line);background:var(--card);color:inherit;font-weight:600;padding:9px 14px;border-radius:9px;font-size:13.5px;cursor:pointer}
+  .db-ghost:disabled{opacity:.55;cursor:default}
   .db-wrap{flex:1;overflow:auto;min-height:0}
+  .db-foot{display:flex;align-items:center;justify-content:space-between;padding:10px 24px;border-top:1px solid var(--line);background:var(--card);font-size:13px;color:var(--ink-soft);flex-shrink:0}
+  .db-foot:empty{display:none}
+  .db-pager{display:flex;align-items:center;gap:6px}
+  .db-pager button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:inherit;cursor:pointer;font-size:14px}
+  .db-pager button:disabled{opacity:.4;cursor:default}
+  .db-pg{padding:0 10px;font-weight:600;color:var(--ink)}
   table.db{width:100%;border-collapse:collapse;font-size:13px}
   table.db th{position:sticky;top:0;background:var(--card);text-align:left;padding:11px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);border-bottom:1px solid var(--line);white-space:nowrap;z-index:1}
   table.db td{padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -325,9 +333,11 @@
       <h2>Base de datos <span class="count" id="dbCount">0</span></h2>
       <span class="db-store" id="dbStore">—</span>
       <div class="db-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg><input id="dbQ" placeholder="Buscar cliente…"></div>
+      <button class="db-ghost" id="dbEnrich" title="Lee las conversaciones y rellena los datos que falten">🔄 Actualizar desde chats</button>
       <button class="db-csv" id="dbCsv">⬇ Exportar CSV</button>
     </div>
     <div class="db-wrap"><div id="dbTable"></div></div>
+    <div class="db-foot" id="dbFoot"></div>
   </div>
 </div>
 
@@ -709,7 +719,7 @@
 
   function buildLeadsDL(){ document.getElementById('leadsDL').innerHTML = leads.map(function(l){ return '<option value="'+esc((l.name||l.phone)+' (+'+l.phone+')')+'">'; }).join(''); }
   // ── BASE DE DATOS: tabla de TODOS los clientes ──
-  var dbSearch = '';
+  var dbSearch = '', dbPage = 1, DB_PAGE_SIZE = 25;
   var DB_COLS = [
     ['name','Nombre'],['phone','WhatsApp'],['email','Email'],['country','País'],
     ['tour','Tour'],['package','Paquete'],['riders','Riders'],['pillions','Pillions'],
@@ -731,11 +741,15 @@
     });
   }
   function renderDb(){
-    var f=dbFiltered();
-    document.getElementById('dbCount').textContent=f.length;
-    if(!f.length){ document.getElementById('dbTable').innerHTML='<div class="db-empty">'+(leads.length?'Sin resultados':'Aún no hay clientes')+'</div>'; return; }
+    var f=dbFiltered(), total=f.length;
+    document.getElementById('dbCount').textContent=total;
+    var foot=document.getElementById('dbFoot');
+    if(!total){ document.getElementById('dbTable').innerHTML='<div class="db-empty">'+(leads.length?'Sin resultados':'Aún no hay clientes')+'</div>'; foot.innerHTML=''; return; }
+    var pages=Math.max(1, Math.ceil(total/DB_PAGE_SIZE));
+    if(dbPage>pages) dbPage=pages; if(dbPage<1) dbPage=1;
+    var start=(dbPage-1)*DB_PAGE_SIZE, pageRows=f.slice(start, start+DB_PAGE_SIZE);
     var th='<tr>'+DB_COLS.map(function(c){return '<th>'+c[1]+'</th>';}).join('')+'</tr>';
-    var rows=f.map(function(l){
+    var rows=pageRows.map(function(l){
       return '<tr onclick="openFromDb(\''+l.phone+'\')">'+DB_COLS.map(function(c){
         var raw=dbVal(l,c[0]);
         if(c[0]==='package' && raw) return '<td><span class="db-tag">'+esc(raw)+'</span></td>';
@@ -744,7 +758,18 @@
       }).join('')+'</tr>';
     }).join('');
     document.getElementById('dbTable').innerHTML='<table class="db"><thead>'+th+'</thead><tbody>'+rows+'</tbody></table>';
+    foot.innerHTML =
+      '<span>'+(start+1)+'–'+(start+pageRows.length)+' de '+total+'</span>'
+      +'<div class="db-pager">'
+      +'<button '+(dbPage<=1?'disabled':'')+' onclick="dbGo(1)">«</button>'
+      +'<button '+(dbPage<=1?'disabled':'')+' onclick="dbGo('+(dbPage-1)+')">‹</button>'
+      +'<span class="db-pg">'+dbPage+' / '+pages+'</span>'
+      +'<button '+(dbPage>=pages?'disabled':'')+' onclick="dbGo('+(dbPage+1)+')">›</button>'
+      +'<button '+(dbPage>=pages?'disabled':'')+' onclick="dbGo('+pages+')">»</button>'
+      +'</div>';
   }
+  function dbGo(p){ dbPage=p; renderDb(); var w=document.querySelector('.db-wrap'); if(w) w.scrollTop=0; }
+  window.dbGo=dbGo;
   function openFromDb(phone){
     var a=document.getElementById('app'); a.classList.remove('dbmode'); setNav('navConv'); open_(phone);
   }
@@ -777,9 +802,18 @@
 
   document.getElementById('navConv').onclick=function(){ var a=document.getElementById('app'); a.classList.remove('calmode'); a.classList.remove('dbmode'); setNav('navConv'); };
   document.getElementById('navCal').onclick=function(){ var a=document.getElementById('app'); a.classList.add('calmode'); a.classList.remove('dbmode'); setNav('navCal'); buildLeadsDL(); loadAppts(renderCal); };
-  document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); a.classList.add('dbmode'); a.classList.remove('calmode'); setNav('navDb'); loadHealth(); renderDb(); };
-  document.getElementById('dbQ').oninput=function(e){ dbSearch=e.target.value.toLowerCase().trim(); renderDb(); };
+  document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); a.classList.add('dbmode'); a.classList.remove('calmode'); setNav('navDb'); dbPage=1; loadHealth(); renderDb(); };
+  document.getElementById('dbQ').oninput=function(e){ dbSearch=e.target.value.toLowerCase().trim(); dbPage=1; renderDb(); };
   document.getElementById('dbCsv').onclick=exportCsv;
+  document.getElementById('dbEnrich').onclick=function(){
+    var b=this, t=b.textContent; b.disabled=true; b.textContent='⏳ Leyendo chats…';
+    apiPost('enrich-all',{}).then(function(r){return r.json();}).then(function(j){
+      return api('leads').then(function(r){return r.json();}).then(function(L){
+        leads=L; renderDb();
+        b.textContent='✓ '+(j.enriched||0)+' actualizados'; setTimeout(function(){ b.textContent=t; b.disabled=false; },2800);
+      });
+    }).catch(function(){ b.textContent='✕ Error'; setTimeout(function(){ b.textContent=t; b.disabled=false; },2800); });
+  };
   document.getElementById('calPrev').onclick=function(){ calM--; if(calM<0){calM=11;calY--;} renderCal(); };
   document.getElementById('calNext').onclick=function(){ calM++; if(calM>11){calM=0;calY++;} renderCal(); };
   document.getElementById('newAppt').onclick=function(){ buildLeadsDL(); document.getElementById('amErr').textContent=''; document.getElementById('apptModal').style.display='flex'; };
