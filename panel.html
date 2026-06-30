@@ -203,6 +203,26 @@
   .db-dim{color:var(--ink-soft)}
   .db-tag{font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,.05)}
   body.dark .db-tag{background:rgba(255,255,255,.07)}
+  /* etiquetas de color + desplegables editables in-line */
+  .db-badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap}
+  .db-sel{font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:7px;padding:4px 7px;background:var(--card);color:inherit;cursor:pointer;outline:none;max-width:160px}
+  .db-sel:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+  .it-booking{background:rgba(220,38,38,.13);color:#dc2626}
+  .it-interested{background:rgba(217,119,6,.16);color:#b45309}
+  .it-exploring{background:rgba(22,163,74,.13);color:#16a34a}
+  .it-escalate{background:rgba(107,114,128,.16);color:#6b7280}
+  .st-new{border-color:rgba(37,99,235,.55);background:rgba(37,99,235,.10);color:#2563eb}
+  .st-quoted{border-color:rgba(217,119,6,.55);background:rgba(217,119,6,.12);color:#b45309}
+  .st-won{border-color:rgba(22,163,74,.55);background:rgba(22,163,74,.13);color:#15803d}
+  .st-lost{border-color:rgba(220,38,38,.55);background:rgba(220,38,38,.10);color:#dc2626}
+  .st-noshow{border-color:rgba(107,114,128,.55);background:rgba(107,114,128,.12);color:#6b7280}
+  .st-none{color:var(--ink-soft)}
+  .pk-roundtrip{border-color:rgba(100,116,139,.55);background:rgba(100,116,139,.10);color:#475569}
+  .pk-extreme{border-color:rgba(232,73,10,.55);background:rgba(232,73,10,.12);color:#c2410c}
+  .pk-deluxe{border-color:rgba(79,70,229,.55);background:rgba(79,70,229,.12);color:#4f46e5}
+  .pk-standard{border-color:rgba(13,148,136,.55);background:rgba(13,148,136,.12);color:#0d9488}
+  .pk-none{color:var(--ink-soft)}
+  body.dark .pk-roundtrip{color:#94a3b8}body.dark .st-new{color:#60a5fa}body.dark .st-quoted{color:#fbbf24}body.dark .st-won{color:#4ade80}body.dark .pk-deluxe{color:#a5b4fc}body.dark .pk-standard{color:#5eead4}body.dark .pk-extreme{color:#fb923c}
   .db-empty{padding:48px;text-align:center;color:var(--ink-soft)}
   #calView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
   #app.calmode #list,#app.calmode #chat,#app.calmode #detail{display:none}
@@ -730,6 +750,45 @@
     ['travelDate','Fecha viaje'],['status','Estado'],['intent','Intención'],['updatedAt','Últ. act.']
   ];
   var STATUS_LABEL = {'':'—',new:'🆕 Nuevo',quoted:'💬 Cotizado',won:'✅ Ganado',lost:'❌ Perdido',noshow:'🚫 No-show'};
+  var ST_OPTS = [['','—'],['new','🆕 Nuevo'],['quoted','💬 Cotizado'],['won','✅ Ganado'],['lost','❌ Perdido'],['noshow','🚫 No-show']];
+  var PKG_OPTS = ['','Roundtrip','Extreme','Deluxe','Standard / best value'];
+  function pkgKey(p){ p=(p||'').toLowerCase(); if(p.indexOf('roundtrip')>=0)return 'roundtrip'; if(p.indexOf('extreme')>=0)return 'extreme'; if(p.indexOf('deluxe')>=0)return 'deluxe'; if(p.indexOf('standard')>=0||p.indexOf('best')>=0)return 'standard'; return 'none'; }
+  // Celda de la tabla: estado/paquete = desplegable editable con color; intención = etiqueta de color.
+  function dbCell(l,key){
+    if(key==='status'){
+      var st=l.status||'';
+      var o=ST_OPTS.map(function(x){return '<option value="'+x[0]+'"'+(st===x[0]?' selected':'')+'>'+x[1]+'</option>';}).join('');
+      return '<td onclick="event.stopPropagation()"><select class="db-sel st-'+(st||'none')+'" onchange="dbSetStatus(\''+l.phone+'\',this)">'+o+'</select></td>';
+    }
+    if(key==='package'){
+      var pk=l.package||'', opts=PKG_OPTS.slice(); if(pk && opts.indexOf(pk)<0) opts.unshift(pk);
+      var o2=opts.map(function(v){return '<option value="'+esc(v)+'"'+(pk===v?' selected':'')+'>'+esc(v||'—')+'</option>';}).join('');
+      return '<td onclick="event.stopPropagation()"><select class="db-sel pk-'+pkgKey(pk)+'" onchange="dbSetPackage(\''+l.phone+'\',this)">'+o2+'</select></td>';
+    }
+    if(key==='intent'){
+      var it=l.intent||'exploring';
+      return '<td><span class="db-badge it-'+it+'">'+(LABEL[it]||it)+'</span></td>';
+    }
+    var raw=dbVal(l,key), cls=(key==='name'?'db-nm':((raw===''||raw==='—')?'db-dim':''));
+    return '<td'+(cls?' class="'+cls+'"':'')+'>'+esc(raw||'—')+'</td>';
+  }
+  function dbSetStatus(phone,sel){
+    var v=sel.value;
+    apiPost('status',{phone:phone,status:v}).then(function(r){ if(!r.ok) throw 0;
+      sel.className='db-sel st-'+(v||'none');
+      var L=leads.filter(function(x){return x.phone===phone;})[0]; if(L)L.status=v;
+      if(curLead&&curLead.phone===phone){ curLead.status=v; var es=document.getElementById('edStatus'); if(es)es.value=v; }
+    }).catch(function(){ alert('No se pudo guardar el estado'); });
+  }
+  function dbSetPackage(phone,sel){
+    var v=sel.value;
+    apiPost('lead',{phone:phone,package:v}).then(function(r){ if(!r.ok) throw 0;
+      sel.className='db-sel pk-'+pkgKey(v);
+      var L=leads.filter(function(x){return x.phone===phone;})[0]; if(L)L.package=v;
+      if(curLead&&curLead.phone===phone){ curLead.package=v; var ep=document.getElementById('edPackage'); if(ep)ep.value=v; }
+    }).catch(function(){ alert('No se pudo guardar el paquete'); });
+  }
+  window.dbSetStatus=dbSetStatus; window.dbSetPackage=dbSetPackage;
   function dbVal(l,k){
     if(k==='phone') return '+'+l.phone;
     if(k==='updatedAt') return ago(l.updatedAt);
@@ -754,12 +813,7 @@
     var start=(dbPage-1)*DB_PAGE_SIZE, pageRows=f.slice(start, start+DB_PAGE_SIZE);
     var th='<tr>'+DB_COLS.map(function(c){return '<th>'+c[1]+'</th>';}).join('')+'</tr>';
     var rows=pageRows.map(function(l){
-      return '<tr onclick="openFromDb(\''+l.phone+'\')">'+DB_COLS.map(function(c){
-        var raw=dbVal(l,c[0]);
-        if(c[0]==='package' && raw) return '<td><span class="db-tag">'+esc(raw)+'</span></td>';
-        var cls=(c[0]==='name'?'db-nm':((raw===''||raw==='—')?'db-dim':''));
-        return '<td'+(cls?' class="'+cls+'"':'')+'>'+esc(raw||'—')+'</td>';
-      }).join('')+'</tr>';
+      return '<tr onclick="openFromDb(\''+l.phone+'\')">'+DB_COLS.map(function(c){ return dbCell(l,c[0]); }).join('')+'</tr>';
     }).join('');
     document.getElementById('dbTable').innerHTML='<table class="db"><thead>'+th+'</thead><tbody>'+rows+'</tbody></table>';
     foot.innerHTML =
