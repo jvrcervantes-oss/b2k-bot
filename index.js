@@ -1050,6 +1050,12 @@ app.get("/admin", (req, res) => {
   res.type("html").send(ADMIN_HTML.replace(/__PROJECT__/g, PROJECT_NAME || "Bot"));
 });
 
+// URL dedicada a la base de datos: sirve el mismo panel; la página abre la vista BD al cargar.
+app.get("/admin/db", (req, res) => {
+  if (!ADMIN_PASSWORD) return res.status(503).send("Panel no configurado: define ADMIN_PASSWORD en Railway.");
+  res.type("html").send(ADMIN_HTML.replace(/__PROJECT__/g, PROJECT_NAME || "Bot"));
+});
+
 app.get("/admin/api/leads", async (req, res) => {
   if (!adminAuth(req, res)) return;
   try { res.json(await listLeads()); } catch (e) { res.status(500).json({ error: e.message }); }
