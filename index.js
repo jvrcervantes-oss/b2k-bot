@@ -39,6 +39,9 @@ const {
   FOLLOWUP_MAX,
   FOLLOWUP_SCHEDULE,
   FOLLOWUP_TEMPLATE_VARS,
+  INTRO_TEMPLATE_NAME,
+  INTRO_TEMPLATE_LANG,
+  INTRO_TEMPLATE_VARS,
 } = process.env;
 
 const stripeClient = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
@@ -607,6 +610,35 @@ async function followupTick() {
 }
 setInterval(followupTick, 30 * 60000); // revisar cada 30 minutos
 
+// ─── RECORDATORIOS DE SEGUIMIENTO MANUAL ───────────────────────────
+// Cuando un lead llega a su fecha "Próximo seguimiento" (nextFollowUp), avisa al OWNER
+// por WhatsApp para que lo contacte. Una vez por fecha (fuReminded). No al lead, al estudio.
+async function followUpReminderTick() {
+  try {
+    if (!OWNER_PHONE) return;
+    const now = new Date();
+    const todayStr = now.getFullYear() + "-" + ("0" + (now.getMonth() + 1)).slice(-2) + "-" + ("0" + now.getDate()).slice(-2);
+    const leads = await listLeads();
+    for (const l of leads) {
+      if (l.archived) continue;
+      if (FOLLOWUP_SKIP_STATUS.has(l.status)) continue;     // ganado/perdido/no-show
+      if (!l.nextFollowUp) continue;
+      const fu = String(l.nextFollowUp).slice(0, 10);
+      if (fu > todayStr) continue;                          // aún no vence
+      if (l.fuReminded === fu) continue;                    // ya avisado para esta fecha
+      const who = l.name || ("+" + l.phone);
+      const extra = [l.package, l.owner ? "· " + l.owner : ""].filter(Boolean).join(" ");
+      await sendWhatsApp(OWNER_PHONE, `📅 ${PROJECT_NAME} — Seguimiento pendiente\n\n*${who}* ${extra}\nTel: +${l.phone}\nVencía: ${fu}\n\nToca contactarle 👇`);
+      await updateLeadFields(l.phone, { fuReminded: fu });
+      await logEvent(l.phone, "fu_reminded", { date: fu });
+      console.log(`[${PROJECT_NAME}] Recordatorio de seguimiento (owner) para ${l.phone} — vencía ${fu}`);
+    }
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] followUpReminderTick error: ${e.message}`);
+  }
+}
+setInterval(followUpReminderTick, 30 * 60000); // revisar cada 30 minutos
+
 // ─── INSTRUCCIONES BASE ───────────────────────────────────────────
 const BASE_INSTRUCTIONS = `
 CHANNEL AWARENESS (critical):
@@ -861,11 +893,37 @@ async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams = [])
       },
       { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" } }
     );
-    console.log(`[${PROJECT_NAME}] Aviso (plantilla "${templateName}") enviado al owner`);
+    console.log(`[${PROJECT_NAME}] Plantilla "${templateName}" enviada a ${toClean}`);
+    return { ok: true };
   } catch (e) {
     const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
-    console.error(`[${PROJECT_NAME}] Error enviando plantilla al owner:`, detail);
+    console.error(`[${PROJECT_NAME}] Error enviando plantilla "${templateName}" a ${toClean}:`, detail);
+    return { ok: false, error: detail };
   }
+}
+
+// ─── OUTREACH: el bot inicia la conversación con un lead del formulario de Meta ──
+// El lead aún no ha escrito → fuera de la ventana de 24h SOLO se puede contactar con
+// una PLANTILLA aprobada (INTRO_TEMPLATE_NAME, {{1}}=nombre). Tras enviarla, se siembra
+// la conversación para que Daniel tenga contexto y no vuelva a saludar cuando respondan.
+async function sendIntro(phone) {
+  const lead = (await getLead(phone)) || { phone };
+  const firstName = (lead.name || "").trim().split(/\s+/)[0] || "there";
+  if (!INTRO_TEMPLATE_NAME) {
+    return { ok: false, error: "Falta INTRO_TEMPLATE_NAME: crea y aprueba una plantilla de bienvenida en Meta (categoría Marketing, body con {{1}}=nombre) y configúrala en Railway." };
+  }
+  const nVars = INTRO_TEMPLATE_VARS != null ? parseInt(INTRO_TEMPLATE_VARS) : 1;
+  const params = nVars >= 1 ? [firstName] : [];
+  const r = await sendWhatsAppTemplate(phone, INTRO_TEMPLATE_NAME, INTRO_TEMPLATE_LANG, params);
+  if (!r || !r.ok) return { ok: false, error: (r && r.error) || "envío fallido" };
+  await updateLeadFields(phone, { outreached: true, outreachedAt: Date.now() });
+  try {
+    const history = await getConversation(phone);
+    history.push({ role: "assistant", content: `Hey ${firstName}! 👋 Saw you filled out our Instagram form — I'm Daniel from ${PROJECT_NAME}, here to help with your trip. What would you like to know?` });
+    await saveConversation(phone, history);
+  } catch (e) { /* best-effort */ }
+  await logEvent(phone, "outreach");
+  return { ok: true };
 }
 
 // Avisa al owner. Usa plantilla si está configurada; si no, texto libre (solo llega si su ventana 24h está abierta).
@@ -1268,6 +1326,8 @@ app.post("/admin/api/bulk", async (req, res) => {
         const prev = (await getLead(phone)) || {};
         const tags = Array.isArray(prev.tags) ? prev.tags.slice() : [];
         if (value && tags.indexOf(value) < 0) { tags.push(value); await updateLeadFields(phone, { tags }); logEvent(phone, "tag", { to: value }); }
+      } else if (action === "outreach") {
+        await sendIntro(phone);
       } else if (action === "delete") {
         await deleteLead(phone);
       } else { continue; }
@@ -1275,6 +1335,15 @@ app.post("/admin/api/bulk", async (req, res) => {
     }
     res.json({ ok: true, count: n });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── OUTREACH: el bot escribe primero a un lead del formulario de Meta ──
+app.post("/admin/api/outreach", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone } = req.body || {};
+  if (!phone) return res.status(400).json({ error: "phone requerido" });
+  try { const r = await sendIntro(phone); if (!r.ok) return res.status(502).json({ error: r.error }); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── Respuestas rápidas: listar / guardar ──

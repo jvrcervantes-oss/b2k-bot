@@ -495,8 +495,10 @@
       bulk_sel:'seleccionados', bulk_status:'Cambiar estado…', bulk_owner:'Asignar owner…', bulk_tag:'+ Etiqueta', bulk_archive:'Archivar', bulk_restore:'Restaurar', bulk_export:'Exportar', bulk_delete:'Borrar', bulk_clear:'Quitar selección',
       prompt_tag:'Nombre de la etiqueta:', cfm_delete:'¿Borrar este lead definitivamente? No se puede deshacer.', cfm_delete_n:'¿Borrar {n} leads definitivamente? No se puede deshacer.',
       act_archive:'Archivar', act_restore:'Restaurar', act_open:'Abrir conversación', act_delete:'Borrar',
+      act_outreach:'💬 Iniciar conversación', act_reoutreach:'💬 Reenviar intro', bulk_outreach:'💬 Iniciar conv.',
+      outreach_ing:'⏳ Enviando…', outreach_ok:'Intro enviada', outreach_err:'No se pudo iniciar la conversación. ¿Está configurada la plantilla de intro (INTRO_TEMPLATE_NAME) en Railway?',
       e_owner:'Propietario', e_followup:'Próximo seguimiento', e_tags:'Etiquetas', ph_tag:'Añadir etiqueta…', f_activity:'Actividad',
-      tl_empty:'Sin actividad registrada', tl_created:'Lead creado', tl_imported:'Importado de Meta', tl_status:'Estado', tl_owner:'Asignado a', tl_appt:'Cita agendada', tl_note:'Nota actualizada', tl_tag:'Etiqueta añadida', tl_archived:'Archivado', tl_restored:'Restaurado', tl_enriched:'Datos enriquecidos',
+      tl_empty:'Sin actividad registrada', tl_created:'Lead creado', tl_imported:'Importado de Meta', tl_status:'Estado', tl_owner:'Asignado a', tl_appt:'Cita agendada', tl_note:'Nota actualizada', tl_tag:'Etiqueta añadida', tl_archived:'Archivado', tl_restored:'Restaurado', tl_enriched:'Datos enriquecidos', tl_outreach:'Conversación iniciada (intro)', tl_fu_reminded:'Recordatorio de seguimiento enviado',
       al_save:'No se pudo guardar', edit_tpl:'✎ Editar plantillas…', locale:'es-ES' },
     en:{ brand:'CRM BMA', login_title:'Conversations panel', login_sub:'CRM BMA · studio access', ph_pw:'Password', btn_enter:'Sign in', err_pw:'Wrong password',
       nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español',
@@ -530,8 +532,10 @@
       bulk_sel:'selected', bulk_status:'Set status…', bulk_owner:'Assign owner…', bulk_tag:'+ Tag', bulk_archive:'Archive', bulk_restore:'Restore', bulk_export:'Export', bulk_delete:'Delete', bulk_clear:'Clear selection',
       prompt_tag:'Tag name:', cfm_delete:'Delete this lead permanently? This cannot be undone.', cfm_delete_n:'Delete {n} leads permanently? This cannot be undone.',
       act_archive:'Archive', act_restore:'Restore', act_open:'Open conversation', act_delete:'Delete',
+      act_outreach:'💬 Start conversation', act_reoutreach:'💬 Resend intro', bulk_outreach:'💬 Start conv.',
+      outreach_ing:'⏳ Sending…', outreach_ok:'Intro sent', outreach_err:'Could not start the conversation. Is the intro template (INTRO_TEMPLATE_NAME) configured in Railway?',
       e_owner:'Owner', e_followup:'Next follow-up', e_tags:'Tags', ph_tag:'Add tag…', f_activity:'Activity',
-      tl_empty:'No activity yet', tl_created:'Lead created', tl_imported:'Imported from Meta', tl_status:'Status', tl_owner:'Assigned to', tl_appt:'Appointment booked', tl_note:'Note updated', tl_tag:'Tag added', tl_archived:'Archived', tl_restored:'Restored', tl_enriched:'Data enriched',
+      tl_empty:'No activity yet', tl_created:'Lead created', tl_imported:'Imported from Meta', tl_status:'Status', tl_owner:'Assigned to', tl_appt:'Appointment booked', tl_note:'Note updated', tl_tag:'Tag added', tl_archived:'Archived', tl_restored:'Restored', tl_enriched:'Data enriched', tl_outreach:'Conversation started (intro)', tl_fu_reminded:'Follow-up reminder sent',
       al_save:"Couldn't save", edit_tpl:'✎ Edit templates…', locale:'en-GB' }
   };
   var LANG = localStorage.getItem('botpanel_lang') || 'es';
@@ -709,6 +713,7 @@
         + '<div style="display:flex;gap:6px;margin-top:6px"><input id="edTagNew" placeholder="'+t('ph_tag')+'" style="flex:1"><button class="savebtn" style="width:auto;margin:0;padding:8px 12px" onclick="leadAddTag()">+</button></div></div>'
       + '<div class="edit"><label>'+t('e_notes')+'</label><textarea id="edNotes" placeholder="'+t('ph_notes')+'">'+esc(l.notes||'')+'</textarea>'
         + '<button class="savebtn" id="edNotesSave" onclick="saveNote()">'+t('e_savenotes')+'</button></div>'
+      + '<button class="savebtn" id="edOutreach" style="background:#16a34a;margin-top:8px" onclick="fichaOutreach()">'+(l.outreached?t('act_reoutreach'):t('act_outreach'))+'</button>'
       + '<div style="display:flex;gap:8px;margin-top:6px">'
         + (l.archived ? '<button class="savebtn" style="background:var(--ink-soft)" onclick="fichaArchive(false)">'+t('act_restore')+'</button>' : '<button class="savebtn" style="background:var(--ink-soft)" onclick="fichaArchive(true)">'+t('act_archive')+'</button>')
         + '<button class="savebtn" style="background:var(--red)" onclick="fichaDelete()">'+t('act_delete')+'</button></div>'
@@ -718,7 +723,7 @@
     var tg=Array.isArray(l.tags)?l.tags:[];
     return tg.length ? tg.map(function(x){ return '<span class="tag" style="'+tagColor(x)+'">'+esc(x)+' <b style="cursor:pointer" onclick="leadRemoveTag(\''+esc(x).replace(/'/g,'')+'\')">×</b></span>'; }).join('') : '<span class="db-dim" style="font-size:12px">—</span>';
   }
-  var TL_ICON={created:'✨',imported:'⬆️',status:'🔁',owner:'👤',appt:'📞',note:'📝',tag:'🏷️',archived:'📦',restored:'♻️',enriched:'🔍'};
+  var TL_ICON={created:'✨',imported:'⬆️',status:'🔁',owner:'👤',appt:'📞',note:'📝',tag:'🏷️',archived:'📦',restored:'♻️',enriched:'🔍',outreach:'💬',fu_reminded:'📅'};
   function tlHTML(l){
     var h=Array.isArray(l.history)?l.history.slice().reverse():[];
     if(!h.length) return '<div class="db-dim" style="font-size:12px;padding:6px 0">'+t('tl_empty')+'</div>';
@@ -748,7 +753,19 @@
     if(!curLead) return; if(!confirm(t('cfm_delete'))) return; var ph=curLead.phone;
     apiPost('lead/delete',{phone:ph}).then(function(r){ if(!r.ok) throw 0; leads=leads.filter(function(x){return x.phone!==ph;}); curLead=null; active=null; document.getElementById('detail').innerHTML='<div class="ph-detail">'+t('detail_empty')+'</div>'; document.getElementById('app').classList.remove('showchat'); render(); }).catch(function(){ alert(t('al_save')); });
   }
-  window.leadAddTag=leadAddTag; window.leadRemoveTag=leadRemoveTag; window.fichaArchive=fichaArchive; window.fichaDelete=fichaDelete;
+  function fichaOutreach(){
+    if(!curLead) return; var b=document.getElementById('edOutreach'); if(b){ b.disabled=true; b.textContent=t('outreach_ing'); }
+    apiPost('outreach',{phone:curLead.phone}).then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); }).then(function(o){
+      if(!o.ok) throw ((o.j&&o.j.error)||'error');
+      syncLead({outreached:true}); if(b){ b.disabled=false; b.textContent='✓ '+t('outreach_ok'); }
+    }).catch(function(e){ if(b){ b.disabled=false; b.textContent=t('act_outreach'); } alert(t('outreach_err')+(typeof e==='string'?'\n\n'+e:'')); });
+  }
+  function rowOutreach(phone){ closeRowMenu();
+    apiPost('outreach',{phone:phone}).then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); }).then(function(o){
+      if(!o.ok) throw ((o.j&&o.j.error)||'error'); var L=leads.filter(function(x){return x.phone===phone;})[0]; if(L)L.outreached=true;
+    }).catch(function(e){ alert(t('outreach_err')+(typeof e==='string'?'\n\n'+e:'')); });
+  }
+  window.leadAddTag=leadAddTag; window.leadRemoveTag=leadRemoveTag; window.fichaArchive=fichaArchive; window.fichaDelete=fichaDelete; window.fichaOutreach=fichaOutreach; window.rowOutreach=rowOutreach;
   function flash(id, ok){
     var b = document.getElementById(id); if(!b) return; var orig = b.textContent;
     b.textContent = ok ? t('flash_saved') : t('flash_err'); b.classList.add(ok?'ok':'bad');
@@ -1150,6 +1167,7 @@
       + '<select onchange="bulkAct(\'status\',this.value);this.value=\'\'"><option value="">'+t('bulk_status')+'</option>'+stOpts+'</select>'
       + '<select onchange="bulkAct(\'owner\',this.value);this.value=\'\'"><option value="">'+t('bulk_owner')+'</option>'+owOpts+'</select>'
       + '<button onclick="bulkTag()">'+t('bulk_tag')+'</button>'
+      + '<button onclick="bulkAct(\'outreach\')">'+t('bulk_outreach')+'</button>'
       + (dbTab==='archived' ? '<button onclick="bulkAct(\'restore\')">'+t('bulk_restore')+'</button>' : '<button onclick="bulkAct(\'archive\')">'+t('bulk_archive')+'</button>')
       + '<button onclick="bulkExport()">'+t('bulk_export')+'</button>'
       + '<button class="danger" onclick="bulkAct(\'delete\')">'+t('bulk_delete')+'</button>'
@@ -1207,7 +1225,8 @@
     ev.stopPropagation(); closeRowMenu();
     var l=leads.filter(function(x){return x.phone===phone;})[0]||{};
     var m=document.createElement('div'); m.className='rowmenu'; m.id='rowmenu';
-    m.innerHTML = (l.archived ? '<div onclick="rowArchive(\''+phone+'\',false)">'+t('act_restore')+'</div>' : '<div onclick="rowArchive(\''+phone+'\',true)">'+t('act_archive')+'</div>')
+    m.innerHTML = '<div onclick="rowOutreach(\''+phone+'\')">'+t('act_outreach')+'</div>'
+      + (l.archived ? '<div onclick="rowArchive(\''+phone+'\',false)">'+t('act_restore')+'</div>' : '<div onclick="rowArchive(\''+phone+'\',true)">'+t('act_archive')+'</div>')
       + '<div onclick="openFromDb(\''+phone+'\')">'+t('act_open')+'</div>'
       + '<div class="danger" onclick="rowDelete(\''+phone+'\')">'+t('act_delete')+'</div>';
     ev.currentTarget.appendChild(m);
