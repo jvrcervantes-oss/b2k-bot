@@ -367,6 +367,30 @@ async function enrichLeadFromConversation(phone, { force = false } = {}) {
   return fields;
 }
 
+// ─── IMPORTAR LEADS DE META (CSV de Lead Ads) ────────────────────────
+// Crea/actualiza el lead en la BD a partir de una fila ya parseada en el cliente.
+// No pisa datos existentes (merge solo-vacíos): si el lead ya chateó, manda el chat.
+async function importMetaLead(row) {
+  const phone = String((row && row.whatsapp) || "").replace(/\D/g, "");
+  if (!phone) return "skip";
+  const prev = await getLead(phone);
+  const fields = {};
+  if (row.name && !(prev && prev.name)) fields.name = String(row.name).slice(0, 120);
+  if (row.email && !(prev && prev.email)) fields.email = String(row.email).toLowerCase().slice(0, 160);
+  if (row.package && !(prev && prev.package)) fields.package = String(row.package).slice(0, 120);
+  if (row.tour && !(prev && prev.tour)) fields.tour = String(row.tour).slice(0, 80);
+  if (!prev) {
+    fields.source = "meta-form";
+    if (row.source) fields.adSource = String(row.source).slice(0, 120);
+    const t = row.createdTime ? Date.parse(row.createdTime) : NaN;
+    fields.updatedAt = isNaN(t) ? Date.now() : t; // ordena por fecha de envío del formulario
+  }
+  if (!Object.keys(fields).length) return "updated"; // ya estaba todo
+  await updateLeadFields(phone, fields);
+  writeLeadToSheet(phone, fields); // best-effort
+  return prev ? "updated" : "created";
+}
+
 // Barrido: enriquece leads incompletos (cap para no disparar costes de LLM).
 async function enrichSweep(limit = 20) {
   try {
@@ -1075,6 +1099,21 @@ app.post("/admin/api/enrich-all", async (req, res) => {
   if (!adminAuth(req, res)) return;
   try { const n = await enrichSweep(40); res.json({ ok: true, enriched: n }); }
   catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Importar leads de un CSV de Meta (el cliente parsea el archivo y manda las filas).
+app.post("/admin/api/import", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const rows = req.body && req.body.rows;
+  if (!Array.isArray(rows)) return res.status(400).json({ error: "rows (array) requerido" });
+  let created = 0, updated = 0, skipped = 0;
+  try {
+    for (const r of rows) {
+      const out = await importMetaLead(r);
+      if (out === "created") created++; else if (out === "updated") updated++; else skipped++;
+    }
+    res.json({ ok: true, created, updated, skipped, total: rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Estado del almacén: si la "base de datos" persiste (Redis) o es volátil (RAM), y cuántos leads hay.

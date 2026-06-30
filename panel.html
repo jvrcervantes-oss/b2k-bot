@@ -334,6 +334,8 @@
       <h2>Base de datos <span class="count" id="dbCount">0</span></h2>
       <span class="db-store" id="dbStore">—</span>
       <div class="db-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg><input id="dbQ" placeholder="Buscar cliente…"></div>
+      <input type="file" id="dbFile" accept=".csv,text/csv" style="display:none">
+      <button class="db-ghost" id="dbImport" title="Sube el CSV de leads que descargas de Meta Lead Ads">⬆ Importar Meta</button>
       <button class="db-ghost" id="dbEnrich" title="Lee las conversaciones y rellena los datos que falten">🔄 Actualizar desde chats</button>
       <button class="db-csv" id="dbCsv">⬇ Exportar CSV</button>
     </div>
@@ -800,6 +802,44 @@
     setTimeout(function(){ URL.revokeObjectURL(a.href); },1000);
   }
 
+  // ── IMPORTAR CSV de Meta Lead Ads (UTF-16, separado por tabuladores) ──
+  function parseMetaCsv(text){
+    if(text && text.charCodeAt(0)===0xFEFF) text=text.slice(1); // quitar BOM
+    var lines=text.split(/\r?\n/).filter(function(l){ return l.replace(/\t/g,'').trim().length; });
+    if(lines.length<2) return [];
+    function cells(line){ return line.split('\t').map(function(c){ c=c.trim(); if(c.length>1&&c.charAt(0)==='"'&&c.charAt(c.length-1)==='"') c=c.slice(1,-1); return c; }); }
+    var hdr=cells(lines[0]).map(function(h){ return h.toLowerCase().replace(/[^a-z0-9_?]/g,''); });
+    var idx={}; hdr.forEach(function(h,i){ idx[h]=i; });
+    function col(c,n){ var i=idx[n]; return (i==null||i>=c.length)?'':(c[i]||''); }
+    function mappkg(v){ v=(v||'').toLowerCase(); if(v.indexOf('deluxe')>=0) return 'Deluxe'; if(v.indexOf('standard')>=0||v.indexOf('best_value')>=0) return 'Standard / best value'; return ''; }
+    var out=[];
+    for(var k=1;k<lines.length;k++){
+      var c=cells(lines[k]); var phone=(col(c,'whatsapp_number')||'').replace(/\D/g,'');
+      if(!phone) continue;
+      out.push({ whatsapp:phone, name:col(c,'full_name'), email:(col(c,'email')||'').toLowerCase(),
+        package:mappkg(col(c,'which_package_fits_you_best?')||col(c,'which_package_fits_you_best')),
+        tour:'Bali to Komodo', createdTime:col(c,'created_time'), source:col(c,'campaign_name') });
+    }
+    return out;
+  }
+  function importMetaFile(file){
+    var rd=new FileReader();
+    rd.onload=function(){
+      var buf=new Uint8Array(rd.result), enc='utf-8';
+      if(buf[0]===0xFF&&buf[1]===0xFE) enc='utf-16le'; else if(buf[0]===0xFE&&buf[1]===0xFF) enc='utf-16be';
+      var text; try{ text=new TextDecoder(enc).decode(buf); }catch(e){ text=new TextDecoder('utf-8').decode(buf); }
+      var rows; try{ rows=parseMetaCsv(text); }catch(e){ rows=[]; }
+      if(!rows.length){ alert('No se han encontrado leads en el archivo (¿es el CSV de Meta Lead Ads?).'); return; }
+      var b=document.getElementById('dbImport'), t=b.textContent; b.disabled=true; b.textContent='⏳ Importando '+rows.length+'…';
+      apiPost('import',{rows:rows}).then(function(r){return r.json();}).then(function(j){
+        return api('leads').then(function(r){return r.json();}).then(function(L){ leads=L; dbPage=1; renderDb();
+          b.textContent='✓ '+j.created+' nuevos · '+j.updated+' act.'; setTimeout(function(){ b.textContent=t; b.disabled=false; },3500);
+        });
+      }).catch(function(){ b.textContent='✕ Error'; setTimeout(function(){ b.textContent=t; b.disabled=false; },3000); });
+    };
+    rd.readAsArrayBuffer(file);
+  }
+
   function setNav(id){ ['navConv','navCal','navDb'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
 
   function setUrl(p){ try{ history.replaceState(null,'',p); }catch(e){} }
@@ -808,6 +848,8 @@
   document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); a.classList.add('dbmode'); a.classList.remove('calmode'); setNav('navDb'); setUrl('/admin/db'); dbPage=1; loadHealth(); renderDb(); };
   document.getElementById('dbQ').oninput=function(e){ dbSearch=e.target.value.toLowerCase().trim(); dbPage=1; renderDb(); };
   document.getElementById('dbCsv').onclick=exportCsv;
+  document.getElementById('dbImport').onclick=function(){ document.getElementById('dbFile').click(); };
+  document.getElementById('dbFile').onchange=function(e){ var f=e.target.files&&e.target.files[0]; if(f) importMetaFile(f); e.target.value=''; };
   document.getElementById('dbEnrich').onclick=function(){
     var b=this, t=b.textContent; b.disabled=true; b.textContent='⏳ Leyendo chats…';
     apiPost('enrich-all',{}).then(function(r){return r.json();}).then(function(j){
