@@ -974,6 +974,17 @@ app.get("/admin/api/leads", async (req, res) => {
   try { res.json(await listLeads()); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Estado del almacén: si la "base de datos" persiste (Redis) o es volátil (RAM), y cuántos leads hay.
+app.get("/admin/api/health", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  let count = 0;
+  try {
+    if (redisClient) count = await redisClient.zCard("leads_index");
+    else count = Object.keys(fallbackLeads).length;
+  } catch (e) { /* best-effort */ }
+  res.json({ storage: redisClient ? "redis" : "ram", leads: count });
+});
+
 app.get("/admin/api/conv/:phone", async (req, res) => {
   if (!adminAuth(req, res)) return;
   try { res.json(await getConversation(req.params.phone)); } catch (e) { res.status(500).json({ error: e.message }); }

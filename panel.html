@@ -172,6 +172,29 @@
   #detail .savebtn.bad{background:var(--red)}
 
   /* ── calendario ── */
+  /* ── base de datos (tabla de todos los clientes) ── */
+  #dbView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
+  #app.dbmode #dbView{display:flex}
+  .db-top{display:flex;align-items:center;gap:14px;padding:14px 24px;background:var(--card);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .db-top h2{font-size:18px;font-weight:700;margin-right:auto}
+  .db-store{font-size:12px;font-weight:600;padding:5px 11px;border-radius:20px;display:flex;align-items:center;gap:6px}
+  .db-store.ok{background:rgba(22,163,74,.12);color:#16a34a}
+  .db-store.ram{background:rgba(217,119,6,.14);color:#b45309}
+  .db-search{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:7px 12px}
+  .db-search input{border:0;background:none;outline:none;font-size:13.5px;color:inherit;width:190px}
+  .db-csv{border:0;background:var(--accent);color:#fff;font-weight:600;padding:9px 16px;border-radius:9px;font-size:13.5px;cursor:pointer}
+  .db-wrap{flex:1;overflow:auto;min-height:0}
+  table.db{width:100%;border-collapse:collapse;font-size:13px}
+  table.db th{position:sticky;top:0;background:var(--card);text-align:left;padding:11px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);border-bottom:1px solid var(--line);white-space:nowrap;z-index:1}
+  table.db td{padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+  table.db tbody tr{cursor:pointer}
+  table.db tbody tr:hover{background:rgba(0,0,0,.03)}
+  body.dark table.db tbody tr:hover{background:rgba(255,255,255,.04)}
+  table.db .db-nm{font-weight:600}
+  .db-dim{color:var(--ink-soft)}
+  .db-tag{font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,.05)}
+  body.dark .db-tag{background:rgba(255,255,255,.07)}
+  .db-empty{padding:48px;text-align:center;color:var(--ink-soft)}
   #calView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
   #app.calmode #list,#app.calmode #chat,#app.calmode #detail{display:none}
   #app.calmode #calView{display:flex}
@@ -233,6 +256,7 @@
     <div class="brand">A</div>
     <div class="ic on" id="navConv" title="Conversaciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="ic" id="navCal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" id="navDb" title="Base de datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="spacer"></div>
     <div class="ic" title="Cambiar tema" id="themeToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="ic" title="Salir" id="logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
@@ -293,6 +317,17 @@
         <div id="upList"></div>
       </div>
     </div>
+  </div>
+
+  <!-- base de datos: todos los clientes en tabla -->
+  <div id="dbView">
+    <div class="db-top">
+      <h2>Base de datos <span class="count" id="dbCount">0</span></h2>
+      <span class="db-store" id="dbStore">—</span>
+      <div class="db-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg><input id="dbQ" placeholder="Buscar cliente…"></div>
+      <button class="db-csv" id="dbCsv">⬇ Exportar CSV</button>
+    </div>
+    <div class="db-wrap"><div id="dbTable"></div></div>
   </div>
 </div>
 
@@ -673,10 +708,78 @@
   window.cancelAppt=cancelAppt;
 
   function buildLeadsDL(){ document.getElementById('leadsDL').innerHTML = leads.map(function(l){ return '<option value="'+esc((l.name||l.phone)+' (+'+l.phone+')')+'">'; }).join(''); }
-  function setNav(id){ ['navConv','navCal'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
+  // ── BASE DE DATOS: tabla de TODOS los clientes ──
+  var dbSearch = '';
+  var DB_COLS = [
+    ['name','Nombre'],['phone','WhatsApp'],['email','Email'],['country','País'],
+    ['tour','Tour'],['package','Paquete'],['riders','Riders'],['pillions','Pillions'],
+    ['travelDate','Fecha viaje'],['status','Estado'],['intent','Intención'],['updatedAt','Últ. act.']
+  ];
+  var STATUS_LABEL = {'':'—',new:'🆕 Nuevo',quoted:'💬 Cotizado',won:'✅ Ganado',lost:'❌ Perdido',noshow:'🚫 No-show'};
+  function dbVal(l,k){
+    if(k==='phone') return '+'+l.phone;
+    if(k==='updatedAt') return ago(l.updatedAt);
+    if(k==='intent') return LABEL[l.intent]||l.intent||'explorando';
+    if(k==='status') return STATUS_LABEL[l.status||'']||l.status||'—';
+    var v=l[k]; return (v==null||v==='')?'':String(v);
+  }
+  function dbFiltered(){
+    return leads.filter(function(l){
+      if(!dbSearch) return true;
+      var hay=((l.name||'')+' '+l.phone+' '+(l.email||'')+' '+(l.package||'')+' '+(l.tour||'')+' '+(l.country||'')).toLowerCase();
+      return hay.indexOf(dbSearch)>=0;
+    });
+  }
+  function renderDb(){
+    var f=dbFiltered();
+    document.getElementById('dbCount').textContent=f.length;
+    if(!f.length){ document.getElementById('dbTable').innerHTML='<div class="db-empty">'+(leads.length?'Sin resultados':'Aún no hay clientes')+'</div>'; return; }
+    var th='<tr>'+DB_COLS.map(function(c){return '<th>'+c[1]+'</th>';}).join('')+'</tr>';
+    var rows=f.map(function(l){
+      return '<tr onclick="openFromDb(\''+l.phone+'\')">'+DB_COLS.map(function(c){
+        var raw=dbVal(l,c[0]);
+        if(c[0]==='package' && raw) return '<td><span class="db-tag">'+esc(raw)+'</span></td>';
+        var cls=(c[0]==='name'?'db-nm':((raw===''||raw==='—')?'db-dim':''));
+        return '<td'+(cls?' class="'+cls+'"':'')+'>'+esc(raw||'—')+'</td>';
+      }).join('')+'</tr>';
+    }).join('');
+    document.getElementById('dbTable').innerHTML='<table class="db"><thead>'+th+'</thead><tbody>'+rows+'</tbody></table>';
+  }
+  function openFromDb(phone){
+    var a=document.getElementById('app'); a.classList.remove('dbmode'); setNav('navConv'); open_(phone);
+  }
+  window.openFromDb=openFromDb;
+  function loadHealth(){
+    api('health').then(function(r){return r.json();}).then(function(h){
+      var el=document.getElementById('dbStore');
+      if(h.storage==='redis'){ el.className='db-store ok'; el.textContent='🟢 Redis · persistente'; }
+      else { el.className='db-store ram'; el.textContent='🟠 RAM · NO persiste — configura Redis'; }
+    }).catch(function(){});
+  }
+  function exportCsv(){
+    var f=dbFiltered();
+    function cell(s){ s=(s==null?'':String(s)); return '"'+s.replace(/"/g,'""')+'"'; }
+    var lines=[DB_COLS.map(function(c){return cell(c[1]);}).join(',')];
+    f.forEach(function(l){ lines.push(DB_COLS.map(function(c){
+      if(c[0]==='updatedAt') return cell(new Date(l.updatedAt).toISOString());
+      if(c[0]==='phone') return cell('+'+l.phone);
+      if(c[0]==='status') return cell(STATUS_LABEL[l.status||'']||l.status||'');
+      if(c[0]==='intent') return cell(LABEL[l.intent]||l.intent||'');
+      return cell(l[c[0]]);
+    }).join(',')); });
+    var blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+    var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='clientes_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); },1000);
+  }
 
-  document.getElementById('navConv').onclick=function(){ document.getElementById('app').classList.remove('calmode'); setNav('navConv'); };
-  document.getElementById('navCal').onclick=function(){ document.getElementById('app').classList.add('calmode'); setNav('navCal'); buildLeadsDL(); loadAppts(renderCal); };
+  function setNav(id){ ['navConv','navCal','navDb'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
+
+  document.getElementById('navConv').onclick=function(){ var a=document.getElementById('app'); a.classList.remove('calmode'); a.classList.remove('dbmode'); setNav('navConv'); };
+  document.getElementById('navCal').onclick=function(){ var a=document.getElementById('app'); a.classList.add('calmode'); a.classList.remove('dbmode'); setNav('navCal'); buildLeadsDL(); loadAppts(renderCal); };
+  document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); a.classList.add('dbmode'); a.classList.remove('calmode'); setNav('navDb'); loadHealth(); renderDb(); };
+  document.getElementById('dbQ').oninput=function(e){ dbSearch=e.target.value.toLowerCase().trim(); renderDb(); };
+  document.getElementById('dbCsv').onclick=exportCsv;
   document.getElementById('calPrev').onclick=function(){ calM--; if(calM<0){calM=11;calY--;} renderCal(); };
   document.getElementById('calNext').onclick=function(){ calM++; if(calM>11){calM=0;calY++;} renderCal(); };
   document.getElementById('newAppt').onclick=function(){ buildLeadsDL(); document.getElementById('amErr').textContent=''; document.getElementById('apptModal').style.display='flex'; };
@@ -705,6 +808,7 @@
     timer = setInterval(function(){
       api('leads').then(function(r){return r.json();}).then(function(L){
         leads = L; processAlerts(L); render();
+        if(document.getElementById('app').classList.contains('dbmode')) renderDb();
         if(active){ var al = leads.filter(function(x){return x.phone===active;})[0]; if(al){ curLead = al; updatePauseUI(!!al.paused); updateWindowUI(al); } }
       });
       loadAppts(function(){ if(document.getElementById('app').classList.contains('calmode')) renderCal(); });
