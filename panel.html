@@ -459,6 +459,9 @@
       + '<div class="edit"><label>País</label><input id="edCountry" value="'+esc(l.country||'')+'"></div>'
       + '<div class="edit"><label>Email</label><input id="edEmail" value="'+esc(l.email||'')+'"></div>'
       + '<div class="edit"><label>Tour de interés</label><input id="edTour" value="'+esc(l.tour||'')+'"></div>'
+      + '<div class="edit"><label>Paquete</label><input id="edPackage" value="'+esc(l.package||'')+'" placeholder="Roundtrip / Extreme / Deluxe"></div>'
+      + '<div class="edit"><label>Nº riders</label><input id="edRiders" value="'+esc(l.riders!=null?l.riders:'')+'" placeholder="ej. 4"></div>'
+      + '<div class="edit"><label>Pillions</label><input id="edPillions" value="'+esc(l.pillions!=null?l.pillions:'')+'" placeholder="ej. 0"></div>'
       + '<div class="edit"><label>Fecha de viaje</label><input id="edTravel" value="'+esc(l.travelDate||'')+'" placeholder="ej. Julio 2026"></div>'
       + '<button class="savebtn" id="edSave" onclick="saveLeadFields()">Guardar ficha</button>'
       + '<div class="edit"><label>Notas internas</label><textarea id="edNotes" placeholder="Notas del estudio…">'+esc(l.notes||'')+'</textarea>'
@@ -480,11 +483,15 @@
   }
   function saveLeadFields(){
     if(!curLead) return;
+    function numv(id){ var v=document.getElementById(id).value.trim(); return v===''?'':(isNaN(parseInt(v,10))?v:parseInt(v,10)); }
     var body = { phone:curLead.phone,
       name:document.getElementById('edName').value.trim(),
       country:document.getElementById('edCountry').value.trim(),
       email:document.getElementById('edEmail').value.trim(),
       tour:document.getElementById('edTour').value.trim(),
+      package:document.getElementById('edPackage').value.trim(),
+      riders:numv('edRiders'),
+      pillions:numv('edPillions'),
       travelDate:document.getElementById('edTravel').value.trim() };
     apiPost('lead',body).then(function(r){ if(!r.ok) throw 0;
       syncLead(body);

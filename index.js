@@ -106,10 +106,12 @@ const fallbackLeads = {};      // phone → { phone, name, intent, lastMessage, 
 const fallbackNotified = {};   // phone → "interested" | "booking"
 
 async function recordLead(phone, name, intent, lastMessage) {
+  const prev = (await getLead(phone)) || {};
   const info = {
+    ...prev,                                  // conserva email/package/travelDate/riders… ya capturados
     phone,
-    name: name || "",
-    intent: intent || "exploring",
+    name: name || prev.name || "",
+    intent: intent || prev.intent || "exploring",
     lastMessage: (lastMessage || "").slice(0, 200),
     updatedAt: Date.now(),
   };
@@ -259,6 +261,55 @@ async function updateLeadFields(phone, fields) {
     fallbackLeads[phone] = info;
   }
   return info;
+}
+
+// ─── EXTRACCIÓN AUTOMÁTICA DE DATOS DEL LEAD ──────────────────────
+// Llaves "importantes" que guardamos en la ficha/BD del lead.
+const LEAD_KEYMAP = {
+  name: "name", email: "email", country: "country", tour: "tour",
+  package: "package", pkg: "package", paquete: "package",
+  riders: "riders", pillions: "pillions",
+  dates: "travelDate", date: "travelDate", traveldate: "travelDate", travel: "travelDate",
+};
+
+// 1) El formulario de Instagram llega como el PRIMER mensaje de WhatsApp (texto plano).
+//    Lo parseamos para rellenar nombre/email/paquete en la ficha sin intervención.
+function parseLeadForm(text) {
+  if (!text) return null;
+  if (!/which package|full name|whatsapp number|filled out (your|the) form/i.test(text)) return null;
+  const grab = (re) => { const m = text.match(re); return m ? m[1].trim() : null; };
+  const fields = {};
+  const name = grab(/full name:\s*([^\n]+)/i);
+  const email = grab(/email:\s*([^\n\s]+@[^\n\s]+)/i);
+  const pkg = grab(/which package[^:]*:\s*([^\n]+)/i);
+  if (name) fields.name = name.replace(/\s+/g, " ").trim();
+  if (email) fields.email = email.toLowerCase();
+  if (pkg) fields.package = pkg.replace(/\s+/g, " ").trim();
+  return Object.keys(fields).length ? fields : null;
+}
+
+// 2) El bot emite un tag silencioso [LEAD k=v; k=v] al confirmar datos en la charla.
+function parseLeadTag(reply) {
+  const m = reply.match(/\[LEAD\s+([^\]]+)\]/i);
+  if (!m) return null;
+  const out = {};
+  m[1].split(";").forEach((pair) => {
+    const i = pair.indexOf("=");
+    if (i < 0) return;
+    const k = LEAD_KEYMAP[pair.slice(0, i).trim().toLowerCase()];
+    let v = pair.slice(i + 1).trim();
+    if (!k || !v || /^(unknown|n\/?a|tbd|\?+)$/i.test(v)) return;
+    if (k === "riders" || k === "pillions") { const n = parseInt(v, 10); if (!isNaN(n)) out[k] = n; }
+    else out[k] = v.slice(0, 120);
+  });
+  return Object.keys(out).length ? out : null;
+}
+
+// Guarda los campos extraídos en la BD (Redis) + Sheet, sin pisar con vacíos.
+async function captureLeadData(phone, fields) {
+  if (!fields || !Object.keys(fields).length) return;
+  await updateLeadFields(phone, { ...fields, updatedAt: Date.now() });
+  writeLeadToSheet(phone, fields); // best-effort (solo escribe las llaves con columna mapeada)
 }
 
 // ─── RESPUESTAS RÁPIDAS (canned replies, compartidas por proyecto) ──
@@ -512,6 +563,16 @@ At the very end of your response, on a NEW LINE, add ONE intent tag:
 When intent is booking AND you know the total number of riders, also add on the same line:
 [RIDERS:N] — where N is the total number of riders (e.g. [RIDERS:4])
 When you output [RIDERS:N], NEVER type a link, a URL, or the word "https" yourself. You do NOT have the real payment link — the server creates it and appends it automatically below your message. Any URL you write is FAKE and will break the customer's payment. Just say you're sending the link and stop.
+
+LEAD DATA TAGGING — fill the CRM as you learn things (do this consistently):
+- Whenever you LEARN or CONFIRM a concrete fact about the lead, append a SILENT data tag at the very end of your message, on its own new line:
+  [LEAD key=value; key=value]
+- It is stripped before sending — the customer NEVER sees it. Include ONLY the fields you are now sure of; omit anything you don't know yet. NEVER guess or invent a value.
+- Valid keys: tour (e.g. Bali to Komodo / 7 Islands) · package (Roundtrip / Extreme / Deluxe) · riders (a number) · pillions (a number) · dates (their travel window, e.g. "late 2027" or "October 2026") · country · name · email.
+- Send it the moment you learn each thing, and again (with the fuller set) as more is confirmed — re-sending a known field is fine, it just updates the record.
+- Note: leads who arrived via the Instagram form already have their name, email and package band captured automatically — you don't need to re-tag those, but DO tag what you learn in the chat (chosen package, exact riders, dates, country, pillions).
+- Example: a UK rider confirms 4 of them want Extreme for late 2027 → end your message with: [LEAD tour=Bali to Komodo; package=Extreme; riders=4; dates=late 2027; country=UK]
+
 All tags are stripped before sending. NEVER mention them to the customer.
 `;
 
@@ -579,7 +640,7 @@ async function saveLead(phone, name, lastMessage, intent) {
 }
 
 // Mapeo de campos editables → columnas fijas del CRM (cabeceras del Sheet)
-const SHEET_COL = { name: "A", country: "B", email: "D", tour: "E", status: "H", travelDate: "K", notes: "O" };
+const SHEET_COL = { name: "A", country: "B", email: "D", tour: "E", package: "F", status: "H", travelDate: "K", notes: "O" };
 const STATUS_SHEET_LABEL = { new: "New", quoted: "Quoted", won: "Won ✅", lost: "Lost", noshow: "No-show" };
 
 async function updateLeadCells(sheets, row, vals) {
@@ -774,6 +835,13 @@ app.post("/webhook", async (req, res) => {
     const history = await getConversation(from);
     history.push({ role: "user", content: text });
 
+    // ── Captura automática: si este mensaje es el formulario de Instagram, extrae sus datos ──
+    const formFields = parseLeadForm(text);
+    if (formFields) {
+      await captureLeadData(from, formFields);
+      console.log(`[${PROJECT_NAME}] Datos de formulario IG capturados para ${from}: ${Object.keys(formFields).join(", ")}`);
+    }
+
     // ── Control humano: si el bot está en pausa para este lead, guarda y calla ──
     if (await isPaused(from)) {
       await saveConversation(from, history);
@@ -802,7 +870,8 @@ app.post("/webhook", async (req, res) => {
     const ridersMatch = reply.match(/\[RIDERS:(\d+)\]/);
     const numRiders = ridersMatch ? parseInt(ridersMatch[1]) : null;
     const apptMatch = reply.match(/\[APPT:([^\]|]+)\|([^\]]+)\]/);
-    reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").trim();
+    const leadFields = parseLeadTag(reply); // datos confirmados en la charla → ficha/BD
+    reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").replace(/\[LEAD[^\]]*\]/gi, "").trim();
     // Strip markdown that WhatsApp sends literally (breaks URLs)
     reply = reply.replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1"); // **URL** → URL
     reply = reply.replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
@@ -836,6 +905,10 @@ app.post("/webhook", async (req, res) => {
     await setWaiting(from, false); // el bot ya respondió → no queda pendiente
     await saveLead(from, profileName, text, intent);
     await recordLead(from, profileName, intent, text);  // índice para el panel web
+    if (leadFields) {
+      await captureLeadData(from, leadFields);
+      console.log(`[${PROJECT_NAME}] Datos extraídos de la charla para ${from}: ${Object.keys(leadFields).join(", ")}`);
+    }
 
     // ── Cita agendada por el bot en la conversación ───────────────
     if (apptMatch) {
@@ -955,10 +1028,10 @@ app.post("/admin/api/status", async (req, res) => {
 // ── CRM: campos editables de la ficha (name/country/email/tour/travelDate) ──
 app.post("/admin/api/lead", async (req, res) => {
   if (!adminAuth(req, res)) return;
-  const { phone, name, country, email, tour, travelDate } = req.body || {};
+  const { phone } = req.body || {};
   if (!phone) return res.status(400).json({ error: "phone requerido" });
   const fields = {};
-  ["name", "country", "email", "tour", "travelDate"].forEach((k) => {
+  ["name", "country", "email", "tour", "package", "riders", "pillions", "travelDate"].forEach((k) => {
     if (req.body[k] != null) fields[k] = req.body[k];
   });
   await updateLeadFields(phone, fields);
