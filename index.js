@@ -42,7 +42,12 @@ const {
   INTRO_TEMPLATE_NAME,
   INTRO_TEMPLATE_LANG,
   INTRO_TEMPLATE_VARS,
+  CRM_SHEET_SYNC,
 } = process.env;
+
+// La BD del CRM es Redis (lead:phone + leads_index). El Google Sheet era un espejo
+// heredado y queda DESACTIVADO salvo que se ponga CRM_SHEET_SYNC=1 en Railway.
+const SHEET_SYNC = CRM_SHEET_SYNC === "1" || CRM_SHEET_SYNC === "true";
 
 const stripeClient = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
@@ -752,6 +757,7 @@ async function findLeadRow(sheets, phone) {
 }
 
 async function saveLead(phone, name, lastMessage, intent) {
+  if (!SHEET_SYNC) return; // CRM = Redis; sin sincronización al Google Sheet
   try {
     const sheets = await getSheetsClient();
     const existingRow = await findLeadRow(sheets, phone);
@@ -803,7 +809,7 @@ async function updateLeadCells(sheets, row, vals) {
 // Escribe los campos editados de un lead en su fila del CRM.
 // Depende de que el Sheet esté compartido con la Service Account (si no, falla controlado).
 async function writeLeadToSheet(phone, vals) {
-  if (!SHEET_ID || !GOOGLE_SERVICE_ACCOUNT) return;
+  if (!SHEET_SYNC || !SHEET_ID || !GOOGLE_SERVICE_ACCOUNT) return;
   try {
     const sheets = await getSheetsClient();
     const row = await findLeadRow(sheets, phone);
@@ -1382,20 +1388,19 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`[${PROJECT_NAME}] Bot escuchando en puerto ${PORT}`);
   console.log(`[${PROJECT_NAME}] OWNER_PHONE: ${OWNER_PHONE ? normalizePhone(OWNER_PHONE) : "⚠️  NO CONFIGURADO"}`);
-  console.log(`[${PROJECT_NAME}] SHEET_ID: ${SHEET_ID ? SHEET_ID.slice(0, 10) + "..." : "⚠️  NO CONFIGURADO"}`);
-  console.log(`[${PROJECT_NAME}] Redis: ${redisClient ? "conectado" : "RAM fallback"}`);
+  console.log(`[${PROJECT_NAME}] CRM (BD): ${redisClient ? "Redis (persistente)" : "RAM (volátil — configura REDIS_URL)"}`);
 
-  // Test Google Sheets connection at startup
-  if (SHEET_ID && GOOGLE_SERVICE_ACCOUNT) {
+  // El CRM vive en Redis. El Google Sheet solo se prueba/usa si CRM_SHEET_SYNC está activado.
+  if (SHEET_SYNC && SHEET_ID && GOOGLE_SERVICE_ACCOUNT) {
     try {
       const sheets = await getSheetsClient();
       await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
-      console.log(`[${PROJECT_NAME}] Google Sheets: ✅ conectado`);
+      console.log(`[${PROJECT_NAME}] Google Sheets sync: ✅ conectado`);
     } catch (e) {
-      console.error(`[${PROJECT_NAME}] Google Sheets: ❌ HTTP ${e.code || '?'} — ${e.message}`);
+      console.error(`[${PROJECT_NAME}] Google Sheets sync: ❌ HTTP ${e.code || '?'} — ${e.message}`);
     }
   } else {
-    console.warn(`[${PROJECT_NAME}] Google Sheets: ⚠️  SHEET_ID o GOOGLE_SERVICE_ACCOUNT no configurados`);
+    console.log(`[${PROJECT_NAME}] Google Sheets sync: desactivado (CRM = Redis)`);
   }
 
   // Auto-relleno de la BD: barrido inicial (tras conectar Redis) + periódico cada 30 min.
