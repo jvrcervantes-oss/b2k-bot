@@ -34,6 +34,18 @@
   body.dark #detail .edit input,body.dark #detail .edit select,body.dark #detail .edit textarea{background:#0d1420}
   body.dark .cal-day.out{background:rgba(255,255,255,.03)}
   body.dark .cal-nav button{background:var(--card)}
+  /* modo oscuro: controles nativos (select/date/scrollbars) + modales + tintes legibles */
+  body.dark{color-scheme:dark}
+  body.dark .modal-box{background:var(--card);box-shadow:0 30px 70px -30px rgba(0,0,0,.8)}
+  body.dark .modal-box input,body.dark .modal-box textarea{background:#0d1420;color:var(--ink);border-color:var(--line)}
+  body.dark .btn-ghost{background:var(--card);color:var(--ink-soft);border-color:var(--line)}
+  body.dark .db-sel,body.dark .db-filters select,body.dark .db-bulk select,body.dark .db-bulk button{background:#0d1420;color:var(--ink)}
+  body.dark .db-tag{background:rgba(255,255,255,.08)}
+  body.dark .it-booking{color:#f87171}body.dark .it-interested{color:#fbbf24}body.dark .it-exploring{color:#4ade80}body.dark .it-escalate{color:#9aa6bd}
+  body.dark .st-lost{color:#f87171}body.dark .st-noshow{color:#9aa6bd}body.dark .pk-none,body.dark .st-none{color:#9aa6bd}
+  /* colores de métricas (clases con variante oscura) */
+  .m-new{color:#2563eb}.m-quoted{color:#b45309}.m-won{color:#15803d}.m-lost{color:#dc2626}.m-rev{color:#15803d}
+  body.dark .m-new{color:#60a5fa}body.dark .m-quoted{color:#fbbf24}body.dark .m-won{color:#4ade80}body.dark .m-lost{color:#f87171}body.dark .m-rev{color:#4ade80}
   body.dark .modal-box{background:var(--card)}
   body.dark .modal-box input,body.dark #cannedText{background:#0d1420;color:var(--ink)}
   body.dark .btn-ghost{background:var(--card)}
@@ -58,7 +70,7 @@
   #login .err{color:var(--red);font-size:12.5px;height:16px;margin-top:2px}
 
   /* ── SHELL ── */
-  #app{display:none;height:100vh;display:none;grid-template-columns:64px 340px 1fr 300px}
+  #app{display:none;height:100vh;overflow:hidden;grid-template-columns:64px 340px 1fr 300px}
   #app.on{display:grid}
   @media(max-width:1100px){#app.on{grid-template-columns:64px 320px 1fr}#detail{display:none}}
   @media(max-width:760px){#app.on{grid-template-columns:64px 1fr}#list{display:none}#app.on.showchat #list{display:none}}
@@ -117,7 +129,7 @@
   .i-escalate{background:#e5e7eb;color:#4b5563}
 
   /* chat column */
-  #chat{display:flex;flex-direction:column;min-width:0;background:#f0f2f5}
+  #chat{display:flex;flex-direction:column;min-width:0;min-height:0;background:#f0f2f5}
   #chat .top{background:var(--card);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;gap:12px}
   #chat .top .back{display:none;border:0;background:none;color:var(--ink-soft);font-size:20px;padding:0 6px 0 0}
   @media(max-width:760px){#chat .top .back{display:block}}
@@ -278,6 +290,15 @@
   .tl .tli{display:flex;gap:9px;padding:7px 0;border-top:1px solid var(--line-2);font-size:12.5px}
   .tl .tli .ic2{flex-shrink:0}
   .tl .tli .tlt{color:var(--ink-soft);font-size:11px}
+  /* barra de acciones rápidas en la ficha */
+  .qbar{display:flex;flex-direction:column;gap:9px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+  .qa-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .qa-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:600;margin-right:2px}
+  .qa-own{border:1px solid var(--line);background:var(--bg);color:inherit;border-radius:20px;padding:5px 13px;font-size:12.5px;font-weight:600;cursor:pointer}
+  .qa-own.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .qbtn{flex:1;border:0;border-radius:9px;padding:10px;font-weight:600;font-size:12.5px;cursor:pointer;color:#fff}
+  .qbtn.call{background:var(--accent)}
+  .qbtn.out{background:#16a34a}
   #calView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
   #app.calmode #list,#app.calmode #chat,#app.calmode #detail{display:none}
   #app.calmode #calView{display:flex}
@@ -497,6 +518,7 @@
       act_archive:'Archivar', act_restore:'Restaurar', act_open:'Abrir conversación', act_delete:'Borrar',
       act_outreach:'💬 Iniciar conversación', act_reoutreach:'💬 Reenviar intro', bulk_outreach:'💬 Iniciar conv.',
       outreach_ing:'⏳ Enviando…', outreach_ok:'Intro enviada', outreach_err:'No se pudo iniciar la conversación. ¿Está configurada la plantilla de intro (INTRO_TEMPLATE_NAME) en Railway?',
+      q_assign:'Asignar', q_call:'Agendar llamada', call_title:'Llamada con', al_appt_date:'Pon fecha y hora',
       e_owner:'Propietario', e_followup:'Próximo seguimiento', e_tags:'Etiquetas', ph_tag:'Añadir etiqueta…', f_activity:'Actividad',
       tl_empty:'Sin actividad registrada', tl_created:'Lead creado', tl_imported:'Importado de Meta', tl_status:'Estado', tl_owner:'Asignado a', tl_appt:'Cita agendada', tl_note:'Nota actualizada', tl_tag:'Etiqueta añadida', tl_archived:'Archivado', tl_restored:'Restaurado', tl_enriched:'Datos enriquecidos', tl_outreach:'Conversación iniciada (intro)', tl_fu_reminded:'Recordatorio de seguimiento enviado',
       al_save:'No se pudo guardar', edit_tpl:'✎ Editar plantillas…', locale:'es-ES' },
@@ -534,6 +556,7 @@
       act_archive:'Archive', act_restore:'Restore', act_open:'Open conversation', act_delete:'Delete',
       act_outreach:'💬 Start conversation', act_reoutreach:'💬 Resend intro', bulk_outreach:'💬 Start conv.',
       outreach_ing:'⏳ Sending…', outreach_ok:'Intro sent', outreach_err:'Could not start the conversation. Is the intro template (INTRO_TEMPLATE_NAME) configured in Railway?',
+      q_assign:'Assign', q_call:'Schedule call', call_title:'Call with', al_appt_date:'Set date and time',
       e_owner:'Owner', e_followup:'Next follow-up', e_tags:'Tags', ph_tag:'Add tag…', f_activity:'Activity',
       tl_empty:'No activity yet', tl_created:'Lead created', tl_imported:'Imported from Meta', tl_status:'Status', tl_owner:'Assigned to', tl_appt:'Appointment booked', tl_note:'Note updated', tl_tag:'Tag added', tl_archived:'Archived', tl_restored:'Restored', tl_enriched:'Data enriched', tl_outreach:'Conversation started (intro)', tl_fu_reminded:'Follow-up reminder sent',
       al_save:"Couldn't save", edit_tpl:'✎ Edit templates…', locale:'en-GB' }
@@ -694,6 +717,17 @@
     var st = l.status||'';
     function opt(v,lbl){ return '<option value="'+v+'"'+(st===v?' selected':'')+'>'+lbl+'</option>'; }
     return ''
+      // ── acciones rápidas ──
+      + '<div class="qbar">'
+        + '<div class="qa-row"><span class="qa-lbl">'+t('q_assign')+'</span>'
+          + OWNER_OPTS.filter(function(o){return o;}).map(function(o){ return '<button class="qa-own'+((l.owner||'')===o?' on':'')+'" onclick="qAssign(\''+o+'\')">'+esc(o)+'</button>'; }).join('')
+        + '</div>'
+        + '<div style="display:flex;gap:6px"><button class="qbtn call" onclick="fichaScheduleCall()">📞 '+t('q_call')+'</button>'
+          + '<button class="qbtn out" id="edOutreach" onclick="fichaOutreach()">'+(l.outreached?t('act_reoutreach'):t('act_outreach'))+'</button></div>'
+      + '</div>'
+      // ── actividad (timeline) arriba ──
+      + '<div class="edit"><label>'+t('f_activity')+'</label>'+tlHTML(l)+'</div>'
+      // ── formulario editable ──
       + '<div class="edit"><label>'+t('e_status')+'</label><select id="edStatus" onchange="saveStatus()">'
         + '<option value=""'+(st===''?' selected':'')+'>'+t('s_blank')+'</option>'
         + opt('new',t('s_new'))+opt('quoted',t('s_quoted'))+opt('won',t('s_won'))+opt('lost',t('s_lost'))+opt('noshow',t('s_noshow'))
@@ -713,11 +747,9 @@
         + '<div style="display:flex;gap:6px;margin-top:6px"><input id="edTagNew" placeholder="'+t('ph_tag')+'" style="flex:1"><button class="savebtn" style="width:auto;margin:0;padding:8px 12px" onclick="leadAddTag()">+</button></div></div>'
       + '<div class="edit"><label>'+t('e_notes')+'</label><textarea id="edNotes" placeholder="'+t('ph_notes')+'">'+esc(l.notes||'')+'</textarea>'
         + '<button class="savebtn" id="edNotesSave" onclick="saveNote()">'+t('e_savenotes')+'</button></div>'
-      + '<button class="savebtn" id="edOutreach" style="background:#16a34a;margin-top:8px" onclick="fichaOutreach()">'+(l.outreached?t('act_reoutreach'):t('act_outreach'))+'</button>'
-      + '<div style="display:flex;gap:8px;margin-top:6px">'
+      + '<div style="display:flex;gap:8px;margin-top:10px">'
         + (l.archived ? '<button class="savebtn" style="background:var(--ink-soft)" onclick="fichaArchive(false)">'+t('act_restore')+'</button>' : '<button class="savebtn" style="background:var(--ink-soft)" onclick="fichaArchive(true)">'+t('act_archive')+'</button>')
-        + '<button class="savebtn" style="background:var(--red)" onclick="fichaDelete()">'+t('act_delete')+'</button></div>'
-      + '<div class="edit"><label>'+t('f_activity')+'</label>'+tlHTML(l)+'</div>';
+        + '<button class="savebtn" style="background:var(--red)" onclick="fichaDelete()">'+t('act_delete')+'</button></div>';
   }
   function tagsChips(l){
     var tg=Array.isArray(l.tags)?l.tags:[];
@@ -765,7 +797,18 @@
       if(!o.ok) throw ((o.j&&o.j.error)||'error'); var L=leads.filter(function(x){return x.phone===phone;})[0]; if(L)L.outreached=true;
     }).catch(function(e){ alert(t('outreach_err')+(typeof e==='string'?'\n\n'+e:'')); });
   }
-  window.leadAddTag=leadAddTag; window.leadRemoveTag=leadRemoveTag; window.fichaArchive=fichaArchive; window.fichaDelete=fichaDelete; window.fichaOutreach=fichaOutreach; window.rowOutreach=rowOutreach;
+  function qAssign(owner){ if(!curLead) return; var v=(curLead.owner===owner)?'':owner;
+    apiPost('lead',{phone:curLead.phone,owner:v}).then(function(r){ if(!r.ok) throw 0; syncLead({owner:v}); if(active) open_(active); }).catch(function(){ alert(t('al_save')); });
+  }
+  function fichaScheduleCall(){ if(!curLead) return; buildLeadsDL();
+    var who=(curLead.name||curLead.phone);
+    document.getElementById('amErr').textContent='';
+    document.getElementById('amLead').value=who+' (+'+curLead.phone+')';
+    document.getElementById('amTitle').value=t('call_title')+' '+who;
+    document.getElementById('amWhen').value='';
+    document.getElementById('apptModal').style.display='flex';
+  }
+  window.leadAddTag=leadAddTag; window.leadRemoveTag=leadRemoveTag; window.fichaArchive=fichaArchive; window.fichaDelete=fichaDelete; window.fichaOutreach=fichaOutreach; window.rowOutreach=rowOutreach; window.qAssign=qAssign; window.fichaScheduleCall=fichaScheduleCall;
   function flash(id, ok){
     var b = document.getElementById(id); if(!b) return; var orig = b.textContent;
     b.textContent = ok ? t('flash_saved') : t('flash_err'); b.classList.add(ok?'ok':'bad');
@@ -1124,12 +1167,12 @@
     leads.forEach(function(l){ if(l.archived) return; m.total++; var st=l.status||''; var ca=l.createdAt||l.updatedAt||0; if(ca>=wk)m.week++;
       if(st===''||st==='new')m.nq++; if(st==='quoted')m.quoted++; if(st==='won')m.won++; if(st==='lost')m.lost++;
       if(st===''||st==='new'||st==='quoted')m.pipe+=leadValue(l); if(st==='won')m.rev+=leadValue(l); });
-    function mt(v,l2,col,oc){ return '<div class="metric'+(oc?' click':'')+'"'+(oc?' onclick="'+oc+'"':'')+'><span class="mv"'+(col?' style="color:'+col+'"':'')+'>'+v+'</span><span class="ml">'+l2+'</span></div>'; }
+    function mt(v,l2,cls,oc){ return '<div class="metric'+(oc?' click':'')+'"'+(oc?' onclick="'+oc+'"':'')+'><span class="mv'+(cls?' '+cls:'')+'">'+v+'</span><span class="ml">'+l2+'</span></div>'; }
     document.getElementById('dbMetrics').innerHTML =
       mt(m.total,t('m_total')) + mt(m.week,t('m_week')) +
-      mt(m.nq,t('m_new'),'#2563eb',"dbGoTab('active')") + mt(m.quoted,t('m_quoted'),'#b45309',"dbGoTab('active')") +
-      mt(m.won,t('m_won'),'#15803d',"dbGoTab('won')") + mt(m.lost,t('m_lost'),'#dc2626',"dbGoTab('lost')") +
-      mt(money(m.pipe)||'$0',t('m_pipeline')) + mt(money(m.rev)||'$0',t('m_revenue'),'#15803d');
+      mt(m.nq,t('m_new'),'m-new',"dbGoTab('active')") + mt(m.quoted,t('m_quoted'),'m-quoted',"dbGoTab('active')") +
+      mt(m.won,t('m_won'),'m-won',"dbGoTab('won')") + mt(m.lost,t('m_lost'),'m-lost',"dbGoTab('lost')") +
+      mt(money(m.pipe)||'$0',t('m_pipeline')) + mt(money(m.rev)||'$0',t('m_revenue'),'m-rev');
   }
   function renderTabs(){
     var tabs=[['active','tab_active'],['won','tab_won'],['lost','tab_lost'],['noshow','tab_noshow'],['archived','tab_archived'],['all','tab_all']];
@@ -1364,7 +1407,7 @@
   document.getElementById('amCancel').onclick=function(){ document.getElementById('apptModal').style.display='none'; };
   document.getElementById('amSave').onclick=function(){
     var when=document.getElementById('amWhen').value;
-    if(!when){ document.getElementById('amErr').textContent='Pon fecha y hora'; return; }
+    if(!when){ document.getElementById('amErr').textContent=t('al_appt_date'); return; }
     var lv=document.getElementById('amLead').value.trim(), phone='', name='', m=lv.match(/\((\+?\d[\d ]*)\)/);
     if(m){ phone=m[1].replace(/\D/g,''); name=lv.replace(/\s*\(.*\)\s*/,'').trim(); }
     else if(/^\+?\d[\d ]*$/.test(lv)){ phone=lv.replace(/\D/g,''); }
@@ -1374,6 +1417,8 @@
       document.getElementById('apptModal').style.display='none';
       document.getElementById('amWhen').value=''; document.getElementById('amTitle').value=''; document.getElementById('amLead').value='';
       loadAppts(renderCal);
+      // refrescar leads + ficha abierta para mostrar la cita y el evento en el timeline
+      api('leads').then(function(r){return r.json();}).then(function(L){ leads=L; if(active) open_(active); if(document.getElementById('app').classList.contains('dbmode')) renderTable(); });
     });
   };
 
