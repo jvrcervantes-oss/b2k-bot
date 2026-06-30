@@ -271,10 +271,10 @@
 <div id="login">
   <div class="box">
     <div class="logo">A</div>
-    <h1>Panel de conversaciones</h1>
-    <p>__PROJECT__ · acceso del estudio</p>
-    <input id="pw" type="password" placeholder="Contraseña" autocomplete="current-password">
-    <button id="enter">Entrar</button>
+    <h1 data-i18n="login_title">Panel de conversaciones</h1>
+    <p data-i18n="login_sub">CRM BMA · acceso del estudio</p>
+    <input id="pw" type="password" data-ph="ph_pw" placeholder="Contraseña" autocomplete="current-password">
+    <button id="enter" data-i18n="btn_enter">Entrar</button>
     <div class="err" id="err"></div>
   </div>
 </div>
@@ -283,27 +283,28 @@
 <div id="app">
   <nav>
     <div class="brand">A</div>
-    <div class="ic on" id="navConv" title="Conversaciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="ic" id="navCal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="ic" id="navDb" title="Base de datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic on" id="navConv" data-ti="nav_conv" title="Conversaciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" id="navCal" data-ti="nav_cal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" id="navDb" data-ti="nav_db" title="Base de datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="spacer"></div>
-    <div class="ic" title="Cambiar tema" id="themeToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="ic" title="Salir" id="logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" id="langToggle" data-ti="nav_lang" style="font-size:12px;font-weight:700">EN</div>
+    <div class="ic" data-ti="nav_theme" id="themeToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" data-ti="nav_logout" id="logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
   </nav>
 
   <!-- list -->
   <div id="list">
-    <div class="head"><h2>Conversaciones <span class="count" id="count">0</span></h2></div>
-    <div class="stats"><span class="stWaitWrap" id="stWaitWrap">🔔 <b id="stWait">0</b> por responder</span><span><b id="stInt">0</b> interesados</span><span><b id="stBook">0</b> en reserva</span><span><b id="stNew">0</b> hoy</span></div>
+    <div class="head"><h2><span data-i18n="h_conv">Conversaciones</span> <span class="count" id="count">0</span></h2></div>
+    <div class="stats"><span class="stWaitWrap" id="stWaitWrap">🔔 <b id="stWait">0</b> <span data-i18n="st_wait">por responder</span></span><span><b id="stInt">0</b> <span data-i18n="st_int">interesados</span></span><span><b id="stBook">0</b> <span data-i18n="st_book">en reserva</span></span><span><b id="stNew">0</b> <span data-i18n="st_today">hoy</span></span></div>
     <div class="search">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg>
-      <input id="q" placeholder="Buscar lead…">
+      <input id="q" data-ph="ph_search_lead" placeholder="Buscar lead…">
     </div>
     <div class="chips">
-      <button class="chip on" data-f="all">Todos</button>
-      <button class="chip" data-f="waiting">🔔 Por responder</button>
-      <button class="chip" data-f="interested">🟡 Interesados</button>
-      <button class="chip" data-f="booking">🔴 Reserva</button>
+      <button class="chip on" data-f="all" data-i18n="chip_all">Todos</button>
+      <button class="chip" data-f="waiting" data-i18n="chip_wait">🔔 Por responder</button>
+      <button class="chip" data-f="interested" data-i18n="chip_int">🟡 Interesados</button>
+      <button class="chip" data-f="booking" data-i18n="chip_book">🔴 Reserva</button>
     </div>
     <div id="leads"></div>
   </div>
@@ -313,28 +314,28 @@
     <div class="top">
       <button class="back" id="back">‹</button>
       <div class="av" id="ctAv" style="width:38px;height:38px;font-size:14px;display:none"></div>
-      <div style="flex:1"><div class="nm" id="ctName">Selecciona un lead</div><div class="ph" id="ctPhone"></div></div>
+      <div style="flex:1"><div class="nm" id="ctName" data-i18n="pick_lead">Selecciona un lead</div><div class="ph" id="ctPhone"></div></div>
       <button class="pausebtn" id="pauseBtn" style="display:none"></button>
     </div>
-    <div id="msgs"><div class="nochat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg><br>Elige una conversación de la izquierda</div></div>
+    <div id="msgs"><div class="nochat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg><br><span data-i18n="nochat">Elige una conversación de la izquierda</span></div></div>
     <div class="wininfo" id="winInfo"></div>
     <div class="sendhint" id="sendHint" style="display:none"></div>
     <div class="composer" id="composer" style="display:none">
       <div class="cannedpop" id="cannedPop"></div>
-      <button id="cannedBtn" class="cannedbtn" title="Respuestas rápidas">📋</button>
-      <textarea id="reply" rows="1" placeholder="Escribe para tomar el control…"></textarea>
-      <button id="sendBtn" title="Enviar">➤</button>
+      <button id="cannedBtn" class="cannedbtn" data-ti="t_canned" title="Respuestas rápidas">📋</button>
+      <textarea id="reply" rows="1" data-ph="ph_reply" placeholder="Escribe para tomar el control…"></textarea>
+      <button id="sendBtn" data-ti="t_send" title="Enviar">➤</button>
     </div>
   </div>
 
   <!-- detail -->
-  <div id="detail"><div class="ph-detail">Selecciona un lead para ver su ficha</div></div>
+  <div id="detail"><div class="ph-detail" data-i18n="detail_empty">Selecciona un lead para ver su ficha</div></div>
 
   <!-- calendario -->
   <div id="calView">
     <div class="cal-top">
       <div class="cal-nav"><button id="calPrev">‹</button><h2 id="calMonth"></h2><button id="calNext">›</button></div>
-      <button id="newAppt" class="cal-new">+ Nueva cita</button>
+      <button id="newAppt" class="cal-new" data-i18n="cal_new">+ Nueva cita</button>
     </div>
     <div class="cal-wrap">
       <div class="cal-cal">
@@ -342,7 +343,7 @@
         <div class="cal-grid" id="calGrid"></div>
       </div>
       <div class="cal-side">
-        <h3>Próximas citas</h3>
+        <h3 data-i18n="cal_upcoming">Próximas citas</h3>
         <div id="upList"></div>
       </div>
     </div>
@@ -351,13 +352,13 @@
   <!-- base de datos: todos los clientes en tabla -->
   <div id="dbView">
     <div class="db-top">
-      <h2>Base de datos <span class="count" id="dbCount">0</span></h2>
+      <h2><span data-i18n="h_db">Base de datos</span> <span class="count" id="dbCount">0</span></h2>
       <span class="db-store" id="dbStore">—</span>
-      <div class="db-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg><input id="dbQ" placeholder="Buscar cliente…"></div>
+      <div class="db-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg><input id="dbQ" data-ph="ph_search_client" placeholder="Buscar cliente…"></div>
       <input type="file" id="dbFile" accept=".csv,text/csv" style="display:none">
-      <button class="db-ghost" id="dbImport" title="Sube el CSV de leads que descargas de Meta Lead Ads">⬆ Importar Meta</button>
-      <button class="db-ghost" id="dbEnrich" title="Lee las conversaciones y rellena los datos que falten">🔄 Actualizar desde chats</button>
-      <button class="db-csv" id="dbCsv">⬇ Exportar CSV</button>
+      <button class="db-ghost" id="dbImport" data-i18n="btn_import" data-ti="ti_import" title="Sube el CSV de leads que descargas de Meta Lead Ads">⬆ Importar Meta</button>
+      <button class="db-ghost" id="dbEnrich" data-i18n="btn_enrich" data-ti="ti_enrich" title="Lee las conversaciones y rellena los datos que falten">🔄 Actualizar desde chats</button>
+      <button class="db-csv" id="dbCsv" data-i18n="btn_csv">⬇ Exportar CSV</button>
     </div>
     <div class="db-wrap"><div id="dbTable"></div></div>
     <div class="db-foot" id="dbFoot"></div>
@@ -367,26 +368,26 @@
 <!-- modal respuestas rápidas -->
 <div id="cannedModal" class="modal" style="display:none">
   <div class="modal-box">
-    <h3>Respuestas rápidas</h3>
-    <label>Una por línea · formato <b>Título | texto</b></label>
+    <h3 data-i18n="m_canned">Respuestas rápidas</h3>
+    <label><span data-i18n="m_canned_help">Una por línea · formato</span> <b data-i18n="m_canned_fmt">Título | texto</b></label>
     <textarea id="cannedText" style="width:100%;min-height:180px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;resize:vertical;outline:none"></textarea>
-    <div class="modal-actions"><button class="btn-ghost" id="cannedCancel">Cancelar</button><button class="btn-primary" id="cannedSave">Guardar</button></div>
+    <div class="modal-actions"><button class="btn-ghost" id="cannedCancel" data-i18n="btn_cancel">Cancelar</button><button class="btn-primary" id="cannedSave" data-i18n="btn_save">Guardar</button></div>
   </div>
 </div>
 
 <!-- modal nueva cita -->
 <div id="apptModal" class="modal" style="display:none">
   <div class="modal-box">
-    <h3>Nueva cita</h3>
-    <label>Lead</label>
-    <input id="amLead" list="leadsDL" placeholder="Nombre o teléfono (opcional)">
+    <h3 data-i18n="m_appt">Nueva cita</h3>
+    <label data-i18n="l_lead">Lead</label>
+    <input id="amLead" list="leadsDL" data-ph="ph_lead" placeholder="Nombre o teléfono (opcional)">
     <datalist id="leadsDL"></datalist>
-    <label>Fecha y hora</label>
+    <label data-i18n="l_datetime">Fecha y hora</label>
     <input id="amWhen" type="datetime-local">
-    <label>Título</label>
-    <input id="amTitle" placeholder="Llamada con…">
+    <label data-i18n="l_title">Título</label>
+    <input id="amTitle" data-ph="ph_call" placeholder="Llamada con…">
     <div class="modal-err" id="amErr"></div>
-    <div class="modal-actions"><button id="amCancel" class="btn-ghost">Cancelar</button><button id="amSave" class="btn-primary">Guardar cita</button></div>
+    <div class="modal-actions"><button id="amCancel" class="btn-ghost" data-i18n="btn_cancel">Cancelar</button><button id="amSave" class="btn-primary" data-i18n="btn_save_appt">Guardar cita</button></div>
   </div>
 </div>
 
@@ -395,6 +396,88 @@
   var KEY = new URLSearchParams(location.search).get('key') || sessionStorage.getItem('botpanel_key') || '';
   var leads = [], filter = 'all', search = '', active = null, curLead = null;
   var appts = [], calY = null, calM = null;
+
+  // ── i18n (ES / EN) ──────────────────────────────────────────────
+  var I18N = {
+    es:{ brand:'CRM BMA', login_title:'Panel de conversaciones', login_sub:'CRM BMA · acceso del estudio', ph_pw:'Contraseña', btn_enter:'Entrar', err_pw:'Contraseña incorrecta',
+      nav_conv:'Conversaciones', nav_cal:'Calendario', nav_db:'Base de datos', nav_theme:'Cambiar tema', nav_logout:'Salir', nav_lang:'English',
+      h_conv:'Conversaciones', st_wait:'por responder', st_int:'interesados', st_book:'en reserva', st_today:'hoy',
+      ph_search_lead:'Buscar lead…', chip_all:'Todos', chip_wait:'🔔 Por responder', chip_int:'🟡 Interesados', chip_book:'🔴 Reserva',
+      pick_lead:'Selecciona un lead', nochat:'Elige una conversación de la izquierda', ph_reply:'Escribe para tomar el control…', t_canned:'Respuestas rápidas', t_send:'Enviar', detail_empty:'Selecciona un lead para ver su ficha',
+      cal_new:'+ Nueva cita', cal_upcoming:'Próximas citas', cal_none:'Sin citas próximas', dow:['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'],
+      h_db:'Base de datos', ph_search_client:'Buscar cliente…', btn_import:'⬆ Importar Meta', ti_import:'Sube el CSV de leads que descargas de Meta Lead Ads', btn_enrich:'🔄 Actualizar desde chats', ti_enrich:'Lee las conversaciones y rellena los datos que falten', btn_csv:'⬇ Exportar CSV',
+      m_canned:'Respuestas rápidas', m_canned_help:'Una por línea · formato', m_canned_fmt:'Título | texto', btn_cancel:'Cancelar', btn_save:'Guardar',
+      m_appt:'Nueva cita', l_lead:'Lead', ph_lead:'Nombre o teléfono (opcional)', l_datetime:'Fecha y hora', l_title:'Título', ph_call:'Llamada con…', btn_save_appt:'Guardar cita',
+      i_exploring:'explorando', i_interested:'interesado', i_booking:'reserva', i_escalate:'duda',
+      c_name:'Nombre', c_phone:'WhatsApp', c_email:'Email', c_country:'País', c_tour:'Tour', c_package:'Paquete', c_riders:'Riders', c_pillions:'Pillions', c_travel:'Fecha viaje', c_status:'Estado', c_intent:'Intención', c_lastact:'Últ. act.',
+      s_blank:'—', s_new:'🆕 Nuevo', s_quoted:'💬 Cotizado', s_won:'✅ Ganado', s_lost:'❌ Perdido', s_noshow:'🚫 No-show',
+      e_status:'Estado', e_name:'Nombre', e_country:'País', e_email:'Email', e_tour:'Tour de interés', e_package:'Paquete', e_riders:'Nº riders', e_pillions:'Pillions', e_travel:'Fecha de viaje', e_savecard:'Guardar ficha', e_notes:'Notas internas', ph_notes:'Notas del estudio…', e_savenotes:'Guardar notas',
+      ph_pkg:'Roundtrip / Extreme / Deluxe', ph_eg4:'ej. 4', ph_eg0:'ej. 0', ph_egmonth:'ej. Julio 2026',
+      f_intent:'Intención', f_lastact:'Última actividad', f_messages:'Mensajes', f_followups:'Seguimientos enviados', f_after24:'tras 24h', f_nextappt:'Próxima cita', wa_open:'Abrir en WhatsApp',
+      p_resume:'🤖 Reactivar bot', p_pause:'✋ Pausar bot', hint_paused:'Tú tienes el control · el bot está en pausa para este lead', hint_active:'El bot responde solo · si escribes tú, tomas el control',
+      win_open_a:'🟢 Ventana de 24h abierta · cierra en ', win_closed:'🔴 Ventana de 24h cerrada — WhatsApp no permite texto libre (haría falta una plantilla)', win_closed_ph:'Ventana de 24h cerrada',
+      ago_now:'ahora', ago_yest:'ayer', of:'de', more:'más',
+      store_redis:'🟢 Redis · persistente', store_ram:'🟠 RAM · NO persiste — configura Redis',
+      empty_results:'Sin resultados', empty_clients:'Aún no hay clientes', empty_convs:'Aún no hay conversaciones', no_msgs:'Sin mensajes guardados', no_tpl:'Sin plantillas aún',
+      flash_saved:'✓ Guardado', flash_err:'✕ Error', imp_ing:'⏳ Importando ', imp_new:'nuevos', imp_upd:'act.', enr_ing:'⏳ Leyendo chats…', enr_done:'actualizados',
+      al_status:'No se pudo guardar el estado', al_pkg:'No se pudo guardar el paquete', al_nolead:'No se han encontrado leads en el archivo (¿es el CSV de Meta Lead Ads?).', al_imp:'Error al importar', al_tpl:'No se pudieron guardar las plantillas',
+      al_send:'No se pudo enviar: ', al_send2:'\n\nSi han pasado +24h desde el último mensaje del cliente, WhatsApp no permite texto libre (haría falta plantilla).', cfm_cancel:'¿Cancelar esta cita?',
+      notify_wait:'🔔 Lead por responder', notify_hot:'🔴 Lead caliente (reserva)', locale:'es-ES' },
+    en:{ brand:'CRM BMA', login_title:'Conversations panel', login_sub:'CRM BMA · studio access', ph_pw:'Password', btn_enter:'Sign in', err_pw:'Wrong password',
+      nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español',
+      h_conv:'Conversations', st_wait:'to reply', st_int:'interested', st_book:'booking', st_today:'today',
+      ph_search_lead:'Search lead…', chip_all:'All', chip_wait:'🔔 To reply', chip_int:'🟡 Interested', chip_book:'🔴 Booking',
+      pick_lead:'Select a lead', nochat:'Pick a conversation on the left', ph_reply:'Type to take over…', t_canned:'Quick replies', t_send:'Send', detail_empty:'Select a lead to see their card',
+      cal_new:'+ New appointment', cal_upcoming:'Upcoming', cal_none:'No upcoming appointments', dow:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+      h_db:'Database', ph_search_client:'Search client…', btn_import:'⬆ Import Meta', ti_import:'Upload the leads CSV you download from Meta Lead Ads', btn_enrich:'🔄 Update from chats', ti_enrich:'Reads conversations and fills in missing data', btn_csv:'⬇ Export CSV',
+      m_canned:'Quick replies', m_canned_help:'One per line · format', m_canned_fmt:'Title | text', btn_cancel:'Cancel', btn_save:'Save',
+      m_appt:'New appointment', l_lead:'Lead', ph_lead:'Name or phone (optional)', l_datetime:'Date & time', l_title:'Title', ph_call:'Call with…', btn_save_appt:'Save appointment',
+      i_exploring:'exploring', i_interested:'interested', i_booking:'booking', i_escalate:'question',
+      c_name:'Name', c_phone:'WhatsApp', c_email:'Email', c_country:'Country', c_tour:'Tour', c_package:'Package', c_riders:'Riders', c_pillions:'Pillions', c_travel:'Travel date', c_status:'Status', c_intent:'Intent', c_lastact:'Last act.',
+      s_blank:'—', s_new:'🆕 New', s_quoted:'💬 Quoted', s_won:'✅ Won', s_lost:'❌ Lost', s_noshow:'🚫 No-show',
+      e_status:'Status', e_name:'Name', e_country:'Country', e_email:'Email', e_tour:'Tour of interest', e_package:'Package', e_riders:'# riders', e_pillions:'Pillions', e_travel:'Travel date', e_savecard:'Save card', e_notes:'Internal notes', ph_notes:'Studio notes…', e_savenotes:'Save notes',
+      ph_pkg:'Roundtrip / Extreme / Deluxe', ph_eg4:'e.g. 4', ph_eg0:'e.g. 0', ph_egmonth:'e.g. July 2026',
+      f_intent:'Intent', f_lastact:'Last activity', f_messages:'Messages', f_followups:'Follow-ups sent', f_after24:'after 24h', f_nextappt:'Next appointment', wa_open:'Open in WhatsApp',
+      p_resume:'🤖 Resume bot', p_pause:'✋ Pause bot', hint_paused:"You're in control · the bot is paused for this lead", hint_active:'The bot replies on its own · type and you take over',
+      win_open_a:'🟢 24h window open · closes in ', win_closed:'🔴 24h window closed — WhatsApp blocks free text (a template is required)', win_closed_ph:'24h window closed',
+      ago_now:'now', ago_yest:'yesterday', of:'of', more:'more',
+      store_redis:'🟢 Redis · persistent', store_ram:'🟠 RAM · NOT persistent — set up Redis',
+      empty_results:'No results', empty_clients:'No clients yet', empty_convs:'No conversations yet', no_msgs:'No saved messages', no_tpl:'No templates yet',
+      flash_saved:'✓ Saved', flash_err:'✕ Error', imp_ing:'⏳ Importing ', imp_new:'new', imp_upd:'upd.', enr_ing:'⏳ Reading chats…', enr_done:'updated',
+      al_status:"Couldn't save status", al_pkg:"Couldn't save package", al_nolead:'No leads found in the file (is it the Meta Lead Ads CSV?).', al_imp:'Import error', al_tpl:"Couldn't save templates",
+      al_send:"Couldn't send: ", al_send2:"\n\nIf it's been 24h+ since the customer's last message, WhatsApp blocks free text (a template is required).", cfm_cancel:'Cancel this appointment?',
+      notify_wait:'🔔 Lead to reply', notify_hot:'🔴 Hot lead (booking)', locale:'en-GB' }
+  };
+  var LANG = localStorage.getItem('botpanel_lang') || 'es';
+  function t(k){ var d=I18N[LANG]||I18N.es; return (d[k]!=null)?d[k]:(I18N.es[k]!=null?I18N.es[k]:k); }
+  function applyStaticI18n(){
+    document.documentElement.lang = LANG;
+    document.title = t('brand') + ' · ' + t('h_conv');
+    var n;
+    n=document.querySelectorAll('[data-i18n]'); for(var i=0;i<n.length;i++) n[i].textContent=t(n[i].getAttribute('data-i18n'));
+    n=document.querySelectorAll('[data-ph]'); for(var j=0;j<n.length;j++) n[j].placeholder=t(n[j].getAttribute('data-ph'));
+    n=document.querySelectorAll('[data-ti]'); for(var m=0;m<n.length;m++) n[m].title=t(n[m].getAttribute('data-ti'));
+    var dows=document.querySelectorAll('.cal-dow span'), dw=t('dow');
+    if(dows.length===7 && dw && dw.length===7){ for(var d2=0;d2<7;d2++) dows[d2].textContent=dw[d2]; }
+    var lt=document.getElementById('langToggle'); if(lt) lt.textContent=(LANG==='es'?'EN':'ES');
+    rebuildI18nVars();
+  }
+  function setLang(lng){
+    LANG=lng; try{ localStorage.setItem('botpanel_lang',lng); }catch(e){}
+    applyStaticI18n();
+    if(typeof render==='function') render();
+    var app=document.getElementById('app');
+    if(app.classList.contains('dbmode')){ renderDb(); if(typeof loadHealth==='function') loadHealth(); }
+    if(app.classList.contains('calmode')) renderCal();
+    if(active && !app.classList.contains('dbmode') && !app.classList.contains('calmode')) open_(active);
+  }
+  // Reconstruye las estructuras con texto traducido según el idioma activo.
+  function rebuildI18nVars(){
+    LABEL = {exploring:t('i_exploring'),interested:t('i_interested'),booking:t('i_booking'),escalate:t('i_escalate')};
+    STATUS_LABEL = {'':t('s_blank'),new:t('s_new'),quoted:t('s_quoted'),won:t('s_won'),lost:t('s_lost'),noshow:t('s_noshow')};
+    ST_OPTS = [['',t('s_blank')],['new',t('s_new')],['quoted',t('s_quoted')],['won',t('s_won')],['lost',t('s_lost')],['noshow',t('s_noshow')]];
+    DB_COLS = [['name',t('c_name')],['phone',t('c_phone')],['email',t('c_email')],['country',t('c_country')],['tour',t('c_tour')],['package',t('c_package')],['riders',t('c_riders')],['pillions',t('c_pillions')],['travelDate',t('c_travel')],['status',t('c_status')],['intent',t('c_intent')],['updatedAt',t('c_lastact')]];
+  }
 
   function api(path){ return fetch('/admin/api/' + path, { headers: { 'X-Admin-Key': KEY } }); }
   function apiPost(path, body){ return fetch('/admin/api/' + path, { method:'POST', headers: { 'Content-Type':'application/json', 'X-Admin-Key': KEY }, body:JSON.stringify(body) }); }
@@ -418,7 +501,7 @@
 
   document.getElementById('enter').onclick = function(){
     var k = document.getElementById('pw').value.trim();
-    tryAuth(k).catch(function(){ document.getElementById('err').textContent = 'Contraseña incorrecta'; });
+    tryAuth(k).catch(function(){ document.getElementById('err').textContent = t('err_pw'); });
   };
   document.getElementById('pw').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('enter').click(); });
   document.getElementById('logout').onclick = function(){ sessionStorage.removeItem('botpanel_key'); location.href = location.pathname; };
@@ -432,13 +515,14 @@
     localStorage.setItem('botpanel_theme', theme);
     applyTheme(theme);
   };
+  document.getElementById('langToggle').onclick = function(){ setLang(LANG==='es'?'en':'es'); };
 
   // ── helpers ──
   function esc(s){ var d=document.createElement('div'); d.textContent = s==null?'':s; return d.innerHTML; }
   function initials(n){ n=(n||'').trim(); if(!n) return '#'; var p=n.split(/\s+/); return (p[0][0]+(p[1]?p[1][0]:'')).toUpperCase(); }
   var PALETTE=['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d'];
   function color(s){ var h=0; s=s||''; for(var i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return PALETTE[h%PALETTE.length]; }
-  function ago(ts){ var s=Math.floor((Date.now()-ts)/1000); if(s<60)return 'ahora'; if(s<3600)return Math.floor(s/60)+'m'; if(s<86400)return Math.floor(s/3600)+'h'; var d=Math.floor(s/86400); return d===1?'ayer':d+'d'; }
+  function ago(ts){ var s=Math.floor((Date.now()-ts)/1000); if(s<60)return t('ago_now'); if(s<3600)return Math.floor(s/60)+'m'; if(s<86400)return Math.floor(s/3600)+'h'; var d=Math.floor(s/86400); return d===1?t('ago_yest'):d+'d'; }
   var LABEL={exploring:'explorando',interested:'interesado',booking:'reserva',escalate:'duda'};
 
   // ── render list ──
@@ -459,7 +543,7 @@
     document.getElementById('stWait').textContent=nw;
     document.getElementById('stWaitWrap').classList.toggle('on', nw>0);
     var box = document.getElementById('leads');
-    if(!f.length){ box.innerHTML = '<div class="empty">'+(leads.length?'Sin resultados':'Aún no hay conversaciones')+'</div>'; return; }
+    if(!f.length){ box.innerHTML = '<div class="empty">'+(leads.length?t('empty_results'):t('empty_convs'))+'</div>'; return; }
     box.innerHTML = f.map(function(l){
       var c = color(l.name||l.phone), it = l.intent||'exploring';
       var dotc = it==='booking'?'var(--red)':it==='interested'?'var(--amber)':it==='escalate'?'#9ca3af':'var(--green)';
@@ -497,18 +581,18 @@
 
     api('conv/' + encodeURIComponent(phone)).then(function(r){return r.json();}).then(function(C){
       var box = document.getElementById('msgs');
-      box.innerHTML = C.length ? C.map(function(m){ return '<div class="m '+m.role+'">'+esc(m.content)+'</div>'; }).join('') : '<div class="nochat">Sin mensajes guardados</div>';
+      box.innerHTML = C.length ? C.map(function(m){ return '<div class="m '+m.role+'">'+esc(m.content)+'</div>'; }).join('') : '<div class="nochat">'+t('no_msgs')+'</div>';
       box.scrollTop = box.scrollHeight;
 
       document.getElementById('detail').innerHTML =
         '<div class="big" style="background:'+c+'">'+esc(initials(l.name||phone))+'</div>'
         + '<div class="dn">'+esc(l.name||phone)+'</div><div class="dp">+'+esc(phone)+'</div>'
         + '<div class="dbadge"><span class="badge i-'+it+'">'+(LABEL[it]||it)+'</span></div>'
-        + '<a class="wa" href="https://wa.me/'+esc(phone)+'" target="_blank"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.5 15.3L2 22l4.8-1.4A10 10 0 1 0 12 2zm0 18a8 8 0 0 1-4.1-1.1l-.3-.2-2.8.8.8-2.8-.2-.3A8 8 0 1 1 12 20z"/></svg>Abrir en WhatsApp</a>'
-        + '<div class="field"><div class="k">Intención</div><div class="v">'+(LABEL[it]||it)+'</div></div>'
-        + '<div class="field"><div class="k">Última actividad</div><div class="v">'+ago(l.updatedAt)+'</div></div>'
-        + '<div class="field"><div class="k">Mensajes</div><div class="v">'+C.length+'</div></div>'
-        + (l.followups ? '<div class="field"><div class="k">Seguimientos enviados</div><div class="v">'+l.followups+' tras 24h</div></div>' : '')
+        + '<a class="wa" href="https://wa.me/'+esc(phone)+'" target="_blank"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.5 15.3L2 22l4.8-1.4A10 10 0 1 0 12 2zm0 18a8 8 0 0 1-4.1-1.1l-.3-.2-2.8.8.8-2.8-.2-.3A8 8 0 1 1 12 20z"/></svg>'+t('wa_open')+'</a>'
+        + '<div class="field"><div class="k">'+t('f_intent')+'</div><div class="v">'+(LABEL[it]||it)+'</div></div>'
+        + '<div class="field"><div class="k">'+t('f_lastact')+'</div><div class="v">'+ago(l.updatedAt)+'</div></div>'
+        + '<div class="field"><div class="k">'+t('f_messages')+'</div><div class="v">'+C.length+'</div></div>'
+        + (l.followups ? '<div class="field"><div class="k">'+t('f_followups')+'</div><div class="v">'+l.followups+' '+t('f_after24')+'</div></div>' : '')
         + apptFieldHTML(phone)
         + crmEditorHTML(l);
     });
@@ -518,33 +602,33 @@
   // ── editor CRM de la ficha (estado, campos editables, notas) ──
   function crmEditorHTML(l){
     var st = l.status||'';
-    function opt(v,t){ return '<option value="'+v+'"'+(st===v?' selected':'')+'>'+t+'</option>'; }
+    function opt(v,lbl){ return '<option value="'+v+'"'+(st===v?' selected':'')+'>'+lbl+'</option>'; }
     return ''
-      + '<div class="edit"><label>Estado</label><select id="edStatus" onchange="saveStatus()">'
-        + '<option value=""'+(st===''?' selected':'')+'>—</option>'
-        + opt('new','🆕 Nuevo')+opt('quoted','💬 Cotizado')+opt('won','✅ Ganado')+opt('lost','❌ Perdido')+opt('noshow','🚫 No-show')
+      + '<div class="edit"><label>'+t('e_status')+'</label><select id="edStatus" onchange="saveStatus()">'
+        + '<option value=""'+(st===''?' selected':'')+'>'+t('s_blank')+'</option>'
+        + opt('new',t('s_new'))+opt('quoted',t('s_quoted'))+opt('won',t('s_won'))+opt('lost',t('s_lost'))+opt('noshow',t('s_noshow'))
       + '</select></div>'
-      + '<div class="edit"><label>Nombre</label><input id="edName" value="'+esc(l.name||'')+'"></div>'
-      + '<div class="edit"><label>País</label><input id="edCountry" value="'+esc(l.country||'')+'"></div>'
-      + '<div class="edit"><label>Email</label><input id="edEmail" value="'+esc(l.email||'')+'"></div>'
-      + '<div class="edit"><label>Tour de interés</label><input id="edTour" value="'+esc(l.tour||'')+'"></div>'
-      + '<div class="edit"><label>Paquete</label><input id="edPackage" value="'+esc(l.package||'')+'" placeholder="Roundtrip / Extreme / Deluxe"></div>'
-      + '<div class="edit"><label>Nº riders</label><input id="edRiders" value="'+esc(l.riders!=null?l.riders:'')+'" placeholder="ej. 4"></div>'
-      + '<div class="edit"><label>Pillions</label><input id="edPillions" value="'+esc(l.pillions!=null?l.pillions:'')+'" placeholder="ej. 0"></div>'
-      + '<div class="edit"><label>Fecha de viaje</label><input id="edTravel" value="'+esc(l.travelDate||'')+'" placeholder="ej. Julio 2026"></div>'
-      + '<button class="savebtn" id="edSave" onclick="saveLeadFields()">Guardar ficha</button>'
-      + '<div class="edit"><label>Notas internas</label><textarea id="edNotes" placeholder="Notas del estudio…">'+esc(l.notes||'')+'</textarea>'
-        + '<button class="savebtn" id="edNotesSave" onclick="saveNote()">Guardar notas</button></div>';
+      + '<div class="edit"><label>'+t('e_name')+'</label><input id="edName" value="'+esc(l.name||'')+'"></div>'
+      + '<div class="edit"><label>'+t('e_country')+'</label><input id="edCountry" value="'+esc(l.country||'')+'"></div>'
+      + '<div class="edit"><label>'+t('e_email')+'</label><input id="edEmail" value="'+esc(l.email||'')+'"></div>'
+      + '<div class="edit"><label>'+t('e_tour')+'</label><input id="edTour" value="'+esc(l.tour||'')+'"></div>'
+      + '<div class="edit"><label>'+t('e_package')+'</label><input id="edPackage" value="'+esc(l.package||'')+'" placeholder="'+t('ph_pkg')+'"></div>'
+      + '<div class="edit"><label>'+t('e_riders')+'</label><input id="edRiders" value="'+esc(l.riders!=null?l.riders:'')+'" placeholder="'+t('ph_eg4')+'"></div>'
+      + '<div class="edit"><label>'+t('e_pillions')+'</label><input id="edPillions" value="'+esc(l.pillions!=null?l.pillions:'')+'" placeholder="'+t('ph_eg0')+'"></div>'
+      + '<div class="edit"><label>'+t('e_travel')+'</label><input id="edTravel" value="'+esc(l.travelDate||'')+'" placeholder="'+t('ph_egmonth')+'"></div>'
+      + '<button class="savebtn" id="edSave" onclick="saveLeadFields()">'+t('e_savecard')+'</button>'
+      + '<div class="edit"><label>'+t('e_notes')+'</label><textarea id="edNotes" placeholder="'+t('ph_notes')+'">'+esc(l.notes||'')+'</textarea>'
+        + '<button class="savebtn" id="edNotesSave" onclick="saveNote()">'+t('e_savenotes')+'</button></div>';
   }
   function flash(id, ok){
-    var b = document.getElementById(id); if(!b) return; var t = b.textContent;
-    b.textContent = ok ? '✓ Guardado' : '✕ Error'; b.classList.add(ok?'ok':'bad');
-    setTimeout(function(){ b.textContent = t; b.classList.remove('ok','bad'); }, 1500);
+    var b = document.getElementById(id); if(!b) return; var orig = b.textContent;
+    b.textContent = ok ? t('flash_saved') : t('flash_err'); b.classList.add(ok?'ok':'bad');
+    setTimeout(function(){ b.textContent = orig; b.classList.remove('ok','bad'); }, 1500);
   }
   function syncLead(fields){ Object.assign(curLead, fields); var L = leads.filter(function(x){return x.phone===curLead.phone;})[0]; if(L) Object.assign(L, fields); }
   function saveStatus(){
     if(!curLead) return; var v = document.getElementById('edStatus').value;
-    apiPost('status',{phone:curLead.phone,status:v}).then(function(r){ if(!r.ok) throw 0; syncLead({status:v}); }).catch(function(){ alert('No se pudo guardar el estado'); });
+    apiPost('status',{phone:curLead.phone,status:v}).then(function(r){ if(!r.ok) throw 0; syncLead({status:v}); }).catch(function(){ alert(t('al_status')); });
   }
   function saveNote(){
     if(!curLead) return; var v = document.getElementById('edNotes').value;
@@ -579,24 +663,24 @@
   }
   function updatePauseUI(paused){
     var btn = document.getElementById('pauseBtn'), hint = document.getElementById('sendHint');
-    if(paused){ btn.textContent = '🤖 Reactivar bot'; btn.classList.add('paused'); hint.textContent = 'Tú tienes el control · el bot está en pausa para este lead'; }
-    else { btn.textContent = '✋ Pausar bot'; btn.classList.remove('paused'); hint.textContent = 'El bot responde solo · si escribes tú, tomas el control'; }
+    if(paused){ btn.textContent = t('p_resume'); btn.classList.add('paused'); hint.textContent = t('hint_paused'); }
+    else { btn.textContent = t('p_pause'); btn.classList.remove('paused'); hint.textContent = t('hint_active'); }
   }
   // Indicador de la ventana de 24h de WhatsApp (texto libre solo dentro de ella)
   function updateWindowUI(l){
     var el = document.getElementById('winInfo'), ta = document.getElementById('reply'), btn = document.getElementById('sendBtn');
-    var t = l && l.lastInboundAt;
-    if(!t){ el.className = 'wininfo'; ta.disabled = false; btn.disabled = false; ta.placeholder = 'Escribe para tomar el control…'; return; }
-    var left = 24*3600000 - (Date.now() - t);
+    var t2 = l && l.lastInboundAt;
+    if(!t2){ el.className = 'wininfo'; ta.disabled = false; btn.disabled = false; ta.placeholder = t('ph_reply'); return; }
+    var left = 24*3600000 - (Date.now() - t2);
     if(left > 0){
       var h = Math.floor(left/3600000), m = Math.floor((left%3600000)/60000);
       el.className = 'wininfo open';
-      el.innerHTML = '🟢 Ventana de 24h abierta · cierra en ' + (h>0 ? h+'h ' : '') + m + 'm';
-      ta.disabled = false; btn.disabled = false; ta.placeholder = 'Escribe para tomar el control…';
+      el.innerHTML = t('win_open_a') + (h>0 ? h+'h ' : '') + m + 'm';
+      ta.disabled = false; btn.disabled = false; ta.placeholder = t('ph_reply');
     } else {
       el.className = 'wininfo closed';
-      el.innerHTML = '🔴 Ventana de 24h cerrada — WhatsApp no permite texto libre (haría falta una plantilla)';
-      ta.disabled = true; btn.disabled = true; ta.placeholder = 'Ventana de 24h cerrada';
+      el.innerHTML = t('win_closed');
+      ta.disabled = true; btn.disabled = true; ta.placeholder = t('win_closed_ph');
     }
   }
 
@@ -634,7 +718,7 @@
     if(nw.length || nb.length){
       beep();
       var l = nw[0] || nb[0];
-      var title = nw.length ? '🔔 Lead por responder' : '🔴 Lead caliente (reserva)';
+      var title = nw.length ? t('notify_wait') : t('notify_hot');
       notify(title, (l.name || ('+' + l.phone)) + (l.lastMessage ? ' — ' + l.lastMessage : ''));
     }
   }
@@ -656,7 +740,7 @@
       curLead.paused = true; updatePauseUI(true);
       var L = leads.filter(function(x){ return x.phone === curLead.phone; })[0]; if(L) L.paused = true;
     }).catch(function(e){
-      alert('No se pudo enviar: ' + ((e && e.error) || 'error') + '\n\nSi han pasado +24h desde el último mensaje del cliente, WhatsApp no permite texto libre (haría falta plantilla).');
+      alert(t('al_send') + ((e && e.error) || 'error') + t('al_send2'));
     }).then(function(){ btn.disabled = false; });
   }
   document.getElementById('pauseBtn').onclick = togglePause;
@@ -674,7 +758,7 @@
     var pop = document.getElementById('cannedPop');
     pop.innerHTML = (canned.length ? canned.map(function(c,i){
       return '<div class="ci" onclick="useCanned('+i+')"><div class="ct">'+esc(c.title)+'</div><div class="cx">'+esc(c.text)+'</div></div>';
-    }).join('') : '<div class="ci" style="color:#9aa3b5;cursor:default">Sin plantillas aún</div>')
+    }).join('') : '<div class="ci" style="color:#9aa3b5;cursor:default">'+t('no_tpl')+'</div>')
     + '<div class="cedit" id="cannedEditLink">✎ Editar plantillas…</div>';
     document.getElementById('cannedEditLink').onclick = editCanned;
   }
@@ -698,7 +782,7 @@
   function saveCanned(){
     var lines = document.getElementById('cannedText').value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
     var list = lines.map(function(l){ var i = l.indexOf('|'); return i<0 ? { title:l.slice(0,30), text:l } : { title:l.slice(0,i).trim(), text:l.slice(i+1).trim() }; });
-    apiPost('canned',{list:list}).then(function(r){ if(!r.ok) throw 0; canned = list; document.getElementById('cannedModal').style.display='none'; }).catch(function(){ alert('No se pudieron guardar las plantillas'); });
+    apiPost('canned',{list:list}).then(function(r){ if(!r.ok) throw 0; canned = list; document.getElementById('cannedModal').style.display='none'; }).catch(function(){ alert(t('al_tpl')); });
   }
   window.useCanned = useCanned;
   document.getElementById('cannedBtn').onclick = toggleCanned;
@@ -713,13 +797,13 @@
   function loadAppts(cb){ api('appts').then(function(r){return r.json();}).then(function(A){ appts = A; if(cb) cb(); }).catch(function(){}); }
   function sameDay(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
   function timeOf(iso){ var d=new Date(iso); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
-  function fmtWhen(iso){ var d=new Date(iso); return d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric',month:'short'})+' · '+timeOf(iso); }
+  function fmtWhen(iso){ var d=new Date(iso); return d.toLocaleDateString(t('locale'),{weekday:'short',day:'numeric',month:'short'})+' · '+timeOf(iso); }
   function nextApptFor(phone){ var now=Date.now()-3600000; return appts.filter(function(a){ return a.phone===phone && new Date(a.when).getTime()>=now; }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); })[0]; }
-  function apptFieldHTML(phone){ var a=nextApptFor(phone); if(!a) return ''; return '<div class="field"><div class="k">Próxima cita</div><div class="v">'+esc(a.title)+'<br><span style="color:var(--accent);font-size:13px">'+fmtWhen(a.when)+'</span></div></div>'; }
+  function apptFieldHTML(phone){ var a=nextApptFor(phone); if(!a) return ''; return '<div class="field"><div class="k">'+t('f_nextappt')+'</div><div class="v">'+esc(a.title)+'<br><span style="color:var(--accent);font-size:13px">'+fmtWhen(a.when)+'</span></div></div>'; }
 
   function renderCal(){
     if(calY==null){ var n=new Date(); calY=n.getFullYear(); calM=n.getMonth(); }
-    document.getElementById('calMonth').textContent = new Date(calY,calM,1).toLocaleDateString('es-ES',{month:'long',year:'numeric'});
+    document.getElementById('calMonth').textContent = new Date(calY,calM,1).toLocaleDateString(t('locale'),{month:'long',year:'numeric'});
     var startDow=(new Date(calY,calM,1).getDay()+6)%7, daysInMonth=new Date(calY,calM+1,0).getDate(), today=new Date();
     var html='';
     for(var i=0;i<42;i++){
@@ -727,7 +811,7 @@
       var out=d.getMonth()!==calM, isToday=sameDay(d,today);
       var da=appts.filter(function(a){ return sameDay(new Date(a.when),d); }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); });
       var chips=da.slice(0,3).map(function(a){ return '<div class="appt" onclick="cancelAppt(event,\''+a.id+'\')" title="'+esc(a.title)+'">'+timeOf(a.when)+' '+esc(a.title)+'</div>'; }).join('');
-      if(da.length>3) chips+='<div class="appt" style="background:none;border:0;color:#9aa3b5">+'+(da.length-3)+' más</div>';
+      if(da.length>3) chips+='<div class="appt" style="background:none;border:0;color:#9aa3b5">+'+(da.length-3)+' '+t('more')+'</div>';
       html+='<div class="cal-day'+(out?' out':'')+(isToday?' today':'')+'"><span class="dnum">'+d.getDate()+'</span>'+chips+'</div>';
     }
     document.getElementById('calGrid').innerHTML=html;
@@ -735,10 +819,10 @@
     var up=appts.filter(function(a){ return new Date(a.when).getTime()>=now; }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); }).slice(0,12);
     document.getElementById('upList').innerHTML = up.length ? up.map(function(a){
       return '<div class="up"><span class="del" onclick="cancelAppt(event,\''+a.id+'\')">✕</span><div class="ut">'+esc(a.title)+'</div><div class="uw">'+fmtWhen(a.when)+'</div>'+((a.name||a.phone)?'<div class="un">'+esc(a.name||('+'+a.phone))+'</div>':'')+'</div>';
-    }).join('') : '<div style="color:#9aa3b5;font-size:13px">Sin citas próximas</div>';
+    }).join('') : '<div style="color:#9aa3b5;font-size:13px">'+t('cal_none')+'</div>';
   }
 
-  function cancelAppt(e,id){ e.stopPropagation(); if(!confirm('¿Cancelar esta cita?')) return; fetch('/admin/api/appts/'+id,{method:'DELETE',headers:{'X-Admin-Key':KEY}}).then(function(){ loadAppts(renderCal); }); }
+  function cancelAppt(e,id){ e.stopPropagation(); if(!confirm(t('cfm_cancel'))) return; fetch('/admin/api/appts/'+id,{method:'DELETE',headers:{'X-Admin-Key':KEY}}).then(function(){ loadAppts(renderCal); }); }
   window.cancelAppt=cancelAppt;
 
   function buildLeadsDL(){ document.getElementById('leadsDL').innerHTML = leads.map(function(l){ return '<option value="'+esc((l.name||l.phone)+' (+'+l.phone+')')+'">'; }).join(''); }
@@ -807,7 +891,7 @@
     var f=dbFiltered(), total=f.length;
     document.getElementById('dbCount').textContent=total;
     var foot=document.getElementById('dbFoot');
-    if(!total){ document.getElementById('dbTable').innerHTML='<div class="db-empty">'+(leads.length?'Sin resultados':'Aún no hay clientes')+'</div>'; foot.innerHTML=''; return; }
+    if(!total){ document.getElementById('dbTable').innerHTML='<div class="db-empty">'+(leads.length?t('empty_results'):t('empty_clients'))+'</div>'; foot.innerHTML=''; return; }
     var pages=Math.max(1, Math.ceil(total/DB_PAGE_SIZE));
     if(dbPage>pages) dbPage=pages; if(dbPage<1) dbPage=1;
     var start=(dbPage-1)*DB_PAGE_SIZE, pageRows=f.slice(start, start+DB_PAGE_SIZE);
@@ -817,7 +901,7 @@
     }).join('');
     document.getElementById('dbTable').innerHTML='<table class="db"><thead>'+th+'</thead><tbody>'+rows+'</tbody></table>';
     foot.innerHTML =
-      '<span>'+(start+1)+'–'+(start+pageRows.length)+' de '+total+'</span>'
+      '<span>'+(start+1)+'–'+(start+pageRows.length)+' '+t('of')+' '+total+'</span>'
       +'<div class="db-pager">'
       +'<button '+(dbPage<=1?'disabled':'')+' onclick="dbGo(1)">«</button>'
       +'<button '+(dbPage<=1?'disabled':'')+' onclick="dbGo('+(dbPage-1)+')">‹</button>'
@@ -835,8 +919,8 @@
   function loadHealth(){
     api('health').then(function(r){return r.json();}).then(function(h){
       var el=document.getElementById('dbStore');
-      if(h.storage==='redis'){ el.className='db-store ok'; el.textContent='🟢 Redis · persistente'; }
-      else { el.className='db-store ram'; el.textContent='🟠 RAM · NO persiste — configura Redis'; }
+      if(h.storage==='redis'){ el.className='db-store ok'; el.textContent=t('store_redis'); }
+      else { el.className='db-store ram'; el.textContent=t('store_ram'); }
     }).catch(function(){});
   }
   function exportCsv(){
@@ -883,13 +967,13 @@
       if(buf[0]===0xFF&&buf[1]===0xFE) enc='utf-16le'; else if(buf[0]===0xFE&&buf[1]===0xFF) enc='utf-16be';
       var text; try{ text=new TextDecoder(enc).decode(buf); }catch(e){ text=new TextDecoder('utf-8').decode(buf); }
       var rows; try{ rows=parseMetaCsv(text); }catch(e){ rows=[]; }
-      if(!rows.length){ alert('No se han encontrado leads en el archivo (¿es el CSV de Meta Lead Ads?).'); return; }
-      var b=document.getElementById('dbImport'), t=b.textContent; b.disabled=true; b.textContent='⏳ Importando '+rows.length+'…';
+      if(!rows.length){ alert(t('al_nolead')); return; }
+      var b=document.getElementById('dbImport'), orig=b.textContent; b.disabled=true; b.textContent=t('imp_ing')+rows.length+'…';
       apiPost('import',{rows:rows}).then(function(r){return r.json();}).then(function(j){
         return api('leads').then(function(r){return r.json();}).then(function(L){ leads=L; dbPage=1; renderDb();
-          b.textContent='✓ '+j.created+' nuevos · '+j.updated+' act.'; setTimeout(function(){ b.textContent=t; b.disabled=false; },3500);
+          b.textContent='✓ '+j.created+' '+t('imp_new')+' · '+j.updated+' '+t('imp_upd'); setTimeout(function(){ b.textContent=orig; b.disabled=false; },3500);
         });
-      }).catch(function(){ b.textContent='✕ Error'; setTimeout(function(){ b.textContent=t; b.disabled=false; },3000); });
+      }).catch(function(){ b.textContent=t('err_short'); setTimeout(function(){ b.textContent=orig; b.disabled=false; },3000); });
     };
     rd.readAsArrayBuffer(file);
   }
@@ -905,13 +989,13 @@
   document.getElementById('dbImport').onclick=function(){ document.getElementById('dbFile').click(); };
   document.getElementById('dbFile').onchange=function(e){ var f=e.target.files&&e.target.files[0]; if(f) importMetaFile(f); e.target.value=''; };
   document.getElementById('dbEnrich').onclick=function(){
-    var b=this, t=b.textContent; b.disabled=true; b.textContent='⏳ Leyendo chats…';
+    var b=this, orig=b.textContent; b.disabled=true; b.textContent=t('enr_ing');
     apiPost('enrich-all',{}).then(function(r){return r.json();}).then(function(j){
       return api('leads').then(function(r){return r.json();}).then(function(L){
         leads=L; renderDb();
-        b.textContent='✓ '+(j.enriched||0)+' actualizados'; setTimeout(function(){ b.textContent=t; b.disabled=false; },2800);
+        b.textContent='✓ '+(j.enriched||0)+' '+t('enr_done'); setTimeout(function(){ b.textContent=orig; b.disabled=false; },2800);
       });
-    }).catch(function(){ b.textContent='✕ Error'; setTimeout(function(){ b.textContent=t; b.disabled=false; },2800); });
+    }).catch(function(){ b.textContent=t('err_short'); setTimeout(function(){ b.textContent=orig; b.disabled=false; },2800); });
   };
   document.getElementById('calPrev').onclick=function(){ calM--; if(calM<0){calM=11;calY--;} renderCal(); };
   document.getElementById('calNext').onclick=function(){ calM++; if(calM>11){calM=0;calY++;} renderCal(); };
@@ -947,6 +1031,9 @@
       loadAppts(function(){ if(document.getElementById('app').classList.contains('calmode')) renderCal(); });
     }, 10000);
   }
+
+  // aplicar idioma (después de declarar todas las variables) — traduce login + estáticos
+  applyStaticI18n();
 
   // auto-login si viene ?key= o hay sesión
   if(KEY){ tryAuth(KEY).catch(function(){ /* mostrar login */ }); }
