@@ -115,6 +115,10 @@ async function recordLead(phone, name, intent, lastMessage) {
     lastMessage: (lastMessage || "").slice(0, 200),
     updatedAt: Date.now(),
   };
+  if (!info.createdAt) {                       // primera vez que vemos este lead → fecha de alta + evento
+    info.createdAt = info.updatedAt;
+    info.history = (Array.isArray(prev.history) ? prev.history : []).concat([{ ts: info.createdAt, type: "created" }]);
+  }
   if (redisClient) {
     await redisClient.set(`lead:${phone}`, JSON.stringify(info));
     await redisClient.zAdd("leads_index", { score: info.updatedAt, value: phone });
@@ -312,6 +316,16 @@ async function captureLeadData(phone, fields) {
   writeLeadToSheet(phone, fields); // best-effort (solo escribe las llaves con columna mapeada)
 }
 
+// Registra un hito CRM en el historial del lead (para el timeline del panel). No bumpea updatedAt.
+async function logEvent(phone, type, meta) {
+  try {
+    const prev = (await getLead(phone)) || {};
+    const history = (Array.isArray(prev.history) ? prev.history : []).slice(-49);
+    history.push(Object.assign({ ts: Date.now(), type }, meta || {}));
+    await updateLeadFields(phone, { history });
+  } catch (e) { /* best-effort */ }
+}
+
 // ─── ENRIQUECIMIENTO: rellena la ficha leyendo la conversación con el LLM ──────
 // Para leads antiguos (p.ej. Keith) cuyos datos están en el chat pero no en la ficha.
 const EXTRACT_MODEL = process.env.EXTRACT_MODEL || MODEL;
@@ -363,7 +377,7 @@ async function enrichLeadFromConversation(phone, { force = false } = {}) {
   });
   fields.enrichedAt = Date.now();
   await updateLeadFields(phone, fields); // no toca updatedAt → no reordena el lead como "actividad nueva"
-  if (Object.keys(fields).length > 1) writeLeadToSheet(phone, fields);
+  if (Object.keys(fields).length > 1) { writeLeadToSheet(phone, fields); logEvent(phone, "enriched", { fields: Object.keys(fields).filter((k) => k !== "enrichedAt") }); }
   return fields;
 }
 
@@ -384,6 +398,8 @@ async function importMetaLead(row) {
     if (row.source) fields.adSource = String(row.source).slice(0, 120);
     const t = row.createdTime ? Date.parse(row.createdTime) : NaN;
     fields.updatedAt = isNaN(t) ? Date.now() : t; // ordena por fecha de envío del formulario
+    fields.createdAt = fields.updatedAt;
+    fields.history = [{ ts: fields.createdAt, type: "imported" }];
   }
   if (!Object.keys(fields).length) return "updated"; // ya estaba todo
   await updateLeadFields(phone, fields);
@@ -457,6 +473,7 @@ async function createAppt(a) {
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const appt = { id, phone: a.phone || "", name: a.name || "", title: a.title || "Cita", when: a.when, createdAt: Date.now() };
   await persistAppt(appt);
+  if (appt.phone) logEvent(appt.phone, "appt", { title: appt.title, when: appt.when });
 
   // Sincroniza con Google Calendar si está configurado (Service Account + CALENDAR_ID).
   if (CALENDAR_ID && GOOGLE_SERVICE_ACCOUNT) {
@@ -737,7 +754,7 @@ async function saveLead(phone, name, lastMessage, intent) {
 }
 
 // Mapeo de campos editables → columnas fijas del CRM (cabeceras del Sheet)
-const SHEET_COL = { name: "A", country: "B", email: "D", tour: "E", package: "F", status: "H", travelDate: "K", notes: "O" };
+const SHEET_COL = { name: "A", country: "B", email: "D", tour: "E", package: "F", status: "H", owner: "J", travelDate: "K", nextFollowUp: "M", notes: "O" };
 const STATUS_SHEET_LABEL = { new: "New", quoted: "Quoted", won: "Won ✅", lost: "Lost", noshow: "No-show" };
 
 async function updateLeadCells(sheets, row, vals) {
@@ -1165,6 +1182,7 @@ app.post("/admin/api/note", async (req, res) => {
   if (!phone) return res.status(400).json({ error: "phone requerido" });
   await setNotes(phone, notes || "");
   writeLeadToSheet(phone, { notes: notes || "" }); // best-effort, no bloquea la respuesta
+  logEvent(phone, "note");
   res.json({ ok: true });
 });
 
@@ -1173,23 +1191,90 @@ app.post("/admin/api/status", async (req, res) => {
   if (!adminAuth(req, res)) return;
   const { phone, status } = req.body || {};
   if (!phone) return res.status(400).json({ error: "phone requerido" });
+  const prevStatus = await getStatus(phone);
   await setStatus(phone, status || "");
   if (STATUS_SHEET_LABEL[status]) writeLeadToSheet(phone, { status: STATUS_SHEET_LABEL[status] });
+  if ((status || "") !== (prevStatus || "")) logEvent(phone, "status", { from: prevStatus || "", to: status || "" });
   res.json({ ok: true });
 });
 
-// ── CRM: campos editables de la ficha (name/country/email/tour/travelDate) ──
+// ── CRM: campos editables de la ficha (name/country/email/tour/travelDate/owner/tags/seguimiento) ──
 app.post("/admin/api/lead", async (req, res) => {
   if (!adminAuth(req, res)) return;
   const { phone } = req.body || {};
   if (!phone) return res.status(400).json({ error: "phone requerido" });
+  const prev = (await getLead(phone)) || {};
   const fields = {};
-  ["name", "country", "email", "tour", "package", "riders", "pillions", "travelDate"].forEach((k) => {
+  ["name", "country", "email", "tour", "package", "riders", "pillions", "travelDate", "owner", "nextFollowUp", "tags", "archived"].forEach((k) => {
     if (req.body[k] != null) fields[k] = req.body[k];
   });
   await updateLeadFields(phone, fields);
-  writeLeadToSheet(phone, fields); // best-effort
+  writeLeadToSheet(phone, fields); // best-effort (solo escribe las llaves con columna mapeada)
+  if (fields.owner != null && (fields.owner || "") !== (prev.owner || "")) logEvent(phone, "owner", { to: fields.owner || "" });
   res.json({ ok: true });
+});
+
+// ── CRM: archivar / restaurar un lead (reversible; sale de las vistas) ──
+app.post("/admin/api/archive", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, archived } = req.body || {};
+  if (!phone) return res.status(400).json({ error: "phone requerido" });
+  await updateLeadFields(phone, { archived: !!archived });
+  logEvent(phone, archived ? "archived" : "restored");
+  res.json({ ok: true, archived: !!archived });
+});
+
+// ── CRM: borrar definitivamente un lead (irreversible) ──
+async function deleteLead(phone) {
+  if (redisClient) {
+    await redisClient.del(`lead:${phone}`, `notes:${phone}`, `status:${phone}`, `conv:${phone}`, `paused:${phone}`, `waiting:${phone}`, `inbound:${phone}`, `followup:${phone}`, `notified:${phone}`);
+    await redisClient.zRem("leads_index", phone);
+  } else {
+    delete fallbackLeads[phone]; delete fallbackNotes[phone]; delete fallbackStatus[phone];
+    delete fallbackPaused[phone]; delete fallbackWaiting[phone]; delete fallbackInbound[phone];
+    delete fallbackFollowup[phone]; delete fallbackNotified[phone];
+    delete fallbackMemory[phone];
+  }
+}
+app.post("/admin/api/lead/delete", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone } = req.body || {};
+  if (!phone) return res.status(400).json({ error: "phone requerido" });
+  try { await deleteLead(phone); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── CRM: acciones en lote sobre varios leads ──
+app.post("/admin/api/bulk", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phones, action, value } = req.body || {};
+  if (!Array.isArray(phones) || !phones.length || !action) return res.status(400).json({ error: "phones[] y action requeridos" });
+  let n = 0;
+  try {
+    for (const phone of phones) {
+      if (action === "status") {
+        const prevStatus = await getStatus(phone);
+        await setStatus(phone, value || "");
+        if (STATUS_SHEET_LABEL[value]) writeLeadToSheet(phone, { status: STATUS_SHEET_LABEL[value] });
+        if ((value || "") !== (prevStatus || "")) logEvent(phone, "status", { from: prevStatus || "", to: value || "" });
+      } else if (action === "owner") {
+        await updateLeadFields(phone, { owner: value || "" });
+        writeLeadToSheet(phone, { owner: value || "" });
+        logEvent(phone, "owner", { to: value || "" });
+      } else if (action === "archive" || action === "restore") {
+        await updateLeadFields(phone, { archived: action === "archive" });
+        logEvent(phone, action === "archive" ? "archived" : "restored");
+      } else if (action === "tag") {
+        const prev = (await getLead(phone)) || {};
+        const tags = Array.isArray(prev.tags) ? prev.tags.slice() : [];
+        if (value && tags.indexOf(value) < 0) { tags.push(value); await updateLeadFields(phone, { tags }); logEvent(phone, "tag", { to: value }); }
+      } else if (action === "delete") {
+        await deleteLead(phone);
+      } else { continue; }
+      n++;
+    }
+    res.json({ ok: true, count: n });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── Respuestas rápidas: listar / guardar ──
