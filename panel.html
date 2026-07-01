@@ -394,12 +394,13 @@
   /* ══ MÓVIL: una vista a la vez + barra de navegación inferior (al final: gana a las reglas base) ══ */
   @media(max-width:760px){
     #app.on{grid-template-columns:1fr}
-    nav{position:fixed;left:0;right:0;bottom:0;top:auto;height:58px;flex-direction:row;justify-content:space-around;align-items:center;padding:0 4px;gap:0;z-index:60;border-top:1px solid rgba(255,255,255,.10)}
+    /* la barra respeta el safe-area del móvil (home indicator) + un mínimo de 16px por si no lo reporta */
+    nav{position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;flex-direction:row;justify-content:space-around;align-items:center;padding:7px 4px max(16px,env(safe-area-inset-bottom,0px));gap:0;z-index:60;border-top:1px solid rgba(255,255,255,.10)}
     nav .brand,nav .spacer{display:none}
     nav .ic{width:46px;height:40px}
-    #dbView,#calView{grid-column:1/-1;padding-bottom:58px}
+    #dbView,#calView{grid-column:1/-1;padding-bottom:calc(66px + env(safe-area-inset-bottom,0px))}
     /* Conversaciones: lista por defecto; al abrir un chat = pantalla completa, sin barra */
-    #list{display:flex;padding-bottom:58px}
+    #list{display:flex;padding-bottom:calc(66px + env(safe-area-inset-bottom,0px))}
     #chat{display:none}
     #detail{display:none}
     #app.on.showchat #list{display:none}
