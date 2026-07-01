@@ -369,6 +369,28 @@
     outline:2px solid var(--accent);outline-offset:2px;
   }
   @media (prefers-reduced-motion:reduce){ *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important} }
+
+  /* ── vista rápida de cita (solo lectura): filas legibles con icono animado ── */
+  #apptViewModal .modal-box{width:384px}
+  #avTitle{margin-bottom:14px}
+  #avBody{display:flex;flex-direction:column;margin:2px 0 4px}
+  .av-row{display:flex;align-items:flex-start;gap:12px;padding:12px 6px;border-top:1px solid var(--line-2);text-align:left;width:100%;font-family:inherit}
+  .av-row:first-child{border-top:0}
+  button.av-row{cursor:pointer;border:0;border-radius:11px;background:none;color:inherit;transition:transform .16s cubic-bezier(.2,.7,.3,1),background .16s ease}
+  button.av-row:hover{background:var(--accent-soft);transform:translateX(2px)}
+  .av-ic{flex-shrink:0;width:34px;height:34px;border-radius:9px;background:var(--bg);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;transition:transform .16s cubic-bezier(.2,.7,.3,1),background .16s ease,color .16s ease}
+  .av-ic svg{width:17px;height:17px}
+  .av-row:hover .av-ic{background:var(--accent-soft);color:var(--accent);transform:scale(1.12) rotate(-3deg)}
+  .av-main{display:flex;flex-direction:column;min-width:0;flex:1;padding-top:1px}
+  .av-k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:600;margin-bottom:3px}
+  .av-v{font-size:14.5px;color:var(--ink);font-weight:500;line-height:1.45;word-break:break-word}
+  .av-v.accent{color:var(--accent);font-weight:600;font-size:15px}
+  .av-empty{color:var(--ink-soft);font-weight:400}
+  .av-go{flex-shrink:0;align-self:center;color:var(--ink-soft);opacity:0;transform:translateX(-5px);transition:opacity .16s ease,transform .16s ease}
+  .av-go svg{width:16px;height:16px;display:block}
+  button.av-row:hover .av-go{opacity:1;transform:translateX(0);color:var(--accent)}
+  .av-notes{background:var(--bg);border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;font-size:14px;line-height:1.5;color:var(--ink);white-space:pre-wrap;margin-top:1px}
+  #apptViewModal .modal-actions{border-top:1px solid var(--line-2);padding-top:14px;margin-top:10px}
 </style>
 </head>
 <body>
@@ -1056,16 +1078,34 @@
 
   // Vista rápida de solo lectura: el clic en una cita abre esto, NO el editor (evita cambios accidentales).
   var viewingApptId=null;
+  var AVIC={
+    cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+    user:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+    closer:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></svg>',
+    note:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>',
+    go:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'
+  };
+  function avRow(ic,k,v){ return '<div class="av-row"><span class="av-ic">'+ic+'</span><span class="av-main"><span class="av-k">'+esc(k)+'</span>'+v+'</span></div>'; }
   function openApptView(id){ var a=appts.filter(function(x){return x.id===id;})[0]; if(!a) return; viewingApptId=id;
     document.getElementById('avTitle').textContent=a.title||t('m_appt');
-    var lead=a.name?(a.name+(a.phone?' (+'+a.phone+')':'')):(a.phone?'+'+a.phone:t('av_nolead'));
-    function row(k,v){ return '<div class="field"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>'; }
-    var soft='color:var(--ink-soft)';
-    document.getElementById('avBody').innerHTML=
-      row(t('l_datetime'),'<span style="color:var(--accent)">'+esc(fmtWhen(a.when))+'</span>')
-      +row(t('l_lead'),esc(lead))
-      +row(t('l_closer'),a.closer?('👤 '+esc(a.closer)):('<span style="'+soft+'">'+t('av_noone')+'</span>'))
-      +row(t('l_notes_appt'),a.notes?esc(a.notes).replace(/\n/g,'<br>'):('<span style="'+soft+'">'+t('av_nonotes')+'</span>'));
+    var rows='';
+    // fecha (destacada en acento)
+    rows+=avRow(AVIC.cal, t('l_datetime'), '<span class="av-v accent">'+esc(fmtWhen(a.when))+'</span>');
+    // lead → fila-botón que abre WhatsApp si hay teléfono
+    var leadTxt=a.name?(esc(a.name)+(a.phone?' <span class="av-empty">(+'+esc(a.phone)+')</span>':'')):(a.phone?('+'+esc(a.phone)):('<span class="av-empty">'+t('av_nolead')+'</span>'));
+    if(a.phone){
+      rows+='<button type="button" class="av-row" onclick="window.open(\'https://wa.me/'+esc(a.phone)+'\',\'_blank\')" title="'+t('wa_open')+'">'
+        +'<span class="av-ic">'+AVIC.user+'</span><span class="av-main"><span class="av-k">'+t('l_lead')+'</span><span class="av-v">'+leadTxt+'</span></span>'
+        +'<span class="av-go">'+AVIC.go+'</span></button>';
+    } else {
+      rows+=avRow(AVIC.user, t('l_lead'), '<span class="av-v">'+leadTxt+'</span>');
+    }
+    // closer
+    rows+=avRow(AVIC.closer, t('l_closer'), a.closer?('<span class="av-v">'+esc(a.closer)+'</span>'):('<span class="av-v av-empty">'+t('av_noone')+'</span>'));
+    // notas (panel legible)
+    var notes=a.notes?('<div class="av-notes">'+esc(a.notes).replace(/\n/g,'<br>')+'</div>'):('<span class="av-v av-empty">'+t('av_nonotes')+'</span>');
+    rows+='<div class="av-row"><span class="av-ic">'+AVIC.note+'</span><span class="av-main"><span class="av-k">'+t('l_notes_appt')+'</span>'+notes+'</span></div>';
+    document.getElementById('avBody').innerHTML=rows;
     document.getElementById('apptViewModal').style.display='flex';
   }
   window.openApptView=openApptView;
