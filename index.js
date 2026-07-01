@@ -1070,7 +1070,7 @@ async function sendIntro(phone) {
   await updateLeadFields(phone, { outreached: true, outreachedAt: Date.now() });
   try {
     const history = await getConversation(phone);
-    history.push({ role: "assistant", content: `Hey ${firstName}! 👋 Saw you filled out our Instagram form — I'm Daniel from ${PROJECT_NAME}, here to help with your trip. What would you like to know?` });
+    history.push({ role: "assistant", content: `Hey ${firstName}! 👋 Saw you filled out our Instagram form — I'm Daniel from ${PROJECT_NAME}, here to help with your trip. What would you like to know?`, ts: Date.now(), by: "bot" });
     await saveConversation(phone, history);
   } catch (e) { /* best-effort */ }
   await logEvent(phone, "outreach");
@@ -1156,7 +1156,7 @@ app.post("/webhook", async (req, res) => {
 
     // ── Mensaje normal del cliente ────────────────────────────────
     const history = await getConversation(from);
-    history.push({ role: "user", content: text });
+    history.push({ role: "user", content: text, ts: Date.now() });
 
     // ── Captura automática: si este mensaje es el formulario de Instagram, extrae sus datos ──
     const formFields = parseLeadForm(text);
@@ -1193,7 +1193,7 @@ app.post("/webhook", async (req, res) => {
       max_tokens: 500,
       thinking: { type: "disabled" }, // respuestas cortas y baratas; en Sonnet 5 el thinking va ON por defecto y se comería el max_tokens
       system: buildSystemPrompt() + mediaHint,
-      messages: history,
+      messages: history.map((m) => ({ role: m.role, content: m.content })), // solo role+content (ts/by/media son internos)
     });
 
     const _textBlock = response.content.find((b) => b.type === "text");
@@ -1242,15 +1242,19 @@ app.post("/webhook", async (req, res) => {
       else console.warn(`[${PROJECT_NAME}] [RESEND_LINK] pedido pero no hay link previo para ${from} (el bot no debería prometerlo)`);
     }
 
-    history.push({ role: "assistant", content: reply });
+    history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
     await saveConversation(from, history);
 
     await sendWhatsApp(from, reply);
-    // Fotos/vídeos que el bot decidió enviar ([MEDIA:label]) → se buscan en la biblioteca y se mandan.
+    // Fotos/vídeos que el bot decidió enviar ([MEDIA:label]) → se buscan en la biblioteca, se mandan y se anotan en el historial.
     if (mediaMatch) {
       const wanted = mediaMatch[1].split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
       const toSend = mediaLib.filter((m) => wanted.includes(String(m.label).toLowerCase()));
-      for (const item of toSend) await sendWhatsAppMedia(from, item);
+      for (const item of toSend) {
+        await sendWhatsAppMedia(from, item);
+        history.push({ role: "assistant", content: item.caption || (item.type === "video" ? "[vídeo]" : "[foto]"), ts: Date.now(), by: "bot", media: { type: item.type, url: item.url, caption: item.caption || "" } });
+      }
+      if (toSend.length) await saveConversation(from, history);
       if (wanted.length && !toSend.length) console.warn(`[${PROJECT_NAME}] [MEDIA] pedido sin match en biblioteca: ${wanted.join(", ")}`);
     }
     await setWaiting(from, false); // el bot ya respondió → no queda pendiente
@@ -1411,12 +1415,30 @@ app.post("/admin/api/send", async (req, res) => {
   const r = await sendWhatsAppResult(phone, text);
   if (!r.ok) return res.status(502).json({ error: r.error });
   const history = await getConversation(phone);
-  history.push({ role: "assistant", content: text });
+  history.push({ role: "assistant", content: text, ts: Date.now(), by: "human" });
   await saveConversation(phone, history);
   await setPaused(phone, true); // al responder a mano, el bot deja de contestar a ese lead
   await setWaiting(phone, false); // ya respondido por el estudio → quitar el pendiente
   const prev = await getLead(phone);
   await recordLead(phone, prev && prev.name, (prev && prev.intent) || "interested", text);
+  res.json({ ok: true });
+});
+
+// Enviar una foto/vídeo a mano al cliente (toma de control). Igual que /send: envía, registra y pausa el bot.
+app.post("/admin/api/send-media", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, url, type, caption } = req.body || {};
+  if (!phone || !url) return res.status(400).json({ error: "phone y url requeridos" });
+  const mtype = type === "video" ? "video" : "image";
+  const r = await sendWhatsAppMedia(phone, { type: mtype, url, caption: caption || "", label: "manual" });
+  if (!r.ok) return res.status(502).json({ error: r.error });
+  const history = await getConversation(phone);
+  history.push({ role: "assistant", content: (caption || "").trim() || (mtype === "video" ? "[vídeo]" : "[foto]"), ts: Date.now(), by: "human", media: { type: mtype, url, caption: caption || "" } });
+  await saveConversation(phone, history);
+  await setPaused(phone, true);
+  await setWaiting(phone, false);
+  const prev = await getLead(phone);
+  await recordLead(phone, prev && prev.name, (prev && prev.intent) || "interested", caption || "[media]");
   res.json({ ok: true });
 });
 

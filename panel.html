@@ -149,6 +149,15 @@
   .m{max-width:62%;padding:9px 13px;border-radius:14px;font-size:13.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 1px rgba(0,0,0,.04)}
   .m.user{align-self:flex-start;background:#fff;border-bottom-left-radius:4px}
   .m.assistant{align-self:flex-end;background:var(--bot);color:#fff;border-bottom-right-radius:4px}
+  .m .mmeta{display:flex;justify-content:flex-end;align-items:center;gap:5px;margin-top:4px;font-size:10px;opacity:.7}
+  .m.user .mmeta{justify-content:flex-start}
+  .m .mtime{font-variant-numeric:tabular-nums}
+  .m.hasmedia{padding:5px 5px 7px}
+  .m .mmedia{max-width:240px;max-height:260px;border-radius:10px;display:block;cursor:pointer}
+  .m video.mmedia{cursor:default;width:240px}
+  .m .mcap{font-size:12.5px;margin:5px 4px 0;line-height:1.4}
+  .m a{color:inherit;text-decoration:underline;word-break:break-all}
+  .m.user a{color:var(--accent)}
   .stats{display:flex;gap:16px;padding:0 18px 10px;font-size:12px;color:var(--ink-soft)}
   .stats b{color:var(--ink);font-weight:700}
   .pausebtn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 12px;font-size:12.5px;font-weight:600;color:var(--ink-soft);white-space:nowrap}
@@ -507,6 +516,8 @@
     <div class="composer" id="composer" style="display:none">
       <div class="cannedpop" id="cannedPop"></div>
       <button id="cannedBtn" class="cannedbtn" data-ti="t_canned" title="Respuestas rápidas">📋</button>
+      <button id="attachBtn" class="cannedbtn" data-ti="t_attach" title="Enviar foto/vídeo">📎</button>
+      <input type="file" id="attachFile" accept="image/*,video/*" style="display:none">
       <textarea id="reply" rows="1" data-ph="ph_reply" placeholder="Escribe para tomar el control…"></textarea>
       <button id="sendBtn" data-ti="t_send" title="Enviar">➤</button>
     </div>
@@ -623,7 +634,7 @@
       m_media:'Fotos y vídeos del bot', media_help:'El bot envía estos archivos cuando ayudan a vender. Sube el archivo desde tu equipo (botón ⬆) o pega una URL pública. Ponle una etiqueta corta (ej. "intro", "bikes", "route").', btn_media_add:'+ Añadir archivo', media_empty:'Aún no hay archivos. Añade el primero 👇', mt_image:'Foto', mt_video:'Vídeo', mr_ph_label:'etiqueta (ej. intro)', mr_ph_url:'sube ⬆ o pega una URL pública', mr_ph_cap:'pie de foto (opcional)', al_media_url:'Cada archivo necesita una etiqueta y una URL (sube el archivo o pega una URL).', al_media_saved:'Biblioteca guardada ✓', ti_media_up:'Subir archivo del equipo', al_media_big:'Archivo demasiado grande (máx 16 MB).', al_media_uploaded:'Archivo subido ✓',
       h_conv:'Conversaciones', st_wait:'por responder', st_int:'interesados', st_book:'en reserva', st_today:'hoy',
       ph_search_lead:'Buscar lead…', chip_all:'Todos', chip_wait:'🔔 Por responder', chip_int:'🟡 Interesados', chip_book:'🔴 Reserva',
-      pick_lead:'Selecciona un lead', nochat:'Elige una conversación de la izquierda', ph_reply:'Escribe para tomar el control…', t_canned:'Respuestas rápidas', t_send:'Enviar', detail_empty:'Selecciona un lead para ver su ficha',
+      pick_lead:'Selecciona un lead', nochat:'Elige una conversación de la izquierda', ph_reply:'Escribe para tomar el control…', t_canned:'Respuestas rápidas', t_attach:'Enviar foto/vídeo', t_send:'Enviar', by_bot:'Enviado por el bot', by_human:'Enviado a mano', detail_empty:'Selecciona un lead para ver su ficha',
       cal_new:'+ Nueva cita', cal_upcoming:'Próximas citas', cal_none:'Sin citas próximas', dow:['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'],
       h_db:'Base de datos', ph_search_client:'Buscar cliente…', btn_import:'⬆ Importar Meta', ti_import:'Sube el CSV de leads que descargas de Meta Lead Ads', btn_enrich:'🔄 Actualizar desde chats', ti_enrich:'Lee las conversaciones y rellena los datos que falten', btn_csv:'⬇ Exportar CSV',
       m_canned:'Respuestas rápidas', m_canned_help:'Una por línea · formato', m_canned_fmt:'Título | texto', btn_cancel:'Cancelar', btn_save:'Guardar',
@@ -663,7 +674,7 @@
       m_media:'Bot photos & videos', media_help:'The bot sends these files when they help the sale. Upload a file from your device (⬆ button) or paste a public URL. Give it a short label (e.g. "intro", "bikes", "route").', btn_media_add:'+ Add file', media_empty:'No files yet. Add the first one 👇', mt_image:'Photo', mt_video:'Video', mr_ph_label:'label (e.g. intro)', mr_ph_url:'upload ⬆ or paste a public URL', mr_ph_cap:'caption (optional)', al_media_url:'Each file needs a label and a URL (upload a file or paste a URL).', al_media_saved:'Library saved ✓', ti_media_up:'Upload file from device', al_media_big:'File too large (max 16 MB).', al_media_uploaded:'File uploaded ✓',
       h_conv:'Conversations', st_wait:'to reply', st_int:'interested', st_book:'booking', st_today:'today',
       ph_search_lead:'Search lead…', chip_all:'All', chip_wait:'🔔 To reply', chip_int:'🟡 Interested', chip_book:'🔴 Booking',
-      pick_lead:'Select a lead', nochat:'Pick a conversation on the left', ph_reply:'Type to take over…', t_canned:'Quick replies', t_send:'Send', detail_empty:'Select a lead to see their card',
+      pick_lead:'Select a lead', nochat:'Pick a conversation on the left', ph_reply:'Type to take over…', t_canned:'Quick replies', t_attach:'Send photo/video', t_send:'Send', by_bot:'Sent by the bot', by_human:'Sent manually', detail_empty:'Select a lead to see their card',
       cal_new:'+ New appointment', cal_upcoming:'Upcoming', cal_none:'No upcoming appointments', dow:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
       h_db:'Database', ph_search_client:'Search client…', btn_import:'⬆ Import Meta', ti_import:'Upload the leads CSV you download from Meta Lead Ads', btn_enrich:'🔄 Update from chats', ti_enrich:'Reads conversations and fills in missing data', btn_csv:'⬇ Export CSV',
       m_canned:'Quick replies', m_canned_help:'One per line · format', m_canned_fmt:'Title | text', btn_cancel:'Cancel', btn_save:'Save',
@@ -822,11 +833,28 @@
   // ── open conversation ──
   // Render de los mensajes del chat (reutilizado por open_ y el refresco en vivo).
   var activeConvSig = '';
+  function linkify(s){ return s.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>'); }
+  function msgTime(ts){ var d=new Date(ts); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+  function msgHTML(m){
+    var meta=[];
+    if(m.role==='assistant') meta.push('<span class="mby" title="'+(m.by==='human'?t('by_human'):t('by_bot'))+'">'+(m.by==='human'?'🧑':'🤖')+'</span>');
+    if(m.ts) meta.push('<span class="mtime">'+msgTime(m.ts)+'</span>');
+    var body;
+    if(m.media && m.media.url){
+      body = (m.media.type==='video'
+          ? '<video class="mmedia" src="'+esc(m.media.url)+'" controls preload="metadata"></video>'
+          : '<img class="mmedia" src="'+esc(m.media.url)+'" loading="lazy" onclick="window.open(this.src,\'_blank\')">')
+        + (m.media.caption ? '<div class="mcap">'+esc(m.media.caption)+'</div>' : '');
+    } else {
+      body = linkify(esc(m.content)).replace(/\n/g,'<br>');
+    }
+    return '<div class="m '+m.role+(m.media?' hasmedia':'')+'">'+body+(meta.length?'<div class="mmeta">'+meta.join('')+'</div>':'')+'</div>';
+  }
   function renderMsgs(C, forceBottom){
     var box = document.getElementById('msgs');
     var prevTop = box.scrollTop;
     var nearBottom = forceBottom || (box.scrollHeight - box.scrollTop - box.clientHeight < 80);
-    box.innerHTML = C.length ? C.map(function(m){ return '<div class="m '+m.role+'">'+esc(m.content)+'</div>'; }).join('') : '<div class="nochat">'+t('no_msgs')+'</div>';
+    box.innerHTML = C.length ? C.map(msgHTML).join('') : '<div class="nochat">'+t('no_msgs')+'</div>';
     box.scrollTop = nearBottom ? box.scrollHeight : prevTop; // al fondo si seguía el hilo; si leía arriba, no le muevas
   }
   // Refresca los mensajes del chat activo sin re-pintar si no cambió (evita parpadeo/salto de scroll).
@@ -1009,11 +1037,14 @@
   window.saveStatus = saveStatus; window.saveNote = saveNote; window.saveLeadFields = saveLeadFields;
 
   // ── toma de control: responder a mano + pausar el bot ──
-  function appendBubble(role, content){
+  function appendBubble(role, content, opts){
     var box = document.getElementById('msgs');
     if(box.querySelector('.nochat')) box.innerHTML = '';
-    var d = document.createElement('div'); d.className = 'm ' + role; d.textContent = content;
-    box.appendChild(d); box.scrollTop = box.scrollHeight;
+    opts = opts || {};
+    var m = { role:role, content:content, ts:Date.now(), by:opts.by, media:opts.media };
+    box.insertAdjacentHTML('beforeend', msgHTML(m));
+    activeConvSig = ''; // fuerza que el próximo loadConv re-sincronice con el servidor
+    box.scrollTop = box.scrollHeight;
   }
   function updatePauseUI(paused){
     var btn = document.getElementById('pauseBtn'), hint = document.getElementById('sendHint');
@@ -1093,15 +1124,36 @@
     var btn = document.getElementById('sendBtn'); btn.disabled = true;
     apiPost('send', { phone: curLead.phone, text: txt }).then(function(r){
       if(!r.ok) return r.json().then(function(e){ throw e; });
-      ta.value = ''; ta.style.height = 'auto'; appendBubble('assistant', txt);
+      ta.value = ''; ta.style.height = 'auto'; appendBubble('assistant', txt, {by:'human'});
       curLead.paused = true; updatePauseUI(true);
       var L = leads.filter(function(x){ return x.phone === curLead.phone; })[0]; if(L) L.paused = true;
     }).catch(function(e){
       alert(t('al_send') + ((e && e.error) || 'error') + t('al_send2'));
     }).then(function(){ btn.disabled = false; });
   }
+  // Enviar una foto/vídeo a mano desde el chat: subir → send-media. La caja de texto (si hay) va de pie.
+  function sendMediaFromComposer(file){
+    if(!curLead) return;
+    if(file.size>16*1024*1024){ alert(t('al_media_big')); return; }
+    var ta=document.getElementById('reply'), caption=ta.value.trim();
+    var ab=document.getElementById('attachBtn'); ab.disabled=true; ab.textContent='⏳';
+    var fr=new FileReader();
+    fr.onload=function(){
+      apiPost('media/upload',{dataUrl:fr.result}).then(function(r){ if(!r.ok) return r.json().then(function(e){throw e;}); return r.json(); }).then(function(d){
+        return apiPost('send-media',{phone:curLead.phone,url:d.url,type:d.type,caption:caption}).then(function(r2){ if(!r2.ok) return r2.json().then(function(e){throw e;}); return d; });
+      }).then(function(d){
+        ta.value=''; ta.style.height='auto';
+        appendBubble('assistant', caption, {by:'human', media:{type:d.type,url:d.url,caption:caption}});
+        curLead.paused=true; updatePauseUI(true);
+        var L=leads.filter(function(x){return x.phone===curLead.phone;})[0]; if(L)L.paused=true;
+      }).catch(function(e){ alert(t('al_send')+((e&&e.error)||'error')+t('al_send2')); }).then(function(){ ab.disabled=false; ab.textContent='📎'; });
+    };
+    fr.readAsDataURL(file);
+  }
   document.getElementById('pauseBtn').onclick = togglePause;
   document.getElementById('sendBtn').onclick = sendMsg;
+  document.getElementById('attachBtn').onclick = function(){ if(document.getElementById('reply').disabled) return; document.getElementById('attachFile').click(); };
+  document.getElementById('attachFile').onchange = function(e){ var f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) sendMediaFromComposer(f); };
   (function(){
     var ta = document.getElementById('reply');
     ta.addEventListener('input', function(){ ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'; });
