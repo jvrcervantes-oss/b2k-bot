@@ -8,7 +8,7 @@ import { createClient } from "redis";
 import Stripe from "stripe";
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "20mb" })); // 20mb: permite subir fotos/vídeos locales (base64) desde el panel
 
 // ─── CONFIGURACIÓN (variables de entorno — distintas por proyecto) ──
 const {
@@ -984,6 +984,19 @@ async function setMediaLib(list) {
   return arr;
 }
 
+// Archivos subidos desde el panel (foto/vídeo local) → se guardan como blob en Redis
+// y se sirven por /media/:id, para que el bot los envíe por link sin hosting externo.
+const fallbackBlobs = {};
+async function setBlob(id, mime, b64) {
+  const payload = JSON.stringify({ mime, data: b64 });
+  if (redisClient) await redisClient.set(`mediablob:${id}`, payload);
+  else fallbackBlobs[id] = payload;
+}
+async function getBlob(id) {
+  const raw = redisClient ? await redisClient.get(`mediablob:${id}`) : fallbackBlobs[id];
+  return raw ? JSON.parse(raw) : null;
+}
+
 // Último link de pago generado por lead (para reenviarlo sin crear un cobro nuevo).
 const fallbackLastLink = {};
 async function setLastLink(phone, url) {
@@ -1547,6 +1560,33 @@ app.get("/admin/api/media", async (req, res) => {
   if (!adminAuth(req, res)) return;
   try { res.json(await getMediaLib()); } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// Subir un archivo local (dataURL base64) → guarda el blob y devuelve una URL self-hosted.
+app.post("/admin/api/media/upload", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const dataUrl = (req.body && req.body.dataUrl) || "";
+  const m = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl);
+  if (!m) return res.status(400).json({ error: "archivo inválido" });
+  const mime = m[1].toLowerCase(), b64 = m[2];
+  if (!/^image\/|^video\//.test(mime)) return res.status(400).json({ error: "solo imágenes o vídeos" });
+  if (Math.floor(b64.length * 0.75) > 16 * 1024 * 1024) return res.status(413).json({ error: "máx 16 MB" });
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  try {
+    await setBlob(id, mime, b64);
+    const url = `https://${req.get("host")}/media/${id}`;
+    res.json({ id, url, type: mime.startsWith("video/") ? "video" : "image", mime });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Sirve el archivo subido (público: WhatsApp lo descarga al enviarlo por link).
+app.get("/media/:id", async (req, res) => {
+  try {
+    const blob = await getBlob(req.params.id);
+    if (!blob) return res.status(404).send("not found");
+    res.set("Content-Type", blob.mime);
+    res.set("Cache-Control", "public, max-age=86400");
+    res.send(Buffer.from(blob.data, "base64"));
+  } catch (e) { res.status(500).send("error"); }
+});
+
 app.post("/admin/api/media", async (req, res) => {
   if (!adminAuth(req, res)) return;
   const items = Array.isArray(req.body && req.body.items) ? req.body.items : [];

@@ -437,7 +437,11 @@
   .media-row input,.media-row select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;background:var(--card);color:var(--ink);width:100%}
   .media-row .mr-label{flex:1}
   .media-row .mr-type{width:104px;flex-shrink:0;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7488' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center;background-size:11px;padding-right:26px;cursor:pointer}
-  .media-row .mr-url{margin-bottom:7px}
+  .media-row .mr-urlrow{display:flex;gap:8px;align-items:center;margin-bottom:7px}
+  .media-row .mr-urlrow .mr-url{margin-bottom:0}
+  .media-row .mr-up{width:38px;height:36px;flex-shrink:0;border:1px solid var(--line);background:var(--card);color:var(--accent);border-radius:8px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .15s ease,border-color .15s ease}
+  .media-row .mr-up:hover{background:var(--accent-soft);border-color:var(--accent)}
+  .media-row .mr-up:disabled{opacity:.6;cursor:default}
   .media-row input:focus,.media-row select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
   .media-row .mr-del{width:30px;height:30px;flex-shrink:0;border:1px solid var(--line);background:var(--card);color:#dc2626;border-radius:8px;cursor:pointer;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;transition:background .15s ease,border-color .15s ease}
   .media-row .mr-del:hover{background:#fee2e2;border-color:#dc2626}
@@ -616,7 +620,7 @@
   var I18N = {
     es:{ brand:'CRM BMA', login_title:'Panel de conversaciones', login_sub:'CRM BMA · acceso del estudio', ph_pw:'Contraseña', btn_enter:'Entrar', err_pw:'Contraseña incorrecta',
       nav_conv:'Conversaciones', nav_cal:'Calendario', nav_db:'Base de datos', nav_media:'Fotos y vídeos', nav_theme:'Cambiar tema', nav_logout:'Salir', nav_lang:'English',
-      m_media:'Fotos y vídeos del bot', media_help:'El bot envía estos archivos cuando ayudan a vender. Pega la URL pública de cada foto/vídeo y ponle una etiqueta corta (ej. "intro", "bikes", "route").', btn_media_add:'+ Añadir archivo', media_empty:'Aún no hay archivos. Añade el primero 👇', mt_image:'Foto', mt_video:'Vídeo', mr_ph_label:'etiqueta (ej. intro)', mr_ph_url:'https://… (URL pública)', mr_ph_cap:'pie de foto (opcional)', al_media_url:'Cada archivo necesita una etiqueta y una URL http(s) válida.', al_media_saved:'Biblioteca guardada ✓',
+      m_media:'Fotos y vídeos del bot', media_help:'El bot envía estos archivos cuando ayudan a vender. Sube el archivo desde tu equipo (botón ⬆) o pega una URL pública. Ponle una etiqueta corta (ej. "intro", "bikes", "route").', btn_media_add:'+ Añadir archivo', media_empty:'Aún no hay archivos. Añade el primero 👇', mt_image:'Foto', mt_video:'Vídeo', mr_ph_label:'etiqueta (ej. intro)', mr_ph_url:'sube ⬆ o pega una URL pública', mr_ph_cap:'pie de foto (opcional)', al_media_url:'Cada archivo necesita una etiqueta y una URL (sube el archivo o pega una URL).', al_media_saved:'Biblioteca guardada ✓', ti_media_up:'Subir archivo del equipo', al_media_big:'Archivo demasiado grande (máx 16 MB).', al_media_uploaded:'Archivo subido ✓',
       h_conv:'Conversaciones', st_wait:'por responder', st_int:'interesados', st_book:'en reserva', st_today:'hoy',
       ph_search_lead:'Buscar lead…', chip_all:'Todos', chip_wait:'🔔 Por responder', chip_int:'🟡 Interesados', chip_book:'🔴 Reserva',
       pick_lead:'Selecciona un lead', nochat:'Elige una conversación de la izquierda', ph_reply:'Escribe para tomar el control…', t_canned:'Respuestas rápidas', t_send:'Enviar', detail_empty:'Selecciona un lead para ver su ficha',
@@ -656,7 +660,7 @@
       al_save:'No se pudo guardar', edit_tpl:'✎ Editar plantillas…', locale:'es-ES' },
     en:{ brand:'CRM BMA', login_title:'Conversations panel', login_sub:'CRM BMA · studio access', ph_pw:'Password', btn_enter:'Sign in', err_pw:'Wrong password',
       nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_media:'Photos & videos', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español',
-      m_media:'Bot photos & videos', media_help:'The bot sends these files when they help the sale. Paste the public URL of each photo/video and give it a short label (e.g. "intro", "bikes", "route").', btn_media_add:'+ Add file', media_empty:'No files yet. Add the first one 👇', mt_image:'Photo', mt_video:'Video', mr_ph_label:'label (e.g. intro)', mr_ph_url:'https://… (public URL)', mr_ph_cap:'caption (optional)', al_media_url:'Each file needs a label and a valid http(s) URL.', al_media_saved:'Library saved ✓',
+      m_media:'Bot photos & videos', media_help:'The bot sends these files when they help the sale. Upload a file from your device (⬆ button) or paste a public URL. Give it a short label (e.g. "intro", "bikes", "route").', btn_media_add:'+ Add file', media_empty:'No files yet. Add the first one 👇', mt_image:'Photo', mt_video:'Video', mr_ph_label:'label (e.g. intro)', mr_ph_url:'upload ⬆ or paste a public URL', mr_ph_cap:'caption (optional)', al_media_url:'Each file needs a label and a URL (upload a file or paste a URL).', al_media_saved:'Library saved ✓', ti_media_up:'Upload file from device', al_media_big:'File too large (max 16 MB).', al_media_uploaded:'File uploaded ✓',
       h_conv:'Conversations', st_wait:'to reply', st_int:'interested', st_book:'booking', st_today:'today',
       ph_search_lead:'Search lead…', chip_all:'All', chip_wait:'🔔 To reply', chip_int:'🟡 Interested', chip_book:'🔴 Booking',
       pick_lead:'Select a lead', nochat:'Pick a conversation on the left', ph_reply:'Type to take over…', t_canned:'Quick replies', t_send:'Send', detail_empty:'Select a lead to see their card',
@@ -1201,12 +1205,35 @@
         +'<div class="mr-top"><input class="mr-label" value="'+esc(m.label||'')+'" placeholder="'+t('mr_ph_label')+'">'
         +'<select class="mr-type"><option value="image"'+(img?' selected':'')+'>'+t('mt_image')+'</option><option value="video"'+(vid?' selected':'')+'>'+t('mt_video')+'</option></select>'
         +'<button class="mr-del" onclick="mediaDelRow('+i+')" title="'+t('bulk_delete')+'">✕</button></div>'
-        +'<input class="mr-url" value="'+esc(m.url||'')+'" placeholder="'+t('mr_ph_url')+'">'
+        +'<div class="mr-urlrow"><input class="mr-url" value="'+esc(m.url||'')+'" placeholder="'+t('mr_ph_url')+'">'
+        +'<button class="mr-up" onclick="mediaPick('+i+')" title="'+t('ti_media_up')+'">⬆</button>'
+        +'<input type="file" class="mr-file" accept="image/*,video/*" style="display:none" onchange="mediaUpload('+i+',this)"></div>'
         +'<input class="mr-cap" value="'+esc(m.caption||'')+'" placeholder="'+t('mr_ph_cap')+'"></div>';
     }).join('');
   }
   function mediaDelRow(i){ readMediaFromDOM(); mediaItems.splice(i,1); renderMediaRows(); }
   window.mediaDelRow=mediaDelRow;
+  function mediaPick(i){ var rows=document.querySelectorAll('#mediaList .media-row'); var f=rows[i]&&rows[i].querySelector('.mr-file'); if(f) f.click(); }
+  function mediaUpload(i,input){
+    var file=input.files&&input.files[0]; if(!file) return;
+    var errEl=document.getElementById('mediaErr');
+    if(file.size>16*1024*1024){ errEl.style.color=''; errEl.textContent=t('al_media_big'); input.value=''; return; }
+    var rows=document.querySelectorAll('#mediaList .media-row'); var up=rows[i]&&rows[i].querySelector('.mr-up');
+    if(up){ up.textContent='⏳'; up.disabled=true; }
+    var fr=new FileReader();
+    fr.onload=function(){
+      apiPost('media/upload',{dataUrl:fr.result}).then(function(r){ if(!r.ok) return r.json().then(function(e){throw e;}); return r.json(); }).then(function(d){
+        readMediaFromDOM();
+        mediaItems[i]=mediaItems[i]||{label:'',type:'image',url:'',caption:''};
+        mediaItems[i].url=d.url; mediaItems[i].type=d.type;
+        if(!mediaItems[i].label){ mediaItems[i].label=(file.name||'').replace(/\.[^.]+$/,'').slice(0,40); }
+        renderMediaRows();
+        errEl.style.color='var(--accent)'; errEl.textContent=t('al_media_uploaded'); setTimeout(function(){ errEl.textContent=''; errEl.style.color=''; },1600);
+      }).catch(function(e){ if(up){ up.textContent='⬆'; up.disabled=false; } errEl.style.color=''; errEl.textContent=(e&&e.error)||t('al_save'); });
+    };
+    fr.readAsDataURL(file);
+  }
+  window.mediaPick=mediaPick; window.mediaUpload=mediaUpload;
   function openMedia(){ document.getElementById('mediaErr').textContent=''; loadMedia(function(){ renderMediaRows(); document.getElementById('mediaModal').style.display='flex'; }); }
   window.openMedia=openMedia;
 
