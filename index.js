@@ -369,6 +369,7 @@ async function enrichLeadFromConversation(phone, { force = false } = {}) {
     const r = await anthropic.messages.create({
       model: EXTRACT_MODEL,
       max_tokens: 300,
+      thinking: { type: "disabled" }, // extractor JSON: sin thinking (en Sonnet 5 iría ON por defecto y rompería el parseo/max_tokens)
       system:
         'You extract CRM fields from a WhatsApp sales chat for a motorcycle tour company. ' +
         'Return ONLY a compact JSON object — no prose, no code fences. Keys: ' +
@@ -1093,6 +1094,7 @@ app.post("/webhook", async (req, res) => {
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 500,
+      thinking: { type: "disabled" }, // respuestas cortas y baratas; en Sonnet 5 el thinking va ON por defecto y se comería el max_tokens
       system: buildSystemPrompt(),
       messages: history,
     });
