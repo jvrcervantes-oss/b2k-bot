@@ -78,9 +78,18 @@
   /* nav rail */
   nav{background:var(--nav);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:6px}
   nav .brand{width:38px;height:38px;border-radius:10px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;margin-bottom:10px}
-  nav .ic{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#8893a8}
-  nav .ic.on{background:rgba(255,255,255,.08);color:#fff}
-  nav .ic svg{width:20px;height:20px}
+  nav .ic{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#8893a8;cursor:pointer;transition:transform .15s cubic-bezier(.2,.7,.3,1),background .15s ease,color .15s ease,box-shadow .15s ease}
+  nav .ic:hover{background:rgba(255,255,255,.10);color:#fff;transform:translateY(-1px)}
+  nav .ic:active{transform:translateY(0) scale(.9)}
+  nav .ic.on{background:rgba(255,255,255,.10);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+  nav .ic.on:hover{background:rgba(255,255,255,.16)}
+  nav .ic:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  nav .ic svg{width:20px;height:20px;transition:transform .15s cubic-bezier(.2,.7,.3,1)}
+  nav .ic:hover svg{transform:scale(1.12)}
+  /* toggle de idioma: bandera SVG + código */
+  #langToggle{gap:4px;font-size:10.5px;font-weight:700;letter-spacing:.02em}
+  nav .ic svg.flag{width:18px;height:13px;border-radius:2px;flex-shrink:0;box-shadow:0 0 0 1px rgba(0,0,0,.18)}
+  nav .ic:hover svg.flag{transform:scale(1.08)}
   nav .spacer{flex:1}
 
   /* list column */
@@ -415,7 +424,7 @@
     <div class="ic" id="navCal" data-ti="nav_cal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="ic" id="navDb" data-ti="nav_db" title="Base de datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="spacer"></div>
-    <div class="ic" id="langToggle" data-ti="nav_lang" style="font-size:12px;font-weight:700">EN</div>
+    <div class="ic" id="langToggle" data-ti="nav_lang">EN</div>
     <div class="ic" data-ti="nav_theme" id="themeToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="ic" data-ti="nav_logout" id="logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
   </nav>
@@ -630,6 +639,11 @@
       al_save:"Couldn't save", edit_tpl:'✎ Edit templates…', locale:'en-GB' }
   };
   var LANG = localStorage.getItem('botpanel_lang') || 'es';
+  // Banderas SVG (los emoji de bandera no renderizan en Windows/Edge → se verían "GB"/"ES").
+  var FLAG={
+    gb:'<svg class="flag" viewBox="0 0 60 30" preserveAspectRatio="xMidYMid slice"><rect width="60" height="30" fill="#012169"/><path d="M0 0 60 30M60 0 0 30" stroke="#fff" stroke-width="6"/><path d="M0 0 60 30M60 0 0 30" stroke="#C8102E" stroke-width="4"/><path d="M30 0V30M0 15H60" stroke="#fff" stroke-width="10"/><path d="M30 0V30M0 15H60" stroke="#C8102E" stroke-width="6"/></svg>',
+    es:'<svg class="flag" viewBox="0 0 3 2" preserveAspectRatio="xMidYMid slice"><rect width="3" height="2" fill="#c60b1e"/><rect y=".5" width="3" height="1" fill="#ffc400"/></svg>'
+  };
   function t(k){ var d=I18N[LANG]||I18N.es; return (d[k]!=null)?d[k]:(I18N.es[k]!=null?I18N.es[k]:k); }
   function applyStaticI18n(){
     document.documentElement.lang = LANG;
@@ -640,7 +654,7 @@
     n=document.querySelectorAll('[data-ti]'); for(var m=0;m<n.length;m++) n[m].title=t(n[m].getAttribute('data-ti'));
     var dows=document.querySelectorAll('.cal-dow span'), dw=t('dow');
     if(dows.length===7 && dw && dw.length===7){ for(var d2=0;d2<7;d2++) dows[d2].textContent=dw[d2]; }
-    var lt=document.getElementById('langToggle'); if(lt) lt.textContent=(LANG==='es'?'EN':'ES');
+    var lt=document.getElementById('langToggle'); if(lt){ var toEN=(LANG==='es'); lt.innerHTML=(toEN?FLAG.gb:FLAG.es)+'<span>'+(toEN?'EN':'ES')+'</span>'; }
     rebuildI18nVars();
   }
   function setLang(lng){
