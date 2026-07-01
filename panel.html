@@ -37,7 +37,7 @@
   /* modo oscuro: controles nativos (select/date/scrollbars) + modales + tintes legibles */
   body.dark{color-scheme:dark}
   body.dark .modal-box{background:var(--card);box-shadow:0 30px 70px -30px rgba(0,0,0,.8)}
-  body.dark .modal-box input,body.dark .modal-box textarea{background:#0d1420;color:var(--ink);border-color:var(--line)}
+  body.dark .modal-box input,body.dark .modal-box select,body.dark .modal-box textarea{background:#0d1420;color:var(--ink);border-color:var(--line)}
   body.dark .btn-ghost{background:var(--card);color:var(--ink-soft);border-color:var(--line)}
   body.dark .db-sel,body.dark .db-filters select,body.dark .db-bulk select,body.dark .db-bulk button{background:#0d1420;color:var(--ink)}
   body.dark .db-tag{background:rgba(255,255,255,.08)}
@@ -332,8 +332,9 @@
   .modal-box{background:#fff;border-radius:16px;padding:26px;width:360px;box-shadow:0 30px 70px -30px rgba(0,0,0,.6)}
   .modal-box h3{font-size:18px;font-weight:700;margin-bottom:10px}
   .modal-box label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin:10px 0 5px}
-  .modal-box input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:14px;outline:none;font-family:inherit}
-  .modal-box input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .modal-box input,.modal-box select,.modal-box textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:14px;outline:none;font-family:inherit;box-sizing:border-box}
+  .modal-box textarea{resize:vertical;min-height:64px}
+  .modal-box input:focus,.modal-box select:focus,.modal-box textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
   .modal-err{color:var(--red);font-size:12.5px;min-height:16px;margin-top:8px}
   .modal-actions{display:flex;gap:10px;margin-top:6px}
   .btn-ghost{flex:1;padding:11px;border:1px solid var(--line);background:#fff;border-radius:9px;font-weight:600;color:var(--ink-soft)}
@@ -463,7 +464,7 @@
 <!-- modal nueva cita -->
 <div id="apptModal" class="modal" style="display:none">
   <div class="modal-box">
-    <h3 data-i18n="m_appt">Nueva cita</h3>
+    <h3 id="amHead" data-i18n="m_appt">Nueva cita</h3>
     <label data-i18n="l_lead">Lead</label>
     <input id="amLead" list="leadsDL" data-ph="ph_lead" placeholder="Nombre o teléfono (opcional)">
     <datalist id="leadsDL"></datalist>
@@ -471,8 +472,12 @@
     <input id="amWhen" type="datetime-local">
     <label data-i18n="l_title">Título</label>
     <input id="amTitle" data-ph="ph_call" placeholder="Llamada con…">
+    <label data-i18n="l_closer">Closer asignado</label>
+    <select id="amCloser"></select>
+    <label data-i18n="l_notes_appt">Notas de la cita</label>
+    <textarea id="amNotes" rows="3" data-ph="ph_notes_appt" placeholder="Contexto de lo hablado, para el closer…"></textarea>
     <div class="modal-err" id="amErr"></div>
-    <div class="modal-actions"><button id="amCancel" class="btn-ghost" data-i18n="btn_cancel">Cancelar</button><button id="amSave" class="btn-primary" data-i18n="btn_save_appt">Guardar cita</button></div>
+    <div class="modal-actions"><button id="amDelete" class="btn-ghost" data-i18n="btn_delete_appt" style="display:none;margin-right:auto;color:#dc2626">Eliminar cita</button><button id="amCancel" class="btn-ghost" data-i18n="btn_cancel">Cancelar</button><button id="amSave" class="btn-primary" data-i18n="btn_save_appt">Guardar cita</button></div>
   </div>
 </div>
 
@@ -480,7 +485,7 @@
   // ── auth ──
   var KEY = new URLSearchParams(location.search).get('key') || sessionStorage.getItem('botpanel_key') || '';
   var leads = [], filter = 'all', search = '', active = null, curLead = null;
-  var appts = [], calY = null, calM = null;
+  var appts = [], calY = null, calM = null, editingApptId = null;
 
   // ── i18n (ES / EN) ──────────────────────────────────────────────
   var I18N = {
@@ -492,7 +497,8 @@
       cal_new:'+ Nueva cita', cal_upcoming:'Próximas citas', cal_none:'Sin citas próximas', dow:['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'],
       h_db:'Base de datos', ph_search_client:'Buscar cliente…', btn_import:'⬆ Importar Meta', ti_import:'Sube el CSV de leads que descargas de Meta Lead Ads', btn_enrich:'🔄 Actualizar desde chats', ti_enrich:'Lee las conversaciones y rellena los datos que falten', btn_csv:'⬇ Exportar CSV',
       m_canned:'Respuestas rápidas', m_canned_help:'Una por línea · formato', m_canned_fmt:'Título | texto', btn_cancel:'Cancelar', btn_save:'Guardar',
-      m_appt:'Nueva cita', l_lead:'Lead', ph_lead:'Nombre o teléfono (opcional)', l_datetime:'Fecha y hora', l_title:'Título', ph_call:'Llamada con…', btn_save_appt:'Guardar cita',
+      m_appt:'Nueva cita', m_appt_edit:'Editar cita', l_lead:'Lead', ph_lead:'Nombre o teléfono (opcional)', l_datetime:'Fecha y hora', l_title:'Título', ph_call:'Llamada con…', btn_save_appt:'Guardar cita',
+      l_closer:'Closer asignado', l_notes_appt:'Notas de la cita', ph_notes_appt:'Contexto de lo hablado, para el closer…', btn_delete_appt:'Eliminar cita',
       i_exploring:'explorando', i_interested:'interesado', i_booking:'reserva', i_escalate:'duda',
       c_name:'Nombre', c_phone:'WhatsApp', c_email:'Email', c_country:'País', c_tour:'Tour', c_package:'Paquete', c_riders:'Riders', c_pillions:'Pillions', c_travel:'Fecha viaje', c_status:'Estado', c_intent:'Intención', c_lastact:'Últ. act.',
       s_blank:'—', s_new:'🆕 Nuevo', s_quoted:'💬 Cotizado', s_won:'✅ Ganado', s_lost:'❌ Perdido', s_noshow:'🚫 No-show',
@@ -530,7 +536,8 @@
       cal_new:'+ New appointment', cal_upcoming:'Upcoming', cal_none:'No upcoming appointments', dow:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
       h_db:'Database', ph_search_client:'Search client…', btn_import:'⬆ Import Meta', ti_import:'Upload the leads CSV you download from Meta Lead Ads', btn_enrich:'🔄 Update from chats', ti_enrich:'Reads conversations and fills in missing data', btn_csv:'⬇ Export CSV',
       m_canned:'Quick replies', m_canned_help:'One per line · format', m_canned_fmt:'Title | text', btn_cancel:'Cancel', btn_save:'Save',
-      m_appt:'New appointment', l_lead:'Lead', ph_lead:'Name or phone (optional)', l_datetime:'Date & time', l_title:'Title', ph_call:'Call with…', btn_save_appt:'Save appointment',
+      m_appt:'New appointment', m_appt_edit:'Edit appointment', l_lead:'Lead', ph_lead:'Name or phone (optional)', l_datetime:'Date & time', l_title:'Title', ph_call:'Call with…', btn_save_appt:'Save appointment',
+      l_closer:'Assigned closer', l_notes_appt:'Appointment notes', ph_notes_appt:'What was discussed, for the closer…', btn_delete_appt:'Delete appointment',
       i_exploring:'exploring', i_interested:'interested', i_booking:'booking', i_escalate:'question',
       c_name:'Name', c_phone:'WhatsApp', c_email:'Email', c_country:'Country', c_tour:'Tour', c_package:'Package', c_riders:'Riders', c_pillions:'Pillions', c_travel:'Travel date', c_status:'Status', c_intent:'Intent', c_lastact:'Last act.',
       s_blank:'—', s_new:'🆕 New', s_quoted:'💬 Quoted', s_won:'✅ Won', s_lost:'❌ Lost', s_noshow:'🚫 No-show',
@@ -800,13 +807,12 @@
   function qAssign(owner){ if(!curLead) return; var v=(curLead.owner===owner)?'':owner;
     apiPost('lead',{phone:curLead.phone,owner:v}).then(function(r){ if(!r.ok) throw 0; syncLead({owner:v}); if(active) open_(active); }).catch(function(){ alert(t('al_save')); });
   }
-  function fichaScheduleCall(){ if(!curLead) return; buildLeadsDL();
+  function fichaScheduleCall(){ if(!curLead) return;
     var who=(curLead.name||curLead.phone);
-    document.getElementById('amErr').textContent='';
+    openApptCreate();
     document.getElementById('amLead').value=who+' (+'+curLead.phone+')';
     document.getElementById('amTitle').value=t('call_title')+' '+who;
-    document.getElementById('amWhen').value='';
-    document.getElementById('apptModal').style.display='flex';
+    fillCloserOpts(curLead.owner||''); // el closer por defecto = quien lleva el lead; se puede cambiar
   }
   window.leadAddTag=leadAddTag; window.leadRemoveTag=leadRemoveTag; window.fichaArchive=fichaArchive; window.fichaDelete=fichaDelete; window.fichaOutreach=fichaOutreach; window.rowOutreach=rowOutreach; window.qAssign=qAssign; window.fichaScheduleCall=fichaScheduleCall;
   function flash(id, ok){
@@ -990,7 +996,24 @@
   function timeOf(iso){ var d=new Date(iso); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
   function fmtWhen(iso){ var d=new Date(iso); return d.toLocaleDateString(t('locale'),{weekday:'short',day:'numeric',month:'short'})+' · '+timeOf(iso); }
   function nextApptFor(phone){ var now=Date.now()-3600000; return appts.filter(function(a){ return a.phone===phone && new Date(a.when).getTime()>=now; }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); })[0]; }
-  function apptFieldHTML(phone){ var a=nextApptFor(phone); if(!a) return ''; return '<div class="field"><div class="k">'+t('f_nextappt')+'</div><div class="v">'+esc(a.title)+'<br><span style="color:var(--accent);font-size:13px">'+fmtWhen(a.when)+'</span></div></div>'; }
+  function apptFieldHTML(phone){ var a=nextApptFor(phone); if(!a) return ''; return '<div class="field"><div class="k">'+t('f_nextappt')+'</div><div class="v">'+esc(a.title)+'<br><span style="color:var(--accent);font-size:13px">'+fmtWhen(a.when)+'</span>'+(a.closer?'<br><span style="font-size:12px;color:var(--ink-soft)">👤 '+esc(a.closer)+'</span>':'')+'</div></div>'; }
+
+  // ── modal de cita: crear / editar (mismo modal, reutiliza OWNER_OPTS como lista de closers) ──
+  function fillCloserOpts(sel){ var s=document.getElementById('amCloser'); s.innerHTML=OWNER_OPTS.map(function(v){return '<option value="'+esc(v)+'">'+esc(v||'—')+'</option>';}).join(''); s.value=sel||''; }
+  function openApptCreate(){ editingApptId=null; buildLeadsDL();
+    document.getElementById('amHead').textContent=t('m_appt'); document.getElementById('amErr').textContent='';
+    document.getElementById('amLead').value=''; document.getElementById('amWhen').value=''; document.getElementById('amTitle').value=''; document.getElementById('amNotes').value=''; fillCloserOpts('');
+    document.getElementById('amDelete').style.display='none';
+    document.getElementById('apptModal').style.display='flex';
+  }
+  function openApptEdit(id){ var a=appts.filter(function(x){return x.id===id;})[0]; if(!a) return; editingApptId=id; buildLeadsDL();
+    document.getElementById('amHead').textContent=t('m_appt_edit'); document.getElementById('amErr').textContent='';
+    document.getElementById('amLead').value=a.name?(a.name+(a.phone?' (+'+a.phone+')':'')):(a.phone?'+'+a.phone:'');
+    document.getElementById('amWhen').value=(a.when||'').slice(0,16); document.getElementById('amTitle').value=a.title||''; document.getElementById('amNotes').value=a.notes||''; fillCloserOpts(a.closer||'');
+    document.getElementById('amDelete').style.display='';
+    document.getElementById('apptModal').style.display='flex';
+  }
+  window.openApptEdit=openApptEdit;
 
   function renderCal(){
     if(calY==null){ var n=new Date(); calY=n.getFullYear(); calM=n.getMonth(); }
@@ -1001,7 +1024,7 @@
       var d=new Date(calY,calM,i-startDow+1);
       var out=d.getMonth()!==calM, isToday=sameDay(d,today);
       var da=appts.filter(function(a){ return sameDay(new Date(a.when),d); }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); });
-      var chips=da.slice(0,3).map(function(a){ return '<div class="appt" onclick="cancelAppt(event,\''+a.id+'\')" title="'+esc(a.title)+'">'+timeOf(a.when)+' '+esc(a.title)+'</div>'; }).join('');
+      var chips=da.slice(0,3).map(function(a){ return '<div class="appt" onclick="openApptEdit(\''+a.id+'\')" title="'+esc(a.title)+(a.closer?' · '+esc(a.closer):'')+'">'+timeOf(a.when)+' '+esc(a.title)+'</div>'; }).join('');
       if(da.length>3) chips+='<div class="appt" style="background:none;border:0;color:#9aa3b5">+'+(da.length-3)+' '+t('more')+'</div>';
       html+='<div class="cal-day'+(out?' out':'')+(isToday?' today':'')+'"><span class="dnum">'+d.getDate()+'</span>'+chips+'</div>';
     }
@@ -1009,7 +1032,7 @@
     var now=Date.now()-3600000;
     var up=appts.filter(function(a){ return new Date(a.when).getTime()>=now; }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); }).slice(0,12);
     document.getElementById('upList').innerHTML = up.length ? up.map(function(a){
-      return '<div class="up"><span class="del" onclick="cancelAppt(event,\''+a.id+'\')">✕</span><div class="ut">'+esc(a.title)+'</div><div class="uw">'+fmtWhen(a.when)+'</div>'+((a.name||a.phone)?'<div class="un">'+esc(a.name||('+'+a.phone))+'</div>':'')+'</div>';
+      return '<div class="up" style="cursor:pointer" onclick="openApptEdit(\''+a.id+'\')"><span class="del" onclick="cancelAppt(event,\''+a.id+'\')">✕</span><div class="ut">'+esc(a.title)+'</div><div class="uw">'+fmtWhen(a.when)+'</div>'+((a.name||a.phone)?'<div class="un">'+esc(a.name||('+'+a.phone))+'</div>':'')+(a.closer?'<div class="un" style="color:var(--accent)">👤 '+esc(a.closer)+'</div>':'')+'</div>';
     }).join('') : '<div style="color:#9aa3b5;font-size:13px">'+t('cal_none')+'</div>';
   }
 
@@ -1403,8 +1426,13 @@
   };
   document.getElementById('calPrev').onclick=function(){ calM--; if(calM<0){calM=11;calY--;} renderCal(); };
   document.getElementById('calNext').onclick=function(){ calM++; if(calM>11){calM=0;calY++;} renderCal(); };
-  document.getElementById('newAppt').onclick=function(){ buildLeadsDL(); document.getElementById('amErr').textContent=''; document.getElementById('apptModal').style.display='flex'; };
-  document.getElementById('amCancel').onclick=function(){ document.getElementById('apptModal').style.display='none'; };
+  document.getElementById('newAppt').onclick=function(){ openApptCreate(); };
+  document.getElementById('amCancel').onclick=function(){ document.getElementById('apptModal').style.display='none'; editingApptId=null; };
+  document.getElementById('amDelete').onclick=function(){ if(!editingApptId) return; if(!confirm(t('cfm_cancel'))) return;
+    fetch('/admin/api/appts/'+editingApptId,{method:'DELETE',headers:{'X-Admin-Key':KEY}}).then(function(){
+      document.getElementById('apptModal').style.display='none'; editingApptId=null; loadAppts(renderCal);
+    });
+  };
   document.getElementById('amSave').onclick=function(){
     var when=document.getElementById('amWhen').value;
     if(!when){ document.getElementById('amErr').textContent=t('al_appt_date'); return; }
@@ -1413,9 +1441,11 @@
     else if(/^\+?\d[\d ]*$/.test(lv)){ phone=lv.replace(/\D/g,''); }
     else { name=lv; }
     var title=document.getElementById('amTitle').value.trim()||'Cita';
-    apiPost('appts',{phone:phone,name:name,title:title,when:when}).then(function(r){return r.json();}).then(function(){
-      document.getElementById('apptModal').style.display='none';
-      document.getElementById('amWhen').value=''; document.getElementById('amTitle').value=''; document.getElementById('amLead').value='';
+    var closer=document.getElementById('amCloser').value, notes=document.getElementById('amNotes').value.trim();
+    var payload={phone:phone,name:name,title:title,when:when,closer:closer,notes:notes};
+    if(editingApptId) payload.id=editingApptId;
+    apiPost('appts',payload).then(function(r){return r.json();}).then(function(){
+      document.getElementById('apptModal').style.display='none'; editingApptId=null;
       loadAppts(renderCal);
       // refrescar leads + ficha abierta para mostrar la cita y el evento en el timeline
       api('leads').then(function(r){return r.json();}).then(function(L){ leads=L; if(active) open_(active); if(document.getElementById('app').classList.contains('dbmode')) renderTable(); });

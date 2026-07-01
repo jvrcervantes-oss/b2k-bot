@@ -487,9 +487,19 @@ async function getCalendarClient() {
   return google.calendar({ version: "v3", auth });
 }
 
+// Descripción del evento de Google Calendar: incluye closer y notas para que
+// quien atienda la cita (aunque no iniciara la conversación) tenga el contexto.
+function apptDescription(a) {
+  return [
+    `Lead: ${a.name || ""}${a.phone ? " (+" + a.phone + ")" : ""}`.trim(),
+    a.closer ? `Closer: ${a.closer}` : "",
+    a.notes ? `Notas: ${a.notes}` : "",
+  ].filter(Boolean).join("\n");
+}
+
 async function createAppt(a) {
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  const appt = { id, phone: a.phone || "", name: a.name || "", title: a.title || "Cita", when: a.when, createdAt: Date.now() };
+  const appt = { id, phone: a.phone || "", name: a.name || "", title: a.title || "Cita", when: a.when, closer: a.closer || "", notes: a.notes || "", createdAt: Date.now() };
   await persistAppt(appt);
   if (appt.phone) logEvent(appt.phone, "appt", { title: appt.title, when: appt.when });
 
@@ -503,7 +513,7 @@ async function createAppt(a) {
         calendarId: CALENDAR_ID,
         requestBody: {
           summary: appt.title,
-          description: `Lead: ${appt.name || ""}${appt.phone ? " (+" + appt.phone + ")" : ""}`.trim(),
+          description: apptDescription(appt),
           start: { dateTime: startNaive, timeZone: tz },
           end: { dateTime: addMinutesNaive(appt.when, 30), timeZone: tz },
         },
@@ -512,6 +522,39 @@ async function createAppt(a) {
       await persistAppt(appt);
     } catch (e) {
       console.error(`[${PROJECT_NAME}] Calendar insert error: ${e.message}`);
+    }
+  }
+  return appt;
+}
+
+// Edita una cita existente (título, fecha, closer, notas) y propaga al evento de Calendar.
+async function updateAppt(id, fields) {
+  const appt = await getAppt(id);
+  if (!appt) return null;
+  ["title", "when", "closer", "notes", "name", "phone"].forEach((k) => {
+    if (fields[k] !== undefined && fields[k] !== null) appt[k] = fields[k];
+  });
+  await persistAppt(appt);
+  if (redisClient && fields.when !== undefined) {
+    await redisClient.zAdd("appts_index", { score: apptTs(appt.when), value: appt.id });
+  }
+  if (appt.eventId && CALENDAR_ID && GOOGLE_SERVICE_ACCOUNT) {
+    try {
+      const cal = await getCalendarClient();
+      const tz = CALENDAR_TZ || "Europe/Madrid";
+      const startNaive = appt.when.length === 16 ? appt.when + ":00" : appt.when;
+      await cal.events.patch({
+        calendarId: CALENDAR_ID,
+        eventId: appt.eventId,
+        requestBody: {
+          summary: appt.title,
+          description: apptDescription(appt),
+          start: { dateTime: startNaive, timeZone: tz },
+          end: { dateTime: addMinutesNaive(appt.when, 30), timeZone: tz },
+        },
+      });
+    } catch (e) {
+      console.error(`[${PROJECT_NAME}] Calendar patch error: ${e.message}`);
     }
   }
   return appt;
@@ -1384,9 +1427,15 @@ app.get("/admin/api/appts", async (req, res) => {
 });
 app.post("/admin/api/appts", async (req, res) => {
   if (!adminAuth(req, res)) return;
-  const { phone, name, title, when } = req.body || {};
+  const { id, phone, name, title, when, closer, notes } = req.body || {};
+  if (id) {
+    try {
+      const u = await updateAppt(id, { phone, name, title, when, closer, notes });
+      return u ? res.json(u) : res.status(404).json({ error: "cita no encontrada" });
+    } catch (e) { return res.status(500).json({ error: e.message }); }
+  }
   if (!when) return res.status(400).json({ error: "when (fecha/hora) requerido" });
-  try { res.json(await createAppt({ phone, name, title, when })); } catch (e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await createAppt({ phone, name, title, when, closer, notes })); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.delete("/admin/api/appts/:id", async (req, res) => {
   if (!adminAuth(req, res)) return;
