@@ -798,6 +798,8 @@ At the very end of your response, on a NEW LINE, add ONE intent tag:
 When intent is booking AND you know the total number of riders, also add on the same line:
 [RIDERS:N] — where N is the total number of riders (e.g. [RIDERS:4])
 When you output [RIDERS:N], NEVER type a link, a URL, or the word "https" yourself. You do NOT have the real payment link — the server creates it and appends it automatically below your message. Any URL you write is FAKE and will break the customer's payment. Just say you're sending the link and stop.
+- [RIDERS:N] CREATES A REAL CHARGE. Output it ONLY when the customer EXPLICITLY asks to pay right now ("send me the payment link", "how do I pay the deposit", "I want to pay"). Confirming trip details, riders, dates or "I'd like to book" is NOT a pay-now request → push the free video CALL instead, do NOT output [RIDERS:N].
+- RESEND: if the customer asks to resend the SAME payment link they already got ("can you send it again?", "resend the link"), output [RESEND_LINK] on its own new line — NOT [RIDERS:N]. The server re-attaches the exact same link (no new charge). If you never sent them a link, don't output [RESEND_LINK]; offer the call instead.
 
 LEAD DATA TAGGING — fill the CRM as you learn things (do this consistently):
 - Whenever you LEARN or CONFIRM a concrete fact about the lead, append a SILENT data tag at the very end of your message, on its own new line:
@@ -980,6 +982,17 @@ async function setMediaLib(list) {
   if (redisClient) await redisClient.set("media_lib", JSON.stringify(arr));
   else fallbackMediaLib = arr;
   return arr;
+}
+
+// Último link de pago generado por lead (para reenviarlo sin crear un cobro nuevo).
+const fallbackLastLink = {};
+async function setLastLink(phone, url) {
+  if (redisClient) await redisClient.setEx(`lastlink:${phone}`, 24 * 3600, url);
+  else fallbackLastLink[phone] = url;
+}
+async function getLastLink(phone) {
+  if (redisClient) return (await redisClient.get(`lastlink:${phone}`)) || "";
+  return fallbackLastLink[phone] || "";
 }
 // Envía una foto/vídeo por URL (WhatsApp Cloud API acepta media por link público).
 async function sendWhatsAppMedia(to, item) {
@@ -1182,8 +1195,9 @@ app.post("/webhook", async (req, res) => {
     const numRiders = ridersMatch ? parseInt(ridersMatch[1]) : null;
     const apptMatch = reply.match(/\[APPT:([^\]|]+)\|([^\]]+)\]/);
     const mediaMatch = reply.match(/\[MEDIA:([^\]]+)\]/i);
+    const resendMatch = /\[RESEND_LINK\]/i.test(reply); // el cliente pide reenviar el link que ya recibió
     let leadFields = parseLeadTag(reply); // datos confirmados en la charla → ficha/BD
-    reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").trim();
+    reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").trim();
     // Strip markdown that WhatsApp sends literally (breaks URLs)
     reply = reply.replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1"); // **URL** → URL
     reply = reply.replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
@@ -1204,10 +1218,15 @@ app.post("/webhook", async (req, res) => {
     // El cierre por defecto es la LLAMADA, no el pago — el link es la excepción.
     if (numRiders && stripeClient && intent === "booking") {
       const sessionUrl = await createStripeSession(numRiders);
-      if (sessionUrl) reply = reply + "\n\n" + sessionUrl;
+      if (sessionUrl) { reply = reply + "\n\n" + sessionUrl; await setLastLink(from, sessionUrl); }
       else console.error(`[${PROJECT_NAME}] booking detectado pero no se pudo crear la sesión Stripe`);
     } else if (numRiders && intent === "booking" && !stripeClient) {
       console.error(`[${PROJECT_NAME}] booking detectado pero stripeClient es null — falta STRIPE_SECRET_KEY en el entorno`);
+    } else if (resendMatch) {
+      // El cliente pidió reenviar el link que YA recibió → mismo link, sin crear un cobro nuevo.
+      const last = await getLastLink(from);
+      if (last) reply = reply + "\n\n" + last;
+      else console.warn(`[${PROJECT_NAME}] [RESEND_LINK] pedido pero no hay link previo para ${from} (el bot no debería prometerlo)`);
     }
 
     history.push({ role: "assistant", content: reply });
