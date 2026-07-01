@@ -481,6 +481,15 @@
   </div>
 </div>
 
+<!-- modal vista rápida de cita (solo lectura) -->
+<div id="apptViewModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <h3 id="avTitle">Cita</h3>
+    <div id="avBody"></div>
+    <div class="modal-actions"><button id="avClose" class="btn-ghost" data-i18n="btn_close">Cerrar</button><button id="avEdit" class="btn-primary" data-i18n="btn_edit_appt">Editar cita</button></div>
+  </div>
+</div>
+
 <script>
   // ── auth ──
   var KEY = new URLSearchParams(location.search).get('key') || sessionStorage.getItem('botpanel_key') || '';
@@ -498,7 +507,7 @@
       h_db:'Base de datos', ph_search_client:'Buscar cliente…', btn_import:'⬆ Importar Meta', ti_import:'Sube el CSV de leads que descargas de Meta Lead Ads', btn_enrich:'🔄 Actualizar desde chats', ti_enrich:'Lee las conversaciones y rellena los datos que falten', btn_csv:'⬇ Exportar CSV',
       m_canned:'Respuestas rápidas', m_canned_help:'Una por línea · formato', m_canned_fmt:'Título | texto', btn_cancel:'Cancelar', btn_save:'Guardar',
       m_appt:'Nueva cita', m_appt_edit:'Editar cita', l_lead:'Lead', ph_lead:'Nombre o teléfono (opcional)', l_datetime:'Fecha y hora', l_title:'Título', ph_call:'Llamada con…', btn_save_appt:'Guardar cita',
-      l_closer:'Closer asignado', l_notes_appt:'Notas de la cita', ph_notes_appt:'Contexto de lo hablado, para el closer…', btn_delete_appt:'Eliminar cita',
+      l_closer:'Closer asignado', l_notes_appt:'Notas de la cita', ph_notes_appt:'Contexto de lo hablado, para el closer…', btn_delete_appt:'Eliminar cita', btn_close:'Cerrar', btn_edit_appt:'Editar cita', av_nolead:'Sin lead', av_noone:'Sin asignar', av_nonotes:'Sin notas',
       i_exploring:'explorando', i_interested:'interesado', i_booking:'reserva', i_escalate:'duda',
       c_name:'Nombre', c_phone:'WhatsApp', c_email:'Email', c_country:'País', c_tour:'Tour', c_package:'Paquete', c_riders:'Riders', c_pillions:'Pillions', c_travel:'Fecha viaje', c_status:'Estado', c_intent:'Intención', c_lastact:'Últ. act.',
       s_blank:'—', s_new:'🆕 Nuevo', s_quoted:'💬 Cotizado', s_won:'✅ Ganado', s_lost:'❌ Perdido', s_noshow:'🚫 No-show',
@@ -537,7 +546,7 @@
       h_db:'Database', ph_search_client:'Search client…', btn_import:'⬆ Import Meta', ti_import:'Upload the leads CSV you download from Meta Lead Ads', btn_enrich:'🔄 Update from chats', ti_enrich:'Reads conversations and fills in missing data', btn_csv:'⬇ Export CSV',
       m_canned:'Quick replies', m_canned_help:'One per line · format', m_canned_fmt:'Title | text', btn_cancel:'Cancel', btn_save:'Save',
       m_appt:'New appointment', m_appt_edit:'Edit appointment', l_lead:'Lead', ph_lead:'Name or phone (optional)', l_datetime:'Date & time', l_title:'Title', ph_call:'Call with…', btn_save_appt:'Save appointment',
-      l_closer:'Assigned closer', l_notes_appt:'Appointment notes', ph_notes_appt:'What was discussed, for the closer…', btn_delete_appt:'Delete appointment',
+      l_closer:'Assigned closer', l_notes_appt:'Appointment notes', ph_notes_appt:'What was discussed, for the closer…', btn_delete_appt:'Delete appointment', btn_close:'Close', btn_edit_appt:'Edit appointment', av_nolead:'No lead', av_noone:'Unassigned', av_nonotes:'No notes',
       i_exploring:'exploring', i_interested:'interested', i_booking:'booking', i_escalate:'question',
       c_name:'Name', c_phone:'WhatsApp', c_email:'Email', c_country:'Country', c_tour:'Tour', c_package:'Package', c_riders:'Riders', c_pillions:'Pillions', c_travel:'Travel date', c_status:'Status', c_intent:'Intent', c_lastact:'Last act.',
       s_blank:'—', s_new:'🆕 New', s_quoted:'💬 Quoted', s_won:'✅ Won', s_lost:'❌ Lost', s_noshow:'🚫 No-show',
@@ -1015,6 +1024,22 @@
   }
   window.openApptEdit=openApptEdit;
 
+  // Vista rápida de solo lectura: el clic en una cita abre esto, NO el editor (evita cambios accidentales).
+  var viewingApptId=null;
+  function openApptView(id){ var a=appts.filter(function(x){return x.id===id;})[0]; if(!a) return; viewingApptId=id;
+    document.getElementById('avTitle').textContent=a.title||t('m_appt');
+    var lead=a.name?(a.name+(a.phone?' (+'+a.phone+')':'')):(a.phone?'+'+a.phone:t('av_nolead'));
+    function row(k,v){ return '<div class="field"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>'; }
+    var soft='color:var(--ink-soft)';
+    document.getElementById('avBody').innerHTML=
+      row(t('l_datetime'),'<span style="color:var(--accent)">'+esc(fmtWhen(a.when))+'</span>')
+      +row(t('l_lead'),esc(lead))
+      +row(t('l_closer'),a.closer?('👤 '+esc(a.closer)):('<span style="'+soft+'">'+t('av_noone')+'</span>'))
+      +row(t('l_notes_appt'),a.notes?esc(a.notes).replace(/\n/g,'<br>'):('<span style="'+soft+'">'+t('av_nonotes')+'</span>'));
+    document.getElementById('apptViewModal').style.display='flex';
+  }
+  window.openApptView=openApptView;
+
   function renderCal(){
     if(calY==null){ var n=new Date(); calY=n.getFullYear(); calM=n.getMonth(); }
     document.getElementById('calMonth').textContent = new Date(calY,calM,1).toLocaleDateString(t('locale'),{month:'long',year:'numeric'});
@@ -1024,7 +1049,7 @@
       var d=new Date(calY,calM,i-startDow+1);
       var out=d.getMonth()!==calM, isToday=sameDay(d,today);
       var da=appts.filter(function(a){ return sameDay(new Date(a.when),d); }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); });
-      var chips=da.slice(0,3).map(function(a){ return '<div class="appt" onclick="openApptEdit(\''+a.id+'\')" title="'+esc(a.title)+(a.closer?' · '+esc(a.closer):'')+'">'+timeOf(a.when)+' '+esc(a.title)+'</div>'; }).join('');
+      var chips=da.slice(0,3).map(function(a){ return '<div class="appt" onclick="openApptView(\''+a.id+'\')" title="'+esc(a.title)+(a.closer?' · '+esc(a.closer):'')+'">'+timeOf(a.when)+' '+esc(a.title)+'</div>'; }).join('');
       if(da.length>3) chips+='<div class="appt" style="background:none;border:0;color:#9aa3b5">+'+(da.length-3)+' '+t('more')+'</div>';
       html+='<div class="cal-day'+(out?' out':'')+(isToday?' today':'')+'"><span class="dnum">'+d.getDate()+'</span>'+chips+'</div>';
     }
@@ -1032,7 +1057,7 @@
     var now=Date.now()-3600000;
     var up=appts.filter(function(a){ return new Date(a.when).getTime()>=now; }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); }).slice(0,12);
     document.getElementById('upList').innerHTML = up.length ? up.map(function(a){
-      return '<div class="up" style="cursor:pointer" onclick="openApptEdit(\''+a.id+'\')"><span class="del" onclick="cancelAppt(event,\''+a.id+'\')">✕</span><div class="ut">'+esc(a.title)+'</div><div class="uw">'+fmtWhen(a.when)+'</div>'+((a.name||a.phone)?'<div class="un">'+esc(a.name||('+'+a.phone))+'</div>':'')+(a.closer?'<div class="un" style="color:var(--accent)">👤 '+esc(a.closer)+'</div>':'')+'</div>';
+      return '<div class="up" style="cursor:pointer" onclick="openApptView(\''+a.id+'\')"><span class="del" onclick="cancelAppt(event,\''+a.id+'\')">✕</span><div class="ut">'+esc(a.title)+'</div><div class="uw">'+fmtWhen(a.when)+'</div>'+((a.name||a.phone)?'<div class="un">'+esc(a.name||('+'+a.phone))+'</div>':'')+(a.closer?'<div class="un" style="color:var(--accent)">👤 '+esc(a.closer)+'</div>':'')+'</div>';
     }).join('') : '<div style="color:#9aa3b5;font-size:13px">'+t('cal_none')+'</div>';
   }
 
@@ -1427,6 +1452,8 @@
   document.getElementById('calPrev').onclick=function(){ calM--; if(calM<0){calM=11;calY--;} renderCal(); };
   document.getElementById('calNext').onclick=function(){ calM++; if(calM>11){calM=0;calY++;} renderCal(); };
   document.getElementById('newAppt').onclick=function(){ openApptCreate(); };
+  document.getElementById('avClose').onclick=function(){ document.getElementById('apptViewModal').style.display='none'; viewingApptId=null; };
+  document.getElementById('avEdit').onclick=function(){ var id=viewingApptId; document.getElementById('apptViewModal').style.display='none'; viewingApptId=null; if(id) openApptEdit(id); };
   document.getElementById('amCancel').onclick=function(){ document.getElementById('apptModal').style.display='none'; editingApptId=null; };
   document.getElementById('amDelete').onclick=function(){ if(!editingApptId) return; if(!confirm(t('cfm_cancel'))) return;
     fetch('/admin/api/appts/'+editingApptId,{method:'DELETE',headers:{'X-Admin-Key':KEY}}).then(function(){
