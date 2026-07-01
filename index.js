@@ -644,12 +644,18 @@ async function followupTick() {
     const maxN = parseInt(FOLLOWUP_MAX) || schedule.length;
     const nVars = FOLLOWUP_TEMPLATE_VARS != null ? parseInt(FOLLOWUP_TEMPLATE_VARS) : 1;
     const now = Date.now();
+    const _d = new Date();
+    const todayStr = _d.getFullYear() + "-" + ("0" + (_d.getMonth() + 1)).slice(-2) + "-" + ("0" + _d.getDate()).slice(-2);
     const leads = await listLeads();
     for (const l of leads) {
       if (isOwner(l.phone)) continue;
       if (l.paused) continue;                              // humano al mando
       if (FOLLOWUP_SKIP_STATUS.has(l.status)) continue;    // cerrado (ganado/perdido/no-show)
       if (FOLLOWUP_SKIP_INTENT.has(l.intent)) continue;    // hay una duda escalada al owner
+      // Seguimiento AGENDADO a futuro (p.ej. waitlist "avísame cuando abráis 2027"):
+      // no auto-nudge; ya lo cubre followUpReminderTick avisando al owner en esa fecha.
+      if (l.nextFollowUp && String(l.nextFollowUp).slice(0, 10) > todayStr) continue;
+      if (Array.isArray(l.tags) && l.tags.some((t) => /waitlist/i.test(t))) continue; // en lista de espera
       if (!l.lastInboundAt) continue;
       const coldH = (now - l.lastInboundAt) / 3600000;
       if (coldH < 24) continue;                            // ventana abierta → el bot ya responde solo
