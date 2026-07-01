@@ -402,23 +402,44 @@
   .av-notes{background:var(--bg);border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;font-size:14px;line-height:1.5;color:var(--ink);white-space:pre-wrap;margin-top:1px}
   #apptViewModal .modal-actions{border-top:1px solid var(--line-2);padding-top:14px;margin-top:10px}
 
-  /* ── selects modernos: chevron propio, forma redondeada, foco suave ── */
+  /* ── selects 2026: chevron propio, forma redondeada, texto legible, lift + foco ── */
   select.db-sel,.db-filters select,.db-bulk select,.modal-box select,#detail .edit select{
     appearance:none;-webkit-appearance:none;-moz-appearance:none;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7488' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-    background-repeat:no-repeat;background-position:right 9px center;background-size:11px;
-    padding-right:28px;font-family:inherit;font-weight:600;
-    transition:border-color .15s ease,box-shadow .15s ease,background-color .15s ease;
+    background-repeat:no-repeat;background-position:right 11px center;background-size:12px;
+    padding-right:32px;font-family:inherit;font-weight:600;color:var(--ink);letter-spacing:.01em;
+    border-radius:10px;cursor:pointer;
+    transition:transform .15s cubic-bezier(.2,.7,.3,1),border-color .15s ease,box-shadow .15s ease,background-color .15s ease;
   }
-  select.db-sel:hover,.db-filters select:hover,.db-bulk select:hover,.modal-box select:hover,#detail .edit select:hover{border-color:var(--accent)}
+  .db-filters select,.db-bulk select{font-size:13px}
+  select.db-sel:hover,.db-filters select:hover,.db-bulk select:hover,.modal-box select:hover,#detail .edit select:hover{
+    border-color:var(--accent);box-shadow:0 4px 12px -7px rgba(0,0,0,.25);transform:translateY(-1px);
+  }
+  select.db-sel:focus-visible,.db-filters select:focus-visible,.db-bulk select:focus-visible,.modal-box select:focus-visible,#detail .edit select:focus-visible{
+    border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);outline:none;
+  }
   body.dark select.db-sel,body.dark .db-filters select,body.dark .db-bulk select,body.dark .modal-box select,body.dark #detail .edit select{
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239aa6bd' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-    background-repeat:no-repeat;background-position:right 9px center;background-size:11px;
+    background-repeat:no-repeat;background-position:right 11px center;background-size:12px;
   }
   /* ── país con banderita en la DB ── */
   .db-country{display:inline-flex;align-items:center;gap:7px}
   .db-country .fi{width:20px;height:14px;background-size:cover;border-radius:3px;box-shadow:0 0 0 1px rgba(0,0,0,.12);flex-shrink:0}
   body.dark .db-country .fi{box-shadow:0 0 0 1px rgba(255,255,255,.14)}
+  /* ── biblioteca de media (fotos/vídeos del bot) ── */
+  .media-help{font-size:12.5px;color:var(--ink-soft);line-height:1.45;margin:2px 0 12px}
+  #mediaList{display:flex;flex-direction:column;gap:10px;max-height:46vh;overflow:auto}
+  .media-empty{font-size:13px;color:var(--ink-soft);text-align:center;padding:14px 0}
+  .media-row{border:1px solid var(--line);border-radius:11px;padding:10px;background:var(--bg)}
+  .media-row .mr-top{display:flex;gap:8px;align-items:center;margin-bottom:7px}
+  .media-row input,.media-row select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;background:var(--card);color:var(--ink);width:100%}
+  .media-row .mr-label{flex:1}
+  .media-row .mr-type{width:104px;flex-shrink:0;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7488' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center;background-size:11px;padding-right:26px;cursor:pointer}
+  .media-row .mr-url{margin-bottom:7px}
+  .media-row input:focus,.media-row select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .media-row .mr-del{width:30px;height:30px;flex-shrink:0;border:1px solid var(--line);background:var(--card);color:#dc2626;border-radius:8px;cursor:pointer;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;transition:background .15s ease,border-color .15s ease}
+  .media-row .mr-del:hover{background:#fee2e2;border-color:#dc2626}
+  body.dark .media-row .mr-del:hover{background:#3b1a1a}
 </style>
 </head>
 <body>
@@ -442,6 +463,7 @@
     <div class="ic on" id="navConv" data-ti="nav_conv" title="Conversaciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="ic" id="navCal" data-ti="nav_cal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="ic" id="navDb" data-ti="nav_db" title="Base de datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" id="navMedia" data-ti="nav_media" title="Fotos y vídeos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="spacer"></div>
     <div class="ic" id="langToggle" data-ti="nav_lang">EN</div>
     <div class="ic" data-ti="nav_theme" id="themeToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
@@ -570,6 +592,18 @@
   </div>
 </div>
 
+<!-- modal biblioteca de media (fotos/vídeos que el bot puede enviar) -->
+<div id="mediaModal" class="modal" style="display:none">
+  <div class="modal-box" style="width:480px;max-width:94vw">
+    <h3 data-i18n="m_media">Fotos y vídeos del bot</h3>
+    <p class="media-help" data-i18n="media_help">El bot puede enviar estos archivos cuando ayudan a vender. Pega la URL pública de cada foto/vídeo y ponle una etiqueta corta (ej. "intro", "bikes", "route").</p>
+    <div id="mediaList"></div>
+    <button id="mediaAdd" class="btn-ghost" style="width:100%;margin-top:8px" data-i18n="btn_media_add">+ Añadir archivo</button>
+    <div class="modal-err" id="mediaErr"></div>
+    <div class="modal-actions"><button id="mediaClose" class="btn-ghost" data-i18n="btn_close">Cerrar</button><button id="mediaSave" class="btn-primary" data-i18n="btn_save">Guardar</button></div>
+  </div>
+</div>
+
 <script>
   // ── auth ──
   var KEY = new URLSearchParams(location.search).get('key') || sessionStorage.getItem('botpanel_key') || '';
@@ -579,7 +613,8 @@
   // ── i18n (ES / EN) ──────────────────────────────────────────────
   var I18N = {
     es:{ brand:'CRM BMA', login_title:'Panel de conversaciones', login_sub:'CRM BMA · acceso del estudio', ph_pw:'Contraseña', btn_enter:'Entrar', err_pw:'Contraseña incorrecta',
-      nav_conv:'Conversaciones', nav_cal:'Calendario', nav_db:'Base de datos', nav_theme:'Cambiar tema', nav_logout:'Salir', nav_lang:'English',
+      nav_conv:'Conversaciones', nav_cal:'Calendario', nav_db:'Base de datos', nav_media:'Fotos y vídeos', nav_theme:'Cambiar tema', nav_logout:'Salir', nav_lang:'English',
+      m_media:'Fotos y vídeos del bot', media_help:'El bot envía estos archivos cuando ayudan a vender. Pega la URL pública de cada foto/vídeo y ponle una etiqueta corta (ej. "intro", "bikes", "route").', btn_media_add:'+ Añadir archivo', media_empty:'Aún no hay archivos. Añade el primero 👇', mt_image:'Foto', mt_video:'Vídeo', mr_ph_label:'etiqueta (ej. intro)', mr_ph_url:'https://… (URL pública)', mr_ph_cap:'pie de foto (opcional)', al_media_url:'Cada archivo necesita una etiqueta y una URL http(s) válida.', al_media_saved:'Biblioteca guardada ✓',
       h_conv:'Conversaciones', st_wait:'por responder', st_int:'interesados', st_book:'en reserva', st_today:'hoy',
       ph_search_lead:'Buscar lead…', chip_all:'Todos', chip_wait:'🔔 Por responder', chip_int:'🟡 Interesados', chip_book:'🔴 Reserva',
       pick_lead:'Selecciona un lead', nochat:'Elige una conversación de la izquierda', ph_reply:'Escribe para tomar el control…', t_canned:'Respuestas rápidas', t_send:'Enviar', detail_empty:'Selecciona un lead para ver su ficha',
@@ -618,7 +653,8 @@
       tl_empty:'Sin actividad registrada', tl_created:'Lead creado', tl_imported:'Importado de Meta', tl_status:'Estado', tl_owner:'Asignado a', tl_appt:'Cita agendada', tl_note:'Nota actualizada', tl_tag:'Etiqueta añadida', tl_archived:'Archivado', tl_restored:'Restaurado', tl_enriched:'Datos enriquecidos', tl_outreach:'Conversación iniciada (intro)', tl_fu_reminded:'Recordatorio de seguimiento enviado',
       al_save:'No se pudo guardar', edit_tpl:'✎ Editar plantillas…', locale:'es-ES' },
     en:{ brand:'CRM BMA', login_title:'Conversations panel', login_sub:'CRM BMA · studio access', ph_pw:'Password', btn_enter:'Sign in', err_pw:'Wrong password',
-      nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español',
+      nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_media:'Photos & videos', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español',
+      m_media:'Bot photos & videos', media_help:'The bot sends these files when they help the sale. Paste the public URL of each photo/video and give it a short label (e.g. "intro", "bikes", "route").', btn_media_add:'+ Add file', media_empty:'No files yet. Add the first one 👇', mt_image:'Photo', mt_video:'Video', mr_ph_label:'label (e.g. intro)', mr_ph_url:'https://… (public URL)', mr_ph_cap:'caption (optional)', al_media_url:'Each file needs a label and a valid http(s) URL.', al_media_saved:'Library saved ✓',
       h_conv:'Conversations', st_wait:'to reply', st_int:'interested', st_book:'booking', st_today:'today',
       ph_search_lead:'Search lead…', chip_all:'All', chip_wait:'🔔 To reply', chip_int:'🟡 Interested', chip_book:'🔴 Booking',
       pick_lead:'Select a lead', nochat:'Pick a conversation on the left', ph_reply:'Type to take over…', t_canned:'Quick replies', t_send:'Send', detail_empty:'Select a lead to see their card',
@@ -1143,6 +1179,35 @@
   }
   window.openApptView=openApptView;
 
+  // ── Biblioteca de media (fotos/vídeos que el bot puede enviar) ──
+  var mediaItems = [];
+  function loadMedia(cb){ api('media').then(function(r){return r.json();}).then(function(A){ mediaItems = Array.isArray(A)?A:[]; if(cb)cb(); }).catch(function(){ mediaItems=[]; if(cb)cb(); }); }
+  function readMediaFromDOM(){
+    var rows=document.querySelectorAll('#mediaList .media-row');
+    mediaItems=Array.prototype.map.call(rows,function(row){
+      return { id:row.getAttribute('data-id')||'', label:row.querySelector('.mr-label').value.trim(),
+        type:row.querySelector('.mr-type').value, url:row.querySelector('.mr-url').value.trim(),
+        caption:row.querySelector('.mr-cap').value.trim() };
+    });
+  }
+  function renderMediaRows(){
+    var list=document.getElementById('mediaList');
+    if(!mediaItems.length){ list.innerHTML='<div class="media-empty">'+t('media_empty')+'</div>'; return; }
+    list.innerHTML=mediaItems.map(function(m,i){
+      var img=(m.type||'image')==='image', vid=(m.type||'image')==='video';
+      return '<div class="media-row" data-id="'+esc(m.id||'')+'">'
+        +'<div class="mr-top"><input class="mr-label" value="'+esc(m.label||'')+'" placeholder="'+t('mr_ph_label')+'">'
+        +'<select class="mr-type"><option value="image"'+(img?' selected':'')+'>'+t('mt_image')+'</option><option value="video"'+(vid?' selected':'')+'>'+t('mt_video')+'</option></select>'
+        +'<button class="mr-del" onclick="mediaDelRow('+i+')" title="'+t('bulk_delete')+'">✕</button></div>'
+        +'<input class="mr-url" value="'+esc(m.url||'')+'" placeholder="'+t('mr_ph_url')+'">'
+        +'<input class="mr-cap" value="'+esc(m.caption||'')+'" placeholder="'+t('mr_ph_cap')+'"></div>';
+    }).join('');
+  }
+  function mediaDelRow(i){ readMediaFromDOM(); mediaItems.splice(i,1); renderMediaRows(); }
+  window.mediaDelRow=mediaDelRow;
+  function openMedia(){ document.getElementById('mediaErr').textContent=''; loadMedia(function(){ renderMediaRows(); document.getElementById('mediaModal').style.display='flex'; }); }
+  window.openMedia=openMedia;
+
   function renderCal(){
     if(calY==null){ var n=new Date(); calY=n.getFullYear(); calM=n.getMonth(); }
     document.getElementById('calMonth').textContent = new Date(calY,calM,1).toLocaleDateString(t('locale'),{month:'long',year:'numeric'});
@@ -1559,6 +1624,21 @@
   document.getElementById('navConv').onclick=function(){ var a=document.getElementById('app'); a.classList.remove('calmode'); a.classList.remove('dbmode'); setNav('navConv'); setUrl('/admin'); };
   document.getElementById('navCal').onclick=function(){ var a=document.getElementById('app'); a.classList.add('calmode'); a.classList.remove('dbmode'); setNav('navCal'); setUrl('/admin'); buildLeadsDL(); loadAppts(renderCal); };
   document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); a.classList.add('dbmode'); a.classList.remove('calmode'); setNav('navDb'); setUrl('/admin/db'); dbPage=1; loadHealth(); renderDb(); };
+  document.getElementById('navMedia').onclick=function(){ openMedia(); };
+  document.getElementById('mediaClose').onclick=function(){ document.getElementById('mediaModal').style.display='none'; };
+  document.getElementById('mediaAdd').onclick=function(){ readMediaFromDOM(); mediaItems.push({id:'',label:'',type:'image',url:'',caption:''}); renderMediaRows(); };
+  document.getElementById('mediaSave').onclick=function(){
+    readMediaFromDOM();
+    mediaItems=mediaItems.filter(function(m){ return m.label||m.url||m.caption; }); // quita filas vacías
+    var bad=mediaItems.some(function(m){ return !m.label || !/^https?:\/\//i.test(m.url); });
+    var errEl=document.getElementById('mediaErr');
+    if(bad){ renderMediaRows(); errEl.style.color=''; errEl.textContent=t('al_media_url'); return; }
+    apiPost('media',{items:mediaItems}).then(function(r){return r.json();}).then(function(A){
+      mediaItems=Array.isArray(A)?A:mediaItems; renderMediaRows();
+      errEl.style.color='var(--accent)'; errEl.textContent=t('al_media_saved');
+      setTimeout(function(){ errEl.textContent=''; errEl.style.color=''; },1800);
+    }).catch(function(){ errEl.style.color=''; errEl.textContent=t('al_save'); });
+  };
   document.getElementById('dbQ').oninput=function(e){ dbSearch=e.target.value.toLowerCase().trim(); dbPage=1; renderDb(); };
   document.getElementById('dbCsv').onclick=function(){ exportCsv(); };
   document.getElementById('dbImport').onclick=function(){ document.getElementById('dbFile').click(); };

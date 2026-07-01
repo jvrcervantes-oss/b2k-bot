@@ -757,7 +757,9 @@ CLOSING — YOUR #1 GOAL IS TO BOOK A FREE 30-MINUTE VIDEO CALL (read carefully 
 - Never stall ("I'll check availability", "confirm with the team") — just offer the call and lock a time.
 
 SCHEDULING THE CALL — THIS IS YOUR MAIN CONVERSION PATH (appointments):
-- Agree on a specific date and time, and ALWAYS ask their timezone (riders are international — AU, US, UK). Propose a slot or ask what suits them.
+- Agree on a specific date and time, and ALWAYS ask their city/timezone (riders are international — AU, US, UK). Propose a slot or ask what suits them.
+- Once you know their city/country, do the timezone math FOR them: state the difference in plain words and offer a concrete slot in THEIR local time (e.g. "you're ~12h behind Bali — does 8:30 AM your time tomorrow work? That's 8:30 PM here"). Never make the customer calculate the offset.
+- Confirm the exact day + hour in the CUSTOMER'S own timezone, and put that timezone label in the APPT title (e.g. "EST", "AEST", "GMT"). If a video-call tool is mentioned, tell them you'll send the meeting link at that time.
 - Only once you BOTH agree on a concrete date AND time, confirm it naturally in your message AND add at the very end, on a NEW line:
   [APPT:YYYY-MM-DDTHH:MM|Short title incl. timezone]
   Example: [APPT:2026-07-15T10:00|Call w/ John re Bali-Komodo — 10:00 AEST]
@@ -945,6 +947,37 @@ async function sendWhatsApp(to, message) {
   if (!r.ok) console.error(`[${PROJECT_NAME}] Error enviando WhatsApp a ${normalizePhone(to)}:`, r.error);
 }
 
+// ─── BIBLIOTECA DE MEDIA (fotos/vídeos que el bot puede enviar; se gestiona desde el panel) ──
+let fallbackMediaLib = [];
+async function getMediaLib() {
+  if (redisClient) { const r = await redisClient.get("media_lib"); return r ? JSON.parse(r) : []; }
+  return fallbackMediaLib;
+}
+async function setMediaLib(list) {
+  const arr = Array.isArray(list) ? list.slice(0, 50) : [];
+  if (redisClient) await redisClient.set("media_lib", JSON.stringify(arr));
+  else fallbackMediaLib = arr;
+  return arr;
+}
+// Envía una foto/vídeo por URL (WhatsApp Cloud API acepta media por link público).
+async function sendWhatsAppMedia(to, item) {
+  const toClean = normalizePhone(to);
+  const type = item.type === "video" ? "video" : "image";
+  const payload = { messaging_product: "whatsapp", to: toClean, type };
+  payload[type] = { link: item.url };
+  if (item.caption) payload[type].caption = item.caption;
+  try {
+    await axios.post(`https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/messages`, payload,
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" } });
+    console.log(`[${PROJECT_NAME}] Media "${item.label}" (${type}) enviada a ${toClean}`);
+    return { ok: true };
+  } catch (e) {
+    const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
+    console.error(`[${PROJECT_NAME}] Error enviando media "${item.label}" a ${toClean}: ${detail}`);
+    return { ok: false, error: detail };
+  }
+}
+
 // Mensaje de PLANTILLA (única forma de escribir al owner fuera de su ventana de 24h)
 async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams = []) {
   const toClean = normalizePhone(to);
@@ -1099,11 +1132,18 @@ app.post("/webhook", async (req, res) => {
     await setInbound(from, Date.now()); // reinicia la ventana de 24h de WhatsApp
     await resetFollowup(from);           // respondió → reinicia la cadencia de seguimiento
 
+    // Media disponible (gestionada desde el panel): se inyecta para que el bot solo ofrezca lo que existe.
+    const mediaLib = await getMediaLib();
+    const mediaHint = mediaLib.length
+      ? "\n\nMEDIA YOU CAN SEND (real photos/videos that reinforce the pitch — use sparingly, at most 1–2 per conversation, only when it genuinely helps: the customer asks to see the trip/route/bikes, or as a warm intro). Available:\n"
+        + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.caption ? " — " + m.caption : ""}`).join("\n")
+        + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send labels from this list; never invent one."
+      : "";
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 500,
       thinking: { type: "disabled" }, // respuestas cortas y baratas; en Sonnet 5 el thinking va ON por defecto y se comería el max_tokens
-      system: buildSystemPrompt(),
+      system: buildSystemPrompt() + mediaHint,
       messages: history,
     });
 
@@ -1113,8 +1153,9 @@ app.post("/webhook", async (req, res) => {
     const ridersMatch = reply.match(/\[RIDERS:(\d+)\]/);
     const numRiders = ridersMatch ? parseInt(ridersMatch[1]) : null;
     const apptMatch = reply.match(/\[APPT:([^\]|]+)\|([^\]]+)\]/);
+    const mediaMatch = reply.match(/\[MEDIA:([^\]]+)\]/i);
     let leadFields = parseLeadTag(reply); // datos confirmados en la charla → ficha/BD
-    reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").replace(/\[LEAD[^\]]*\]/gi, "").trim();
+    reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").trim();
     // Strip markdown that WhatsApp sends literally (breaks URLs)
     reply = reply.replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1"); // **URL** → URL
     reply = reply.replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
@@ -1145,6 +1186,13 @@ app.post("/webhook", async (req, res) => {
     await saveConversation(from, history);
 
     await sendWhatsApp(from, reply);
+    // Fotos/vídeos que el bot decidió enviar ([MEDIA:label]) → se buscan en la biblioteca y se mandan.
+    if (mediaMatch) {
+      const wanted = mediaMatch[1].split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+      const toSend = mediaLib.filter((m) => wanted.includes(String(m.label).toLowerCase()));
+      for (const item of toSend) await sendWhatsAppMedia(from, item);
+      if (wanted.length && !toSend.length) console.warn(`[${PROJECT_NAME}] [MEDIA] pedido sin match en biblioteca: ${wanted.join(", ")}`);
+    }
     await setWaiting(from, false); // el bot ya respondió → no queda pendiente
     await saveLead(from, profileName, text, intent);
     await recordLead(from, profileName, intent, text);  // índice para el panel web
@@ -1445,6 +1493,24 @@ app.post("/admin/api/canned", async (req, res) => {
   if (!Array.isArray(list)) return res.status(400).json({ error: "list (array) requerido" });
   await setCanned(list);
   res.json({ ok: true });
+});
+
+// ── Biblioteca de media (fotos/vídeos que el bot puede enviar) ──
+app.get("/admin/api/media", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try { res.json(await getMediaLib()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/admin/api/media", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const items = Array.isArray(req.body && req.body.items) ? req.body.items : [];
+  const clean = items.map((m, i) => ({
+    id: String(m.id || (Date.now().toString(36) + i)),
+    label: String(m.label || "").trim().slice(0, 40),
+    type: m.type === "video" ? "video" : "image",
+    url: String(m.url || "").trim(),
+    caption: String(m.caption || "").trim().slice(0, 300),
+  })).filter((m) => /^https?:\/\//i.test(m.url) && m.label);
+  try { res.json(await setMediaLib(clean)); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── Citas / calendario ──

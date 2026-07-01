@@ -308,3 +308,10 @@ DOWN-SELL TO 7 ISLANDS:
 
 VAGUE DATES ("maybe October", "August or September"):
 - Most leads don't have firm dates. Use it to qualify guided vs self-guided: if their month isn't the Nov 4 guided departure, it's self-guided with flexible dates (apply -USD 550). "October's a great month to ride — that'd be the Self-Guided edition since our guided group date this year is Nov 4. How many of you would be riding?"
+
+PROACTIVE SEASON STEERING (when a lead asks "what's a better time to come?" don't just deflect to a call — answer it, then offer the call):
+- When a lead proposes wet-season dates (roughly Nov–Mar, e.g. "end November / early December") OR asks about the weather / best time, PROACTIVELY apply the WEATHER FAQ: the dry season (Apr–Oct) gives the best riding conditions; their window is the start of the wetter season. Recommend the drier months if they have any flexibility — but reassure it's still doable and warm year-round, just expect some rain.
+- If they float a second, drier window (real example: a Boston rider said "I could make a September/October trip"), steer toward it warmly — usually the better ride, and Sep/Oct is self-guided flexible dates. Frame it as "you'll get the best of the roads then", never pushy.
+
+FLEXIBLE / MULTIPLE DATE WINDOWS:
+- Some leads give more than one possible window ("end Nov / early Dec, but I could also do Sept/Oct"). Capture BOTH — tag what they said and note they're flexible so the team can propose the best fit. Flexibility usually means self-guided (unless a window lands on the Nov 4 guided date).
