@@ -51,7 +51,9 @@ const SHEET_SYNC = CRM_SHEET_SYNC === "1" || CRM_SHEET_SYNC === "true";
 
 const stripeClient = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
-const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+// maxRetries alto + timeout holgado: la red de Railway a api.anthropic.com a veces
+// corta la conexión ("Premature close"); el SDK reintenta los errores de conexión.
+const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY, maxRetries: 4, timeout: 60000 });
 const MODEL = BOT_MODEL || "claude-sonnet-4-6";
 
 const CONTEXT = fs.existsSync("context.md")
@@ -1139,15 +1141,21 @@ app.post("/webhook", async (req, res) => {
         + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.caption ? " — " + m.caption : ""}`).join("\n")
         + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send labels from this list; never invent one."
       : "";
-    const response = await anthropic.messages.create({
+    // Streaming (no create): evita el "Premature close" en respuestas no-stream y mantiene viva la conexión.
+    const response = await anthropic.messages.stream({
       model: MODEL,
       max_tokens: 500,
       thinking: { type: "disabled" }, // respuestas cortas y baratas; en Sonnet 5 el thinking va ON por defecto y se comería el max_tokens
       system: buildSystemPrompt() + mediaHint,
       messages: history,
-    });
+    }).finalMessage();
 
-    let reply = response.content[0].text;
+    const _textBlock = response.content.find((b) => b.type === "text");
+    let reply = (_textBlock && _textBlock.text) || "";
+    if (!reply.trim()) { // sin texto (p.ej. refusal / respuesta vacía) → no mandamos vacío
+      console.warn(`[${PROJECT_NAME}] Respuesta del modelo sin texto (stop_reason: ${response.stop_reason}) — no se envía nada a ${from}`);
+      return;
+    }
     const intentMatch = reply.match(/\[INTENT:(\w+)\]/);
     const intent = intentMatch ? intentMatch[1] : "exploring";
     const ridersMatch = reply.match(/\[RIDERS:(\d+)\]/);
