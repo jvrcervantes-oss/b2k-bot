@@ -426,6 +426,8 @@
   .db-country{display:inline-flex;align-items:center;gap:7px}
   .db-country .fi{width:20px;height:14px;background-size:cover;border-radius:3px;box-shadow:0 0 0 1px rgba(0,0,0,.12);flex-shrink:0}
   body.dark .db-country .fi{box-shadow:0 0 0 1px rgba(255,255,255,.14)}
+  .db-appt{display:inline-flex;align-items:center;gap:2px;color:var(--accent);font-weight:600;white-space:nowrap;cursor:pointer;font-size:12.5px}
+  .db-appt:hover{text-decoration:underline}
   /* ── biblioteca de media (fotos/vídeos del bot) ── */
   .media-help{font-size:12.5px;color:var(--ink-soft);line-height:1.45;margin:2px 0 12px}
   #mediaList{display:flex;flex-direction:column;gap:10px;max-height:46vh;overflow:auto}
@@ -624,7 +626,7 @@
       m_appt:'Nueva cita', m_appt_edit:'Editar cita', l_lead:'Lead', ph_lead:'Nombre o teléfono (opcional)', l_datetime:'Fecha y hora', l_title:'Título', ph_call:'Llamada con…', btn_save_appt:'Guardar cita',
       l_closer:'Closer asignado', l_notes_appt:'Notas de la cita', ph_notes_appt:'Contexto de lo hablado, para el closer…', btn_delete_appt:'Eliminar cita', btn_close:'Cerrar', btn_edit_appt:'Editar cita', av_nolead:'Sin lead', av_noone:'Sin asignar', av_nonotes:'Sin notas',
       i_exploring:'explorando', i_interested:'interesado', i_booking:'reserva', i_escalate:'duda',
-      c_name:'Nombre', c_phone:'WhatsApp', c_email:'Email', c_country:'País', c_tour:'Tour', c_package:'Paquete', c_riders:'Riders', c_pillions:'Pillions', c_travel:'Fecha viaje', c_status:'Estado', c_intent:'Intención', c_lastact:'Últ. act.',
+      c_name:'Nombre', c_phone:'WhatsApp', c_email:'Email', c_country:'País', c_tour:'Tour', c_package:'Paquete', c_riders:'Riders', c_pillions:'Pillions', c_travel:'Fecha viaje', c_status:'Estado', c_intent:'Intención', c_lastact:'Últ. act.', c_appt:'Cita',
       s_blank:'—', s_new:'🆕 Nuevo', s_quoted:'💬 Cotizado', s_won:'✅ Ganado', s_lost:'❌ Perdido', s_noshow:'🚫 No-show',
       e_status:'Estado', e_name:'Nombre', e_country:'País', e_email:'Email', e_tour:'Tour de interés', e_package:'Paquete', e_riders:'Nº riders', e_pillions:'Pillions', e_travel:'Fecha de viaje', e_savecard:'Guardar ficha', e_notes:'Notas internas', ph_notes:'Notas del estudio…', e_savenotes:'Guardar notas',
       ph_pkg:'Roundtrip / Extreme / Deluxe', ph_eg4:'ej. 4', ph_eg0:'ej. 0', ph_egmonth:'ej. Julio 2026',
@@ -664,7 +666,7 @@
       m_appt:'New appointment', m_appt_edit:'Edit appointment', l_lead:'Lead', ph_lead:'Name or phone (optional)', l_datetime:'Date & time', l_title:'Title', ph_call:'Call with…', btn_save_appt:'Save appointment',
       l_closer:'Assigned closer', l_notes_appt:'Appointment notes', ph_notes_appt:'What was discussed, for the closer…', btn_delete_appt:'Delete appointment', btn_close:'Close', btn_edit_appt:'Edit appointment', av_nolead:'No lead', av_noone:'Unassigned', av_nonotes:'No notes',
       i_exploring:'exploring', i_interested:'interested', i_booking:'booking', i_escalate:'question',
-      c_name:'Name', c_phone:'WhatsApp', c_email:'Email', c_country:'Country', c_tour:'Tour', c_package:'Package', c_riders:'Riders', c_pillions:'Pillions', c_travel:'Travel date', c_status:'Status', c_intent:'Intent', c_lastact:'Last act.',
+      c_name:'Name', c_phone:'WhatsApp', c_email:'Email', c_country:'Country', c_tour:'Tour', c_package:'Package', c_riders:'Riders', c_pillions:'Pillions', c_travel:'Travel date', c_status:'Status', c_intent:'Intent', c_lastact:'Last act.', c_appt:'Call',
       s_blank:'—', s_new:'🆕 New', s_quoted:'💬 Quoted', s_won:'✅ Won', s_lost:'❌ Lost', s_noshow:'🚫 No-show',
       e_status:'Status', e_name:'Name', e_country:'Country', e_email:'Email', e_tour:'Tour of interest', e_package:'Package', e_riders:'# riders', e_pillions:'Pillions', e_travel:'Travel date', e_savecard:'Save card', e_notes:'Internal notes', ph_notes:'Studio notes…', e_savenotes:'Save notes',
       ph_pkg:'Roundtrip / Extreme / Deluxe', ph_eg4:'e.g. 4', ph_eg0:'e.g. 0', ph_egmonth:'e.g. July 2026',
@@ -726,7 +728,7 @@
     LABEL = {exploring:t('i_exploring'),interested:t('i_interested'),booking:t('i_booking'),escalate:t('i_escalate')};
     STATUS_LABEL = {'':t('s_blank'),new:t('s_new'),quoted:t('s_quoted'),won:t('s_won'),lost:t('s_lost'),noshow:t('s_noshow')};
     ST_OPTS = [['',t('s_blank')],['new',t('s_new')],['quoted',t('s_quoted')],['won',t('s_won')],['lost',t('s_lost')],['noshow',t('s_noshow')]];
-    DB_COLS = [['name',t('c_name')],['phone',t('c_phone')],['email',t('c_email')],['country',t('c_country')],['package',t('c_package')],['riders',t('c_riders')],['value',t('c_value')],['owner',t('c_owner')],['nextFollowUp',t('c_followup')],['travelDate',t('c_travel')],['status',t('c_status')],['intent',t('c_intent')],['tags',t('c_tags')],['updatedAt',t('c_lastact')]];
+    DB_COLS = [['name',t('c_name')],['phone',t('c_phone')],['email',t('c_email')],['country',t('c_country')],['package',t('c_package')],['riders',t('c_riders')],['value',t('c_value')],['owner',t('c_owner')],['appt',t('c_appt')],['nextFollowUp',t('c_followup')],['travelDate',t('c_travel')],['status',t('c_status')],['intent',t('c_intent')],['tags',t('c_tags')],['updatedAt',t('c_lastact')]];
   }
 
   function api(path){ return fetch('/admin/api/' + path, { headers: { 'X-Admin-Key': KEY } }); }
@@ -1239,7 +1241,7 @@
   var dbFilters = {intent:'', pkg:'', source:'', country:'', tag:'', due:false};
   var DB_COLS = [
     ['name','Nombre'],['phone','WhatsApp'],['email','Email'],['country','País'],
-    ['package','Paquete'],['riders','Riders'],['value','Valor'],['owner','Owner'],
+    ['package','Paquete'],['riders','Riders'],['value','Valor'],['owner','Owner'],['appt','Cita'],
     ['nextFollowUp','Seguimiento'],['travelDate','Fecha viaje'],['status','Estado'],['intent','Intención'],['tags','Tags'],['updatedAt','Últ. act.']
   ];
   var STATUS_LABEL = {'':'—',new:'🆕 Nuevo',quoted:'💬 Cotizado',won:'✅ Ganado',lost:'❌ Perdido',noshow:'🚫 No-show'};
@@ -1284,6 +1286,7 @@
       var va,vb;
       if(k==='value'){ va=leadValue(a); vb=leadValue(b); }
       else if(k==='country'){ va=leadCountry(a).toLowerCase(); vb=leadCountry(b).toLowerCase(); }
+      else if(k==='appt'){ var pa=nextApptFor(a),pb=nextApptFor(b); va=pa?new Date(pa.when).getTime():Infinity; vb=pb?new Date(pb.when).getTime():Infinity; } // sin cita = al final
       else if(k==='status'){ va=ORDER[a.status||'']||0; vb=ORDER[b.status||'']||0; }
       else if(k==='riders'||k==='updatedAt'||k==='createdAt'){ va=a[k]||0; vb=b[k]||0; }
       else { va=(a[k]||'').toString().toLowerCase(); vb=(b[k]||'').toString().toLowerCase(); }
@@ -1323,6 +1326,11 @@
     if(key==='country'){
       var c=countryOf(l.phone);
       return '<td>'+(c?'<span class="db-country">'+flagSpan(c.iso)+esc(c.name)+'</span>':'<span class="db-dim">—</span>')+'</td>';
+    }
+    if(key==='appt'){
+      var ap=nextApptFor(l.phone);
+      if(!ap) return '<td class="db-dim">—</td>';
+      return '<td onclick="event.stopPropagation()"><span class="db-appt" onclick="openApptView(\''+ap.id+'\')" title="'+esc(ap.title)+(ap.closer?' · '+esc(ap.closer):'')+'">📞 '+esc(fmtWhen(ap.when))+'</span></td>';
     }
     var raw=dbVal(l,key), cls=(key==='name'?'db-nm':((raw===''||raw==='—')?'db-dim':''));
     return '<td'+(cls?' class="'+cls+'"':'')+'>'+esc(raw||'—')+'</td>';
@@ -1364,6 +1372,8 @@
     if(k==='updatedAt') return ago(l.updatedAt);
     if(k==='intent') return LABEL[l.intent]||l.intent||'explorando';
     if(k==='status') return STATUS_LABEL[l.status||'']||l.status||'—';
+    if(k==='country') return leadCountry(l); // país derivado del prefijo (coherente con la tabla y el CSV)
+    if(k==='appt'){ var a=nextApptFor(l.phone); return a?(fmtWhen(a.when)+(a.closer?' · '+a.closer:'')):''; }
     var v=l[k]; return (v==null||v==='')?'':String(v);
   }
   function dbFiltered(){
@@ -1495,7 +1505,7 @@
       +'<button '+(dbPage>=pages?'disabled':'')+' onclick="dbGo('+(dbPage+1)+')">›</button>'
       +'<button '+(dbPage>=pages?'disabled':'')+' onclick="dbGo('+pages+')">»</button></div>';
   }
-  function dbSetSort(k){ if(dbSort.key===k) dbSort.dir=-dbSort.dir; else { dbSort.key=k; dbSort.dir=(k==='name'||k==='country'||k==='owner'||k==='email')?1:-1; } renderTable(); }
+  function dbSetSort(k){ if(dbSort.key===k) dbSort.dir=-dbSort.dir; else { dbSort.key=k; dbSort.dir=(k==='name'||k==='country'||k==='owner'||k==='email'||k==='appt')?1:-1; } renderTable(); }
   window.dbSetSort=dbSetSort;
   function dbGo(p){ dbPage=p; renderTable(); var w=document.querySelector('.db-wrap'); if(w) w.scrollTop=0; }
   window.dbGo=dbGo;
@@ -1623,7 +1633,7 @@
   function setUrl(p){ try{ history.replaceState(null,'',p); }catch(e){} }
   document.getElementById('navConv').onclick=function(){ var a=document.getElementById('app'); a.classList.remove('calmode'); a.classList.remove('dbmode'); setNav('navConv'); setUrl('/admin'); };
   document.getElementById('navCal').onclick=function(){ var a=document.getElementById('app'); a.classList.add('calmode'); a.classList.remove('dbmode'); setNav('navCal'); setUrl('/admin'); buildLeadsDL(); loadAppts(renderCal); };
-  document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); a.classList.add('dbmode'); a.classList.remove('calmode'); setNav('navDb'); setUrl('/admin/db'); dbPage=1; loadHealth(); renderDb(); };
+  document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); a.classList.add('dbmode'); a.classList.remove('calmode'); setNav('navDb'); setUrl('/admin/db'); dbPage=1; loadHealth(); loadAppts(renderDb); };
   document.getElementById('navMedia').onclick=function(){ openMedia(); };
   document.getElementById('mediaClose').onclick=function(){ document.getElementById('mediaModal').style.display='none'; };
   document.getElementById('mediaAdd').onclick=function(){ readMediaFromDOM(); mediaItems.push({id:'',label:'',type:'image',url:'',caption:''}); renderMediaRows(); };
