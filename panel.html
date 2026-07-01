@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.5.0/css/flag-icons.min.css" rel="stylesheet">
 <style>
   :root{
     --nav:#161e2e; --nav-2:#0f1623; --bg:#f5f6f8; --card:#ffffff;
@@ -400,6 +401,24 @@
   button.av-row:hover .av-go{opacity:1;transform:translateX(0);color:var(--accent)}
   .av-notes{background:var(--bg);border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;font-size:14px;line-height:1.5;color:var(--ink);white-space:pre-wrap;margin-top:1px}
   #apptViewModal .modal-actions{border-top:1px solid var(--line-2);padding-top:14px;margin-top:10px}
+
+  /* ── selects modernos: chevron propio, forma redondeada, foco suave ── */
+  select.db-sel,.db-filters select,.db-bulk select,.modal-box select,#detail .edit select{
+    appearance:none;-webkit-appearance:none;-moz-appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7488' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 9px center;background-size:11px;
+    padding-right:28px;font-family:inherit;font-weight:600;
+    transition:border-color .15s ease,box-shadow .15s ease,background-color .15s ease;
+  }
+  select.db-sel:hover,.db-filters select:hover,.db-bulk select:hover,.modal-box select:hover,#detail .edit select:hover{border-color:var(--accent)}
+  body.dark select.db-sel,body.dark .db-filters select,body.dark .db-bulk select,body.dark .modal-box select,body.dark #detail .edit select{
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239aa6bd' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 9px center;background-size:11px;
+  }
+  /* ── país con banderita en la DB ── */
+  .db-country{display:inline-flex;align-items:center;gap:7px}
+  .db-country .fi{width:20px;height:14px;background-size:cover;border-radius:3px;box-shadow:0 0 0 1px rgba(0,0,0,.12);flex-shrink:0}
+  body.dark .db-country .fi{box-shadow:0 0 0 1px rgba(255,255,255,.14)}
 </style>
 </head>
 <body>
@@ -1171,6 +1190,21 @@
   function todayISO(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
   function isOverdue(l){ return l.nextFollowUp && String(l.nextFollowUp).slice(0,10) <= todayISO(); }
   function tagColor(s){ var h=0; s=s||''; for(var i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; var hue=h%360; return 'background:hsla('+hue+',70%,50%,.15);color:hsl('+hue+',60%,38%)'; }
+  // País por prefijo telefónico (E.164). Se fuerza desde el número; ignora country manual.
+  var DIAL={
+    '1':['us','United States'],'7':['ru','Russia'],'20':['eg','Egypt'],'27':['za','South Africa'],'30':['gr','Greece'],'31':['nl','Netherlands'],'32':['be','Belgium'],'33':['fr','France'],'34':['es','Spain'],'36':['hu','Hungary'],'39':['it','Italy'],'40':['ro','Romania'],'41':['ch','Switzerland'],'43':['at','Austria'],'44':['gb','United Kingdom'],'45':['dk','Denmark'],'46':['se','Sweden'],'47':['no','Norway'],'48':['pl','Poland'],'49':['de','Germany'],
+    '51':['pe','Peru'],'52':['mx','Mexico'],'53':['cu','Cuba'],'54':['ar','Argentina'],'55':['br','Brazil'],'56':['cl','Chile'],'57':['co','Colombia'],'58':['ve','Venezuela'],'60':['my','Malaysia'],'61':['au','Australia'],'62':['id','Indonesia'],'63':['ph','Philippines'],'64':['nz','New Zealand'],'65':['sg','Singapore'],'66':['th','Thailand'],
+    '81':['jp','Japan'],'82':['kr','South Korea'],'84':['vn','Vietnam'],'86':['cn','China'],'90':['tr','Turkey'],'91':['in','India'],'92':['pk','Pakistan'],'94':['lk','Sri Lanka'],'95':['mm','Myanmar'],'98':['ir','Iran'],
+    '212':['ma','Morocco'],'213':['dz','Algeria'],'216':['tn','Tunisia'],'234':['ng','Nigeria'],'254':['ke','Kenya'],'351':['pt','Portugal'],'352':['lu','Luxembourg'],'353':['ie','Ireland'],'354':['is','Iceland'],'356':['mt','Malta'],'357':['cy','Cyprus'],'358':['fi','Finland'],'359':['bg','Bulgaria'],'370':['lt','Lithuania'],'371':['lv','Latvia'],'372':['ee','Estonia'],'380':['ua','Ukraine'],'385':['hr','Croatia'],'386':['si','Slovenia'],'420':['cz','Czechia'],'421':['sk','Slovakia'],'852':['hk','Hong Kong'],'855':['kh','Cambodia'],'856':['la','Laos'],'880':['bd','Bangladesh'],'886':['tw','Taiwan'],
+    '961':['lb','Lebanon'],'962':['jo','Jordan'],'965':['kw','Kuwait'],'966':['sa','Saudi Arabia'],'968':['om','Oman'],'971':['ae','UAE'],'972':['il','Israel'],'973':['bh','Bahrain'],'974':['qa','Qatar'],'977':['np','Nepal'],'598':['uy','Uruguay'],'593':['ec','Ecuador'],'591':['bo','Bolivia'],'595':['py','Paraguay'],'502':['gt','Guatemala'],'506':['cr','Costa Rica'],'507':['pa','Panama']
+  };
+  var DIAL_CODES=Object.keys(DIAL).sort(function(a,b){return b.length-a.length;}); // más largo primero
+  function countryOf(phone){ var d=(phone||'').replace(/\D/g,''); if(!d) return null;
+    for(var i=0;i<DIAL_CODES.length;i++){ if(d.indexOf(DIAL_CODES[i])===0){ var e=DIAL[DIAL_CODES[i]]; return {iso:e[0],name:e[1]}; } }
+    return null; // ponytail: +1 = NANP compartido, por defecto US; prefijo desconocido = sin país
+  }
+  function leadCountry(l){ var c=countryOf(l&&l.phone); return c?c.name:''; }
+  function flagSpan(iso){ return '<span class="fi fi-'+iso+'"></span>'; }
   function leadInTab(l){
     if(dbTab==='all') return true;
     if(dbTab==='archived') return !!l.archived;
@@ -1184,6 +1218,7 @@
     return arr.slice().sort(function(a,b){
       var va,vb;
       if(k==='value'){ va=leadValue(a); vb=leadValue(b); }
+      else if(k==='country'){ va=leadCountry(a).toLowerCase(); vb=leadCountry(b).toLowerCase(); }
       else if(k==='status'){ va=ORDER[a.status||'']||0; vb=ORDER[b.status||'']||0; }
       else if(k==='riders'||k==='updatedAt'||k==='createdAt'){ va=a[k]||0; vb=b[k]||0; }
       else { va=(a[k]||'').toString().toLowerCase(); vb=(b[k]||'').toString().toLowerCase(); }
@@ -1219,6 +1254,10 @@
     if(key==='tags'){
       var tg=Array.isArray(l.tags)?l.tags:[];
       return '<td>'+(tg.length?'<div class="tags">'+tg.map(function(x){return '<span class="tag" style="'+tagColor(x)+'">'+esc(x)+'</span>';}).join('')+'</div>':'<span class="db-dim">—</span>')+'</td>';
+    }
+    if(key==='country'){
+      var c=countryOf(l.phone);
+      return '<td>'+(c?'<span class="db-country">'+flagSpan(c.iso)+esc(c.name)+'</span>':'<span class="db-dim">—</span>')+'</td>';
     }
     var raw=dbVal(l,key), cls=(key==='name'?'db-nm':((raw===''||raw==='—')?'db-dim':''));
     return '<td'+(cls?' class="'+cls+'"':'')+'>'+esc(raw||'—')+'</td>';
@@ -1268,10 +1307,10 @@
       if(dbFilters.intent && (l.intent||'exploring')!==dbFilters.intent) return false;
       if(dbFilters.pkg && pkgKey(l.package)!==dbFilters.pkg) return false;
       if(dbFilters.source && leadSource(l)!==dbFilters.source) return false;
-      if(dbFilters.country && (l.country||'')!==dbFilters.country) return false;
+      if(dbFilters.country && leadCountry(l)!==dbFilters.country) return false;
       if(dbFilters.tag && !(Array.isArray(l.tags)&&l.tags.indexOf(dbFilters.tag)>=0)) return false;
       if(dbFilters.due && !isOverdue(l)) return false;
-      if(dbSearch){ var hay=((l.name||'')+' '+l.phone+' '+(l.email||'')+' '+(l.package||'')+' '+(l.tour||'')+' '+(l.country||'')+' '+(l.owner||'')+' '+(Array.isArray(l.tags)?l.tags.join(' '):'')).toLowerCase(); if(hay.indexOf(dbSearch)<0) return false; }
+      if(dbSearch){ var hay=((l.name||'')+' '+l.phone+' '+(l.email||'')+' '+(l.package||'')+' '+(l.tour||'')+' '+leadCountry(l)+' '+(l.owner||'')+' '+(Array.isArray(l.tags)?l.tags.join(' '):'')).toLowerCase(); if(hay.indexOf(dbSearch)<0) return false; }
       return true;
     });
   }
@@ -1316,7 +1355,7 @@
   window.dbGoTab=dbGoTab;
   function renderFilters(){
     var countries={}, tags={};
-    leads.forEach(function(l){ if(l.country) countries[l.country]=1; if(Array.isArray(l.tags)) l.tags.forEach(function(x){tags[x]=1;}); });
+    leads.forEach(function(l){ var cn=leadCountry(l); if(cn) countries[cn]=1; if(Array.isArray(l.tags)) l.tags.forEach(function(x){tags[x]=1;}); });
     function sel(id,cur,opts,ph){ return '<select onchange="dbSetFilter(\''+id+'\',this.value)"><option value="">'+ph+'</option>'+opts.map(function(o){return '<option value="'+esc(o[0])+'"'+(cur===o[0]?' selected':'')+'>'+esc(o[1])+'</option>';}).join('')+'</select>'; }
     var html = sel('intent',dbFilters.intent,[['exploring',t('i_exploring')],['interested',t('i_interested')],['booking',t('i_booking')],['escalate',t('i_escalate')]],t('f_all_intent'))
       + sel('pkg',dbFilters.pkg,[['roundtrip','Roundtrip'],['extreme','Extreme'],['deluxe','Deluxe'],['standard','Standard / best value']],t('f_all_pkg'))
@@ -1418,9 +1457,9 @@
       if(dbFilters.intent && (l.intent||'exploring')!==dbFilters.intent) return false;
       if(dbFilters.pkg && pkgKey(l.package)!==dbFilters.pkg) return false;
       if(dbFilters.source && leadSource(l)!==dbFilters.source) return false;
-      if(dbFilters.country && (l.country||'')!==dbFilters.country) return false;
+      if(dbFilters.country && leadCountry(l)!==dbFilters.country) return false;
       if(dbFilters.tag && !(Array.isArray(l.tags)&&l.tags.indexOf(dbFilters.tag)>=0)) return false;
-      if(dbSearch){ var hay=((l.name||'')+' '+l.phone+' '+(l.email||'')+' '+(l.country||'')).toLowerCase(); if(hay.indexOf(dbSearch)<0) return false; }
+      if(dbSearch){ var hay=((l.name||'')+' '+l.phone+' '+(l.email||'')+' '+leadCountry(l)).toLowerCase(); if(hay.indexOf(dbSearch)<0) return false; }
       return true;
     });
     document.getElementById('dbKanban').innerHTML = cols.map(function(c){
@@ -1428,7 +1467,7 @@
       var cards=items.map(function(l){
         return '<div class="kcard" draggable="true" data-phone="'+l.phone+'" ondragstart="kDrag(event)" onclick="openFromDb(\''+l.phone+'\')">'
           + '<div class="kn">'+esc(l.name||('+'+l.phone))+'</div>'
-          + '<div class="km"><span>'+esc(l.package||l.country||'')+'</span><span class="kv">'+(leadValue(l)?money(leadValue(l)):'')+'</span></div></div>';
+          + '<div class="km"><span>'+esc(l.package||leadCountry(l))+'</span><span class="kv">'+(leadValue(l)?money(leadValue(l)):'')+'</span></div></div>';
       }).join('');
       return '<div class="kcol" data-status="'+c[0]+'" ondragover="kOver(event)" ondragleave="kLeave(event)" ondrop="kDrop(event)"><h4>'+t(c[1])+'<span class="kc">'+items.length+'</span></h4><div class="kcards">'+cards+'</div></div>';
     }).join('');
