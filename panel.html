@@ -636,7 +636,7 @@
       ph_pkg:'Roundtrip / Extreme / Deluxe', ph_eg4:'ej. 4', ph_eg0:'ej. 0', ph_egmonth:'ej. Julio 2026',
       f_intent:'Intención', f_lastact:'Última actividad', f_messages:'Mensajes', f_followups:'Seguimientos enviados', f_after24:'tras 24h', f_nextappt:'Próxima cita', wa_open:'Abrir en WhatsApp',
       p_resume:'🤖 Reactivar bot', p_pause:'✋ Pausar bot', hint_paused:'Tú tienes el control · el bot está en pausa para este lead', hint_active:'El bot responde solo · si escribes tú, tomas el control',
-      win_open_a:'🟢 Ventana de 24h abierta · cierra en ', win_closed:'🔴 Ventana de 24h cerrada — WhatsApp no permite texto libre (haría falta una plantilla)', win_closed_ph:'Ventana de 24h cerrada',
+      win_open_a:'🟢 Ventana de 24h abierta · cierra en ', win_closed:'🔴 Ventana de 24h cerrada — WhatsApp no permite texto libre (haría falta una plantilla)', win_closed_ph:'Ventana de 24h cerrada', win_never:'🔴 El cliente aún no ha escrito — WhatsApp no permite texto libre hasta que él inicie (o usa una plantilla)',
       ago_now:'ahora', ago_yest:'ayer', of:'de', more:'más',
       store_redis:'🟢 Redis · persistente', store_ram:'🟠 RAM · NO persiste — configura Redis',
       empty_results:'Sin resultados', empty_clients:'Aún no hay clientes', empty_convs:'Aún no hay conversaciones', no_msgs:'Sin mensajes guardados', no_tpl:'Sin plantillas aún',
@@ -676,7 +676,7 @@
       ph_pkg:'Roundtrip / Extreme / Deluxe', ph_eg4:'e.g. 4', ph_eg0:'e.g. 0', ph_egmonth:'e.g. July 2026',
       f_intent:'Intent', f_lastact:'Last activity', f_messages:'Messages', f_followups:'Follow-ups sent', f_after24:'after 24h', f_nextappt:'Next appointment', wa_open:'Open in WhatsApp',
       p_resume:'🤖 Resume bot', p_pause:'✋ Pause bot', hint_paused:"You're in control · the bot is paused for this lead", hint_active:'The bot replies on its own · type and you take over',
-      win_open_a:'🟢 24h window open · closes in ', win_closed:'🔴 24h window closed — WhatsApp blocks free text (a template is required)', win_closed_ph:'24h window closed',
+      win_open_a:'🟢 24h window open · closes in ', win_closed:'🔴 24h window closed — WhatsApp blocks free text (a template is required)', win_closed_ph:'24h window closed', win_never:'🔴 Customer hasn\'t messaged yet — WhatsApp blocks free text until they start (or use a template)',
       ago_now:'now', ago_yest:'yesterday', of:'of', more:'more',
       store_redis:'🟢 Redis · persistent', store_ram:'🟠 RAM · NOT persistent — set up Redis',
       empty_results:'No results', empty_clients:'No clients yet', empty_convs:'No conversations yet', no_msgs:'No saved messages', no_tpl:'No templates yet',
@@ -798,6 +798,8 @@
     document.getElementById('stNew').textContent=nt;
     document.getElementById('stWait').textContent=nw;
     document.getElementById('stWaitWrap').classList.toggle('on', nw>0);
+    // Orden de inbox: "por responder" arriba, luego por última actividad (más reciente primero).
+    f.sort(function(a,b){ var aw=a.waiting?1:0, bw=b.waiting?1:0; return aw!==bw ? bw-aw : (b.updatedAt||0)-(a.updatedAt||0); });
     var box = document.getElementById('leads');
     if(!f.length){ box.innerHTML = '<div class="empty">'+(leads.length?t('empty_results'):t('empty_convs'))+'</div>'; return; }
     box.innerHTML = f.map(function(l){
@@ -818,6 +820,25 @@
   document.getElementById('back').onclick = function(){ document.getElementById('app').classList.remove('showchat'); };
 
   // ── open conversation ──
+  // Render de los mensajes del chat (reutilizado por open_ y el refresco en vivo).
+  var activeConvSig = '';
+  function renderMsgs(C, forceBottom){
+    var box = document.getElementById('msgs');
+    var prevTop = box.scrollTop;
+    var nearBottom = forceBottom || (box.scrollHeight - box.scrollTop - box.clientHeight < 80);
+    box.innerHTML = C.length ? C.map(function(m){ return '<div class="m '+m.role+'">'+esc(m.content)+'</div>'; }).join('') : '<div class="nochat">'+t('no_msgs')+'</div>';
+    box.scrollTop = nearBottom ? box.scrollHeight : prevTop; // al fondo si seguía el hilo; si leía arriba, no le muevas
+  }
+  // Refresca los mensajes del chat activo sin re-pintar si no cambió (evita parpadeo/salto de scroll).
+  function loadConv(phone){
+    api('conv/'+encodeURIComponent(phone)).then(function(r){return r.json();}).then(function(C){
+      if(active!==phone) return;
+      var sig = C.length+'|'+(C.length?C[C.length-1].content:'');
+      if(sig===activeConvSig) return;
+      activeConvSig = sig; renderMsgs(C);
+    }).catch(function(){});
+  }
+  window.loadConv=loadConv;
   function open_(phone){
     active = phone; render();
     document.getElementById('app').classList.add('showchat');
@@ -836,9 +857,9 @@
     updateWindowUI(l);
 
     api('conv/' + encodeURIComponent(phone)).then(function(r){return r.json();}).then(function(C){
-      var box = document.getElementById('msgs');
-      box.innerHTML = C.length ? C.map(function(m){ return '<div class="m '+m.role+'">'+esc(m.content)+'</div>'; }).join('') : '<div class="nochat">'+t('no_msgs')+'</div>';
-      box.scrollTop = box.scrollHeight;
+      if(active!==phone) return; // cambió de chat mientras cargaba
+      activeConvSig = C.length+'|'+(C.length?C[C.length-1].content:'');
+      renderMsgs(C, true); // al abrir, siempre al fondo
 
       document.getElementById('detail').innerHTML =
         '<div class="big" style="background:'+c+'">'+esc(initials(l.name||phone))+'</div>'
@@ -1003,7 +1024,10 @@
   function updateWindowUI(l){
     var el = document.getElementById('winInfo'), ta = document.getElementById('reply'), btn = document.getElementById('sendBtn');
     var t2 = l && l.lastInboundAt;
-    if(!t2){ el.className = 'wininfo'; ta.disabled = false; btn.disabled = false; ta.placeholder = t('ph_reply'); return; }
+    if(!t2){ // el cliente aún no ha escrito → la ventana de 24h no está abierta: no se puede texto libre
+      el.className = 'wininfo closed'; el.innerHTML = t('win_never');
+      ta.disabled = true; btn.disabled = true; ta.placeholder = t('win_closed_ph'); return;
+    }
     var left = 24*3600000 - (Date.now() - t2);
     if(left > 0){
       var h = Math.floor(left/3600000), m = Math.floor((left%3600000)/60000);
@@ -1729,7 +1753,7 @@
       api('leads').then(function(r){return r.json();}).then(function(L){
         leads = L; processAlerts(L); render();
         if(document.getElementById('app').classList.contains('dbmode')) renderDb();
-        if(active){ var al = leads.filter(function(x){return x.phone===active;})[0]; if(al){ curLead = al; updatePauseUI(!!al.paused); updateWindowUI(al); } }
+        if(active){ var al = leads.filter(function(x){return x.phone===active;})[0]; if(al){ curLead = al; updatePauseUI(!!al.paused); updateWindowUI(al); } loadConv(active); }
       });
       loadAppts(function(){ if(document.getElementById('app').classList.contains('calmode')) renderCal(); });
     }, 10000);
