@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { google } from "googleapis";
 import axios from "axios";
 import fs from "fs";
+import https from "https";
 import { createClient } from "redis";
 import Stripe from "stripe";
 
@@ -53,7 +54,26 @@ const stripeClient = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
 // maxRetries alto + timeout holgado: la red de Railway a api.anthropic.com a veces
 // corta la conexión ("Premature close"); el SDK reintenta los errores de conexión.
-const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY, maxRetries: 4, timeout: 60000 });
+// httpAgent con keepAlive:false → conexión nueva por request; evita reutilizar un socket
+// keep-alive que Anthropic ya cerró (causa raíz del "Premature close" con tráfico espaciado).
+const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY, maxRetries: 4, timeout: 60000, httpAgent: new https.Agent({ keepAlive: false }) });
+
+// Llama a Claude con reintentos propios. El "Premature close" ocurre al reutilizar un
+// socket keep-alive que Anthropic ya cerró (frecuente con tráfico espaciado de test) y
+// el SDK NO lo reintenta; reintentar aquí fuerza una conexión nueva.
+async function claudeMessage(params, tries = 3) {
+  let lastErr;
+  for (let i = 1; i <= tries; i++) {
+    try {
+      return await anthropic.messages.stream(params).finalMessage();
+    } catch (e) {
+      lastErr = e;
+      console.warn(`[${PROJECT_NAME}] Claude intento ${i}/${tries} falló: ${e.message}`);
+      if (i < tries) await new Promise((r) => setTimeout(r, 500 * i));
+    }
+  }
+  throw lastErr;
+}
 const MODEL = BOT_MODEL || "claude-sonnet-4-6";
 
 const CONTEXT = fs.existsSync("context.md")
@@ -1142,13 +1162,13 @@ app.post("/webhook", async (req, res) => {
         + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send labels from this list; never invent one."
       : "";
     // Streaming (no create): evita el "Premature close" en respuestas no-stream y mantiene viva la conexión.
-    const response = await anthropic.messages.stream({
+    const response = await claudeMessage({
       model: MODEL,
       max_tokens: 500,
       thinking: { type: "disabled" }, // respuestas cortas y baratas; en Sonnet 5 el thinking va ON por defecto y se comería el max_tokens
       system: buildSystemPrompt() + mediaHint,
       messages: history,
-    }).finalMessage();
+    });
 
     const _textBlock = response.content.find((b) => b.type === "text");
     let reply = (_textBlock && _textBlock.text) || "";
