@@ -74,7 +74,6 @@
   #app{display:none;height:100vh;overflow:hidden;grid-template-columns:64px 340px 1fr 300px}
   #app.on{display:grid}
   @media(max-width:1100px){#app.on{grid-template-columns:64px 320px 1fr}#detail{display:none}}
-  @media(max-width:760px){#app.on{grid-template-columns:64px 1fr}#list{display:none}#app.on.showchat #list{display:none}}
 
   /* nav rail */
   nav{background:var(--nav);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:6px}
@@ -143,6 +142,9 @@
   #chat .top{background:var(--card);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;gap:12px}
   #chat .top .back{display:none;border:0;background:none;color:var(--ink-soft);font-size:20px;padding:0 6px 0 0}
   @media(max-width:760px){#chat .top .back{display:block}}
+  .det-btn{display:none;border:1px solid var(--line);background:var(--card);color:var(--ink-soft);border-radius:9px;width:38px;height:36px;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer}
+  .det-btn svg{width:19px;height:19px}
+  .det-close{display:none;position:fixed;top:10px;left:10px;z-index:71;width:40px;height:40px;border:0;border-radius:50%;background:var(--card);box-shadow:0 2px 10px rgba(0,0,0,.18);color:var(--ink);font-size:24px;align-items:center;justify-content:center;cursor:pointer}
   #chat .top .nm{font-weight:600;font-size:15px}
   #chat .top .ph{font-size:12px;color:var(--ink-soft)}
   #msgs{flex:1;overflow-y:auto;padding:22px 26px;display:flex;flex-direction:column;gap:8px}
@@ -389,6 +391,34 @@
   }
   @media (prefers-reduced-motion:reduce){ *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important} }
 
+  /* ══ MÓVIL: una vista a la vez + barra de navegación inferior (al final: gana a las reglas base) ══ */
+  @media(max-width:760px){
+    #app.on{grid-template-columns:1fr}
+    nav{position:fixed;left:0;right:0;bottom:0;top:auto;height:58px;flex-direction:row;justify-content:space-around;align-items:center;padding:0 4px;gap:0;z-index:60;border-top:1px solid rgba(255,255,255,.10)}
+    nav .brand,nav .spacer{display:none}
+    nav .ic{width:46px;height:40px}
+    #dbView,#calView{grid-column:1/-1;padding-bottom:58px}
+    /* Conversaciones: lista por defecto; al abrir un chat = pantalla completa, sin barra */
+    #list{display:flex;padding-bottom:58px}
+    #chat{display:none}
+    #detail{display:none}
+    #app.on.showchat #list{display:none}
+    #app.on.showchat #chat{display:flex}
+    #app.on.showchat nav{display:none}
+    /* Ficha del lead a pantalla completa (se abre con el botón ⓘ del chat) */
+    #app.showdetail #detail{display:block;position:fixed;inset:0;z-index:70;border:0;padding-top:54px}
+    .det-btn{display:flex}
+    #app.showdetail .det-close{display:flex}
+    /* Kanban: columnas apiladas a lo ancho (sin scroll horizontal) */
+    #dbKanban{flex-direction:column;overflow-x:hidden;padding:14px 14px 72px}
+    .kcol{flex:1 1 auto;width:100%;max-height:none}
+    .kcards{max-height:none}
+    /* Modales a lo ancho */
+    .modal-box{width:94vw !important;max-width:94vw;max-height:88vh;overflow:auto}
+    /* Cabeceras/barras de la DB que respiren en pantalla estrecha */
+    .db-head,.db-bar{flex-wrap:wrap;gap:8px}
+  }
+
   /* ── vista rápida de cita (solo lectura): filas legibles con icono animado ── */
   #apptViewModal .modal-box{width:384px}
   #avTitle{margin-bottom:14px}
@@ -509,7 +539,9 @@
       <div class="av" id="ctAv" style="width:38px;height:38px;font-size:14px;display:none"></div>
       <div style="flex:1"><div class="nm" id="ctName" data-i18n="pick_lead">Selecciona un lead</div><div class="ph" id="ctPhone"></div></div>
       <button class="pausebtn" id="pauseBtn" style="display:none"></button>
+      <button class="det-btn" id="detBtn" title="Ficha del lead"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="7" r="4"/></svg></button>
     </div>
+    <button class="det-close" id="detClose" title="Volver">‹</button>
     <div id="msgs"><div class="nochat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg><br><span data-i18n="nochat">Elige una conversación de la izquierda</span></div></div>
     <div class="wininfo" id="winInfo"></div>
     <div class="sendhint" id="sendHint" style="display:none"></div>
@@ -828,7 +860,10 @@
   Array.prototype.forEach.call(document.querySelectorAll('.chip'), function(ch){
     ch.onclick = function(){ document.querySelectorAll('.chip').forEach(function(c){c.classList.remove('on');}); ch.classList.add('on'); filter = ch.dataset.f; render(); };
   });
-  document.getElementById('back').onclick = function(){ document.getElementById('app').classList.remove('showchat'); };
+  document.getElementById('back').onclick = function(){ var a=document.getElementById('app'); a.classList.remove('showchat'); a.classList.remove('showdetail'); };
+  // Ficha del lead en móvil: abrir/cerrar como overlay a pantalla completa
+  document.getElementById('detBtn').onclick = function(){ document.getElementById('app').classList.add('showdetail'); };
+  document.getElementById('detClose').onclick = function(){ document.getElementById('app').classList.remove('showdetail'); };
 
   // ── open conversation ──
   // Render de los mensajes del chat (reutilizado por open_ y el refresco en vivo).
@@ -869,7 +904,7 @@
   window.loadConv=loadConv;
   function open_(phone){
     active = phone; render();
-    document.getElementById('app').classList.add('showchat');
+    var _app=document.getElementById('app'); _app.classList.add('showchat'); _app.classList.remove('showdetail');
     var l = leads.filter(function(x){return x.phone===phone;})[0] || {phone:phone};
     var c = color(l.name||phone), it = l.intent||'exploring';
 
@@ -1340,7 +1375,8 @@
   function buildLeadsDL(){ document.getElementById('leadsDL').innerHTML = leads.map(function(l){ return '<option value="'+esc((l.name||l.phone)+' (+'+l.phone+')')+'">'; }).join(''); }
   // ── BASE DE DATOS: tabla de TODOS los clientes ──
   var dbSearch = '', dbPage = 1, DB_PAGE_SIZE = 25;
-  var dbTab = 'active', dbView = 'table', dbSort = {key:'updatedAt', dir:-1}, dbSelected = {};
+  var isMobile = window.matchMedia && window.matchMedia('(max-width:760px)').matches;
+  var dbTab = 'active', dbView = (isMobile?'kanban':'table'), dbSort = {key:'updatedAt', dir:-1}, dbSelected = {};
   var dbFilters = {intent:'', pkg:'', source:'', country:'', tag:'', due:false};
   var DB_COLS = [
     ['name','Nombre'],['phone','WhatsApp'],['email','Email'],['country','País'],
