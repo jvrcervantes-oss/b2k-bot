@@ -782,7 +782,9 @@ LEAD DATA TAGGING — fill the CRM as you learn things (do this consistently):
 - Valid keys: tour (e.g. Bali to Komodo / 7 Islands) · package (Roundtrip / Extreme / Deluxe) · riders (a number) · pillions (a number) · dates (their travel window, e.g. "late 2027" or "October 2026") · country · name · email · tags (short labels, comma-separated) · followup (a date YYYY-MM-DD for the next time the team should reach out).
 - Send it the moment you learn each thing, and again (with the fuller set) as more is confirmed — re-sending a known field is fine, it just updates the record.
 - Note: leads who arrived via the Instagram form already have their name, email and package band captured automatically — you don't need to re-tag those, but DO tag what you learn in the chat (chosen package, exact riders, dates, country, pillions).
-- WHEN YOU PROMISE TO "make a note" / "let them know" / waitlist them, you MUST back it with the tag — otherwise the note is lost. Use tags + followup. Examples of tags: "guided-waitlist", "waitlist-2027", "price-objection", "VIP", "needs-IDP". Set followup to a sensible date (e.g. for a 2027 guided waitlist, followup=2026-09-01 so the team contacts them when 2027 dates are likely set).
+- WAITLIST / DEFER — MANDATORY, NEVER SKIP. The instant the customer defers, declines for now, or asks to be contacted later (wants a GUIDED departure not yet scheduled, "let me know when", "we'll wait", "maybe next year", "not right now"), you MUST end THAT SAME message with a LEAD tag carrying BOTH a tag AND a followup date. A promise like "I'll make a note" / "we'll let you know" WITHOUT the tag = the lead is silently lost. Never do that.
+  Format: [LEAD tags=guided-waitlist; followup=YYYY-MM-DD; dates=...; riders=N]
+  Pick followup ~2 months before their window opens; for a 2027 guided waitlist use followup=2026-09-01. Other tag examples: waitlist-2027, price-objection, VIP, needs-IDP.
 - Example: a UK rider confirms 4 of them want Extreme for late 2027 → end your message with: [LEAD tour=Bali to Komodo; package=Extreme; riders=4; dates=late 2027; country=UK]
 - Example (waitlist): group of 4 wants a GUIDED 2027 departure (none open yet) → [LEAD tour=Bali to Komodo; riders=4; dates=late 2027; tags=guided-waitlist,2027; followup=2026-09-01]
 
@@ -1111,7 +1113,7 @@ app.post("/webhook", async (req, res) => {
     const ridersMatch = reply.match(/\[RIDERS:(\d+)\]/);
     const numRiders = ridersMatch ? parseInt(ridersMatch[1]) : null;
     const apptMatch = reply.match(/\[APPT:([^\]|]+)\|([^\]]+)\]/);
-    const leadFields = parseLeadTag(reply); // datos confirmados en la charla → ficha/BD
+    let leadFields = parseLeadTag(reply); // datos confirmados en la charla → ficha/BD
     reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").replace(/\[LEAD[^\]]*\]/gi, "").trim();
     // Strip markdown that WhatsApp sends literally (breaks URLs)
     reply = reply.replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1"); // **URL** → URL
@@ -1146,6 +1148,23 @@ app.post("/webhook", async (req, res) => {
     await setWaiting(from, false); // el bot ya respondió → no queda pendiente
     await saveLead(from, profileName, text, intent);
     await recordLead(from, profileName, intent, text);  // índice para el panel web
+    // Backstop de waitlist: si el bot PROMETIÓ seguir más adelante pero no fijó followup,
+    // lo fijamos igual → el lead no se pierde, se suprime el auto-nudge (followupTick salta los
+    // /waitlist/) y el owner recibe recordatorio en fecha (followUpReminderTick). La persona
+    // debería taggear sola; esto cubre cuando el modelo lo olvida (como pasó con Keith).
+    const promisedLater = /\b(make a note|made a note|let you know|keep you posted|add you to (?:the|our) (?:list|waitlist)|wait[- ]?list|when [^.]*\b(?:dates?|departures?|trip)\b[^.]*\b(?:open|confirm|available|firm|announced))\b/i.test(reply);
+    if (promisedLater && intent !== "booking" && !apptMatch) {
+      const lf = leadFields || {};
+      const hasWl = Array.isArray(lf.tags) && lf.tags.some((t) => /waitlist/i.test(t));
+      if (!lf.nextFollowUp || !hasWl) {
+        const d = new Date(Date.now() + 60 * 24 * 3600 * 1000); // +60 días como fecha segura por defecto
+        const defFu = d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
+        lf.tags = Array.from(new Set([...(Array.isArray(lf.tags) ? lf.tags : []), "guided-waitlist"]));
+        if (!lf.nextFollowUp) lf.nextFollowUp = defFu;
+        leadFields = lf;
+        console.log(`[${PROJECT_NAME}] Waitlist backstop aplicado a ${from} (promesa de seguimiento sin followup explícito)`);
+      }
+    }
     if (leadFields) {
       await captureLeadData(from, leadFields);
       console.log(`[${PROJECT_NAME}] Datos extraídos de la charla para ${from}: ${Object.keys(leadFields).join(", ")}`);
