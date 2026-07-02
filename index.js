@@ -1717,18 +1717,38 @@ function renderEmailHtml(bodyHtml, unsub) {
 </div></body></html>`;
 }
 
-// Envía un email vía Brevo (API transaccional). Devuelve {ok} o {ok:false,error}.
-async function sendEmail({ to, subject, html }) {
+// Envía un email vía Brevo (API transaccional). Dos modos:
+//  · plantilla de Brevo → { to, templateId, params } (usa su asunto/diseño; params = {{params.x}})
+//  · HTML propio        → { to, subject, html }
+// Devuelve {ok} o {ok:false,error}.
+async function sendEmail({ to, name, subject, html, templateId, params }) {
   if (!MAIL_READY) return { ok: false, error: "email no configurado" };
+  const dest = [{ email: to, ...(name ? { name } : {}) }];
+  const payload = templateId
+    ? { templateId, to: dest, params: params || {} }
+    : { sender: parseFrom(MAIL_FROM), to: dest, subject, htmlContent: html };
+  if (MAIL_REPLY_TO) payload.replyTo = { email: MAIL_REPLY_TO };
   try {
-    await axios.post("https://api.brevo.com/v3/smtp/email",
-      { sender: parseFrom(MAIL_FROM), to: [{ email: to }], subject, htmlContent: html, ...(MAIL_REPLY_TO ? { replyTo: { email: MAIL_REPLY_TO } } : {}) },
+    await axios.post("https://api.brevo.com/v3/smtp/email", payload,
       { headers: { "api-key": (BREVO_API_KEY || "").trim(), "Content-Type": "application/json", accept: "application/json" }, timeout: 15000 });
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e.response?.data ? JSON.stringify(e.response.data) : e.message };
   }
 }
+
+// Lista las plantillas transaccionales activas de Brevo (para elegir en el panel).
+app.get("/admin/api/brevo-templates", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  if (!BREVO_API_KEY) return res.status(400).json({ error: "Falta BREVO_API_KEY en Railway." });
+  try {
+    const r = await axios.get("https://api.brevo.com/v3/smtp/templates?templateStatus=true&limit=200&sort=desc",
+      { headers: { "api-key": (BREVO_API_KEY || "").trim(), accept: "application/json" }, timeout: 15000 });
+    res.json((r.data.templates || []).map((t) => ({ id: t.id, name: t.name, subject: t.subject })));
+  } catch (e) {
+    res.status(502).json({ error: e.response?.data ? JSON.stringify(e.response.data) : e.message });
+  }
+});
 
 // Baja pública (sin auth): valida el token, marca la baja y muestra confirmación.
 app.get("/unsubscribe", async (req, res) => {
@@ -1740,7 +1760,8 @@ app.get("/unsubscribe", async (req, res) => {
   res.type("html").send(page("You've been unsubscribed. You won't receive any more newsletters from us."));
 });
 
-// Envío de la campaña (auth). Body: { subject, body, phones?[], testTo? }.
+// Envío de la campaña (auth). Body: { subject, body, templateId?, phones?[], testTo? }.
+// Con templateId se usa una plantilla de Brevo (su asunto/diseño); si no, subject+body markdown.
 app.post("/admin/api/newsletter", async (req, res) => {
   if (!adminAuth(req, res)) return;
   if (!MAIL_READY) {
@@ -1750,14 +1771,18 @@ app.post("/admin/api/newsletter", async (req, res) => {
   const subject = String((req.body && req.body.subject) || "").trim();
   const body = String((req.body && req.body.body) || "").trim();
   const testTo = String((req.body && req.body.testTo) || "").trim().toLowerCase();
-  if (!subject || !body) return res.status(400).json({ error: "asunto y cuerpo requeridos" });
+  const templateId = parseInt((req.body && req.body.templateId), 10) || null; // usar plantilla de Brevo
+  if (!templateId && (!subject || !body)) return res.status(400).json({ error: "elige una plantilla de Brevo, o escribe asunto y cuerpo" });
   const host = req.get("host");
-  const bodyHtml = mdToHtml(body);
+  // Construye el email para un destinatario según el modo (plantilla de Brevo o HTML propio).
+  const buildFor = (email, name) => templateId
+    ? { to: email, name, templateId, params: { unsub: unsubUrl(host, email), name: name || "", email } }
+    : { to: email, subject, html: renderEmailHtml(mdToHtml(body), unsubUrl(host, email)) };
 
   // Envío de PRUEBA: un solo correo a la dirección indicada, no toca el CRM ni las bajas.
   if (testTo) {
     if (!EMAIL_RE.test(testTo)) return res.status(400).json({ error: "email de prueba inválido" });
-    const r = await sendEmail({ to: testTo, subject, html: renderEmailHtml(bodyHtml, unsubUrl(host, testTo)) });
+    const r = await sendEmail(buildFor(testTo, ""));
     return r.ok ? res.json({ ok: true, test: true }) : res.status(502).json({ error: r.error });
   }
 
@@ -1774,16 +1799,17 @@ app.post("/admin/api/newsletter", async (req, res) => {
     const email = String(l.email || "").toLowerCase().trim();
     if (!EMAIL_RE.test(email) || unsub.has(email) || seen.has(email)) continue;
     seen.add(email);
-    recipients.push({ phone: l.phone, email });
+    recipients.push({ phone: l.phone, email, name: l.name || "" });
   }
   if (!recipients.length) return res.json({ ok: true, sent: 0, failed: 0, total: 0 });
 
   // Secuencial con pausa corta (evita el rate-limit de Brevo). ponytail: para listas muy
   // grandes conviene una cola; con volúmenes de leads de una agencia esto sobra.
+  const label = templateId ? `template#${templateId}` : subject;
   let sent = 0, failed = 0;
   for (const r of recipients) {
-    const out = await sendEmail({ to: r.email, subject, html: renderEmailHtml(bodyHtml, unsubUrl(host, r.email)) });
-    if (out.ok) { sent++; await logEvent(r.phone, "newsletter", { subject }); }
+    const out = await sendEmail(buildFor(r.email, r.name));
+    if (out.ok) { sent++; await logEvent(r.phone, "newsletter", { subject: label }); }
     else { failed++; console.warn(`[${PROJECT_NAME}] newsletter fallo a ${r.email}: ${out.error}`); }
     await new Promise((s) => setTimeout(s, 120));
   }
