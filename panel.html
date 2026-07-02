@@ -484,6 +484,13 @@
   .media-row .mr-label{flex:1}
   .media-row .mr-type{width:104px;flex-shrink:0;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7488' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center;background-size:11px;padding-right:26px;cursor:pointer}
   .media-row .mr-use{margin-bottom:7px}
+  #nlModal .modal-box label{display:block;margin:12px 0 5px;font-size:12px;font-weight:600;color:var(--ink-soft)}
+  #nlModal input,#nlModal select,#nlModal textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;font-family:inherit;outline:none;box-sizing:border-box;background:var(--card);color:var(--ink)}
+  #nlModal textarea{resize:vertical;line-height:1.5}
+  .nl-count{font-size:12.5px;color:var(--accent);margin-top:6px;font-weight:600}
+  .nl-testrow{display:flex;gap:8px;align-items:center;margin-top:12px}
+  .nl-testrow input{flex:1}
+  .nl-testrow button{flex-shrink:0;width:auto}
   .media-row .mr-urlrow{display:flex;gap:8px;align-items:center;margin-bottom:7px}
   .media-row .mr-urlrow .mr-url{margin-bottom:0}
   .media-row .mr-up{width:38px;height:36px;flex-shrink:0;border:1px solid var(--line);background:var(--card);color:var(--accent);border-radius:8px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .15s ease,border-color .15s ease}
@@ -517,6 +524,7 @@
     <div class="ic" id="navCal" data-ti="nav_cal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="ic" id="navDb" data-ti="nav_db" title="Base de datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="ic" id="navMedia" data-ti="nav_media" title="Fotos y vídeos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" id="navNewsletter" data-ti="nav_nl" title="Newsletter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="spacer"></div>
     <div class="ic" id="langToggle" data-ti="nav_lang">EN</div>
     <div class="ic" data-ti="nav_theme" id="themeToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
@@ -661,6 +669,24 @@
   </div>
 </div>
 
+<!-- modal newsletter por email -->
+<div id="nlModal" class="modal" style="display:none">
+  <div class="modal-box" style="width:560px;max-width:94vw">
+    <h3 data-i18n="nl_title">Newsletter por email</h3>
+    <p class="media-help" data-i18n="nl_help">Envía un email a los leads que dieron su correo. Incluye siempre un enlace de baja automático. Prueba primero contigo.</p>
+    <label data-i18n="nl_scope">Destinatarios</label>
+    <select id="nlScope"><option value="all" data-i18n="nl_scope_all">Todos con email</option><option value="selected" data-i18n="nl_scope_sel">Seleccionados en la Base de datos</option></select>
+    <div id="nlCount" class="nl-count"></div>
+    <label data-i18n="nl_subject">Asunto</label>
+    <input id="nlSubject" data-ph="nl_ph_subject" placeholder="Asunto del email">
+    <label data-i18n="nl_body">Mensaje</label>
+    <textarea id="nlBody" rows="9" data-ph="nl_ph_body" placeholder="Escribe el email. Deja una línea en blanco entre párrafos."></textarea>
+    <div class="nl-testrow"><input id="nlTest" data-ph="nl_ph_test" placeholder="tu@email.com"><button id="nlTestBtn" class="btn-ghost" data-i18n="nl_test">Enviar prueba</button></div>
+    <div class="modal-err" id="nlErr"></div>
+    <div class="modal-actions"><button id="nlClose" class="btn-ghost" data-i18n="btn_close">Cerrar</button><button id="nlSend" class="btn-primary" data-i18n="nl_send">Enviar</button></div>
+  </div>
+</div>
+
 <script>
   // ── auth ──
   var KEY = new URLSearchParams(location.search).get('key') || sessionStorage.getItem('botpanel_key') || '';
@@ -706,8 +732,9 @@
       act_outreach:'💬 Iniciar conversación', act_reoutreach:'💬 Reenviar intro', bulk_outreach:'💬 Iniciar conv.',
       outreach_ing:'⏳ Enviando…', outreach_ok:'Intro enviada', outreach_err:'No se pudo iniciar la conversación. ¿Está configurada la plantilla de intro (INTRO_TEMPLATE_NAME) en Railway?',
       q_assign:'Asignar', q_call:'Agendar llamada', call_title:'Llamada con', al_appt_date:'Pon fecha y hora', pre_bot:'Bot: ', pre_you:'Tú: ', act_call:'📞 Agendar llamada', cal_today:'Hoy',
+      nav_nl:'Newsletter', nl_title:'Newsletter por email', nl_help:'Envía un email a los leads que dieron su correo. Incluye siempre un enlace de baja automático. Prueba primero contigo.', nl_scope:'Destinatarios', nl_scope_all:'Todos con email', nl_scope_sel:'Seleccionados en la Base de datos', nl_count:'{n} destinatarios con email · {u} dados de baja se excluyen', nl_subject:'Asunto', nl_ph_subject:'Asunto del email', nl_body:'Mensaje', nl_ph_body:'Escribe el email. Deja una línea en blanco entre párrafos.', nl_test:'Enviar prueba', nl_ph_test:'tu@email.com', nl_send:'Enviar', nl_send_n:'Enviar a {n}', nl_sending:'⏳ Enviando…', nl_sent:'✓ Enviados {s} · {f} fallidos', nl_test_ok:'✓ Prueba enviada', nl_no_recip:'No hay destinatarios con email en esta selección.', nl_need:'Escribe asunto y mensaje.', nl_test_need:'Pon un email de prueba válido.', cfm_nl:'¿Enviar el newsletter a {n} personas? No se puede deshacer.',
       e_owner:'Propietario', e_followup:'Próximo seguimiento', e_tags:'Etiquetas', ph_tag:'Añadir etiqueta…', f_activity:'Actividad',
-      tl_empty:'Sin actividad registrada', tl_created:'Lead creado', tl_imported:'Importado de Meta', tl_status:'Estado', tl_owner:'Asignado a', tl_appt:'Cita agendada', tl_note:'Nota actualizada', tl_tag:'Etiqueta añadida', tl_archived:'Archivado', tl_restored:'Restaurado', tl_enriched:'Datos enriquecidos', tl_outreach:'Conversación iniciada (intro)', tl_fu_reminded:'Recordatorio de seguimiento enviado',
+      tl_empty:'Sin actividad registrada', tl_created:'Lead creado', tl_imported:'Importado de Meta', tl_status:'Estado', tl_owner:'Asignado a', tl_appt:'Cita agendada', tl_note:'Nota actualizada', tl_tag:'Etiqueta añadida', tl_archived:'Archivado', tl_restored:'Restaurado', tl_enriched:'Datos enriquecidos', tl_outreach:'Conversación iniciada (intro)', tl_fu_reminded:'Recordatorio de seguimiento enviado', tl_newsletter:'Newsletter enviado',
       al_save:'No se pudo guardar', edit_tpl:'✎ Editar plantillas…', locale:'es-ES' },
     en:{ brand:'CRM BMA', login_title:'Conversations panel', login_sub:'CRM BMA · studio access', ph_pw:'Password', btn_enter:'Sign in', err_pw:'Wrong password',
       nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_media:'Photos & videos', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español',
@@ -746,8 +773,9 @@
       act_outreach:'💬 Start conversation', act_reoutreach:'💬 Resend intro', bulk_outreach:'💬 Start conv.',
       outreach_ing:'⏳ Sending…', outreach_ok:'Intro sent', outreach_err:'Could not start the conversation. Is the intro template (INTRO_TEMPLATE_NAME) configured in Railway?',
       q_assign:'Assign', q_call:'Schedule call', call_title:'Call with', al_appt_date:'Set date and time', pre_bot:'Bot: ', pre_you:'You: ', act_call:'📞 Schedule call', cal_today:'Today',
+      nav_nl:'Newsletter', nl_title:'Email newsletter', nl_help:'Email the leads who gave you their address. Every email includes an automatic unsubscribe link. Test it on yourself first.', nl_scope:'Recipients', nl_scope_all:'Everyone with an email', nl_scope_sel:'Selected in the Database', nl_count:'{n} recipients with email · {u} unsubscribed excluded', nl_subject:'Subject', nl_ph_subject:'Email subject', nl_body:'Message', nl_ph_body:'Write the email. Leave a blank line between paragraphs.', nl_test:'Send test', nl_ph_test:'you@email.com', nl_send:'Send', nl_send_n:'Send to {n}', nl_sending:'⏳ Sending…', nl_sent:'✓ Sent {s} · {f} failed', nl_test_ok:'✓ Test sent', nl_no_recip:'No recipients with an email in this selection.', nl_need:'Write a subject and message.', nl_test_need:'Enter a valid test email.', cfm_nl:'Send the newsletter to {n} people? This cannot be undone.',
       e_owner:'Owner', e_followup:'Next follow-up', e_tags:'Tags', ph_tag:'Add tag…', f_activity:'Activity',
-      tl_empty:'No activity yet', tl_created:'Lead created', tl_imported:'Imported from Meta', tl_status:'Status', tl_owner:'Assigned to', tl_appt:'Appointment booked', tl_note:'Note updated', tl_tag:'Tag added', tl_archived:'Archived', tl_restored:'Restored', tl_enriched:'Data enriched', tl_outreach:'Conversation started (intro)', tl_fu_reminded:'Follow-up reminder sent',
+      tl_empty:'No activity yet', tl_created:'Lead created', tl_imported:'Imported from Meta', tl_status:'Status', tl_owner:'Assigned to', tl_appt:'Appointment booked', tl_note:'Note updated', tl_tag:'Tag added', tl_archived:'Archived', tl_restored:'Restored', tl_enriched:'Data enriched', tl_outreach:'Conversation started (intro)', tl_fu_reminded:'Follow-up reminder sent', tl_newsletter:'Newsletter sent',
       al_save:"Couldn't save", edit_tpl:'✎ Edit templates…', locale:'en-GB' }
   };
   var LANG = localStorage.getItem('botpanel_lang') || 'es';
@@ -993,7 +1021,7 @@
     var tg=Array.isArray(l.tags)?l.tags:[];
     return tg.length ? tg.map(function(x){ return '<span class="tag" style="'+tagColor(x)+'">'+esc(x)+' <b style="cursor:pointer" onclick="leadRemoveTag(\''+esc(x).replace(/'/g,'')+'\')">×</b></span>'; }).join('') : '<span class="db-dim" style="font-size:12px">—</span>';
   }
-  var TL_ICON={created:'✨',imported:'⬆️',status:'🔁',owner:'👤',appt:'📞',note:'📝',tag:'🏷️',archived:'📦',restored:'♻️',enriched:'🔍',outreach:'💬',fu_reminded:'📅'};
+  var TL_ICON={created:'✨',imported:'⬆️',status:'🔁',owner:'👤',appt:'📞',note:'📝',tag:'🏷️',archived:'📦',restored:'♻️',enriched:'🔍',outreach:'💬',fu_reminded:'📅',newsletter:'📧'};
   function tlHTML(l){
     var h=Array.isArray(l.history)?l.history.slice().reverse():[];
     if(!h.length) return '<div class="db-dim" style="font-size:12px;padding:6px 0">'+t('tl_empty')+'</div>';
@@ -1800,6 +1828,37 @@
     rd.readAsArrayBuffer(file);
   }
 
+  // ── Newsletter por email ──
+  var NL_EMAIL=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  // Destinatarios según el alcance elegido (espejo de la lógica del servidor): email válido,
+  // no archivados, no dados de baja, sin emails duplicados.
+  function nlRecipients(){
+    var scope=document.getElementById('nlScope').value, phones=[], seen={}, unsub=0;
+    leads.forEach(function(l){
+      if(l.archived) return;
+      if(scope==='selected' && !dbSelected[l.phone]) return;
+      var e=(l.email||'').toLowerCase().trim();
+      if(!NL_EMAIL.test(e)) return;
+      if(l.emailUnsub){ unsub++; return; }
+      if(seen[e]) return; seen[e]=1;
+      phones.push(l.phone);
+    });
+    return {phones:phones, count:phones.length, unsub:unsub};
+  }
+  function nlUpdateCount(){
+    var r=nlRecipients();
+    document.getElementById('nlCount').textContent=t('nl_count').replace('{n}',r.count).replace('{u}',r.unsub);
+    var b=document.getElementById('nlSend');
+    b.textContent=r.count?t('nl_send_n').replace('{n}',r.count):t('nl_send'); b.disabled=!r.count;
+  }
+  function openNewsletter(){ document.getElementById('nlErr').textContent=''; nlUpdateCount(); document.getElementById('nlModal').style.display='flex'; }
+  function nlPost(payload, btn){ var orig=btn.textContent, err=document.getElementById('nlErr'); err.style.color=''; btn.disabled=true; btn.textContent=t('nl_sending');
+    return apiPost('newsletter',payload).then(function(res){ return res.json().then(function(j){ return {ok:res.ok,j:j}; }); })
+      .then(function(o){ if(!o.ok) throw ((o.j&&o.j.error)||'error'); return o.j; })
+      .catch(function(e){ err.style.color=''; err.textContent=(typeof e==='string'?e:t('al_save')); throw e; })
+      .then(function(j){ btn.disabled=false; btn.textContent=orig; return j; }, function(e){ btn.disabled=false; btn.textContent=orig; });
+  }
+
   function setNav(id){ ['navConv','navCal','navDb'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
 
   function setUrl(p){ try{ history.replaceState(null,'',p); }catch(e){} }
@@ -1807,6 +1866,27 @@
   document.getElementById('navCal').onclick=function(){ var a=document.getElementById('app'); a.classList.add('calmode'); a.classList.remove('dbmode'); setNav('navCal'); setUrl('/admin'); buildLeadsDL(); loadAppts(renderCal); };
   document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); a.classList.add('dbmode'); a.classList.remove('calmode'); setNav('navDb'); setUrl('/admin/db'); dbPage=1; loadHealth(); loadAppts(renderDb); };
   document.getElementById('navMedia').onclick=function(){ openMedia(); };
+  document.getElementById('navNewsletter').onclick=function(){ openNewsletter(); };
+  document.getElementById('nlClose').onclick=function(){ document.getElementById('nlModal').style.display='none'; };
+  document.getElementById('nlScope').onchange=function(){ nlUpdateCount(); };
+  document.getElementById('nlTestBtn').onclick=function(){
+    var to=document.getElementById('nlTest').value.trim(), subject=document.getElementById('nlSubject').value.trim(), body=document.getElementById('nlBody').value.trim();
+    var err=document.getElementById('nlErr');
+    if(!NL_EMAIL.test(to)){ err.style.color=''; err.textContent=t('nl_test_need'); return; }
+    if(!subject||!body){ err.style.color=''; err.textContent=t('nl_need'); return; }
+    nlPost({subject:subject,body:body,testTo:to}, this).then(function(j){ if(j){ err.style.color='var(--accent)'; err.textContent=t('nl_test_ok'); } });
+  };
+  document.getElementById('nlSend').onclick=function(){
+    var subject=document.getElementById('nlSubject').value.trim(), body=document.getElementById('nlBody').value.trim();
+    var err=document.getElementById('nlErr');
+    if(!subject||!body){ err.style.color=''; err.textContent=t('nl_need'); return; }
+    var r=nlRecipients();
+    if(!r.count){ err.style.color=''; err.textContent=t('nl_no_recip'); return; }
+    if(!confirm(t('cfm_nl').replace('{n}',r.count))) return;
+    var payload={subject:subject,body:body};
+    if(document.getElementById('nlScope').value==='selected') payload.phones=r.phones;
+    nlPost(payload, this).then(function(j){ if(j){ err.style.color='var(--accent)'; err.textContent=t('nl_sent').replace('{s}',j.sent||0).replace('{f}',j.failed||0); } });
+  };
   document.getElementById('mediaClose').onclick=function(){ document.getElementById('mediaModal').style.display='none'; };
   document.getElementById('mediaAdd').onclick=function(){ readMediaFromDOM(); mediaItems.push({id:'',label:'',type:'image',url:'',caption:''}); renderMediaRows(); };
   document.getElementById('mediaSave').onclick=function(){

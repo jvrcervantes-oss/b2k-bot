@@ -6,6 +6,7 @@ import fs from "fs";
 import https from "https";
 import { createClient } from "redis";
 import Stripe from "stripe";
+import crypto from "crypto";
 
 const app = express();
 app.use(express.json({ limit: "20mb" })); // 20mb: permite subir fotos/vídeos locales (base64) desde el panel
@@ -44,6 +45,11 @@ const {
   INTRO_TEMPLATE_LANG,
   INTRO_TEMPLATE_VARS,
   CRM_SHEET_SYNC,
+  RESEND_API_KEY,          // newsletter por email (proveedor Resend). Sin esto, el envío está desactivado.
+  MAIL_FROM,               // "Bali Moto Adventures <newsletter@balimotoadventures.com>" (dominio verificado en Resend)
+  MAIL_REPLY_TO,           // opcional: a dónde llegan las respuestas
+  MAIL_COMPANY,            // pie legal del email (nombre + dirección física — obligatorio anti-spam)
+  MAIL_UNSUB_SECRET,       // firma los links de baja; si falta, se usa ADMIN_PASSWORD como fallback
 } = process.env;
 
 // La BD del CRM es Redis (lead:phone + leads_index). El Google Sheet era un espejo
@@ -168,6 +174,7 @@ async function listLeads() {
   } else {
     list = Object.values(fallbackLeads).sort((a, b) => b.updatedAt - a.updatedAt);
   }
+  const unsub = await getUnsubSet(); // para marcar quién está dado de baja del newsletter
   return Promise.all(list.map(async (l) => ({
     ...l,
     paused: await isPaused(l.phone),
@@ -176,6 +183,7 @@ async function listLeads() {
     notes: await getNotes(l.phone),
     status: await getStatus(l.phone),
     followups: await getFollowupCount(l.phone),
+    emailUnsub: !!(l.email && unsub.has(String(l.email).toLowerCase().trim())),
   })));
 }
 
@@ -1624,6 +1632,124 @@ app.post("/admin/api/media", async (req, res) => {
     use: String(m.use || "").trim().slice(0, 300), // cuándo enviarlo (guía interna para el bot; NO se envía al cliente)
   })).filter((m) => /^https?:\/\//i.test(m.url) && m.label);
   try { res.json(await setMediaLib(clean)); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── NEWSLETTER POR EMAIL ─────────────────────────────────────────
+// Envío masivo a los emails capturados en el CRM. Proveedor: Resend (HTTPS API).
+// Requisitos: dominio verificado en Resend + RESEND_API_KEY y MAIL_FROM en Railway.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAIL_READY = !!(RESEND_API_KEY && MAIL_FROM);
+
+// Set de bajas (opt-out). Guardado en Redis; fallback en memoria.
+const fallbackUnsub = new Set();
+async function addEmailUnsub(email) {
+  const e = String(email || "").toLowerCase().trim(); if (!e) return;
+  if (redisClient) await redisClient.sAdd("unsub_emails", e); else fallbackUnsub.add(e);
+}
+async function getUnsubSet() {
+  if (redisClient) return new Set((await redisClient.sMembers("unsub_emails")).map((s) => s.toLowerCase()));
+  return new Set(fallbackUnsub);
+}
+
+// Token de baja: HMAC del email → el link no se puede falsear ni dar de baja a terceros.
+function unsubToken(email) {
+  const secret = MAIL_UNSUB_SECRET || ADMIN_PASSWORD || "unsub";
+  return crypto.createHmac("sha256", secret).update(String(email).toLowerCase().trim()).digest("hex").slice(0, 20);
+}
+function unsubUrl(host, email) {
+  return `https://${host}/unsubscribe?e=${encodeURIComponent(email)}&t=${unsubToken(email)}`;
+}
+
+function escHtml(s) {
+  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+// Texto plano del compositor → párrafos HTML (líneas en blanco separan párrafos).
+function textToHtml(text) {
+  return String(text || "").split(/\n{2,}/).map((p) => `<p style="margin:0 0 16px">${escHtml(p).replace(/\n/g, "<br>")}</p>`).join("");
+}
+// Envoltorio de marca del email (cabecera + cuerpo + pie legal con baja).
+function renderEmailHtml(bodyHtml, unsub) {
+  const brand = escHtml(PROJECT_NAME || "Newsletter");
+  const company = escHtml(MAIL_COMPANY || PROJECT_NAME || "");
+  return `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a">
+<div style="max-width:600px;margin:0 auto;padding:24px">
+  <div style="font-size:18px;font-weight:700;letter-spacing:.02em;padding:8px 0 20px">${brand}</div>
+  <div style="background:#fff;border-radius:12px;padding:28px 26px;font-size:15px;line-height:1.6">${bodyHtml}</div>
+  <div style="font-size:12px;color:#8a8a8a;padding:18px 4px;line-height:1.5">
+    ${company ? company + "<br>" : ""}
+    <a href="${unsub}" style="color:#8a8a8a">Unsubscribe</a> — you received this because you enquired with us.
+  </div>
+</div></body></html>`;
+}
+
+// Envía un email vía Resend. Devuelve {ok} o {ok:false,error}.
+async function sendEmail({ to, subject, html }) {
+  if (!MAIL_READY) return { ok: false, error: "email no configurado" };
+  try {
+    await axios.post("https://api.resend.com/emails",
+      { from: MAIL_FROM, to: [to], subject, html, ...(MAIL_REPLY_TO ? { reply_to: MAIL_REPLY_TO } : {}) },
+      { headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" }, timeout: 15000 });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.response?.data ? JSON.stringify(e.response.data) : e.message };
+  }
+}
+
+// Baja pública (sin auth): valida el token, marca la baja y muestra confirmación.
+app.get("/unsubscribe", async (req, res) => {
+  const email = String(req.query.e || "").toLowerCase().trim();
+  const ok = email && EMAIL_RE.test(email) && req.query.t === unsubToken(email);
+  const page = (msg) => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:system-ui,sans-serif;max-width:460px;margin:80px auto;padding:0 24px;text-align:center;color:#1a1a1a"><h2 style="font-weight:700">${escHtml(PROJECT_NAME || "")}</h2><p style="font-size:16px;line-height:1.6;color:#444">${msg}</p></body>`;
+  if (!ok) return res.status(400).type("html").send(page("This unsubscribe link is invalid or expired."));
+  try { await addEmailUnsub(email); } catch (e) { /* best-effort */ }
+  res.type("html").send(page("You've been unsubscribed. You won't receive any more newsletters from us."));
+});
+
+// Envío de la campaña (auth). Body: { subject, body, phones?[], testTo? }.
+app.post("/admin/api/newsletter", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  if (!MAIL_READY) return res.status(400).json({ error: "Falta configurar el email: verifica un dominio en Resend y pon RESEND_API_KEY y MAIL_FROM en Railway." });
+  const subject = String((req.body && req.body.subject) || "").trim();
+  const body = String((req.body && req.body.body) || "").trim();
+  const testTo = String((req.body && req.body.testTo) || "").trim().toLowerCase();
+  if (!subject || !body) return res.status(400).json({ error: "asunto y cuerpo requeridos" });
+  const host = req.get("host");
+  const bodyHtml = textToHtml(body);
+
+  // Envío de PRUEBA: un solo correo a la dirección indicada, no toca el CRM ni las bajas.
+  if (testTo) {
+    if (!EMAIL_RE.test(testTo)) return res.status(400).json({ error: "email de prueba inválido" });
+    const r = await sendEmail({ to: testTo, subject, html: renderEmailHtml(bodyHtml, unsubUrl(host, testTo)) });
+    return r.ok ? res.json({ ok: true, test: true }) : res.status(502).json({ error: r.error });
+  }
+
+  // Destinatarios: leads con email válido, no dados de baja, sin duplicar email.
+  // Si llega phones[], se restringe a esos leads (selección de la BD).
+  const onlyPhones = Array.isArray(req.body && req.body.phones) ? new Set(req.body.phones) : null;
+  const unsub = await getUnsubSet();
+  const leads = await listLeads();
+  const seen = new Set();
+  const recipients = [];
+  for (const l of leads) {
+    if (l.archived) continue;
+    if (onlyPhones && !onlyPhones.has(l.phone)) continue;
+    const email = String(l.email || "").toLowerCase().trim();
+    if (!EMAIL_RE.test(email) || unsub.has(email) || seen.has(email)) continue;
+    seen.add(email);
+    recipients.push({ phone: l.phone, email });
+  }
+  if (!recipients.length) return res.json({ ok: true, sent: 0, failed: 0, total: 0 });
+
+  // Secuencial con pausa corta (evita el rate-limit de Resend). ponytail: para listas muy
+  // grandes conviene una cola; con volúmenes de leads de una agencia esto sobra.
+  let sent = 0, failed = 0;
+  for (const r of recipients) {
+    const out = await sendEmail({ to: r.email, subject, html: renderEmailHtml(bodyHtml, unsubUrl(host, r.email)) });
+    if (out.ok) { sent++; await logEvent(r.phone, "newsletter", { subject }); }
+    else { failed++; console.warn(`[${PROJECT_NAME}] newsletter fallo a ${r.email}: ${out.error}`); }
+    await new Promise((s) => setTimeout(s, 120));
+  }
+  res.json({ ok: true, sent, failed, total: recipients.length });
 });
 
 // ── Citas / calendario ──

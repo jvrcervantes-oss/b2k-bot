@@ -47,6 +47,20 @@ un servicio separado que apunta a este mismo repo con su propia config.
 
 > ⚠️ **El Sheet del CRM debe estar COMPARTIDO con el `client_email` de la Service Account (permiso Editor).** Si no, la API responde `404 — Requested entity was not found` aunque la autenticación sea correcta. Las variables `GOOGLE_CREDENTIALS` / `GOOGLE_TOKEN` de versiones antiguas ya **no se usan** — se pueden borrar.
 
+### Newsletter por email (opcional)
+
+Activa el envío de newsletters desde el panel (`/admin` → icono del sobre). Sin `RESEND_API_KEY` + `MAIL_FROM`, el botón de enviar avisa de que falta configurarlo.
+
+| Variable | Descripción | Ejemplo |
+|----------|-------------|---------|
+| `RESEND_API_KEY` | API key de [resend.com](https://resend.com) (proveedor de email) | `re_...` |
+| `MAIL_FROM` | Remitente. El dominio DEBE estar verificado en Resend (SPF/DKIM en el DNS) | `Bali Moto Adventures <newsletter@balimotoadventures.com>` |
+| `MAIL_REPLY_TO` | (Opcional) a dónde llegan las respuestas | `info@balimotoadventures.com` |
+| `MAIL_COMPANY` | Pie legal del email: nombre + dirección física (obligatorio anti-spam) | `Bali Moto Adventures · Jl. ... , Bali, Indonesia` |
+| `MAIL_UNSUB_SECRET` | (Opcional) firma los links de baja; si falta se usa `ADMIN_PASSWORD` | cualquier texto largo |
+
+> ⚠️ **Deliverability:** sin dominio verificado en Resend los correos caen en spam o se rechazan. La baja (`/unsubscribe`) es pública y automática; todo email la incluye en el pie.
+
 ## Cómo añadir un proyecto nuevo
 
 1. Crear `proyectos/NombreProyecto/bot-config/contexto.md` con el contexto del negocio
