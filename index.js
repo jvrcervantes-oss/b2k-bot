@@ -350,7 +350,9 @@ async function captureLeadData(phone, fields) {
     const prev = (await getLead(phone)) || {};
     const set = new Set([...(Array.isArray(prev.tags) ? prev.tags : []), ...fields.tags].map((s) => String(s).trim()).filter(Boolean));
     fields = { ...fields, tags: Array.from(set).slice(0, 20) };
-    if (fields.tags.length) logEvent(phone, "tag", { to: fields.tags[fields.tags.length - 1] });
+    // await OBLIGATORIO: sin él, el SET de logEvent (solo history, leído pre-tags) aterriza
+    // DESPUÉS del write de abajo y machaca tags/followup — los tags nunca llegaban a verse.
+    if (fields.tags.length) await logEvent(phone, "tag", { to: fields.tags[fields.tags.length - 1] });
   }
   await updateLeadFields(phone, { ...fields, updatedAt: Date.now() });
   writeLeadToSheet(phone, fields); // best-effort (solo escribe las llaves con columna mapeada)

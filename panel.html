@@ -831,15 +831,17 @@
   // ── render list ──
   function render(){
     var f = leads.filter(function(l){
+      if(l.archived) return false; // archivados: solo en la Database (pestaña Archivados)
       if(filter==='waiting' && !l.waiting) return false;
       if(filter==='interested' && l.intent!=='interested' && l.intent!=='booking') return false;
       if(filter==='booking' && l.intent!=='booking') return false;
       if(search){ var hay=((l.name||'')+' '+l.phone+' '+(l.lastMessage||'')).toLowerCase(); if(hay.indexOf(search)<0) return false; }
       return true;
     });
-    document.getElementById('count').textContent = leads.length;
+    var vis = leads.filter(function(l){ return !l.archived; });
+    document.getElementById('count').textContent = vis.length;
     var ni=0, nb=0, nt=0, nw=0, dayAgo=Date.now()-86400000;
-    leads.forEach(function(l){ if(l.intent==='interested')ni++; if(l.intent==='booking')nb++; if(l.updatedAt>dayAgo)nt++; if(l.waiting)nw++; });
+    vis.forEach(function(l){ if(l.intent==='interested')ni++; if(l.intent==='booking')nb++; if(l.updatedAt>dayAgo)nt++; if(l.waiting)nw++; });
     document.getElementById('stInt').textContent=ni;
     document.getElementById('stBook').textContent=nb;
     document.getElementById('stNew').textContent=nt;
@@ -1429,7 +1431,7 @@
       var va,vb;
       if(k==='value'){ va=leadValue(a); vb=leadValue(b); }
       else if(k==='country'){ va=leadCountry(a).toLowerCase(); vb=leadCountry(b).toLowerCase(); }
-      else if(k==='appt'){ var pa=nextApptFor(a),pb=nextApptFor(b); va=pa?new Date(pa.when).getTime():Infinity; vb=pb?new Date(pb.when).getTime():Infinity; } // sin cita = al final
+      else if(k==='appt'){ var pa=nextApptFor(a.phone),pb=nextApptFor(b.phone); va=pa?new Date(pa.when).getTime():Infinity; vb=pb?new Date(pb.when).getTime():Infinity; } // sin cita = al final
       else if(k==='status'){ va=ORDER[a.status||'']||0; vb=ORDER[b.status||'']||0; }
       else if(k==='riders'||k==='updatedAt'||k==='createdAt'){ va=a[k]||0; vb=b[k]||0; }
       else { va=(a[k]||'').toString().toLowerCase(); vb=(b[k]||'').toString().toLowerCase(); }
