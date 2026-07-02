@@ -1693,7 +1693,7 @@ async function sendEmail({ to, subject, html }) {
   try {
     await axios.post("https://api.brevo.com/v3/smtp/email",
       { sender: parseFrom(MAIL_FROM), to: [{ email: to }], subject, htmlContent: html, ...(MAIL_REPLY_TO ? { replyTo: { email: MAIL_REPLY_TO } } : {}) },
-      { headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json", accept: "application/json" }, timeout: 15000 });
+      { headers: { "api-key": (BREVO_API_KEY || "").trim(), "Content-Type": "application/json", accept: "application/json" }, timeout: 15000 });
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e.response?.data ? JSON.stringify(e.response.data) : e.message };
