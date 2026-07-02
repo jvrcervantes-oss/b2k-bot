@@ -305,6 +305,7 @@
   .kcard:active{cursor:grabbing}
   .kcard .kn{font-weight:600;font-size:13.5px}
   .kcard .km{font-size:11.5px;color:var(--ink-soft);margin-top:3px;display:flex;justify-content:space-between;gap:8px}
+  .kcard .kstatus{margin-top:8px;width:100%;font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--bg);color:var(--ink);cursor:pointer;font-family:inherit;box-sizing:border-box}
   .kcard .kv{font-weight:600;color:var(--ink)}
   /* timeline en la ficha */
   .tl{margin-top:8px}
@@ -398,7 +399,7 @@
     nav{position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;flex-direction:row;justify-content:space-around;align-items:center;padding:7px 4px calc(24px + env(safe-area-inset-bottom,0px));gap:0;z-index:60;border-top:1px solid rgba(255,255,255,.10)}
     nav .brand,nav .spacer{display:none}
     nav .ic{width:46px;height:40px}
-    #dbView,#calView{grid-column:1/-1;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+    #dbView,#calView{grid-column:1/-1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
     /* Conversaciones: lista por defecto; al abrir un chat = pantalla completa, sin barra */
     #list{display:flex;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
     #chat{display:none}
@@ -410,10 +411,12 @@
     #app.showdetail #detail{display:block;position:fixed;inset:0;z-index:70;border:0;padding-top:54px}
     .det-btn{display:flex}
     #app.showdetail .det-close{display:flex}
-    /* Kanban: columnas apiladas a lo ancho (sin scroll horizontal) */
-    #dbKanban{flex-direction:column;overflow-x:hidden;padding:14px 14px 72px}
+    /* Kanban: columnas apiladas a lo ancho (sin scroll horizontal); estado con toque, no drag */
+    #dbKanban{flex-direction:column;overflow-x:hidden;height:auto;padding:14px 14px 20px}
     .kcol{flex:1 1 auto;width:100%;max-height:none}
     .kcards{max-height:none}
+    .kcard{cursor:default}
+    .kcard .kstatus{padding:9px 10px;font-size:13px}
     /* Modales a lo ancho */
     .modal-box{width:94vw !important;max-width:94vw;max-height:88vh;overflow:auto}
     /* Cabeceras/barras de la DB que respiren en pantalla estrecha */
@@ -1682,7 +1685,11 @@
       var cards=items.map(function(l){
         return '<div class="kcard" draggable="true" data-phone="'+l.phone+'" ondragstart="kDrag(event)" onclick="openFromDb(\''+l.phone+'\')">'
           + '<div class="kn">'+esc(l.name||('+'+l.phone))+'</div>'
-          + '<div class="km"><span>'+esc(l.package||leadCountry(l))+'</span><span class="kv">'+(leadValue(l)?money(leadValue(l)):'')+'</span></div></div>';
+          + '<div class="km"><span>'+esc(l.package||leadCountry(l))+'</span><span class="kv">'+(leadValue(l)?money(leadValue(l)):'')+'</span></div>'
+          // Selector de estado (táctil): en móvil el drag&drop no funciona, así se cambia con un toque.
+          + '<select class="kstatus" onclick="event.stopPropagation()" onchange="kSetStatus(event,\''+l.phone+'\')">'
+            + ST_OPTS.map(function(x){return '<option value="'+x[0]+'"'+((l.status||'')===x[0]?' selected':'')+'>'+x[1]+'</option>';}).join('')
+          + '</select></div>';
       }).join('');
       return '<div class="kcol" data-status="'+c[0]+'" ondragover="kOver(event)" ondragleave="kLeave(event)" ondrop="kDrop(event)"><h4>'+t(c[1])+'<span class="kc">'+items.length+'</span></h4><div class="kcards">'+cards+'</div></div>';
     }).join('');
@@ -1697,6 +1704,13 @@
     apiPost('status',{phone:phone,status:st}).catch(function(){ alert(t('al_save')); });
   }
   window.kDrag=kDrag; window.kOver=kOver; window.kLeave=kLeave; window.kDrop=kDrop;
+  // Cambiar estado desde el selector de la tarjeta (funciona en móvil; equivalente al drop).
+  function kSetStatus(e,phone){ e.stopPropagation(); var v=e.target.value;
+    var L=leads.filter(function(x){return x.phone===phone;})[0]; if(!L||(L.status||'')===v) return;
+    L.status=v; renderKanban(); renderMetrics(); renderTabs();
+    apiPost('status',{phone:phone,status:v}).catch(function(){ alert(t('al_save')); });
+  }
+  window.kSetStatus=kSetStatus;
   document.getElementById('dbViewTable').onclick=function(){ dbView='table'; renderDb(); };
   document.getElementById('dbViewKanban').onclick=function(){ dbView='kanban'; renderDb(); };
   function openFromDb(phone){
