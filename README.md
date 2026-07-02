@@ -64,6 +64,8 @@ Activa el envío de newsletters desde el panel (`/admin` → icono del sobre). S
 
 **Usar plantillas de Brevo:** en el panel puedes elegir "Usar una plantilla de Brevo" en vez de escribir el email. El desplegable muestra tus plantillas **transaccionales activas** (Brevo → *Transactional → Templates*; las de campaña de marketing NO aparecen ahí). Personaliza con `{{params.name}}` y añade `{{params.unsub}}` en el pie para el enlace de baja (el bot lo pasa por cada destinatario).
 
+**Programar envíos:** el campo "Programar para" convierte el envío en programado; un tick del servidor (cada minuto) lo dispara a su hora. Los destinatarios se recalculan al disparar (respeta bajas y leads nuevos). La lista de programados permite cancelar. ⚠️ Requiere que el servicio de Railway esté vivo a esa hora (Railway no duerme en plan de pago; si el servicio estuviera parado, se envía al volver a arrancar si la hora ya pasó).
+
 > ⚠️ **Deliverability:** sin dominio verificado en Brevo (Senders, Domains & Dedicated IPs → añadir dominio → registros SPF/DKIM en el DNS) los correos caen en spam o se rechazan. La baja (`/unsubscribe`) es pública y automática; todo email la incluye en el pie.
 
 ## Cómo añadir un proyecto nuevo
