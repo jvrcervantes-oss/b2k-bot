@@ -1791,6 +1791,11 @@ app.listen(PORT, async () => {
   console.log(`[${PROJECT_NAME}] OWNER_PHONE: ${OWNER_PHONE ? normalizePhone(OWNER_PHONE) : "⚠️  NO CONFIGURADO"}`);
   console.log(`[${PROJECT_NAME}] CRM (BD): ${redisClient ? "Redis (persistente)" : "RAM (volátil — configura REDIS_URL)"}`);
   console.log(`[${PROJECT_NAME}] Email (Brevo): ${MAIL_READY ? "🟢 listo" : `⚠️  NO configurado → BREVO_API_KEY=${BREVO_API_KEY ? "ok" : "FALTA"}, MAIL_FROM=${MAIL_FROM ? "ok" : "FALTA"}`}`);
+  if (!MAIL_READY) {
+    // Lista los NOMBRES de claves relacionadas que el proceso SÍ ve (sin valores) → delata un typo de nombre.
+    const seen = Object.keys(process.env).filter((k) => /mail|brevo|from|smtp|sender/i.test(k));
+    console.log(`[${PROJECT_NAME}]   Claves tipo mail/from que veo en el entorno: ${seen.length ? seen.join(", ") : "(ninguna)"}`);
+  }
 
   // El CRM vive en Redis. El Google Sheet solo se prueba/usa si CRM_SHEET_SYNC está activado.
   if (SHEET_SYNC && SHEET_ID && GOOGLE_SERVICE_ACCOUNT) {
