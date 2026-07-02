@@ -1760,35 +1760,13 @@ app.get("/unsubscribe", async (req, res) => {
   res.type("html").send(page("You've been unsubscribed. You won't receive any more newsletters from us."));
 });
 
-// Envío de la campaña (auth). Body: { subject, body, templateId?, phones?[], testTo? }.
-// Con templateId se usa una plantilla de Brevo (su asunto/diseño); si no, subject+body markdown.
-app.post("/admin/api/newsletter", async (req, res) => {
-  if (!adminAuth(req, res)) return;
-  if (!MAIL_READY) {
-    const missing = [!BREVO_API_KEY && "BREVO_API_KEY", !MAIL_FROM && "MAIL_FROM"].filter(Boolean).join(" y ");
-    return res.status(400).json({ error: `El servicio no ve estas variables en Railway: ${missing}. Revisa el nombre EXACTO (mayúsculas, sin espacios), que estén en el servicio B2K y que haya reiniciado tras guardarlas.` });
-  }
-  const subject = String((req.body && req.body.subject) || "").trim();
-  const body = String((req.body && req.body.body) || "").trim();
-  const testTo = String((req.body && req.body.testTo) || "").trim().toLowerCase();
-  const templateId = parseInt((req.body && req.body.templateId), 10) || null; // usar plantilla de Brevo
-  if (!templateId && (!subject || !body)) return res.status(400).json({ error: "elige una plantilla de Brevo, o escribe asunto y cuerpo" });
-  const host = req.get("host");
-  // Construye el email para un destinatario según el modo (plantilla de Brevo o HTML propio).
+// Resuelve destinatarios (email válido, no baja, no archivado, sin duplicar) y envía la campaña.
+// Reutilizado por el envío inmediato y por el programado (tick). Devuelve {sent, failed, total}.
+async function runCampaign({ subject, body, templateId, phones, host }) {
   const buildFor = (email, name) => templateId
     ? { to: email, name, templateId, params: { unsub: unsubUrl(host, email), name: name || "", email } }
     : { to: email, subject, html: renderEmailHtml(mdToHtml(body), unsubUrl(host, email)) };
-
-  // Envío de PRUEBA: un solo correo a la dirección indicada, no toca el CRM ni las bajas.
-  if (testTo) {
-    if (!EMAIL_RE.test(testTo)) return res.status(400).json({ error: "email de prueba inválido" });
-    const r = await sendEmail(buildFor(testTo, ""));
-    return r.ok ? res.json({ ok: true, test: true }) : res.status(502).json({ error: r.error });
-  }
-
-  // Destinatarios: leads con email válido, no dados de baja, sin duplicar email.
-  // Si llega phones[], se restringe a esos leads (selección de la BD).
-  const onlyPhones = Array.isArray(req.body && req.body.phones) ? new Set(req.body.phones) : null;
+  const onlyPhones = Array.isArray(phones) ? new Set(phones) : null;
   const unsub = await getUnsubSet();
   const leads = await listLeads();
   const seen = new Set();
@@ -1801,20 +1779,121 @@ app.post("/admin/api/newsletter", async (req, res) => {
     seen.add(email);
     recipients.push({ phone: l.phone, email, name: l.name || "" });
   }
-  if (!recipients.length) return res.json({ ok: true, sent: 0, failed: 0, total: 0 });
-
-  // Secuencial con pausa corta (evita el rate-limit de Brevo). ponytail: para listas muy
-  // grandes conviene una cola; con volúmenes de leads de una agencia esto sobra.
   const label = templateId ? `template#${templateId}` : subject;
   let sent = 0, failed = 0;
   for (const r of recipients) {
     const out = await sendEmail(buildFor(r.email, r.name));
     if (out.ok) { sent++; await logEvent(r.phone, "newsletter", { subject: label }); }
     else { failed++; console.warn(`[${PROJECT_NAME}] newsletter fallo a ${r.email}: ${out.error}`); }
-    await new Promise((s) => setTimeout(s, 120));
+    await new Promise((s) => setTimeout(s, 120)); // pausa corta: evita el rate-limit de Brevo
   }
-  res.json({ ok: true, sent, failed, total: recipients.length });
+  return { sent, failed, total: recipients.length };
+}
+
+// Campañas programadas (Redis: array JSON en nl_scheduled; fallback en memoria).
+let fallbackScheduled = [];
+async function getScheduled() {
+  if (redisClient) { const r = await redisClient.get("nl_scheduled"); return r ? JSON.parse(r) : []; }
+  return fallbackScheduled;
+}
+async function setScheduled(list) {
+  if (redisClient) await redisClient.set("nl_scheduled", JSON.stringify(list)); else fallbackScheduled = list;
+}
+
+// Envío de la campaña (auth). Body: { subject, body, templateId?, phones?[], testTo?, when? }.
+// Con templateId se usa una plantilla de Brevo (su asunto/diseño); si no, subject+body markdown.
+// Con when (fecha futura) se PROGRAMA en vez de enviar ya.
+app.post("/admin/api/newsletter", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  if (!MAIL_READY) {
+    const missing = [!BREVO_API_KEY && "BREVO_API_KEY", !MAIL_FROM && "MAIL_FROM"].filter(Boolean).join(" y ");
+    return res.status(400).json({ error: `El servicio no ve estas variables en Railway: ${missing}. Revisa el nombre EXACTO (mayúsculas, sin espacios), que estén en el servicio B2K y que haya reiniciado tras guardarlas.` });
+  }
+  const subject = String((req.body && req.body.subject) || "").trim();
+  const body = String((req.body && req.body.body) || "").trim();
+  const testTo = String((req.body && req.body.testTo) || "").trim().toLowerCase();
+  const templateId = parseInt((req.body && req.body.templateId), 10) || null; // usar plantilla de Brevo
+  const phones = Array.isArray(req.body && req.body.phones) ? req.body.phones : null;
+  const when = String((req.body && req.body.when) || "").trim();
+  if (!templateId && (!subject || !body)) return res.status(400).json({ error: "elige una plantilla de Brevo, o escribe asunto y cuerpo" });
+  const host = req.get("host");
+
+  // Envío de PRUEBA: un solo correo a la dirección indicada, no toca el CRM ni las bajas.
+  if (testTo) {
+    if (!EMAIL_RE.test(testTo)) return res.status(400).json({ error: "email de prueba inválido" });
+    const one = templateId
+      ? { to: testTo, templateId, params: { unsub: unsubUrl(host, testTo), name: "", email: testTo } }
+      : { to: testTo, subject, html: renderEmailHtml(mdToHtml(body), unsubUrl(host, testTo)) };
+    const r = await sendEmail(one);
+    return r.ok ? res.json({ ok: true, test: true }) : res.status(502).json({ error: r.error });
+  }
+
+  // PROGRAMAR: guarda la campaña; el tick la envía a su hora (los destinatarios se recalculan
+  // al disparar, así respeta bajas y leads nuevos de última hora).
+  if (when) {
+    const ts = Date.parse(when);
+    if (isNaN(ts)) return res.status(400).json({ error: "fecha inválida" });
+    if (ts < Date.now() - 60000) return res.status(400).json({ error: "esa fecha ya pasó" });
+    const list = await getScheduled();
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    list.push({ id, when: ts, subject, body, templateId, phones, host, createdAt: Date.now() });
+    await setScheduled(list);
+    console.log(`[${PROJECT_NAME}] Newsletter programado ${id} para ${new Date(ts).toISOString()}`);
+    return res.json({ ok: true, scheduled: true, id, when: ts });
+  }
+
+  // Envío INMEDIATO.
+  const out = await runCampaign({ subject, body, templateId, phones, host });
+  res.json({ ok: true, ...out });
 });
+
+// Lista las campañas programadas (resumen, sin el cuerpo completo).
+app.get("/admin/api/newsletter/scheduled", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try {
+    const list = await getScheduled();
+    res.json(list.slice().sort((a, b) => a.when - b.when).map((c) => ({
+      id: c.id, when: c.when,
+      subject: c.templateId ? `Plantilla Brevo #${c.templateId}` : c.subject,
+      scope: c.phones ? c.phones.length : null, // nº seleccionados, o null = todos
+    })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Cancela una campaña programada.
+app.post("/admin/api/newsletter/cancel", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const id = String((req.body && req.body.id) || "");
+  try {
+    const list = await getScheduled();
+    const next = list.filter((c) => c.id !== id);
+    await setScheduled(next);
+    res.json({ ok: true, removed: list.length - next.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Tick: cada minuto envía las campañas cuya hora ya llegó (una por tick).
+let nlSending = false;
+async function newsletterTick() {
+  if (nlSending || !MAIL_READY) return; // no solapar; sin email configurado, dejarlas en cola
+  try {
+    const list = await getScheduled();
+    const due = list.find((c) => c.when <= Date.now());
+    if (!due) return;
+    nlSending = true;
+    // "Reclamar" quitándola de la lista ANTES de enviar → si el tick vuelve a saltar no la duplica.
+    // ponytail: si el proceso muere a mitad de envío, esa campaña no se reintenta (mejor que duplicar).
+    await setScheduled(list.filter((c) => c.id !== due.id));
+    console.log(`[${PROJECT_NAME}] Disparando newsletter programado ${due.id}`);
+    const out = await runCampaign(due);
+    console.log(`[${PROJECT_NAME}] Newsletter programado ${due.id}: enviados ${out.sent}, fallidos ${out.failed} de ${out.total}`);
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] newsletterTick error: ${e.message}`);
+  } finally {
+    nlSending = false;
+  }
+}
+setInterval(newsletterTick, 60000); // revisar cada minuto
 
 // ── Citas / calendario ──
 app.get("/admin/api/appts", async (req, res) => {
