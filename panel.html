@@ -210,6 +210,16 @@
   #dbView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
   #app.dbmode #list,#app.dbmode #chat,#app.dbmode #detail{display:none}
   #app.dbmode #dbView{display:flex}
+  /* secciones a pantalla completa (media, newsletter) — mismo patrón que dbView */
+  #mediaView,#nlView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
+  #app.mediamode #list,#app.mediamode #chat,#app.mediamode #detail{display:none}
+  #app.mediamode #mediaView{display:flex}
+  #app.nlmode #list,#app.nlmode #chat,#app.nlmode #detail{display:none}
+  #app.nlmode #nlView{display:flex}
+  .sec-top{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;background:var(--card);border-bottom:1px solid var(--line)}
+  .sec-top h2{font-size:18px;font-weight:700}
+  .sec-body{flex:1;overflow-y:auto;padding:24px;width:100%;max-width:740px;box-sizing:border-box}
+  .sec-actions{margin-top:18px;display:flex;justify-content:flex-end;gap:10px}
   .db-top{display:flex;align-items:center;gap:14px;padding:14px 24px;background:var(--card);border-bottom:1px solid var(--line);flex-wrap:wrap}
   .db-top h2{font-size:18px;font-weight:700;margin-right:auto}
   .db-store{font-size:12px;font-weight:600;padding:5px 11px;border-radius:20px;display:flex;align-items:center;gap:6px}
@@ -402,7 +412,7 @@
     nav{position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;flex-direction:row;justify-content:space-around;align-items:center;padding:7px 4px calc(24px + env(safe-area-inset-bottom,0px));gap:0;z-index:60;border-top:1px solid rgba(255,255,255,.10)}
     nav .brand,nav .spacer{display:none}
     nav .ic{width:46px;height:40px}
-    #dbView,#calView{grid-column:1/-1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+    #dbView,#calView,#mediaView,#nlView{grid-column:1/-1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
     /* Conversaciones: lista por defecto; al abrir un chat = pantalla completa, sin barra */
     #list{display:flex;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
     #chat{display:none}
@@ -484,9 +494,9 @@
   .media-row .mr-label{flex:1}
   .media-row .mr-type{width:104px;flex-shrink:0;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7488' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center;background-size:11px;padding-right:26px;cursor:pointer}
   .media-row .mr-use{margin-bottom:7px}
-  #nlModal .modal-box label{display:block;margin:12px 0 5px;font-size:12px;font-weight:600;color:var(--ink-soft)}
-  #nlModal input,#nlModal select,#nlModal textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;font-family:inherit;outline:none;box-sizing:border-box;background:var(--card);color:var(--ink)}
-  #nlModal textarea{resize:vertical;line-height:1.5}
+  #nlView label{display:block;margin:14px 0 5px;font-size:12px;font-weight:600;color:var(--ink-soft)}
+  #nlView input,#nlView select,#nlView textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;font-family:inherit;outline:none;box-sizing:border-box;background:var(--card);color:var(--ink)}
+  #nlView textarea{resize:vertical;line-height:1.5}
   .nl-count{font-size:12.5px;color:var(--accent);margin-top:6px;font-weight:600}
   .nl-testrow{display:flex;gap:8px;align-items:center;margin-top:12px}
   .nl-testrow input{flex:1}
@@ -616,6 +626,36 @@
     <div class="db-wrap"><div id="dbTable"></div><div id="dbKanban" style="display:none"></div></div>
     <div class="db-foot" id="dbFoot"></div>
   </div>
+
+  <!-- sección: fotos y vídeos del bot -->
+  <div id="mediaView">
+    <div class="sec-top"><h2 data-i18n="m_media">Fotos y vídeos del bot</h2></div>
+    <div class="sec-body">
+      <p class="media-help" data-i18n="media_help">El bot puede enviar estos archivos cuando ayudan a vender.</p>
+      <div id="mediaList"></div>
+      <button id="mediaAdd" class="btn-ghost" style="width:100%;margin-top:8px" data-i18n="btn_media_add">+ Añadir archivo</button>
+      <div class="modal-err" id="mediaErr"></div>
+      <div class="sec-actions"><button id="mediaSave" class="btn-primary" data-i18n="btn_save">Guardar</button></div>
+    </div>
+  </div>
+
+  <!-- sección: newsletter por email -->
+  <div id="nlView">
+    <div class="sec-top"><h2 data-i18n="nl_title">Newsletter por email</h2></div>
+    <div class="sec-body">
+      <p class="media-help" data-i18n="nl_help">Envía un email a los leads que dieron su correo. Incluye siempre un enlace de baja automático. Prueba primero contigo.</p>
+      <label data-i18n="nl_scope">Destinatarios</label>
+      <select id="nlScope"><option value="all" data-i18n="nl_scope_all">Todos con email</option><option value="selected" data-i18n="nl_scope_sel">Seleccionados en la Base de datos</option></select>
+      <div id="nlCount" class="nl-count"></div>
+      <label data-i18n="nl_subject">Asunto</label>
+      <input id="nlSubject" data-ph="nl_ph_subject" placeholder="Asunto del email">
+      <label data-i18n="nl_body">Mensaje</label>
+      <textarea id="nlBody" rows="9" data-ph="nl_ph_body" placeholder="Escribe el email. Deja una línea en blanco entre párrafos."></textarea>
+      <div class="nl-testrow"><input id="nlTest" data-ph="nl_ph_test" placeholder="tu@email.com"><button id="nlTestBtn" class="btn-ghost" data-i18n="nl_test">Enviar prueba</button></div>
+      <div class="modal-err" id="nlErr"></div>
+      <div class="sec-actions"><button id="nlSend" class="btn-primary" data-i18n="nl_send">Enviar</button></div>
+    </div>
+  </div>
 </div>
 
 <!-- modal respuestas rápidas -->
@@ -654,36 +694,6 @@
     <h3 id="avTitle">Cita</h3>
     <div id="avBody"></div>
     <div class="modal-actions"><button id="avClose" class="btn-ghost" data-i18n="btn_close">Cerrar</button><button id="avEdit" class="btn-primary" data-i18n="btn_edit_appt">Editar cita</button></div>
-  </div>
-</div>
-
-<!-- modal biblioteca de media (fotos/vídeos que el bot puede enviar) -->
-<div id="mediaModal" class="modal" style="display:none">
-  <div class="modal-box" style="width:480px;max-width:94vw">
-    <h3 data-i18n="m_media">Fotos y vídeos del bot</h3>
-    <p class="media-help" data-i18n="media_help">El bot puede enviar estos archivos cuando ayudan a vender. Pega la URL pública de cada foto/vídeo y ponle una etiqueta corta (ej. "intro", "bikes", "route").</p>
-    <div id="mediaList"></div>
-    <button id="mediaAdd" class="btn-ghost" style="width:100%;margin-top:8px" data-i18n="btn_media_add">+ Añadir archivo</button>
-    <div class="modal-err" id="mediaErr"></div>
-    <div class="modal-actions"><button id="mediaClose" class="btn-ghost" data-i18n="btn_close">Cerrar</button><button id="mediaSave" class="btn-primary" data-i18n="btn_save">Guardar</button></div>
-  </div>
-</div>
-
-<!-- modal newsletter por email -->
-<div id="nlModal" class="modal" style="display:none">
-  <div class="modal-box" style="width:560px;max-width:94vw">
-    <h3 data-i18n="nl_title">Newsletter por email</h3>
-    <p class="media-help" data-i18n="nl_help">Envía un email a los leads que dieron su correo. Incluye siempre un enlace de baja automático. Prueba primero contigo.</p>
-    <label data-i18n="nl_scope">Destinatarios</label>
-    <select id="nlScope"><option value="all" data-i18n="nl_scope_all">Todos con email</option><option value="selected" data-i18n="nl_scope_sel">Seleccionados en la Base de datos</option></select>
-    <div id="nlCount" class="nl-count"></div>
-    <label data-i18n="nl_subject">Asunto</label>
-    <input id="nlSubject" data-ph="nl_ph_subject" placeholder="Asunto del email">
-    <label data-i18n="nl_body">Mensaje</label>
-    <textarea id="nlBody" rows="9" data-ph="nl_ph_body" placeholder="Escribe el email. Deja una línea en blanco entre párrafos."></textarea>
-    <div class="nl-testrow"><input id="nlTest" data-ph="nl_ph_test" placeholder="tu@email.com"><button id="nlTestBtn" class="btn-ghost" data-i18n="nl_test">Enviar prueba</button></div>
-    <div class="modal-err" id="nlErr"></div>
-    <div class="modal-actions"><button id="nlClose" class="btn-ghost" data-i18n="btn_close">Cerrar</button><button id="nlSend" class="btn-primary" data-i18n="nl_send">Enviar</button></div>
   </div>
 </div>
 
@@ -804,7 +814,10 @@
     var app=document.getElementById('app');
     if(app.classList.contains('dbmode')){ renderDb(); if(typeof loadHealth==='function') loadHealth(); }
     if(app.classList.contains('calmode')) renderCal();
-    if(active && !app.classList.contains('dbmode') && !app.classList.contains('calmode')) open_(active);
+    if(app.classList.contains('mediamode')) renderMediaRows();
+    if(app.classList.contains('nlmode')) nlUpdateCount();
+    var inSection=['dbmode','calmode','mediamode','nlmode'].some(function(m){return app.classList.contains(m);});
+    if(active && !inSection) open_(active);
   }
   // Reconstruye las estructuras con texto traducido según el idioma activo.
   function rebuildI18nVars(){
@@ -1394,7 +1407,7 @@
     fr.readAsDataURL(file);
   }
   window.mediaPick=mediaPick; window.mediaUpload=mediaUpload;
-  function openMedia(){ document.getElementById('mediaErr').textContent=''; loadMedia(function(){ renderMediaRows(); document.getElementById('mediaModal').style.display='flex'; }); }
+  function openMedia(){ document.getElementById('mediaErr').textContent=''; loadMedia(function(){ renderMediaRows(); }); }
   window.openMedia=openMedia;
 
   function renderCal(){
@@ -1851,7 +1864,7 @@
     var b=document.getElementById('nlSend');
     b.textContent=r.count?t('nl_send_n').replace('{n}',r.count):t('nl_send'); b.disabled=!r.count;
   }
-  function openNewsletter(){ document.getElementById('nlErr').textContent=''; nlUpdateCount(); document.getElementById('nlModal').style.display='flex'; }
+  function openNewsletter(){ document.getElementById('nlErr').textContent=''; nlUpdateCount(); }
   function nlPost(payload, btn){ var orig=btn.textContent, err=document.getElementById('nlErr'); err.style.color=''; btn.disabled=true; btn.textContent=t('nl_sending');
     return apiPost('newsletter',payload).then(function(res){ return res.json().then(function(j){ return {ok:res.ok,j:j}; }); })
       .then(function(o){ if(!o.ok) throw ((o.j&&o.j.error)||'error'); return o.j; })
@@ -1859,15 +1872,15 @@
       .then(function(j){ btn.disabled=false; btn.textContent=orig; return j; }, function(e){ btn.disabled=false; btn.textContent=orig; });
   }
 
-  function setNav(id){ ['navConv','navCal','navDb'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
+  function clearModes(a){ a.classList.remove('calmode','dbmode','mediamode','nlmode'); }
+  function setNav(id){ ['navConv','navCal','navDb','navMedia','navNewsletter'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
 
   function setUrl(p){ try{ history.replaceState(null,'',p); }catch(e){} }
-  document.getElementById('navConv').onclick=function(){ var a=document.getElementById('app'); a.classList.remove('calmode'); a.classList.remove('dbmode'); setNav('navConv'); setUrl('/admin'); };
-  document.getElementById('navCal').onclick=function(){ var a=document.getElementById('app'); a.classList.add('calmode'); a.classList.remove('dbmode'); setNav('navCal'); setUrl('/admin'); buildLeadsDL(); loadAppts(renderCal); };
-  document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); a.classList.add('dbmode'); a.classList.remove('calmode'); setNav('navDb'); setUrl('/admin/db'); dbPage=1; loadHealth(); loadAppts(renderDb); };
-  document.getElementById('navMedia').onclick=function(){ openMedia(); };
-  document.getElementById('navNewsletter').onclick=function(){ openNewsletter(); };
-  document.getElementById('nlClose').onclick=function(){ document.getElementById('nlModal').style.display='none'; };
+  document.getElementById('navConv').onclick=function(){ clearModes(document.getElementById('app')); setNav('navConv'); setUrl('/admin'); };
+  document.getElementById('navCal').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('calmode'); setNav('navCal'); setUrl('/admin'); buildLeadsDL(); loadAppts(renderCal); };
+  document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dbmode'); setNav('navDb'); setUrl('/admin/db'); dbPage=1; loadHealth(); loadAppts(renderDb); };
+  document.getElementById('navMedia').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('mediamode'); setNav('navMedia'); setUrl('/admin'); openMedia(); };
+  document.getElementById('navNewsletter').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('nlmode'); setNav('navNewsletter'); setUrl('/admin'); openNewsletter(); };
   document.getElementById('nlScope').onchange=function(){ nlUpdateCount(); };
   document.getElementById('nlTestBtn').onclick=function(){
     var to=document.getElementById('nlTest').value.trim(), subject=document.getElementById('nlSubject').value.trim(), body=document.getElementById('nlBody').value.trim();
@@ -1887,7 +1900,6 @@
     if(document.getElementById('nlScope').value==='selected') payload.phones=r.phones;
     nlPost(payload, this).then(function(j){ if(j){ err.style.color='var(--accent)'; err.textContent=t('nl_sent').replace('{s}',j.sent||0).replace('{f}',j.failed||0); } });
   };
-  document.getElementById('mediaClose').onclick=function(){ document.getElementById('mediaModal').style.display='none'; };
   document.getElementById('mediaAdd').onclick=function(){ readMediaFromDOM(); mediaItems.push({id:'',label:'',type:'image',url:'',caption:''}); renderMediaRows(); };
   document.getElementById('mediaSave').onclick=function(){
     readMediaFromDOM();

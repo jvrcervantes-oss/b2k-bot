@@ -1713,7 +1713,10 @@ app.get("/unsubscribe", async (req, res) => {
 // Envío de la campaña (auth). Body: { subject, body, phones?[], testTo? }.
 app.post("/admin/api/newsletter", async (req, res) => {
   if (!adminAuth(req, res)) return;
-  if (!MAIL_READY) return res.status(400).json({ error: "Falta configurar el email: verifica un dominio en Brevo y pon BREVO_API_KEY y MAIL_FROM en Railway." });
+  if (!MAIL_READY) {
+    const missing = [!BREVO_API_KEY && "BREVO_API_KEY", !MAIL_FROM && "MAIL_FROM"].filter(Boolean).join(" y ");
+    return res.status(400).json({ error: `El servicio no ve estas variables en Railway: ${missing}. Revisa el nombre EXACTO (mayúsculas, sin espacios), que estén en el servicio B2K y que haya reiniciado tras guardarlas.` });
+  }
   const subject = String((req.body && req.body.subject) || "").trim();
   const body = String((req.body && req.body.body) || "").trim();
   const testTo = String((req.body && req.body.testTo) || "").trim().toLowerCase();
@@ -1787,6 +1790,7 @@ app.listen(PORT, async () => {
   console.log(`[${PROJECT_NAME}] Bot escuchando en puerto ${PORT}`);
   console.log(`[${PROJECT_NAME}] OWNER_PHONE: ${OWNER_PHONE ? normalizePhone(OWNER_PHONE) : "⚠️  NO CONFIGURADO"}`);
   console.log(`[${PROJECT_NAME}] CRM (BD): ${redisClient ? "Redis (persistente)" : "RAM (volátil — configura REDIS_URL)"}`);
+  console.log(`[${PROJECT_NAME}] Email (Brevo): ${MAIL_READY ? "🟢 listo" : `⚠️  NO configurado → BREVO_API_KEY=${BREVO_API_KEY ? "ok" : "FALTA"}, MAIL_FROM=${MAIL_FROM ? "ok" : "FALTA"}`}`);
 
   // El CRM vive en Redis. El Google Sheet solo se prueba/usa si CRM_SHEET_SYNC está activado.
   if (SHEET_SYNC && SHEET_ID && GOOGLE_SERVICE_ACCOUNT) {
