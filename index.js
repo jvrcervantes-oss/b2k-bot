@@ -45,8 +45,8 @@ const {
   INTRO_TEMPLATE_LANG,
   INTRO_TEMPLATE_VARS,
   CRM_SHEET_SYNC,
-  RESEND_API_KEY,          // newsletter por email (proveedor Resend). Sin esto, el envío está desactivado.
-  MAIL_FROM,               // "Bali Moto Adventures <newsletter@balimotoadventures.com>" (dominio verificado en Resend)
+  BREVO_API_KEY,           // newsletter por email (proveedor Brevo). Sin esto, el envío está desactivado.
+  MAIL_FROM,               // "Bali Moto Adventures <newsletter@balimotoadventures.com>" (dominio verificado en Brevo)
   MAIL_REPLY_TO,           // opcional: a dónde llegan las respuestas
   MAIL_COMPANY,            // pie legal del email (nombre + dirección física — obligatorio anti-spam)
   MAIL_UNSUB_SECRET,       // firma los links de baja; si falta, se usa ADMIN_PASSWORD como fallback
@@ -1635,10 +1635,15 @@ app.post("/admin/api/media", async (req, res) => {
 });
 
 // ─── NEWSLETTER POR EMAIL ─────────────────────────────────────────
-// Envío masivo a los emails capturados en el CRM. Proveedor: Resend (HTTPS API).
-// Requisitos: dominio verificado en Resend + RESEND_API_KEY y MAIL_FROM en Railway.
+// Envío masivo a los emails capturados en el CRM. Proveedor: Brevo (API transaccional).
+// Requisitos: dominio verificado en Brevo + BREVO_API_KEY y MAIL_FROM en Railway.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MAIL_READY = !!(RESEND_API_KEY && MAIL_FROM);
+const MAIL_READY = !!(BREVO_API_KEY && MAIL_FROM);
+// "Nombre <email>" → {name, email} para el sender de Brevo. Sin ángulos, todo es el email.
+function parseFrom(s) {
+  const m = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(s || "");
+  return m ? { name: m[1] || undefined, email: m[2].trim() } : { email: (s || "").trim() };
+}
 
 // Set de bajas (opt-out). Guardado en Redis; fallback en memoria.
 const fallbackUnsub = new Set();
@@ -1682,13 +1687,13 @@ function renderEmailHtml(bodyHtml, unsub) {
 </div></body></html>`;
 }
 
-// Envía un email vía Resend. Devuelve {ok} o {ok:false,error}.
+// Envía un email vía Brevo (API transaccional). Devuelve {ok} o {ok:false,error}.
 async function sendEmail({ to, subject, html }) {
   if (!MAIL_READY) return { ok: false, error: "email no configurado" };
   try {
-    await axios.post("https://api.resend.com/emails",
-      { from: MAIL_FROM, to: [to], subject, html, ...(MAIL_REPLY_TO ? { reply_to: MAIL_REPLY_TO } : {}) },
-      { headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" }, timeout: 15000 });
+    await axios.post("https://api.brevo.com/v3/smtp/email",
+      { sender: parseFrom(MAIL_FROM), to: [{ email: to }], subject, htmlContent: html, ...(MAIL_REPLY_TO ? { replyTo: { email: MAIL_REPLY_TO } } : {}) },
+      { headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json", accept: "application/json" }, timeout: 15000 });
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e.response?.data ? JSON.stringify(e.response.data) : e.message };
@@ -1708,7 +1713,7 @@ app.get("/unsubscribe", async (req, res) => {
 // Envío de la campaña (auth). Body: { subject, body, phones?[], testTo? }.
 app.post("/admin/api/newsletter", async (req, res) => {
   if (!adminAuth(req, res)) return;
-  if (!MAIL_READY) return res.status(400).json({ error: "Falta configurar el email: verifica un dominio en Resend y pon RESEND_API_KEY y MAIL_FROM en Railway." });
+  if (!MAIL_READY) return res.status(400).json({ error: "Falta configurar el email: verifica un dominio en Brevo y pon BREVO_API_KEY y MAIL_FROM en Railway." });
   const subject = String((req.body && req.body.subject) || "").trim();
   const body = String((req.body && req.body.body) || "").trim();
   const testTo = String((req.body && req.body.testTo) || "").trim().toLowerCase();
@@ -1740,7 +1745,7 @@ app.post("/admin/api/newsletter", async (req, res) => {
   }
   if (!recipients.length) return res.json({ ok: true, sent: 0, failed: 0, total: 0 });
 
-  // Secuencial con pausa corta (evita el rate-limit de Resend). ponytail: para listas muy
+  // Secuencial con pausa corta (evita el rate-limit de Brevo). ponytail: para listas muy
   // grandes conviene una cola; con volúmenes de leads de una agencia esto sobra.
   let sent = 0, failed = 0;
   for (const r of recipients) {

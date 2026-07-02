@@ -49,17 +49,17 @@ un servicio separado que apunta a este mismo repo con su propia config.
 
 ### Newsletter por email (opcional)
 
-Activa el envío de newsletters desde el panel (`/admin` → icono del sobre). Sin `RESEND_API_KEY` + `MAIL_FROM`, el botón de enviar avisa de que falta configurarlo.
+Activa el envío de newsletters desde el panel (`/admin` → icono del sobre). Sin `BREVO_API_KEY` + `MAIL_FROM`, el botón de enviar avisa de que falta configurarlo.
 
 | Variable | Descripción | Ejemplo |
 |----------|-------------|---------|
-| `RESEND_API_KEY` | API key de [resend.com](https://resend.com) (proveedor de email) | `re_...` |
-| `MAIL_FROM` | Remitente. El dominio DEBE estar verificado en Resend (SPF/DKIM en el DNS) | `Bali Moto Adventures <newsletter@balimotoadventures.com>` |
+| `BREVO_API_KEY` | API key de [brevo.com](https://brevo.com) (SMTP & API → API Keys) | `xkeysib-...` |
+| `MAIL_FROM` | Remitente. El dominio DEBE estar verificado en Brevo (SPF/DKIM en el DNS) | `Bali Moto Adventures <newsletter@balimotoadventures.com>` |
 | `MAIL_REPLY_TO` | (Opcional) a dónde llegan las respuestas | `info@balimotoadventures.com` |
 | `MAIL_COMPANY` | Pie legal del email: nombre + dirección física (obligatorio anti-spam) | `Bali Moto Adventures · Jl. ... , Bali, Indonesia` |
 | `MAIL_UNSUB_SECRET` | (Opcional) firma los links de baja; si falta se usa `ADMIN_PASSWORD` | cualquier texto largo |
 
-> ⚠️ **Deliverability:** sin dominio verificado en Resend los correos caen en spam o se rechazan. La baja (`/unsubscribe`) es pública y automática; todo email la incluye en el pie.
+> ⚠️ **Deliverability:** sin dominio verificado en Brevo (Senders, Domains & Dedicated IPs → añadir dominio → registros SPF/DKIM en el DNS) los correos caen en spam o se rechazan. La baja (`/unsubscribe`) es pública y automática; todo email la incluye en el pie.
 
 ## Cómo añadir un proyecto nuevo
 
