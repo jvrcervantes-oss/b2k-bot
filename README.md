@@ -57,7 +57,10 @@ Activa el envío de newsletters desde el panel (`/admin` → icono del sobre). S
 | `MAIL_FROM` | Remitente. El dominio DEBE estar verificado en Brevo (SPF/DKIM en el DNS) | `Bali Moto Adventures <newsletter@balimotoadventures.com>` |
 | `MAIL_REPLY_TO` | (Opcional) a dónde llegan las respuestas | `info@balimotoadventures.com` |
 | `MAIL_COMPANY` | Pie legal del email: nombre + dirección física (obligatorio anti-spam) | `Bali Moto Adventures · Jl. ... , Bali, Indonesia` |
+| `MAIL_LOGO` | (Opcional) URL del logo para la cabecera del email; si no, se usa el nombre en texto | `https://balimotoadventures.com/logo.png` |
 | `MAIL_UNSUB_SECRET` | (Opcional) firma los links de baja; si falta se usa `ADMIN_PASSWORD` | cualquier texto largo |
+
+**Formato del mensaje (markdown ligero):** `**negrita**`, `*cursiva*`, `## Título`, `### Subtítulo`, `- lista`, `---` (separador), `[texto](enlace)`, `[[Botón|enlace]]` (CTA), `![alt](url)` (imagen). El botón "Enviar prueba" del panel muestra cómo queda.
 
 > ⚠️ **Deliverability:** sin dominio verificado en Brevo (Senders, Domains & Dedicated IPs → añadir dominio → registros SPF/DKIM en el DNS) los correos caen en spam o se rechazan. La baja (`/unsubscribe`) es pública y automática; todo email la incluye en el pie.
 
