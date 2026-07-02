@@ -50,6 +50,7 @@ const {
   MAIL_REPLY_TO,           // opcional: a dónde llegan las respuestas
   MAIL_COMPANY,            // pie legal del email (nombre + dirección física — obligatorio anti-spam)
   MAIL_UNSUB_SECRET,       // firma los links de baja; si falta, se usa ADMIN_PASSWORD como fallback
+  MAIL_LOGO,               // (opcional) URL del logo para la cabecera del email; si no, se usa el nombre en texto
 } = process.env;
 
 // La BD del CRM es Redis (lead:phone + leads_index). El Google Sheet era un espejo
@@ -1668,21 +1669,50 @@ function unsubUrl(host, email) {
 function escHtml(s) {
   return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-// Texto plano del compositor → párrafos HTML (líneas en blanco separan párrafos).
-function textToHtml(text) {
-  return String(text || "").split(/\n{2,}/).map((p) => `<p style="margin:0 0 16px">${escHtml(p).replace(/\n/g, "<br>")}</p>`).join("");
+// Formato en línea de una línea de texto (se escapa HTML ANTES → sin inyección).
+// Soporta: imagen, botón [[Texto|url]], enlace [txt](url), **negrita**, *cursiva*.
+function inlineMd(s) {
+  s = escHtml(s);
+  s = s.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;border-radius:10px;margin:10px 0">');
+  s = s.replace(/\[\[([^\]|]+)\|(https?:\/\/[^\]\s]+)\]\]/g, '<a href="$2" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:13px 24px;border-radius:9px;font-weight:600;margin:8px 0">$1</a>');
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" style="color:#c2410c;text-decoration:underline">$1</a>');
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  return s;
+}
+// Markdown ligero del compositor → HTML. Bloques: ## / ### títulos, - lista, --- separador,
+// líneas en blanco = párrafo nuevo. El resto se procesa en línea con inlineMd.
+function mdToHtml(text) {
+  const lines = String(text || "").replace(/\r/g, "").split("\n");
+  let html = "", listOpen = false, para = [];
+  const flushPara = () => { if (para.length) { html += `<p style="margin:0 0 16px">${para.map(inlineMd).join("<br>")}</p>`; para = []; } };
+  const closeList = () => { if (listOpen) { html += "</ul>"; listOpen = false; } };
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) { flushPara(); closeList(); continue; }
+    if (/^###\s+/.test(line)) { flushPara(); closeList(); html += `<h3 style="font-size:16px;margin:18px 0 8px;color:#111">${inlineMd(line.replace(/^###\s+/, ""))}</h3>`; continue; }
+    if (/^##\s+/.test(line)) { flushPara(); closeList(); html += `<h2 style="font-size:21px;margin:24px 0 10px;color:#111">${inlineMd(line.replace(/^##\s+/, ""))}</h2>`; continue; }
+    if (/^---+$/.test(line)) { flushPara(); closeList(); html += '<hr style="border:0;border-top:1px solid #e6e6e6;margin:24px 0">'; continue; }
+    if (/^[-*]\s+/.test(line)) { flushPara(); if (!listOpen) { html += '<ul style="margin:0 0 16px;padding-left:20px">'; listOpen = true; } html += `<li style="margin:0 0 6px">${inlineMd(line.replace(/^[-*]\s+/, ""))}</li>`; continue; }
+    para.push(line);
+  }
+  flushPara(); closeList();
+  return html;
 }
 // Envoltorio de marca del email (cabecera + cuerpo + pie legal con baja).
 function renderEmailHtml(bodyHtml, unsub) {
   const brand = escHtml(PROJECT_NAME || "Newsletter");
   const company = escHtml(MAIL_COMPANY || PROJECT_NAME || "");
-  return `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a">
-<div style="max-width:600px;margin:0 auto;padding:24px">
-  <div style="font-size:18px;font-weight:700;letter-spacing:.02em;padding:8px 0 20px">${brand}</div>
-  <div style="background:#fff;border-radius:12px;padding:28px 26px;font-size:15px;line-height:1.6">${bodyHtml}</div>
-  <div style="font-size:12px;color:#8a8a8a;padding:18px 4px;line-height:1.5">
+  const header = MAIL_LOGO
+    ? `<img src="${escHtml(MAIL_LOGO)}" alt="${brand}" style="height:42px;display:block">`
+    : `<div style="font-size:21px;font-weight:800;letter-spacing:.02em;color:#111">${brand}</div>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background:#f2f2f0">
+<div style="max-width:600px;margin:0 auto;padding:28px 20px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#222">
+  <div style="padding:4px 4px 22px">${header}</div>
+  <div style="background:#fff;border-radius:14px;padding:34px 30px;font-size:15.5px;line-height:1.65;color:#2a2a2a">${bodyHtml}</div>
+  <div style="font-size:12px;color:#9a9a9a;padding:20px 6px;line-height:1.6;text-align:center">
     ${company ? company + "<br>" : ""}
-    <a href="${unsub}" style="color:#8a8a8a">Unsubscribe</a> — you received this because you enquired with us.
+    <a href="${unsub}" style="color:#9a9a9a">Unsubscribe</a> — you received this because you enquired with us.
   </div>
 </div></body></html>`;
 }
@@ -1722,7 +1752,7 @@ app.post("/admin/api/newsletter", async (req, res) => {
   const testTo = String((req.body && req.body.testTo) || "").trim().toLowerCase();
   if (!subject || !body) return res.status(400).json({ error: "asunto y cuerpo requeridos" });
   const host = req.get("host");
-  const bodyHtml = textToHtml(body);
+  const bodyHtml = mdToHtml(body);
 
   // Envío de PRUEBA: un solo correo a la dirección indicada, no toca el CRM ni las bajas.
   if (testTo) {
