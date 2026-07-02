@@ -112,6 +112,7 @@
   .row .mid{flex:1;min-width:0}
   .row .nm{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .row .ms{font-size:12.5px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .row .ms .pre{font-weight:600;color:var(--ink);opacity:.75}
   .row .rt{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
   .row .tm{font-size:11px;color:#9aa3b5}
   .dot{width:9px;height:9px;border-radius:50%}
@@ -337,7 +338,9 @@
   .cal-day{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:6px;display:flex;flex-direction:column;gap:3px;overflow:hidden;min-height:0}
   .cal-day.out{background:#f0f1f4;opacity:.5}
   .cal-day .dnum{font-size:12px;font-weight:600;color:var(--ink-soft);align-self:flex-start}
+  .cal-day.today{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:color-mix(in srgb, var(--accent) 8%, var(--card))}
   .cal-day.today .dnum{background:var(--accent);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center}
+  .cal-day.today .todaytag{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent);align-self:flex-start;margin-top:-2px}
   .appt{font-size:11px;background:var(--accent-soft);color:#1d4ed8;border-radius:5px;padding:2px 6px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid var(--accent)}
   .cal-side{width:280px;border-left:1px solid var(--line);background:var(--card);padding:18px;overflow-y:auto;flex-shrink:0}
   .cal-side h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:12px}
@@ -480,6 +483,7 @@
   .media-row input,.media-row select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;background:var(--card);color:var(--ink);width:100%}
   .media-row .mr-label{flex:1}
   .media-row .mr-type{width:104px;flex-shrink:0;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7488' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center;background-size:11px;padding-right:26px;cursor:pointer}
+  .media-row .mr-use{margin-bottom:7px}
   .media-row .mr-urlrow{display:flex;gap:8px;align-items:center;margin-bottom:7px}
   .media-row .mr-urlrow .mr-url{margin-bottom:0}
   .media-row .mr-up{width:38px;height:36px;flex-shrink:0;border:1px solid var(--line);background:var(--card);color:var(--accent);border-radius:8px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .15s ease,border-color .15s ease}
@@ -667,7 +671,7 @@
   var I18N = {
     es:{ brand:'CRM BMA', login_title:'Panel de conversaciones', login_sub:'CRM BMA · acceso del estudio', ph_pw:'Contraseña', btn_enter:'Entrar', err_pw:'Contraseña incorrecta',
       nav_conv:'Conversaciones', nav_cal:'Calendario', nav_db:'Base de datos', nav_media:'Fotos y vídeos', nav_theme:'Cambiar tema', nav_logout:'Salir', nav_lang:'English',
-      m_media:'Fotos y vídeos del bot', media_help:'El bot envía estos archivos cuando ayudan a vender. Sube el archivo desde tu equipo (botón ⬆) o pega una URL pública. Ponle una etiqueta corta (ej. "intro", "bikes", "route").', btn_media_add:'+ Añadir archivo', media_empty:'Aún no hay archivos. Añade el primero 👇', mt_image:'Foto', mt_video:'Vídeo', mr_ph_label:'etiqueta (ej. intro)', mr_ph_url:'sube ⬆ o pega una URL pública', mr_ph_cap:'pie de foto (opcional)', al_media_url:'Cada archivo necesita una etiqueta y una URL (sube el archivo o pega una URL).', al_media_saved:'Biblioteca guardada ✓', ti_media_up:'Subir archivo del equipo', al_media_big:'Archivo demasiado grande (máx 16 MB).', al_media_uploaded:'Archivo subido ✓',
+      m_media:'Fotos y vídeos del bot', media_help:'El bot envía estos archivos cuando ayudan a vender. Sube el archivo (botón ⬆) o pega una URL pública, ponle una etiqueta corta (ej. "carreteras") y —importante— en "cuándo usarlo" describe la situación en la que el bot debe enviarlo (ej. "cuando pregunten cómo son las carreteras o el estado del asfalto"). Eso es lo que el bot lee para decidir; el pie de foto es lo que ve el cliente.', btn_media_add:'+ Añadir archivo', media_empty:'Aún no hay archivos. Añade el primero 👇', mt_image:'Foto', mt_video:'Vídeo', mr_ph_label:'etiqueta (ej. intro)', mr_ph_url:'sube ⬆ o pega una URL pública', mr_ph_use:'cuándo usarlo (ej. si preguntan por las carreteras)', mr_ph_cap:'pie de foto que ve el cliente (opcional)', al_media_url:'Cada archivo necesita una etiqueta y una URL (sube el archivo o pega una URL).', al_media_saved:'Biblioteca guardada ✓', ti_media_up:'Subir archivo del equipo', al_media_big:'Archivo demasiado grande (máx 16 MB).', al_media_uploaded:'Archivo subido ✓',
       h_conv:'Conversaciones', st_wait:'por responder', st_int:'interesados', st_book:'en reserva', st_today:'hoy',
       ph_search_lead:'Buscar lead…', chip_all:'Todos', chip_wait:'🔔 Por responder', chip_int:'🟡 Interesados', chip_book:'🔴 Reserva',
       pick_lead:'Selecciona un lead', nochat:'Elige una conversación de la izquierda', ph_reply:'Escribe para tomar el control…', t_canned:'Respuestas rápidas', t_attach:'Enviar foto/vídeo', t_send:'Enviar', by_bot:'Enviado por el bot', by_human:'Enviado a mano', detail_empty:'Selecciona un lead para ver su ficha',
@@ -701,13 +705,13 @@
       act_archive:'Archivar', act_restore:'Restaurar', act_open:'Abrir conversación', act_delete:'Borrar',
       act_outreach:'💬 Iniciar conversación', act_reoutreach:'💬 Reenviar intro', bulk_outreach:'💬 Iniciar conv.',
       outreach_ing:'⏳ Enviando…', outreach_ok:'Intro enviada', outreach_err:'No se pudo iniciar la conversación. ¿Está configurada la plantilla de intro (INTRO_TEMPLATE_NAME) en Railway?',
-      q_assign:'Asignar', q_call:'Agendar llamada', call_title:'Llamada con', al_appt_date:'Pon fecha y hora',
+      q_assign:'Asignar', q_call:'Agendar llamada', call_title:'Llamada con', al_appt_date:'Pon fecha y hora', pre_bot:'Bot: ', pre_you:'Tú: ', act_call:'📞 Agendar llamada', cal_today:'Hoy',
       e_owner:'Propietario', e_followup:'Próximo seguimiento', e_tags:'Etiquetas', ph_tag:'Añadir etiqueta…', f_activity:'Actividad',
       tl_empty:'Sin actividad registrada', tl_created:'Lead creado', tl_imported:'Importado de Meta', tl_status:'Estado', tl_owner:'Asignado a', tl_appt:'Cita agendada', tl_note:'Nota actualizada', tl_tag:'Etiqueta añadida', tl_archived:'Archivado', tl_restored:'Restaurado', tl_enriched:'Datos enriquecidos', tl_outreach:'Conversación iniciada (intro)', tl_fu_reminded:'Recordatorio de seguimiento enviado',
       al_save:'No se pudo guardar', edit_tpl:'✎ Editar plantillas…', locale:'es-ES' },
     en:{ brand:'CRM BMA', login_title:'Conversations panel', login_sub:'CRM BMA · studio access', ph_pw:'Password', btn_enter:'Sign in', err_pw:'Wrong password',
       nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_media:'Photos & videos', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español',
-      m_media:'Bot photos & videos', media_help:'The bot sends these files when they help the sale. Upload a file from your device (⬆ button) or paste a public URL. Give it a short label (e.g. "intro", "bikes", "route").', btn_media_add:'+ Add file', media_empty:'No files yet. Add the first one 👇', mt_image:'Photo', mt_video:'Video', mr_ph_label:'label (e.g. intro)', mr_ph_url:'upload ⬆ or paste a public URL', mr_ph_cap:'caption (optional)', al_media_url:'Each file needs a label and a URL (upload a file or paste a URL).', al_media_saved:'Library saved ✓', ti_media_up:'Upload file from device', al_media_big:'File too large (max 16 MB).', al_media_uploaded:'File uploaded ✓',
+      m_media:'Bot photos & videos', media_help:'The bot sends these files when they help the sale. Upload a file (⬆ button) or paste a public URL, give it a short label (e.g. "roads") and — importantly — in "when to use" describe the situation the bot should send it in (e.g. "when they ask what the roads or tarmac are like"). That is what the bot reads to decide; the caption is what the customer sees.', btn_media_add:'+ Add file', media_empty:'No files yet. Add the first one 👇', mt_image:'Photo', mt_video:'Video', mr_ph_label:'label (e.g. intro)', mr_ph_url:'upload ⬆ or paste a public URL', mr_ph_use:'when to use it (e.g. if they ask about the roads)', mr_ph_cap:'caption the customer sees (optional)', al_media_url:'Each file needs a label and a URL (upload a file or paste a URL).', al_media_saved:'Library saved ✓', ti_media_up:'Upload file from device', al_media_big:'File too large (max 16 MB).', al_media_uploaded:'File uploaded ✓',
       h_conv:'Conversations', st_wait:'to reply', st_int:'interested', st_book:'booking', st_today:'today',
       ph_search_lead:'Search lead…', chip_all:'All', chip_wait:'🔔 To reply', chip_int:'🟡 Interested', chip_book:'🔴 Booking',
       pick_lead:'Select a lead', nochat:'Pick a conversation on the left', ph_reply:'Type to take over…', t_canned:'Quick replies', t_attach:'Send photo/video', t_send:'Send', by_bot:'Sent by the bot', by_human:'Sent manually', detail_empty:'Select a lead to see their card',
@@ -741,7 +745,7 @@
       act_archive:'Archive', act_restore:'Restore', act_open:'Open conversation', act_delete:'Delete',
       act_outreach:'💬 Start conversation', act_reoutreach:'💬 Resend intro', bulk_outreach:'💬 Start conv.',
       outreach_ing:'⏳ Sending…', outreach_ok:'Intro sent', outreach_err:'Could not start the conversation. Is the intro template (INTRO_TEMPLATE_NAME) configured in Railway?',
-      q_assign:'Assign', q_call:'Schedule call', call_title:'Call with', al_appt_date:'Set date and time',
+      q_assign:'Assign', q_call:'Schedule call', call_title:'Call with', al_appt_date:'Set date and time', pre_bot:'Bot: ', pre_you:'You: ', act_call:'📞 Schedule call', cal_today:'Today',
       e_owner:'Owner', e_followup:'Next follow-up', e_tags:'Tags', ph_tag:'Add tag…', f_activity:'Activity',
       tl_empty:'No activity yet', tl_created:'Lead created', tl_imported:'Imported from Meta', tl_status:'Status', tl_owner:'Assigned to', tl_appt:'Appointment booked', tl_note:'Note updated', tl_tag:'Tag added', tl_archived:'Archived', tl_restored:'Restored', tl_enriched:'Data enriched', tl_outreach:'Conversation started (intro)', tl_fu_reminded:'Follow-up reminder sent',
       al_save:"Couldn't save", edit_tpl:'✎ Edit templates…', locale:'en-GB' }
@@ -855,9 +859,10 @@
       var c = color(l.name||l.phone), it = l.intent||'exploring';
       var dotc = it==='booking'?'var(--red)':it==='interested'?'var(--amber)':it==='escalate'?'#9ca3af':'var(--green)';
       var pill = l.waiting ? '<span class="wpill">NUEVO</span>' : '<span class="dot" style="background:'+dotc+'"></span>';
+      var pre = l.lastBy==='bot' ? '<span class="pre">'+t('pre_bot')+'</span>' : l.lastBy==='human' ? '<span class="pre">'+t('pre_you')+'</span>' : '';
       return '<div class="row'+(l.phone===active?' active':'')+(l.waiting?' wait':'')+'" onclick="open_(\''+l.phone+'\')">'
         + '<div class="av" style="background:'+c+'">'+esc(initials(l.name||l.phone))+'</div>'
-        + '<div class="mid"><div class="nm">'+esc(l.name||l.phone)+'</div><div class="ms">'+esc(l.lastMessage||'')+'</div></div>'
+        + '<div class="mid"><div class="nm">'+esc(l.name||l.phone)+'</div><div class="ms">'+pre+esc(l.lastMessage||'')+'</div></div>'
         + '<div class="rt"><span class="tm">'+ago(l.updatedAt)+'</span>'+pill+'</div></div>';
     }).join('');
   }
@@ -1033,13 +1038,21 @@
   function qAssign(owner){ if(!curLead) return; var v=(curLead.owner===owner)?'':owner;
     apiPost('lead',{phone:curLead.phone,owner:v}).then(function(r){ if(!r.ok) throw 0; syncLead({owner:v}); if(active) open_(active); }).catch(function(){ alert(t('al_save')); });
   }
-  function fichaScheduleCall(){ if(!curLead) return;
-    var who=(curLead.name||curLead.phone);
+  // Fecha/hora por defecto al agendar: mañana a las 10:00 (en local del navegador), lista para ajustar.
+  function defaultApptWhen(){ var d=new Date(); d.setDate(d.getDate()+1); d.setHours(10,0,0,0);
+    return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)+'T10:00'; }
+  // Abre el modal de cita ya rellenado para un lead concreto (usado desde la ficha y desde la tabla).
+  function scheduleCallFor(lead){ if(!lead) return;
+    var who=(lead.name||lead.phone);
     openApptCreate();
-    document.getElementById('amLead').value=who+' (+'+curLead.phone+')';
+    document.getElementById('amLead').value=who+' (+'+lead.phone+')';
     document.getElementById('amTitle').value=t('call_title')+' '+who;
-    fillCloserOpts(curLead.owner||''); // el closer por defecto = quien lleva el lead; se puede cambiar
+    document.getElementById('amWhen').value=defaultApptWhen();
+    fillCloserOpts(lead.owner||''); // el closer por defecto = quien lleva el lead; se puede cambiar
   }
+  function fichaScheduleCall(){ scheduleCallFor(curLead); }
+  function rowScheduleCall(phone){ closeRowMenu(); scheduleCallFor(leads.filter(function(x){return x.phone===phone;})[0]); }
+  window.rowScheduleCall=rowScheduleCall;
   window.leadAddTag=leadAddTag; window.leadRemoveTag=leadRemoveTag; window.fichaArchive=fichaArchive; window.fichaDelete=fichaDelete; window.fichaOutreach=fichaOutreach; window.rowOutreach=rowOutreach; window.qAssign=qAssign; window.fichaScheduleCall=fichaScheduleCall;
   function flash(id, ok){
     var b = document.getElementById(id); if(!b) return; var orig = b.textContent;
@@ -1310,6 +1323,7 @@
     mediaItems=Array.prototype.map.call(rows,function(row){
       return { id:row.getAttribute('data-id')||'', label:row.querySelector('.mr-label').value.trim(),
         type:row.querySelector('.mr-type').value, url:row.querySelector('.mr-url').value.trim(),
+        use:row.querySelector('.mr-use').value.trim(),
         caption:row.querySelector('.mr-cap').value.trim() };
     });
   }
@@ -1325,6 +1339,7 @@
         +'<div class="mr-urlrow"><input class="mr-url" value="'+esc(m.url||'')+'" placeholder="'+t('mr_ph_url')+'">'
         +'<button class="mr-up" onclick="mediaPick('+i+')" title="'+t('ti_media_up')+'">⬆</button>'
         +'<input type="file" class="mr-file" accept="image/*,video/*" style="display:none" onchange="mediaUpload('+i+',this)"></div>'
+        +'<input class="mr-use" value="'+esc(m.use||'')+'" placeholder="'+t('mr_ph_use')+'">'
         +'<input class="mr-cap" value="'+esc(m.caption||'')+'" placeholder="'+t('mr_ph_cap')+'"></div>';
     }).join('');
   }
@@ -1365,7 +1380,7 @@
       var da=appts.filter(function(a){ return sameDay(new Date(a.when),d); }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); });
       var chips=da.slice(0,3).map(function(a){ return '<div class="appt" onclick="openApptView(\''+a.id+'\')" title="'+esc(a.title)+(a.closer?' · '+esc(a.closer):'')+'">'+timeOf(a.when)+' '+esc(a.title)+'</div>'; }).join('');
       if(da.length>3) chips+='<div class="appt" style="background:none;border:0;color:#9aa3b5">+'+(da.length-3)+' '+t('more')+'</div>';
-      html+='<div class="cal-day'+(out?' out':'')+(isToday?' today':'')+'"><span class="dnum">'+d.getDate()+'</span>'+chips+'</div>';
+      html+='<div class="cal-day'+(out?' out':'')+(isToday?' today':'')+'"><span class="dnum">'+d.getDate()+'</span>'+(isToday?'<span class="todaytag">'+t('cal_today')+'</span>':'')+chips+'</div>';
     }
     document.getElementById('calGrid').innerHTML=html;
     var now=Date.now()-3600000;
@@ -1659,7 +1674,8 @@
     ev.stopPropagation(); closeRowMenu();
     var l=leads.filter(function(x){return x.phone===phone;})[0]||{};
     var m=document.createElement('div'); m.className='rowmenu'; m.id='rowmenu';
-    m.innerHTML = '<div onclick="rowOutreach(\''+phone+'\')">'+t('act_outreach')+'</div>'
+    m.innerHTML = '<div onclick="rowScheduleCall(\''+phone+'\')">'+t('act_call')+'</div>'
+      + '<div onclick="rowOutreach(\''+phone+'\')">'+t('act_outreach')+'</div>'
       + (l.archived ? '<div onclick="rowArchive(\''+phone+'\',false)">'+t('act_restore')+'</div>' : '<div onclick="rowArchive(\''+phone+'\',true)">'+t('act_archive')+'</div>')
       + '<div onclick="openFromDb(\''+phone+'\')">'+t('act_open')+'</div>'
       + '<div class="danger" onclick="rowDelete(\''+phone+'\')">'+t('act_delete')+'</div>';

@@ -135,7 +135,7 @@ async function escPop() {
 const fallbackLeads = {};      // phone → { phone, name, intent, lastMessage, updatedAt }
 const fallbackNotified = {};   // phone → "interested" | "booking"
 
-async function recordLead(phone, name, intent, lastMessage) {
+async function recordLead(phone, name, intent, lastMessage, lastBy) {
   const prev = (await getLead(phone)) || {};
   const info = {
     ...prev,                                  // conserva email/package/travelDate/riders… ya capturados
@@ -143,6 +143,7 @@ async function recordLead(phone, name, intent, lastMessage) {
     name: name || prev.name || "",
     intent: intent || prev.intent || "exploring",
     lastMessage: (lastMessage || "").slice(0, 200),
+    lastBy: lastBy || prev.lastBy || "client", // quién mandó el último mensaje (client|bot|human) → preview del panel
     updatedAt: Date.now(),
   };
   if (!info.createdAt) {                       // primera vez que vemos este lead → fecha de alta + evento
@@ -1171,7 +1172,7 @@ app.post("/webhook", async (req, res) => {
     if (await isPaused(from)) {
       await saveConversation(from, history);
       const prev = await getLead(from);
-      await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "interested", text);
+      await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "interested", text, "client");
       await setInbound(from, Date.now());
       await resetFollowup(from);    // respondió → reinicia la cadencia de seguimiento
       await setWaiting(from, true); // el cliente espera respuesta humana → marcar en el panel
@@ -1185,9 +1186,9 @@ app.post("/webhook", async (req, res) => {
     // Media disponible (gestionada desde el panel): se inyecta para que el bot solo ofrezca lo que existe.
     const mediaLib = await getMediaLib();
     const mediaHint = mediaLib.length
-      ? "\n\nMEDIA YOU CAN SEND (real photos/videos that reinforce the pitch — use sparingly, at most 1–2 per conversation, only when it genuinely helps: the customer asks to see the trip/route/bikes, or as a warm intro). Available:\n"
-        + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.caption ? " — " + m.caption : ""}`).join("\n")
-        + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send labels from this list; never invent one."
+      ? "\n\nMEDIA YOU CAN SEND (real photos/videos that reinforce the pitch — use sparingly, at most 1–2 per conversation, only when it genuinely helps). For each item, 'when to use' tells you the situation to send it in; match it to what the customer is talking about. Available:\n"
+        + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.use ? " — when to use: " + m.use : ""}${m.caption ? " [caption sent to customer: \"" + m.caption + "\"]" : ""}`).join("\n")
+        + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send a media item when its 'when to use' genuinely matches the moment. Only send labels from this list; never invent one."
       : "";
     // Streaming (no create): evita el "Premature close" en respuestas no-stream y mantiene viva la conexión.
     const response = await claudeMessage({
@@ -1261,7 +1262,7 @@ app.post("/webhook", async (req, res) => {
     }
     await setWaiting(from, false); // el bot ya respondió → no queda pendiente
     await saveLead(from, profileName, text, intent);
-    await recordLead(from, profileName, intent, text);  // índice para el panel web
+    await recordLead(from, profileName, intent, reply, "bot");  // índice para el panel web (preview = última respuesta del bot)
     // Backstop de waitlist: si el bot PROMETIÓ seguir más adelante pero no fijó followup,
     // lo fijamos igual → el lead no se pierde, se suprime el auto-nudge (followupTick salta los
     // /waitlist/) y el owner recibe recordatorio en fecha (followUpReminderTick). La persona
@@ -1422,7 +1423,7 @@ app.post("/admin/api/send", async (req, res) => {
   await setPaused(phone, true); // al responder a mano, el bot deja de contestar a ese lead
   await setWaiting(phone, false); // ya respondido por el estudio → quitar el pendiente
   const prev = await getLead(phone);
-  await recordLead(phone, prev && prev.name, (prev && prev.intent) || "interested", text);
+  await recordLead(phone, prev && prev.name, (prev && prev.intent) || "interested", text, "human");
   res.json({ ok: true });
 });
 
@@ -1440,7 +1441,7 @@ app.post("/admin/api/send-media", async (req, res) => {
   await setPaused(phone, true);
   await setWaiting(phone, false);
   const prev = await getLead(phone);
-  await recordLead(phone, prev && prev.name, (prev && prev.intent) || "interested", caption || "[media]");
+  await recordLead(phone, prev && prev.name, (prev && prev.intent) || "interested", caption || "[media]", "human");
   res.json({ ok: true });
 });
 
@@ -1620,6 +1621,7 @@ app.post("/admin/api/media", async (req, res) => {
     type: m.type === "video" ? "video" : "image",
     url: String(m.url || "").trim(),
     caption: String(m.caption || "").trim().slice(0, 300),
+    use: String(m.use || "").trim().slice(0, 300), // cuándo enviarlo (guía interna para el bot; NO se envía al cliente)
   })).filter((m) => /^https?:\/\//i.test(m.url) && m.label);
   try { res.json(await setMediaLib(clean)); } catch (e) { res.status(500).json({ error: e.message }); }
 });
