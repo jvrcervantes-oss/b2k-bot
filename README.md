@@ -62,6 +62,8 @@ Activa el envío de newsletters desde el panel (`/admin` → icono del sobre). S
 
 **Formato del mensaje (markdown ligero):** `**negrita**`, `*cursiva*`, `## Título`, `### Subtítulo`, `- lista`, `---` (separador), `[texto](enlace)`, `[[Botón|enlace]]` (CTA), `![alt](url)` (imagen). El botón "Enviar prueba" del panel muestra cómo queda.
 
+**Usar plantillas de Brevo:** en el panel puedes elegir "Usar una plantilla de Brevo" en vez de escribir el email. El desplegable muestra tus plantillas **transaccionales activas** (Brevo → *Transactional → Templates*; las de campaña de marketing NO aparecen ahí). Personaliza con `{{params.name}}` y añade `{{params.unsub}}` en el pie para el enlace de baja (el bot lo pasa por cada destinatario).
+
 > ⚠️ **Deliverability:** sin dominio verificado en Brevo (Senders, Domains & Dedicated IPs → añadir dominio → registros SPF/DKIM en el DNS) los correos caen en spam o se rechazan. La baja (`/unsubscribe`) es pública y automática; todo email la incluye en el pie.
 
 ## Cómo añadir un proyecto nuevo
