@@ -298,6 +298,11 @@
   table.db th .sa{opacity:.5;font-size:10px}
   table.db td.chk,table.db th.chk{width:34px;text-align:center}
   tr.overdue td{box-shadow:inset 3px 0 0 var(--red)}
+  tr.hot td{box-shadow:inset 3px 0 0 var(--amber)}
+  tr.hot.overdue td{box-shadow:inset 3px 0 0 var(--red)} /* vencido gana al caliente */
+  td.db-hot{text-align:center;font-size:14px;line-height:1;cursor:default}
+  td.db-hot.h-mid{opacity:.6}
+  td.db-hot.h-lo{opacity:.28;font-size:12px;color:var(--ink-soft)}
   .tags{display:flex;gap:4px;flex-wrap:wrap}
   .tag{font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:20px;white-space:nowrap}
   .kebab{cursor:pointer;color:var(--ink-soft);font-weight:700;padding:0 6px;position:relative}
@@ -847,7 +852,7 @@
     LABEL = {exploring:t('i_exploring'),interested:t('i_interested'),booking:t('i_booking'),escalate:t('i_escalate')};
     STATUS_LABEL = {'':t('s_blank'),new:t('s_new'),quoted:t('s_quoted'),won:t('s_won'),lost:t('s_lost'),noshow:t('s_noshow')};
     ST_OPTS = [['',t('s_blank')],['new',t('s_new')],['quoted',t('s_quoted')],['won',t('s_won')],['lost',t('s_lost')],['noshow',t('s_noshow')]];
-    DB_COLS = [['name',t('c_name')],['phone',t('c_phone')],['email',t('c_email')],['country',t('c_country')],['package',t('c_package')],['riders',t('c_riders')],['value',t('c_value')],['owner',t('c_owner')],['appt',t('c_appt')],['nextFollowUp',t('c_followup')],['travelDate',t('c_travel')],['status',t('c_status')],['intent',t('c_intent')],['tags',t('c_tags')],['updatedAt',t('c_lastact')]];
+    DB_COLS = [['hot','🔥'],['name',t('c_name')],['phone',t('c_phone')],['email',t('c_email')],['country',t('c_country')],['package',t('c_package')],['riders',t('c_riders')],['value',t('c_value')],['owner',t('c_owner')],['appt',t('c_appt')],['nextFollowUp',t('c_followup')],['travelDate',t('c_travel')],['status',t('c_status')],['intent',t('c_intent')],['tags',t('c_tags')],['updatedAt',t('c_lastact')]];
   }
 
   function api(path){ return fetch('/admin/api/' + path, { headers: { 'X-Admin-Key': KEY } }); }
@@ -1461,9 +1466,10 @@
   // ── BASE DE DATOS: tabla de TODOS los clientes ──
   var dbSearch = '', dbPage = 1, DB_PAGE_SIZE = 25;
   var isMobile = window.matchMedia && window.matchMedia('(max-width:760px)').matches;
-  var dbTab = 'active', dbView = (isMobile?'kanban':'table'), dbSort = {key:'updatedAt', dir:-1}, dbSelected = {};
+  var dbTab = 'active', dbView = (isMobile?'kanban':'table'), dbSort = {key:'hot', dir:-1}, dbSelected = {};
   var dbFilters = {intent:'', pkg:'', source:'', country:'', tag:'', due:false};
   var DB_COLS = [
+    ['hot','🔥'],
     ['name','Nombre'],['phone','WhatsApp'],['email','Email'],['country','País'],
     ['package','Paquete'],['riders','Riders'],['value','Valor'],['owner','Owner'],['appt','Cita'],
     ['nextFollowUp','Seguimiento'],['travelDate','Fecha viaje'],['status','Estado'],['intent','Intención'],['tags','Tags'],['updatedAt','Últ. act.']
@@ -1476,6 +1482,26 @@
   var ORDER = {'':0,new:1,quoted:2,won:3,lost:4,noshow:5};
   function pkgKey(p){ p=(p||'').toLowerCase(); if(p.indexOf('roundtrip')>=0)return 'roundtrip'; if(p.indexOf('extreme')>=0)return 'extreme'; if(p.indexOf('deluxe')>=0)return 'deluxe'; if(p.indexOf('standard')>=0||p.indexOf('best')>=0)return 'standard'; return 'none'; }
   function leadValue(l){ var p=PKG_PRICE[pkgKey(l.package)]; return p ? p*(l.riders||1) : 0; }
+  // Prioridad de lead: score 0-~200 con campos que ya llegan del servidor. ponytail: heurística de ranking, ajustar pesos si el owner discrepa del orden.
+  function leadScore(l){
+    if(!l || l.archived) return 0;
+    var s=0;
+    if(l.waiting) s+=150;                                  // cliente escribió y espera respuesta: domina siempre (techo no-waiting = 145)
+    var it=l.intent||'exploring';
+    s += it==='booking'?60 : it==='escalate'?50 : it==='interested'?35 : 0;
+    s += Math.min(40, leadValue(l)/100);                   // valor del trato: hasta +40 (~$4000 tope)
+    if(isOverdue(l)) s+=25;                                // seguimiento vencido
+    var h=(Date.now()-(l.updatedAt||0))/3600000;           // recencia: hasta +20 en las últimas 48h
+    if(h>=0 && h<48) s += 20*(1-h/48);
+    return Math.round(s);
+  }
+  function hotWhy(l,s){
+    var r=[]; if(l.waiting) r.push('esperando respuesta');
+    var it=l.intent||''; if(it==='booking') r.push('quiere reservar'); else if(it==='escalate') r.push('pide humano'); else if(it==='interested') r.push('interesado');
+    var v=leadValue(l); if(v) r.push('$'+v.toLocaleString('en-US'));
+    if(isOverdue(l)) r.push('seguimiento vencido');
+    return 'Prioridad '+s+(r.length?' · '+r.join(' · '):'');
+  }
   function money(n){ return n ? '$'+n.toLocaleString('en-US') : ''; }
   function leadSource(l){ return l.source==='meta-form' ? 'meta' : 'chat'; }
   function todayISO(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
@@ -1508,7 +1534,8 @@
     var k=dbSort.key, dir=dbSort.dir;
     return arr.slice().sort(function(a,b){
       var va,vb;
-      if(k==='value'){ va=leadValue(a); vb=leadValue(b); }
+      if(k==='hot'){ va=leadScore(a); vb=leadScore(b); }
+      else if(k==='value'){ va=leadValue(a); vb=leadValue(b); }
       else if(k==='country'){ va=leadCountry(a).toLowerCase(); vb=leadCountry(b).toLowerCase(); }
       else if(k==='appt'){ var pa=nextApptFor(a.phone),pb=nextApptFor(b.phone); va=pa?new Date(pa.when).getTime():Infinity; vb=pb?new Date(pb.when).getTime():Infinity; } // sin cita = al final
       else if(k==='status'){ va=ORDER[a.status||'']||0; vb=ORDER[b.status||'']||0; }
@@ -1519,6 +1546,10 @@
   }
   // Celda de la tabla: estado/paquete = desplegable editable con color; intención = etiqueta de color.
   function dbCell(l,key){
+    if(key==='hot'){
+      var hs=leadScore(l), lvl=hs>=90?'hi':hs>=45?'mid':'lo';
+      return '<td class="db-hot h-'+lvl+'" title="'+esc(hotWhy(l,hs))+'">'+(lvl==='lo'?'·':'🔥')+'</td>';
+    }
     if(key==='status'){
       var st=l.status||'';
       var o=ST_OPTS.map(function(x){return '<option value="'+x[0]+'"'+(st===x[0]?' selected':'')+'>'+x[1]+'</option>';}).join('');
@@ -1715,7 +1746,8 @@
       + DB_COLS.map(function(c){ return '<th class="sortable" onclick="dbSetSort(\''+c[0]+'\')">'+c[1]+arrow(c[0])+'</th>'; }).join('')
       + '<th></th></tr>';
     var rows=pageRows.map(function(l){
-      return '<tr'+(isOverdue(l)?' class="overdue"':'')+' onclick="openFromDb(\''+l.phone+'\')">'
+      var rc=[]; if(leadScore(l)>=90) rc.push('hot'); if(isOverdue(l)) rc.push('overdue');
+      return '<tr'+(rc.length?' class="'+rc.join(' ')+'"':'')+' onclick="openFromDb(\''+l.phone+'\')">'
         + '<td class="chk" onclick="event.stopPropagation()"><input type="checkbox" '+(dbSelected[l.phone]?'checked':'')+' onchange="toggleSel(\''+l.phone+'\',this)"></td>'
         + DB_COLS.map(function(c){ return dbCell(l,c[0]); }).join('')
         + '<td onclick="event.stopPropagation()"><span class="kebab" onclick="rowMenu(event,\''+l.phone+'\')">⋮</span></td></tr>';
