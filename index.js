@@ -1204,7 +1204,13 @@ app.post("/webhook", async (req, res) => {
       model: MODEL,
       max_tokens: 500,
       thinking: { type: "disabled" }, // respuestas cortas y baratas; en Sonnet 5 el thinking va ON por defecto y se comería el max_tokens
-      system: buildSystemPrompt() + mediaHint,
+      // Prompt caching: el system (~11.5k tok fijos: context.md + BASE_INSTRUCTIONS) es idéntico en cada turno.
+      // Con cache_control, la 1ª vez paga 1.25x y el resto de la charla (dentro de 5 min) paga 0.1x → ~-78% del coste de system.
+      // mediaHint va en bloque aparte tras el prefijo cacheado (cambia solo al editar la media library).
+      system: [
+        { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
+        ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
+      ],
       messages: history.map((m) => ({ role: m.role, content: m.content })), // solo role+content (ts/by/media son internos)
     });
 
