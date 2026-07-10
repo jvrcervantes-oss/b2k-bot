@@ -42,8 +42,10 @@ un servicio separado que apunta a este mismo repo con su propia config.
 | `GOOGLE_SERVICE_ACCOUNT` | JSON completo de la Service Account (string). El bot usa Service Account, NO OAuth de usuario | `{"type":"service_account","client_email":"...","private_key":"..."}` |
 | `SHEET_ID` | ID del Google Sheet del CRM | `1D4ub_...` |
 | `OWNER_PHONE` | Tu número para recibir avisos de reserva | `34601170044` |
-| `BOT_CONTEXT` | El contexto del negocio (system prompt completo) | ver bot-config del proyecto |
+| `BOT_CONTEXT` | El contexto del negocio (system prompt completo) — solo se usa si `CONTEXT_FILE` no existe en el repo | ver bot-config del proyecto |
+| `CONTEXT_FILE` | (Opcional) nombre del archivo de contexto a cargar del repo | `context-balibest.md` (default: `context.md`) |
 | `BOT_MODEL` | (Opcional) modelo de Claude | `claude-sonnet-4-6` |
+| `BOT_VERTICAL` | (Opcional) `tour` (default) o `rental` — selecciona el bloque de cierre en `BASE_INSTRUCTIONS` (tour = agendar videollamada; rental = cerrar directo en el chat) | `rental` |
 
 > ⚠️ **El Sheet del CRM debe estar COMPARTIDO con el `client_email` de la Service Account (permiso Editor).** Si no, la API responde `404 — Requested entity was not found` aunque la autenticación sea correcta. Las variables `GOOGLE_CREDENTIALS` / `GOOGLE_TOKEN` de versiones antiguas ya **no se usan** — se pueden borrar.
 
@@ -70,12 +72,17 @@ Activa el envío de newsletters desde el panel (`/admin` → icono del sobre). S
 
 ## Cómo añadir un proyecto nuevo
 
-1. Crear `proyectos/NombreProyecto/bot-config/contexto.md` con el contexto del negocio
+1. Crear `proyectos/NombreProyecto/bot-config/contexto.md` con el contexto del negocio (referencia) y su copia real de despliegue `context-nombreproyecto.md` en la raíz de este repo (el motor lee del repo, no de `proyectos/`)
 2. Conseguir las credenciales de Meta de ese proyecto (número, token, phone ID)
 3. En Railway, crear un servicio nuevo apuntando a este repo
-4. Configurar las variables de entorno de ese proyecto
+4. Configurar las variables de entorno de ese proyecto, incluyendo `CONTEXT_FILE=context-nombreproyecto.md` (si no se pone, el servicio carga `context.md`, que es el de B2K) y `BOT_VERTICAL` si el negocio no es un tour multi-día (ej. `rental`)
 5. Configurar el webhook en Meta apuntando a la URL de Railway
 6. Listo — el mismo motor funciona con el nuevo contexto
+
+> ⚠️ Todos los servicios de Railway que apunten a este repo comparten el mismo código en cada
+> push (incluido `BASE_INSTRUCTIONS`). Los archivos `context-*.md` conviven todos en el repo;
+> cada servicio elige el suyo con `CONTEXT_FILE`. Ejemplo real: Bali Best Motorcycle usa
+> `context-balibest.md` + `BOT_VERTICAL=rental`, sin tocar el `context.md` de B2K.
 
 ## Cómo modificar el comportamiento
 
