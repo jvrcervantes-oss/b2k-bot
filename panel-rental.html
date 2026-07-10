@@ -1,0 +1,2084 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__PROJECT__ · Conversaciones</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.5.0/css/flag-icons.min.css" rel="stylesheet">
+<style>
+  :root{
+    --nav:#161e2e; --nav-2:#0f1623; --bg:#f5f6f8; --card:#ffffff;
+    --line:#e6e8ee; --line-2:#eef0f4; --ink:#1c2433; --ink-soft:#6b7488;
+    --accent:#2563eb; --accent-soft:#e8f0fe;
+    --green:#16a34a; --amber:#d97706; --red:#dc2626;
+    --bot:#2563eb;
+  }
+  /* ── MODO OSCURO ── (redefine variables + corrige colores claros fijos) */
+  body.dark{
+    --nav:#0b111c; --nav-2:#0b111c; --bg:#0d1420; --card:#161e2e;
+    --line:#28324a; --line-2:#202a3e; --ink:#e7ebf3; --ink-soft:#9aa6bd;
+    --accent:#3b82f6; --accent-soft:#1e2c47;
+    --bot:#2563eb;
+  }
+  body.dark #chat{background:#0b111c}
+  body.dark .row:hover{background:rgba(255,255,255,.04)}
+  body.dark .search input{background:#0d1420}
+  body.dark .search input:focus{background:var(--card)}
+  body.dark .chip{background:var(--card)}
+  body.dark .chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  body.dark .m.user{background:#1f293d;color:var(--ink)}
+  body.dark .pausebtn,body.dark .cannedbtn,body.dark .cannedpop{background:var(--card)}
+  body.dark .cannedpop .cedit:hover{background:rgba(255,255,255,.04)}
+  body.dark #detail .edit input,body.dark #detail .edit select,body.dark #detail .edit textarea{background:#0d1420}
+  body.dark .cal-day.out{background:rgba(255,255,255,.03)}
+  body.dark .cal-nav button{background:var(--card)}
+  /* modo oscuro: controles nativos (select/date/scrollbars) + modales + tintes legibles */
+  body.dark{color-scheme:dark}
+  body.dark .modal-box{background:var(--card);box-shadow:0 30px 70px -30px rgba(0,0,0,.8)}
+  body.dark .modal-box input,body.dark .modal-box select,body.dark .modal-box textarea{background:#0d1420;color:var(--ink);border-color:var(--line)}
+  body.dark .btn-ghost{background:var(--card);color:var(--ink-soft);border-color:var(--line)}
+  body.dark .db-sel,body.dark .db-filters select,body.dark .db-bulk select,body.dark .db-bulk button{background:#0d1420;color:var(--ink)}
+  body.dark .db-tag{background:rgba(255,255,255,.08)}
+  body.dark .it-booking{color:#f87171}body.dark .it-interested{color:#fbbf24}body.dark .it-exploring{color:#4ade80}body.dark .it-escalate{color:#9aa6bd}
+  body.dark .st-lost{color:#f87171}body.dark .st-noshow{color:#9aa6bd}body.dark .pk-none,body.dark .st-none{color:#9aa6bd}
+  /* colores de métricas (clases con variante oscura) */
+  .m-new{color:#2563eb}.m-quoted{color:#b45309}.m-won{color:#15803d}.m-lost{color:#dc2626}.m-rev{color:#15803d}
+  body.dark .m-new{color:#60a5fa}body.dark .m-quoted{color:#fbbf24}body.dark .m-won{color:#4ade80}body.dark .m-lost{color:#f87171}body.dark .m-rev{color:#4ade80}
+  body.dark .modal-box{background:var(--card)}
+  body.dark .modal-box input,body.dark #cannedText{background:#0d1420;color:var(--ink)}
+  body.dark .btn-ghost{background:var(--card)}
+  body.dark .row.wait{background:rgba(217,119,6,.14)}
+  body.dark .row.wait:hover{background:rgba(217,119,6,.22)}
+  body.dark .wininfo.open{background:rgba(22,163,74,.14);color:#4ade80}
+  body.dark .wininfo.closed{background:rgba(220,38,38,.14);color:#f87171}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:'Inter',-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;-webkit-font-smoothing:antialiased}
+  button{font-family:inherit;cursor:pointer}
+
+  /* ── LOGIN ── */
+  #login{position:fixed;inset:0;background:linear-gradient(135deg,#0f1623,#1b2740);display:flex;align-items:center;justify-content:center;z-index:50}
+  #login .box{background:#fff;border-radius:18px;padding:36px 34px;width:340px;box-shadow:0 30px 70px -30px rgba(0,0,0,.6)}
+  #login .logo{width:42px;height:42px;border-radius:11px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:20px;margin-bottom:18px}
+  #login h1{font-size:19px;font-weight:700;margin-bottom:4px}
+  #login p{color:var(--ink-soft);font-size:13px;margin-bottom:20px}
+  #login input{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:14px;margin-bottom:12px;outline:none}
+  #login input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  #login button{width:100%;padding:12px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;font-size:14px}
+  #login .err{color:var(--red);font-size:12.5px;height:16px;margin-top:2px}
+
+  /* ── SHELL ── */
+  #app{display:none;height:100vh;overflow:hidden;grid-template-columns:64px 340px 1fr 300px}
+  #app.on{display:grid}
+  @media(max-width:1100px){#app.on{grid-template-columns:64px 320px 1fr}#detail{display:none}}
+
+  /* nav rail */
+  nav{background:var(--nav);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:6px}
+  nav .brand{width:38px;height:38px;border-radius:10px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;margin-bottom:10px}
+  nav .ic{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#8893a8;cursor:pointer;transition:transform .15s cubic-bezier(.2,.7,.3,1),background .15s ease,color .15s ease,box-shadow .15s ease}
+  nav .ic:hover{background:rgba(255,255,255,.10);color:#fff;transform:translateY(-1px)}
+  nav .ic:active{transform:translateY(0) scale(.9)}
+  nav .ic.on{background:rgba(255,255,255,.10);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+  nav .ic.on:hover{background:rgba(255,255,255,.16)}
+  nav .ic:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  nav .ic svg{width:20px;height:20px;transition:transform .15s cubic-bezier(.2,.7,.3,1)}
+  nav .ic:hover svg{transform:scale(1.12)}
+  /* toggle de idioma: bandera SVG + código */
+  #langToggle{gap:4px;font-size:10.5px;font-weight:700;letter-spacing:.02em}
+  nav .ic svg.flag{width:18px;height:13px;border-radius:2px;flex-shrink:0;box-shadow:0 0 0 1px rgba(0,0,0,.18)}
+  nav .ic:hover svg.flag{transform:scale(1.08)}
+  nav .spacer{flex:1}
+
+  /* list column */
+  #list{background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  #list .head{padding:18px 18px 12px}
+  #list .head h2{font-size:18px;font-weight:700;display:flex;align-items:center;gap:8px}
+  #list .head .count{font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:2px 9px}
+  .search{margin:4px 18px 10px;position:relative}
+  .search input{width:100%;padding:9px 12px 9px 34px;border:1px solid var(--line);border-radius:9px;font-size:13px;outline:none;background:#fafbfc}
+  .search input:focus{border-color:var(--accent);background:#fff}
+  .search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--ink-soft)}
+  .chips{display:flex;gap:7px;padding:0 18px 12px;flex-wrap:wrap}
+  .chip{font-size:12px;font-weight:500;padding:5px 11px;border-radius:999px;border:1px solid var(--line);color:var(--ink-soft);background:#fff}
+  .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  #leads{flex:1;overflow-y:auto}
+  .row{display:flex;gap:11px;padding:12px 18px;border-bottom:1px solid var(--line-2);cursor:pointer;align-items:center}
+  .row:hover{background:#fafbfc}
+  .row.active{background:var(--accent-soft)}
+  .av{width:42px;height:42px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:15px}
+  .row .mid{flex:1;min-width:0}
+  .row .nm{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .ms{font-size:12.5px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .row .ms .pre{font-weight:600;color:var(--ink);opacity:.75}
+  .row .rt{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+  .row .tm{font-size:11px;color:#9aa3b5}
+  .dot{width:9px;height:9px;border-radius:50%}
+  .empty{padding:50px 24px;text-align:center;color:#9aa3b5;font-size:13px}
+
+  /* lead "por responder" (control humano + mensaje del cliente sin contestar) */
+  .row.wait{background:#fff7ed}
+  .row.wait:hover{background:#ffedd5}
+  .row.wait .nm{font-weight:700}
+  .wpill{font-size:9.5px;font-weight:700;color:#fff;background:var(--red);border-radius:999px;padding:1px 7px;letter-spacing:.02em}
+  .stWaitWrap{display:none}
+  .stWaitWrap.on{display:inline;color:var(--red)}
+  .stWaitWrap.on b{color:var(--red)}
+
+  /* indicador de ventana de 24h de WhatsApp */
+  .wininfo{font-size:11.5px;font-weight:500;padding:7px 20px;border-top:1px solid var(--line);display:none;align-items:center;gap:6px}
+  .wininfo.open{display:flex;color:#15803d;background:#f0fdf4}
+  .wininfo.closed{display:flex;color:#b91c1c;background:#fef2f2}
+
+  .badge{font-size:10.5px;font-weight:600;padding:2px 9px;border-radius:999px;text-transform:capitalize}
+  .i-exploring{background:#dcfce7;color:#15803d}
+  .i-interested{background:#fef3c7;color:#b45309}
+  .i-booking{background:#fee2e2;color:#b91c1c}
+  .i-escalate{background:#e5e7eb;color:#4b5563}
+
+  /* chat column */
+  #chat{display:flex;flex-direction:column;min-width:0;min-height:0;background:#f0f2f5}
+  #chat .top{background:var(--card);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;gap:12px}
+  #chat .top .back{display:none;border:0;background:none;color:var(--ink-soft);font-size:20px;padding:0 6px 0 0}
+  @media(max-width:760px){#chat .top .back{display:block}}
+  .det-btn{display:none;border:1px solid var(--line);background:var(--card);color:var(--ink-soft);border-radius:9px;width:38px;height:36px;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer}
+  .det-btn svg{width:19px;height:19px}
+  .det-close{display:none;position:fixed;top:10px;left:10px;z-index:71;width:40px;height:40px;border:0;border-radius:50%;background:var(--card);box-shadow:0 2px 10px rgba(0,0,0,.18);color:var(--ink);font-size:24px;align-items:center;justify-content:center;cursor:pointer}
+  #chat .top .nm{font-weight:600;font-size:15px}
+  #chat .top .ph{font-size:12px;color:var(--ink-soft)}
+  #msgs{flex:1;overflow-y:auto;padding:22px 26px;display:flex;flex-direction:column;gap:8px}
+  .m{max-width:62%;padding:9px 13px;border-radius:14px;font-size:13.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 1px rgba(0,0,0,.04)}
+  .m.user{align-self:flex-start;background:#fff;border-bottom-left-radius:4px}
+  .m.assistant{align-self:flex-end;background:var(--bot);color:#fff;border-bottom-right-radius:4px}
+  .m .mmeta{display:flex;justify-content:flex-end;align-items:center;gap:5px;margin-top:4px;font-size:10px;opacity:.7}
+  .m.user .mmeta{justify-content:flex-start}
+  .m .mtime{font-variant-numeric:tabular-nums}
+  .m.hasmedia{padding:5px 5px 7px}
+  .m .mmedia{max-width:240px;max-height:260px;border-radius:10px;display:block;cursor:pointer}
+  .m video.mmedia{cursor:default;width:240px}
+  .m .mcap{font-size:12.5px;margin:5px 4px 0;line-height:1.4}
+  .m a{color:inherit;text-decoration:underline;word-break:break-all}
+  .m.user a{color:var(--accent)}
+  .stats{display:flex;gap:16px;padding:0 18px 10px;font-size:12px;color:var(--ink-soft)}
+  .stats b{color:var(--ink);font-weight:700}
+  .pausebtn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 12px;font-size:12.5px;font-weight:600;color:var(--ink-soft);white-space:nowrap}
+  .pausebtn.paused{background:#fef3c7;border-color:#fcd34d;color:#b45309}
+  .composer{background:var(--card);border-top:1px solid var(--line);padding:12px 16px;display:flex;align-items:flex-end;gap:10px}
+  .composer textarea{flex:1;border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-family:inherit;font-size:13.5px;resize:none;outline:none;max-height:120px;line-height:1.4}
+  .composer textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .composer button{border:0;background:var(--accent);color:#fff;width:40px;height:40px;border-radius:50%;font-size:17px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+  .composer button:disabled{opacity:.45;cursor:default}
+  .composer{position:relative}
+  .cannedbtn{border:1px solid var(--line);background:#fff;color:var(--ink-soft);width:40px;height:40px;border-radius:50%;font-size:16px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+  .cannedpop{position:absolute;bottom:62px;left:16px;right:16px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 20px 50px -20px rgba(0,0,0,.4);max-height:280px;overflow-y:auto;display:none;z-index:20}
+  .cannedpop.on{display:block}
+  .cannedpop .ci{padding:10px 14px;border-bottom:1px solid var(--line-2);cursor:pointer}
+  .cannedpop .ci:hover{background:var(--accent-soft)}
+  .cannedpop .ci .ct{font-weight:600;font-size:13px}
+  .cannedpop .ci .cx{font-size:12px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .cannedpop .cedit{padding:11px 14px;text-align:center;font-size:12.5px;font-weight:600;color:var(--accent);cursor:pointer}
+  .cannedpop .cedit:hover{background:#fafbfc}
+  .sendhint{font-size:11px;color:#9aa3b5;padding:0 20px 8px}
+  .nochat{margin:auto;text-align:center;color:#9aa3b5}
+  .nochat svg{width:54px;height:54px;opacity:.4;margin-bottom:10px}
+
+  /* detail column */
+  #detail{background:var(--card);border-left:1px solid var(--line);padding:26px 22px;overflow-y:auto}
+  #detail .big{width:74px;height:74px;border-radius:50%;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:27px}
+  #detail .dn{text-align:center;font-size:17px;font-weight:700}
+  #detail .dp{text-align:center;font-size:13px;color:var(--ink-soft);margin-top:2px}
+  #detail .dbadge{text-align:center;margin:12px 0 18px}
+  #detail .wa{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px;border-radius:10px;background:#25d366;color:#fff;font-weight:600;text-decoration:none;font-size:13.5px;margin-bottom:20px}
+  #detail .field{border-top:1px solid var(--line-2);padding:13px 2px}
+  #detail .field .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#9aa3b5;font-weight:600}
+  #detail .field .v{font-size:14px;margin-top:3px}
+  #detail .ph-detail{color:var(--ink-soft);text-align:center;margin-top:90px;font-size:13px}
+  /* editor CRM en la ficha */
+  #detail .edit{border-top:1px solid var(--line-2);padding:12px 2px}
+  #detail .edit label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#9aa3b5;font-weight:600;display:block;margin-bottom:5px}
+  #detail .edit input,#detail .edit select,#detail .edit textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;font-family:inherit;outline:none;background:#fff}
+  #detail .edit input:focus,#detail .edit select:focus,#detail .edit textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  #detail .edit textarea{resize:vertical;min-height:64px;line-height:1.4}
+  #detail .savebtn{margin-top:8px;width:100%;padding:9px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-weight:600;font-size:13px}
+  #detail .savebtn.ok{background:var(--green)}
+  #detail .savebtn.bad{background:var(--red)}
+
+  /* ── calendario ── */
+  /* ── base de datos (tabla de todos los clientes) ── */
+  #dbView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
+  #app.dbmode #list,#app.dbmode #chat,#app.dbmode #detail{display:none}
+  #app.dbmode #dbView{display:flex}
+  /* secciones a pantalla completa (media, newsletter) — mismo patrón que dbView */
+  #mediaView,#nlView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
+  #app.mediamode #list,#app.mediamode #chat,#app.mediamode #detail{display:none}
+  #app.mediamode #mediaView{display:flex}
+  #app.nlmode #list,#app.nlmode #chat,#app.nlmode #detail{display:none}
+  #app.nlmode #nlView{display:flex}
+  .sec-top{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;background:var(--card);border-bottom:1px solid var(--line)}
+  .sec-top h2{font-size:18px;font-weight:700}
+  .sec-body{flex:1;overflow-y:auto;padding:24px;width:100%;max-width:740px;margin:0 auto;box-sizing:border-box}
+  .sec-actions{margin-top:18px;display:flex;justify-content:flex-end;gap:10px}
+  .db-top{display:flex;align-items:center;gap:14px;padding:14px 24px;background:var(--card);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .db-top h2{font-size:18px;font-weight:700;margin-right:auto}
+  .db-store{font-size:12px;font-weight:600;padding:5px 11px;border-radius:20px;display:flex;align-items:center;gap:6px}
+  .db-store.ok{background:rgba(22,163,74,.12);color:#16a34a}
+  .db-store.ram{background:rgba(217,119,6,.14);color:#b45309}
+  .db-search{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:7px 12px}
+  .db-search input{border:0;background:none;outline:none;font-size:13.5px;color:inherit;width:190px}
+  .db-csv{border:0;background:var(--accent);color:#fff;font-weight:600;padding:9px 16px;border-radius:9px;font-size:13.5px;cursor:pointer}
+  .db-ghost{border:1px solid var(--line);background:var(--card);color:inherit;font-weight:600;padding:9px 14px;border-radius:9px;font-size:13.5px;cursor:pointer}
+  .db-ghost:disabled{opacity:.55;cursor:default}
+  .db-wrap{flex:1;overflow:auto;min-height:0}
+  .db-foot{display:flex;align-items:center;justify-content:space-between;padding:10px 24px;border-top:1px solid var(--line);background:var(--card);font-size:13px;color:var(--ink-soft);flex-shrink:0}
+  .db-foot:empty{display:none}
+  .db-pager{display:flex;align-items:center;gap:6px}
+  .db-pager button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:inherit;cursor:pointer;font-size:14px}
+  .db-pager button:disabled{opacity:.4;cursor:default}
+  .db-pg{padding:0 10px;font-weight:600;color:var(--ink)}
+  table.db{width:100%;border-collapse:collapse;font-size:13px}
+  table.db th{position:sticky;top:0;background:var(--card);text-align:left;padding:11px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);border-bottom:1px solid var(--line);white-space:nowrap;z-index:1}
+  table.db td{padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+  table.db tbody tr{cursor:pointer}
+  table.db tbody tr:hover{background:rgba(0,0,0,.03)}
+  body.dark table.db tbody tr:hover{background:rgba(255,255,255,.04)}
+  table.db .db-nm{font-weight:600}
+  .db-dim{color:var(--ink-soft)}
+  .db-tag{font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,.05)}
+  body.dark .db-tag{background:rgba(255,255,255,.07)}
+  /* etiquetas de color + desplegables editables in-line */
+  .db-badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap}
+  .db-sel{font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:7px;padding:4px 7px;background:var(--card);color:inherit;cursor:pointer;outline:none;max-width:160px}
+  .db-sel:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+  .it-booking{background:rgba(220,38,38,.13);color:#dc2626}
+  .it-interested{background:rgba(217,119,6,.16);color:#b45309}
+  .it-exploring{background:rgba(22,163,74,.13);color:#16a34a}
+  .it-escalate{background:rgba(107,114,128,.16);color:#6b7280}
+  .st-new{border-color:rgba(37,99,235,.55);background:rgba(37,99,235,.10);color:#2563eb}
+  .st-quoted{border-color:rgba(217,119,6,.55);background:rgba(217,119,6,.12);color:#b45309}
+  .st-won{border-color:rgba(22,163,74,.55);background:rgba(22,163,74,.13);color:#15803d}
+  .st-lost{border-color:rgba(220,38,38,.55);background:rgba(220,38,38,.10);color:#dc2626}
+  .st-noshow{border-color:rgba(107,114,128,.55);background:rgba(107,114,128,.12);color:#6b7280}
+  .st-none{color:var(--ink-soft)}
+  .pk-roundtrip{border-color:rgba(100,116,139,.55);background:rgba(100,116,139,.10);color:#475569}
+  .pk-extreme{border-color:rgba(232,73,10,.55);background:rgba(232,73,10,.12);color:#c2410c}
+  .pk-deluxe{border-color:rgba(79,70,229,.55);background:rgba(79,70,229,.12);color:#4f46e5}
+  .pk-standard{border-color:rgba(13,148,136,.55);background:rgba(13,148,136,.12);color:#0d9488}
+  .pk-none{color:var(--ink-soft)}
+  body.dark .pk-roundtrip{color:#94a3b8}body.dark .st-new{color:#60a5fa}body.dark .st-quoted{color:#fbbf24}body.dark .st-won{color:#4ade80}body.dark .pk-deluxe{color:#a5b4fc}body.dark .pk-standard{color:#5eead4}body.dark .pk-extreme{color:#fb923c}
+  .db-empty{padding:48px;text-align:center;color:var(--ink-soft)}
+  /* métricas */
+  .db-metrics{display:flex;gap:10px;flex-wrap:wrap;padding:12px 24px;background:var(--card);border-bottom:1px solid var(--line)}
+  .metric{display:flex;flex-direction:column;gap:2px;padding:8px 14px;border:1px solid var(--line);border-radius:10px;min-width:90px}
+  .metric .mv{font-size:18px;font-weight:700;line-height:1}
+  .metric .ml{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);font-weight:600}
+  .metric.click{cursor:pointer}.metric.click:hover{border-color:var(--accent)}
+  /* barra de tabs + toggle de vista */
+  .db-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 24px 0;background:var(--card);border-bottom:1px solid var(--line)}
+  .db-tabs{display:flex;gap:4px;flex-wrap:wrap}
+  .db-tab{border:0;background:none;padding:8px 13px;border-radius:8px 8px 0 0;font-size:13px;font-weight:600;color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent}
+  .db-tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+  .db-tab .tc{font-size:11px;background:rgba(0,0,0,.06);border-radius:20px;padding:1px 7px;margin-left:5px}
+  body.dark .db-tab .tc{background:rgba(255,255,255,.1)}
+  .db-viewtoggle{display:flex;gap:2px;background:var(--bg);border-radius:8px;padding:2px;flex-shrink:0}
+  .vt{border:0;background:none;padding:6px 12px;border-radius:6px;font-size:12.5px;font-weight:600;color:var(--ink-soft);cursor:pointer}
+  .vt.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  /* filtros */
+  .db-filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 24px;background:var(--card);border-bottom:1px solid var(--line)}
+  .db-filters select{font-size:12.5px;border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--bg);color:inherit;cursor:pointer}
+  .db-filters .fclear{font-size:12px;color:var(--accent);cursor:pointer;font-weight:600;background:none;border:0}
+  /* barra de acciones en lote */
+  .db-bulk{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 24px;background:var(--accent-soft);border-bottom:1px solid var(--line);font-size:13px}
+  .db-bulk b{font-weight:700}
+  .db-bulk select,.db-bulk button{font-size:12.5px;border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--card);color:inherit;cursor:pointer}
+  .db-bulk button.danger{color:var(--red);border-color:var(--red)}
+  /* tabla: extras */
+  table.db th.sortable{cursor:pointer;user-select:none}
+  table.db th .sa{opacity:.5;font-size:10px}
+  table.db td.chk,table.db th.chk{width:34px;text-align:center}
+  tr.overdue td{box-shadow:inset 3px 0 0 var(--red)}
+  tr.hot td{box-shadow:inset 3px 0 0 var(--amber)}
+  tr.hot.overdue td{box-shadow:inset 3px 0 0 var(--red)} /* vencido gana al caliente */
+  td.db-hot{text-align:center;font-size:14px;line-height:1;cursor:default}
+  td.db-hot.h-mid{opacity:.6}
+  td.db-hot.h-lo{opacity:.28;font-size:12px;color:var(--ink-soft)}
+  .tags{display:flex;gap:4px;flex-wrap:wrap}
+  .tag{font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:20px;white-space:nowrap}
+  .kebab{cursor:pointer;color:var(--ink-soft);font-weight:700;padding:0 6px;position:relative}
+  .rowmenu{position:absolute;right:0;top:20px;background:var(--card);border:1px solid var(--line);border-radius:9px;box-shadow:0 12px 30px -12px rgba(0,0,0,.5);z-index:20;min-width:150px;overflow:hidden}
+  .rowmenu div{padding:9px 13px;font-size:13px;cursor:pointer;white-space:nowrap}
+  .rowmenu div:hover{background:var(--bg)}.rowmenu div.danger{color:var(--red)}
+  /* kanban */
+  #dbKanban{display:flex;gap:12px;padding:16px 24px;overflow-x:auto;height:100%;align-items:flex-start}
+  .kcol{flex:0 0 250px;background:var(--bg);border-radius:12px;display:flex;flex-direction:column;max-height:100%}
+  .kcol h4{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:12px 14px;display:flex;justify-content:space-between;align-items:center}
+  .kcol .kc{font-size:11px;background:rgba(0,0,0,.06);border-radius:20px;padding:1px 7px}
+  body.dark .kcol .kc{background:rgba(255,255,255,.1)}
+  .kcards{display:flex;flex-direction:column;gap:8px;padding:0 10px 12px;overflow-y:auto;min-height:40px}
+  .kcol.dragover .kcards{outline:2px dashed var(--accent);outline-offset:-4px;border-radius:8px}
+  .kcard{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:grab;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .kcard:active{cursor:grabbing}
+  .kcard .kn{font-weight:600;font-size:13.5px}
+  .kcard .km{font-size:11.5px;color:var(--ink-soft);margin-top:3px;display:flex;justify-content:space-between;gap:8px}
+  .kcard .kstatus{margin-top:8px;width:100%;font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--bg);color:var(--ink);cursor:pointer;font-family:inherit;box-sizing:border-box}
+  .kcard .kv{font-weight:600;color:var(--ink)}
+  /* timeline en la ficha */
+  .tl{margin-top:8px}
+  .tl .tli{display:flex;gap:9px;padding:7px 0;border-top:1px solid var(--line-2);font-size:12.5px}
+  .tl .tli .ic2{flex-shrink:0}
+  .tl .tli .tlt{color:var(--ink-soft);font-size:11px}
+  /* barra de acciones rápidas en la ficha */
+  .qbar{display:flex;flex-direction:column;gap:9px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+  .qa-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .qa-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:600;margin-right:2px}
+  .qa-own{border:1px solid var(--line);background:var(--bg);color:inherit;border-radius:20px;padding:5px 13px;font-size:12.5px;font-weight:600;cursor:pointer}
+  .qa-own.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .qbtn{flex:1;border:0;border-radius:9px;padding:10px;font-weight:600;font-size:12.5px;cursor:pointer;color:#fff}
+  .qbtn.call{background:var(--accent)}
+  .qbtn.out{background:#16a34a}
+  #calView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
+  #app.calmode #list,#app.calmode #chat,#app.calmode #detail{display:none}
+  #app.calmode #calView{display:flex}
+  .cal-top{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;background:var(--card);border-bottom:1px solid var(--line)}
+  .cal-nav{display:flex;align-items:center;gap:12px}
+  .cal-nav h2{font-size:18px;font-weight:700;min-width:170px;text-align:center;text-transform:capitalize}
+  .cal-nav button{width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:#fff;font-size:18px;color:var(--ink-soft)}
+  .cal-new{border:0;background:var(--accent);color:#fff;font-weight:600;padding:9px 16px;border-radius:9px;font-size:13.5px}
+  .cal-wrap{flex:1;display:flex;min-height:0}
+  .cal-cal{flex:1;display:flex;flex-direction:column;padding:14px 20px;min-width:0}
+  .cal-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px}
+  .cal-dow span{font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;text-align:center;letter-spacing:.04em}
+  .cal-grid{flex:1;display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;gap:6px;min-height:0}
+  .cal-day{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:6px;display:flex;flex-direction:column;gap:3px;overflow:hidden;min-height:0}
+  .cal-day.out{background:#f0f1f4;opacity:.5}
+  .cal-day .dnum{font-size:12px;font-weight:600;color:var(--ink-soft);align-self:flex-start}
+  .cal-day.today{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:color-mix(in srgb, var(--accent) 8%, var(--card))}
+  .cal-day.today .dnum{background:var(--accent);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center}
+  .cal-day.today .todaytag{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent);align-self:flex-start;margin-top:-2px}
+  .appt{font-size:11px;background:var(--accent-soft);color:#1d4ed8;border-radius:5px;padding:2px 6px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid var(--accent)}
+  .cal-side{width:280px;border-left:1px solid var(--line);background:var(--card);padding:18px;overflow-y:auto;flex-shrink:0}
+  .cal-side h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:12px}
+  .up{position:relative;border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:8px}
+  .up .ut{font-weight:600;font-size:13.5px;padding-right:16px}
+  .up .uw{font-size:12px;color:var(--accent);margin-top:2px}
+  .up .un{font-size:12px;color:var(--ink-soft);margin-top:2px}
+  .up .del{position:absolute;right:10px;top:8px;color:#c0c6d0;cursor:pointer;font-size:15px;line-height:1}
+  .up .del:hover{color:var(--red)}
+  @media(max-width:900px){.cal-side{display:none}}
+
+  /* ── modal ── */
+  .modal{position:fixed;inset:0;background:rgba(10,16,28,.55);display:flex;align-items:center;justify-content:center;z-index:40}
+  .modal-box{background:#fff;border-radius:16px;padding:26px;width:360px;box-shadow:0 30px 70px -30px rgba(0,0,0,.6)}
+  .modal-box h3{font-size:18px;font-weight:700;margin-bottom:10px}
+  .modal-box label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin:10px 0 5px}
+  .modal-box input,.modal-box select,.modal-box textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:14px;outline:none;font-family:inherit;box-sizing:border-box}
+  .modal-box textarea{resize:vertical;min-height:64px}
+  .modal-box input:focus,.modal-box select:focus,.modal-box textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .modal-err{color:var(--red);font-size:12.5px;min-height:16px;margin-top:8px}
+  .modal-actions{display:flex;gap:10px;margin-top:6px}
+  .btn-ghost{flex:1;padding:11px;border:1px solid var(--line);background:#fff;border-radius:9px;font-weight:600;color:var(--ink-soft)}
+  .btn-primary{flex:2;padding:11px;border:0;background:var(--accent);color:#fff;border-radius:9px;font-weight:600}
+
+  /* ── micro-interacciones de botones (2026): transición base + lift/press/foco ── */
+  .btn-primary,.cal-new,.composer button,#login button,
+  .btn-ghost,.db-ghost,.cannedbtn,.cal-nav button,.db-bulk button,.db-pager button,
+  .qa-own,.chip{
+    transition:transform .16s cubic-bezier(.2,.7,.3,1),box-shadow .16s ease,background .16s ease,border-color .16s ease,color .16s ease,filter .16s ease;
+  }
+  /* botones de acento: elevar + brillo + sombra teñida */
+  .btn-primary:hover,.cal-new:hover,.composer button:hover,#login button:hover{
+    transform:translateY(-1px);filter:brightness(1.06);box-shadow:0 6px 16px -7px var(--accent);
+  }
+  /* botones outline/ghost y pills: teñir hacia el acento + leve elevación */
+  .btn-ghost:hover,.db-ghost:not(:disabled):hover,.cannedbtn:hover,.cal-nav button:hover,
+  .db-bulk button:hover,.db-pager button:hover,.qa-own:not(.on):hover,.chip:not(.on):hover{
+    transform:translateY(-1px);border-color:var(--accent);color:var(--accent);box-shadow:0 4px 12px -7px rgba(0,0,0,.22);
+  }
+  .qa-own.on:hover,.chip.on:hover{transform:translateY(-1px);filter:brightness(1.06)}
+  /* press: hundir ligeramente */
+  .btn-primary:active,.cal-new:active,.composer button:active,#login button:active,
+  .btn-ghost:active,.db-ghost:not(:disabled):active,.cannedbtn:active,.cal-nav button:active,
+  .db-bulk button:active,.db-pager button:active,.qa-own:active,.chip:active{
+    transform:translateY(0) scale(.96);box-shadow:none;filter:brightness(.98);
+  }
+  /* foco accesible por teclado (no dispara en clic de ratón) */
+  .btn-primary:focus-visible,.cal-new:focus-visible,.composer button:focus-visible,#login button:focus-visible,
+  .btn-ghost:focus-visible,.db-ghost:focus-visible,.cannedbtn:focus-visible,.cal-nav button:focus-visible,
+  .db-bulk button:focus-visible,.db-pager button:focus-visible,.qa-own:focus-visible,.chip:focus-visible{
+    outline:2px solid var(--accent);outline-offset:2px;
+  }
+  @media (prefers-reduced-motion:reduce){ *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important} }
+
+  /* ══ MÓVIL: una vista a la vez + barra de navegación inferior (al final: gana a las reglas base) ══ */
+  @media(max-width:760px){
+    #app.on{grid-template-columns:1fr}
+    /* la barra respeta el safe-area del móvil (home indicator) + un mínimo de 16px por si no lo reporta */
+    nav{position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;flex-direction:row;justify-content:space-around;align-items:center;padding:7px 4px calc(24px + env(safe-area-inset-bottom,0px));gap:0;z-index:60;border-top:1px solid rgba(255,255,255,.10)}
+    nav .brand,nav .spacer{display:none}
+    nav .ic{width:46px;height:40px}
+    #dbView,#calView,#mediaView,#nlView{grid-column:1/-1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+    /* Conversaciones: lista por defecto; al abrir un chat = pantalla completa, sin barra */
+    #list{display:flex;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+    #chat{display:none}
+    #detail{display:none}
+    #app.on.showchat #list{display:none}
+    #app.on.showchat #chat{display:flex}
+    #app.on.showchat nav{display:none}
+    /* Ficha del lead a pantalla completa (se abre con el botón ⓘ del chat) */
+    #app.showdetail #detail{display:block;position:fixed;inset:0;z-index:70;border:0;padding-top:54px}
+    .det-btn{display:flex}
+    #app.showdetail .det-close{display:flex}
+    /* Kanban: columnas apiladas a lo ancho (sin scroll horizontal); estado con toque, no drag */
+    #dbKanban{flex-direction:column;overflow-x:hidden;height:auto;padding:14px 14px 20px}
+    .kcol{flex:1 1 auto;width:100%;max-height:none}
+    .kcards{max-height:none}
+    .kcard{cursor:default}
+    .kcard .kstatus{padding:9px 10px;font-size:13px}
+    /* Modales a lo ancho */
+    .modal-box{width:94vw !important;max-width:94vw;max-height:88vh;overflow:auto}
+    /* Cabeceras/barras de la DB que respiren en pantalla estrecha */
+    .db-head,.db-bar{flex-wrap:wrap;gap:8px}
+  }
+
+  /* ── vista rápida de cita (solo lectura): filas legibles con icono animado ── */
+  #apptViewModal .modal-box{width:384px}
+  #avTitle{margin-bottom:14px}
+  #avBody{display:flex;flex-direction:column;margin:2px 0 4px}
+  .av-row{display:flex;align-items:flex-start;gap:12px;padding:12px 6px;border-top:1px solid var(--line-2);text-align:left;width:100%;font-family:inherit}
+  .av-row:first-child{border-top:0}
+  button.av-row{cursor:pointer;border:0;border-radius:11px;background:none;color:inherit;transition:transform .16s cubic-bezier(.2,.7,.3,1),background .16s ease}
+  button.av-row:hover{background:var(--accent-soft);transform:translateX(2px)}
+  .av-ic{flex-shrink:0;width:34px;height:34px;border-radius:9px;background:var(--bg);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;transition:transform .16s cubic-bezier(.2,.7,.3,1),background .16s ease,color .16s ease}
+  .av-ic svg{width:17px;height:17px}
+  .av-row:hover .av-ic{background:var(--accent-soft);color:var(--accent);transform:scale(1.12) rotate(-3deg)}
+  .av-main{display:flex;flex-direction:column;min-width:0;flex:1;padding-top:1px}
+  .av-k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:600;margin-bottom:3px}
+  .av-v{font-size:14.5px;color:var(--ink);font-weight:500;line-height:1.45;word-break:break-word}
+  .av-v.accent{color:var(--accent);font-weight:600;font-size:15px}
+  .av-empty{color:var(--ink-soft);font-weight:400}
+  .av-go{flex-shrink:0;align-self:center;color:var(--ink-soft);opacity:0;transform:translateX(-5px);transition:opacity .16s ease,transform .16s ease}
+  .av-go svg{width:16px;height:16px;display:block}
+  button.av-row:hover .av-go{opacity:1;transform:translateX(0);color:var(--accent)}
+  .av-notes{background:var(--bg);border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;font-size:14px;line-height:1.5;color:var(--ink);white-space:pre-wrap;margin-top:1px}
+  #apptViewModal .modal-actions{border-top:1px solid var(--line-2);padding-top:14px;margin-top:10px}
+
+  /* ── selects 2026: chevron propio, forma redondeada, texto legible, lift + foco ── */
+  select.db-sel,.db-filters select,.db-bulk select,.modal-box select,#detail .edit select{
+    appearance:none;-webkit-appearance:none;-moz-appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7488' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 11px center;background-size:12px;
+    padding-right:32px;font-family:inherit;font-weight:600;color:var(--ink);letter-spacing:.01em;
+    border-radius:10px;cursor:pointer;
+    transition:transform .15s cubic-bezier(.2,.7,.3,1),border-color .15s ease,box-shadow .15s ease,background-color .15s ease;
+  }
+  .db-filters select,.db-bulk select{font-size:13px}
+  select.db-sel:hover,.db-filters select:hover,.db-bulk select:hover,.modal-box select:hover,#detail .edit select:hover{
+    border-color:var(--accent);box-shadow:0 4px 12px -7px rgba(0,0,0,.25);transform:translateY(-1px);
+  }
+  select.db-sel:focus-visible,.db-filters select:focus-visible,.db-bulk select:focus-visible,.modal-box select:focus-visible,#detail .edit select:focus-visible{
+    border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);outline:none;
+  }
+  body.dark select.db-sel,body.dark .db-filters select,body.dark .db-bulk select,body.dark .modal-box select,body.dark #detail .edit select{
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239aa6bd' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 11px center;background-size:12px;
+  }
+  /* ── país con banderita en la DB ── */
+  .db-country{display:inline-flex;align-items:center;gap:7px}
+  .db-country .fi{width:20px;height:14px;background-size:cover;border-radius:3px;box-shadow:0 0 0 1px rgba(0,0,0,.12);flex-shrink:0}
+  body.dark .db-country .fi{box-shadow:0 0 0 1px rgba(255,255,255,.14)}
+  .db-appt{display:inline-flex;align-items:center;gap:2px;color:var(--accent);font-weight:600;white-space:nowrap;cursor:pointer;font-size:12.5px}
+  .db-appt:hover{text-decoration:underline}
+  /* ── biblioteca de media (fotos/vídeos del bot) ── */
+  .media-help{font-size:12.5px;color:var(--ink-soft);line-height:1.45;margin:2px 0 12px}
+  #mediaList{display:flex;flex-direction:column;gap:10px;max-height:46vh;overflow:auto}
+  .media-empty{font-size:13px;color:var(--ink-soft);text-align:center;padding:14px 0}
+  .media-row{border:1px solid var(--line);border-radius:11px;padding:10px;background:var(--bg)}
+  .media-row .mr-top{display:flex;gap:8px;align-items:center;margin-bottom:7px}
+  .media-row input,.media-row select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;background:var(--card);color:var(--ink);width:100%}
+  .media-row .mr-label{flex:1}
+  .media-row .mr-type{width:104px;flex-shrink:0;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7488' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center;background-size:11px;padding-right:26px;cursor:pointer}
+  .media-row .mr-use{margin-bottom:7px}
+  #nlView label{display:block;margin:14px 0 5px;font-size:12px;font-weight:600;color:var(--ink-soft)}
+  #nlView input,#nlView select,#nlView textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;font-family:inherit;outline:none;box-sizing:border-box;background:var(--card);color:var(--ink)}
+  #nlView textarea{resize:vertical;line-height:1.5}
+  .nl-count{font-size:12.5px;color:var(--accent);margin-top:6px;font-weight:600}
+  .nl-fmt{font-size:11.5px;color:var(--ink-soft);margin-top:6px;line-height:1.5}
+  .nl-sched{margin-top:22px}
+  .nl-sched-h{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);margin-bottom:8px}
+  .nl-sched-row{display:flex;align-items:center;gap:10px;justify-content:space-between;border:1px solid var(--line);border-radius:9px;padding:9px 12px;margin-bottom:7px;background:var(--card)}
+  .nl-sched-info{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .nl-sched-info b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nl-sched-info span{font-size:12px;color:var(--ink-soft)}
+  .nl-sched-row button{flex-shrink:0;border:0;background:none;color:var(--ink-soft);font-size:15px;cursor:pointer;padding:4px 6px;border-radius:6px}
+  .nl-sched-row button:hover{background:rgba(0,0,0,.06);color:#dc2626}
+  .nl-testrow{display:flex;gap:8px;align-items:center;margin-top:12px}
+  .nl-testrow input{flex:1}
+  .nl-testrow button{flex-shrink:0;width:auto}
+  .media-row .mr-urlrow{display:flex;gap:8px;align-items:center;margin-bottom:7px}
+  .media-row .mr-urlrow .mr-url{margin-bottom:0}
+  .media-row .mr-up{width:38px;height:36px;flex-shrink:0;border:1px solid var(--line);background:var(--card);color:var(--accent);border-radius:8px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .15s ease,border-color .15s ease}
+  .media-row .mr-up:hover{background:var(--accent-soft);border-color:var(--accent)}
+  .media-row .mr-up:disabled{opacity:.6;cursor:default}
+  .media-row input:focus,.media-row select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .media-row .mr-del{width:30px;height:30px;flex-shrink:0;border:1px solid var(--line);background:var(--card);color:#dc2626;border-radius:8px;cursor:pointer;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;transition:background .15s ease,border-color .15s ease}
+  .media-row .mr-del:hover{background:#fee2e2;border-color:#dc2626}
+  body.dark .media-row .mr-del:hover{background:#3b1a1a}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login">
+  <div class="box">
+    <div class="logo">A</div>
+    <h1 data-i18n="login_title">Panel de conversaciones</h1>
+    <p data-i18n="login_sub">CRM BBM · acceso del equipo</p>
+    <input id="pw" type="password" data-ph="ph_pw" placeholder="Contraseña" autocomplete="current-password">
+    <button id="enter" data-i18n="btn_enter">Entrar</button>
+    <div class="err" id="err"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <nav>
+    <div class="brand">A</div>
+    <div class="ic on" id="navConv" data-ti="nav_conv" title="Conversaciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" id="navCal" data-ti="nav_cal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" id="navDb" data-ti="nav_db" title="Base de datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" id="navMedia" data-ti="nav_media" title="Fotos y vídeos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" id="navNewsletter" data-ti="nav_nl" title="Newsletter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="spacer"></div>
+    <div class="ic" id="langToggle" data-ti="nav_lang">EN</div>
+    <div class="ic" data-ti="nav_theme" id="themeToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" data-ti="nav_logout" id="logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  </nav>
+
+  <!-- list -->
+  <div id="list">
+    <div class="head"><h2><span data-i18n="h_conv">Conversaciones</span> <span class="count" id="count">0</span></h2></div>
+    <div class="stats"><span class="stWaitWrap" id="stWaitWrap">🔔 <b id="stWait">0</b> <span data-i18n="st_wait">por responder</span></span><span><b id="stInt">0</b> <span data-i18n="st_int">interesados</span></span><span><b id="stBook">0</b> <span data-i18n="st_book">en reserva</span></span><span><b id="stNew">0</b> <span data-i18n="st_today">hoy</span></span></div>
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg>
+      <input id="q" data-ph="ph_search_lead" placeholder="Buscar lead…">
+    </div>
+    <div class="chips">
+      <button class="chip on" data-f="all" data-i18n="chip_all">Todos</button>
+      <button class="chip" data-f="waiting" data-i18n="chip_wait">🔔 Por responder</button>
+      <button class="chip" data-f="interested" data-i18n="chip_int">🟡 Interesados</button>
+      <button class="chip" data-f="booking" data-i18n="chip_book">🔴 Reserva</button>
+    </div>
+    <div id="leads"></div>
+  </div>
+
+  <!-- chat -->
+  <div id="chat">
+    <div class="top">
+      <button class="back" id="back">‹</button>
+      <div class="av" id="ctAv" style="width:38px;height:38px;font-size:14px;display:none"></div>
+      <div style="flex:1"><div class="nm" id="ctName" data-i18n="pick_lead">Selecciona un lead</div><div class="ph" id="ctPhone"></div></div>
+      <button class="pausebtn" id="pauseBtn" style="display:none"></button>
+      <button class="det-btn" id="detBtn" title="Ficha del lead"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="7" r="4"/></svg></button>
+    </div>
+    <button class="det-close" id="detClose" title="Volver">‹</button>
+    <div id="msgs"><div class="nochat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg><br><span data-i18n="nochat">Elige una conversación de la izquierda</span></div></div>
+    <div class="wininfo" id="winInfo"></div>
+    <div class="sendhint" id="sendHint" style="display:none"></div>
+    <div class="composer" id="composer" style="display:none">
+      <div class="cannedpop" id="cannedPop"></div>
+      <button id="cannedBtn" class="cannedbtn" data-ti="t_canned" title="Respuestas rápidas">📋</button>
+      <button id="attachBtn" class="cannedbtn" data-ti="t_attach" title="Enviar foto/vídeo">📎</button>
+      <input type="file" id="attachFile" accept="image/*,video/*" style="display:none">
+      <textarea id="reply" rows="1" data-ph="ph_reply" placeholder="Escribe para tomar el control…"></textarea>
+      <button id="sendBtn" data-ti="t_send" title="Enviar">➤</button>
+    </div>
+  </div>
+
+  <!-- detail -->
+  <div id="detail"><div class="ph-detail" data-i18n="detail_empty">Selecciona un lead para ver su ficha</div></div>
+
+  <!-- calendario -->
+  <div id="calView">
+    <div class="cal-top">
+      <div class="cal-nav"><button id="calPrev">‹</button><h2 id="calMonth"></h2><button id="calNext">›</button></div>
+      <button id="newAppt" class="cal-new" data-i18n="cal_new">+ Nueva cita</button>
+    </div>
+    <div class="cal-wrap">
+      <div class="cal-cal">
+        <div class="cal-dow"><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span></div>
+        <div class="cal-grid" id="calGrid"></div>
+      </div>
+      <div class="cal-side">
+        <h3 data-i18n="cal_upcoming">Próximas citas</h3>
+        <div id="upList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- base de datos: todos los clientes en tabla -->
+  <div id="dbView">
+    <div class="db-top">
+      <h2><span data-i18n="h_db">Base de datos</span> <span class="count" id="dbCount">0</span></h2>
+      <span class="db-store" id="dbStore">—</span>
+      <div class="db-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg><input id="dbQ" data-ph="ph_search_client" placeholder="Buscar cliente…"></div>
+      <input type="file" id="dbFile" accept=".csv,text/csv" style="display:none">
+      <button class="db-ghost" id="dbImport" data-i18n="btn_import" data-ti="ti_import" title="Sube el CSV de leads que descargas de Meta Lead Ads">⬆ Importar Meta</button>
+      <button class="db-ghost" id="dbEnrich" data-i18n="btn_enrich" data-ti="ti_enrich" title="Lee las conversaciones y rellena los datos que falten">🔄 Actualizar desde chats</button>
+      <button class="db-csv" id="dbCsv" data-i18n="btn_csv">⬇ Exportar CSV</button>
+    </div>
+    <div class="db-metrics" id="dbMetrics"></div>
+    <div class="db-bar">
+      <div class="db-tabs" id="dbTabs"></div>
+      <div class="db-viewtoggle">
+        <button id="dbViewTable" class="vt on" data-i18n="view_table">Tabla</button>
+        <button id="dbViewKanban" class="vt" data-i18n="view_kanban">Kanban</button>
+      </div>
+    </div>
+    <div class="db-filters" id="dbFilters"></div>
+    <div class="db-bulk" id="dbBulk" style="display:none"></div>
+    <div class="db-wrap"><div id="dbTable"></div><div id="dbKanban" style="display:none"></div></div>
+    <div class="db-foot" id="dbFoot"></div>
+  </div>
+
+  <!-- sección: fotos y vídeos del bot -->
+  <div id="mediaView">
+    <div class="sec-top"><h2 data-i18n="m_media">Fotos y vídeos del bot</h2></div>
+    <div class="sec-body">
+      <p class="media-help" data-i18n="media_help">El bot puede enviar estos archivos cuando ayudan a vender.</p>
+      <div id="mediaList"></div>
+      <button id="mediaAdd" class="btn-ghost" style="width:100%;margin-top:8px" data-i18n="btn_media_add">+ Añadir archivo</button>
+      <div class="modal-err" id="mediaErr"></div>
+      <div class="sec-actions"><button id="mediaSave" class="btn-primary" data-i18n="btn_save">Guardar</button></div>
+    </div>
+  </div>
+
+  <!-- sección: newsletter por email -->
+  <div id="nlView">
+    <div class="sec-top"><h2 data-i18n="nl_title">Newsletter por email</h2></div>
+    <div class="sec-body">
+      <p class="media-help" data-i18n="nl_help">Envía un email a los leads que dieron su correo. Incluye siempre un enlace de baja automático. Prueba primero contigo.</p>
+      <label data-i18n="nl_scope">Destinatarios</label>
+      <select id="nlScope"><option value="all" data-i18n="nl_scope_all">Todos con email</option><option value="selected" data-i18n="nl_scope_sel">Seleccionados en la Base de datos</option></select>
+      <div id="nlCount" class="nl-count"></div>
+      <label data-i18n="nl_mode">Contenido del email</label>
+      <select id="nlMode"><option value="compose" data-i18n="nl_mode_compose">Escribirlo aquí</option><option value="brevo" data-i18n="nl_mode_brevo">Usar una plantilla de Brevo</option></select>
+      <div id="nlBrevoWrap" style="display:none">
+        <label data-i18n="nl_template">Plantilla de Brevo</label>
+        <select id="nlTemplate"></select>
+        <div class="nl-fmt" data-i18n="nl_template_hint">Solo aparecen las plantillas transaccionales activas de Brevo. Para personalizar, usa {{params.name}} en la plantilla; añade {{params.unsub}} en el pie para la baja.</div>
+      </div>
+      <div id="nlComposeWrap">
+        <label data-i18n="nl_subject">Asunto</label>
+        <input id="nlSubject" data-ph="nl_ph_subject" placeholder="Asunto del email">
+        <label data-i18n="nl_body">Mensaje</label>
+        <textarea id="nlBody" rows="9" data-ph="nl_ph_body" placeholder="Escribe el email. Deja una línea en blanco entre párrafos."></textarea>
+        <div class="nl-fmt" data-i18n="nl_fmt">Formato: **negrita** · *cursiva* · ## Título · - lista · [texto](enlace) · [[Botón|enlace]] · ![imagen](url). El botón "Enviar prueba" te muestra cómo queda.</div>
+      </div>
+      <div class="nl-testrow"><input id="nlTest" data-ph="nl_ph_test" placeholder="tu@email.com"><button id="nlTestBtn" class="btn-ghost" data-i18n="nl_test">Enviar prueba</button></div>
+      <label data-i18n="nl_when">Programar para (opcional)</label>
+      <input type="datetime-local" id="nlWhen">
+      <div class="nl-fmt" data-i18n="nl_when_hint">Déjalo vacío para enviar ahora. Con fecha, se envía solo a esa hora (los destinatarios se recalculan al disparar).</div>
+      <div class="modal-err" id="nlErr"></div>
+      <div class="sec-actions"><button id="nlSend" class="btn-primary" data-i18n="nl_send">Enviar</button></div>
+      <div id="nlSchedList" class="nl-sched"></div>
+    </div>
+  </div>
+</div>
+
+<!-- modal respuestas rápidas -->
+<div id="cannedModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <h3 data-i18n="m_canned">Respuestas rápidas</h3>
+    <label><span data-i18n="m_canned_help">Una por línea · formato</span> <b data-i18n="m_canned_fmt">Título | texto</b></label>
+    <textarea id="cannedText" style="width:100%;min-height:180px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;resize:vertical;outline:none"></textarea>
+    <div class="modal-actions"><button class="btn-ghost" id="cannedCancel" data-i18n="btn_cancel">Cancelar</button><button class="btn-primary" id="cannedSave" data-i18n="btn_save">Guardar</button></div>
+  </div>
+</div>
+
+<!-- modal nueva cita -->
+<div id="apptModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <h3 id="amHead" data-i18n="m_appt">Nueva cita</h3>
+    <label data-i18n="l_lead">Lead</label>
+    <input id="amLead" list="leadsDL" data-ph="ph_lead" placeholder="Nombre o teléfono (opcional)">
+    <datalist id="leadsDL"></datalist>
+    <label data-i18n="l_datetime">Fecha y hora</label>
+    <input id="amWhen" type="datetime-local">
+    <label data-i18n="l_title">Título</label>
+    <input id="amTitle" data-ph="ph_call" placeholder="Llamada con…">
+    <label data-i18n="l_closer">Closer asignado</label>
+    <select id="amCloser"></select>
+    <label data-i18n="l_notes_appt">Notas de la cita</label>
+    <textarea id="amNotes" rows="3" data-ph="ph_notes_appt" placeholder="Contexto de lo hablado, para el closer…"></textarea>
+    <div class="modal-err" id="amErr"></div>
+    <div class="modal-actions"><button id="amDelete" class="btn-ghost" data-i18n="btn_delete_appt" style="display:none;margin-right:auto;color:#dc2626">Eliminar cita</button><button id="amCancel" class="btn-ghost" data-i18n="btn_cancel">Cancelar</button><button id="amSave" class="btn-primary" data-i18n="btn_save_appt">Guardar cita</button></div>
+  </div>
+</div>
+
+<!-- modal vista rápida de cita (solo lectura) -->
+<div id="apptViewModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <h3 id="avTitle">Cita</h3>
+    <div id="avBody"></div>
+    <div class="modal-actions"><button id="avClose" class="btn-ghost" data-i18n="btn_close">Cerrar</button><button id="avEdit" class="btn-primary" data-i18n="btn_edit_appt">Editar cita</button></div>
+  </div>
+</div>
+
+<script>
+  // ── auth ──
+  var KEY = new URLSearchParams(location.search).get('key') || sessionStorage.getItem('botpanel_key') || '';
+  var leads = [], filter = 'all', search = '', active = null, curLead = null;
+  var appts = [], calY = null, calM = null, editingApptId = null;
+
+  // ── i18n (ES / EN) ──────────────────────────────────────────────
+  var I18N = {
+    es:{ brand:'CRM BBM', login_title:'Panel de conversaciones', login_sub:'CRM BBM · acceso del equipo', ph_pw:'Contraseña', btn_enter:'Entrar', err_pw:'Contraseña incorrecta',
+      nav_conv:'Conversaciones', nav_cal:'Calendario', nav_db:'Base de datos', nav_media:'Fotos y vídeos', nav_theme:'Cambiar tema', nav_logout:'Salir', nav_lang:'English',
+      m_media:'Fotos y vídeos del bot', media_help:'El bot envía estos archivos cuando ayudan a vender. Sube el archivo (botón ⬆) o pega una URL pública, ponle una etiqueta corta (ej. "carreteras") y —importante— en "cuándo usarlo" describe la situación en la que el bot debe enviarlo (ej. "cuando pregunten cómo son las carreteras o el estado del asfalto"). Eso es lo que el bot lee para decidir; el pie de foto es lo que ve el cliente.', btn_media_add:'+ Añadir archivo', media_empty:'Aún no hay archivos. Añade el primero 👇', mt_image:'Foto', mt_video:'Vídeo', mr_ph_label:'etiqueta (ej. intro)', mr_ph_url:'sube ⬆ o pega una URL pública', mr_ph_use:'cuándo usarlo (ej. si preguntan por las carreteras)', mr_ph_cap:'pie de foto que ve el cliente (opcional)', al_media_url:'Cada archivo necesita una etiqueta y una URL (sube el archivo o pega una URL).', al_media_saved:'Biblioteca guardada ✓', ti_media_up:'Subir archivo del equipo', al_media_big:'Archivo demasiado grande (máx 16 MB).', al_media_uploaded:'Archivo subido ✓',
+      h_conv:'Conversaciones', st_wait:'por responder', st_int:'interesados', st_book:'en reserva', st_today:'hoy',
+      ph_search_lead:'Buscar lead…', chip_all:'Todos', chip_wait:'🔔 Por responder', chip_int:'🟡 Interesados', chip_book:'🔴 Reserva',
+      pick_lead:'Selecciona un lead', nochat:'Elige una conversación de la izquierda', ph_reply:'Escribe para tomar el control…', t_canned:'Respuestas rápidas', t_attach:'Enviar foto/vídeo', t_send:'Enviar', by_bot:'Enviado por el bot', by_human:'Enviado a mano', detail_empty:'Selecciona un lead para ver su ficha',
+      cal_new:'+ Nueva cita', cal_upcoming:'Próximas citas', cal_none:'Sin citas próximas', dow:['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'],
+      h_db:'Base de datos', ph_search_client:'Buscar cliente…', btn_import:'⬆ Importar Meta', ti_import:'Sube el CSV de leads que descargas de Meta Lead Ads', btn_enrich:'🔄 Actualizar desde chats', ti_enrich:'Lee las conversaciones y rellena los datos que falten', btn_csv:'⬇ Exportar CSV',
+      m_canned:'Respuestas rápidas', m_canned_help:'Una por línea · formato', m_canned_fmt:'Título | texto', btn_cancel:'Cancelar', btn_save:'Guardar',
+      m_appt:'Nueva cita', m_appt_edit:'Editar cita', l_lead:'Lead', ph_lead:'Nombre o teléfono (opcional)', l_datetime:'Fecha y hora', l_title:'Título', ph_call:'Llamada con…', btn_save_appt:'Guardar cita',
+      l_closer:'Closer asignado', l_notes_appt:'Notas de la cita', ph_notes_appt:'Contexto de lo hablado, para el closer…', btn_delete_appt:'Eliminar cita', btn_close:'Cerrar', btn_edit_appt:'Editar cita', av_nolead:'Sin lead', av_noone:'Sin asignar', av_nonotes:'Sin notas',
+      i_exploring:'explorando', i_interested:'interesado', i_booking:'reserva', i_escalate:'duda',
+      c_name:'Nombre', c_phone:'WhatsApp', c_email:'Email', c_country:'País', c_tour:'Modelo', c_package:'Plan', c_delivery:'Entrega', c_travel:'Fecha inicio', c_status:'Estado', c_intent:'Intención', c_lastact:'Últ. act.', c_appt:'Cita',
+      s_blank:'—', s_new:'🆕 Nuevo', s_quoted:'💬 Cotizado', s_won:'✅ Ganado', s_lost:'❌ Perdido', s_noshow:'🚫 No-show',
+      e_status:'Estado', e_name:'Nombre', e_country:'País', e_email:'Email', e_tour:'Modelo de moto', e_package:'Plan de alquiler', e_delivery:'Lugar de entrega', e_insurance:'Seguro', e_payment:'Método de pago', e_travel:'Fecha de inicio', e_savecard:'Guardar ficha', e_notes:'Notas internas', ph_notes:'Notas del equipo…', e_savenotes:'Guardar notas',
+      ph_pkg:'Semanal / Mensual / Anual', ph_delivery:'ej. Canggu, hotel X', ph_insurance:'Gold / Diamond / ninguno', ph_payment:'Tarjeta / Crypto / Transferencia', ph_egmonth:'ej. 15 agosto 2026',
+      f_intent:'Intención', f_lastact:'Última actividad', f_messages:'Mensajes', f_followups:'Seguimientos enviados', f_after24:'tras 24h', f_nextappt:'Próxima cita', wa_open:'Abrir en WhatsApp',
+      p_resume:'🤖 Reactivar bot', p_pause:'✋ Pausar bot', hint_paused:'Tú tienes el control · el bot está en pausa para este lead', hint_active:'El bot responde solo · si escribes tú, tomas el control',
+      win_open_a:'🟢 Ventana de 24h abierta · cierra en ', win_closed:'🔴 Ventana de 24h cerrada — WhatsApp no permite texto libre (haría falta una plantilla)', win_closed_ph:'Ventana de 24h cerrada', win_never:'🔴 El cliente aún no ha escrito — WhatsApp no permite texto libre hasta que él inicie (o usa una plantilla)',
+      ago_now:'ahora', ago_yest:'ayer', of:'de', more:'más',
+      store_redis:'🟢 Redis · persistente', store_ram:'🟠 RAM · NO persiste — configura Redis',
+      empty_results:'Sin resultados', empty_clients:'Aún no hay clientes', empty_convs:'Aún no hay conversaciones', no_msgs:'Sin mensajes guardados', no_tpl:'Sin plantillas aún',
+      flash_saved:'✓ Guardado', flash_err:'✕ Error', imp_ing:'⏳ Importando ', imp_new:'nuevos', imp_upd:'act.', enr_ing:'⏳ Leyendo chats…', enr_done:'actualizados',
+      al_status:'No se pudo guardar el estado', al_pkg:'No se pudo guardar el paquete', al_nolead:'No se han encontrado leads en el archivo (¿es el CSV de Meta Lead Ads?).', al_imp:'Error al importar', al_tpl:'No se pudieron guardar las plantillas',
+      al_send:'No se pudo enviar: ', al_send2:'\n\nSi han pasado +24h desde el último mensaje del cliente, WhatsApp no permite texto libre (haría falta plantilla).', cfm_cancel:'¿Cancelar esta cita?',
+      notify_wait:'🔔 Lead por responder', notify_hot:'🔴 Lead caliente (reserva)',
+      view_table:'Tabla', view_kanban:'Kanban',
+      m_total:'Total', m_week:'Nuevos 7d', m_new:'Nuevos', m_quoted:'Cotizados', m_won:'Ganados', m_lost:'Perdidos', m_pipeline:'Pipeline', m_revenue:'Ingresos',
+      tab_active:'Activos', tab_won:'Ganados', tab_lost:'Perdidos', tab_noshow:'No-show', tab_archived:'Archivados', tab_all:'Todos',
+      c_value:'Valor', c_owner:'Owner', c_followup:'Seguimiento', c_tags:'Tags',
+      f_all_intent:'Toda intención', f_all_pkg:'Todo paquete', f_all_source:'Todo origen', f_all_country:'Todo país', f_all_tag:'Toda etiqueta', f_due:'Seguimiento vencido', f_clear:'Limpiar filtros',
+      bulk_sel:'seleccionados', bulk_status:'Cambiar estado…', bulk_owner:'Asignar owner…', bulk_tag:'+ Etiqueta', bulk_archive:'Archivar', bulk_restore:'Restaurar', bulk_export:'Exportar', bulk_delete:'Borrar', bulk_clear:'Quitar selección',
+      prompt_tag:'Nombre de la etiqueta:', cfm_delete:'¿Borrar este lead definitivamente? No se puede deshacer.', cfm_delete_n:'¿Borrar {n} leads definitivamente? No se puede deshacer.',
+      act_archive:'Archivar', act_restore:'Restaurar', act_open:'Abrir conversación', act_delete:'Borrar',
+      act_outreach:'💬 Iniciar conversación', act_reoutreach:'💬 Reenviar intro', bulk_outreach:'💬 Iniciar conv.',
+      outreach_ing:'⏳ Enviando…', outreach_ok:'Intro enviada', outreach_err:'No se pudo iniciar la conversación. ¿Está configurada la plantilla de intro (INTRO_TEMPLATE_NAME) en Railway?',
+      q_assign:'Asignar', q_call:'Agendar llamada', call_title:'Llamada con', al_appt_date:'Pon fecha y hora', pre_bot:'Bot: ', pre_you:'Tú: ', act_call:'📞 Agendar llamada', cal_today:'Hoy',
+      nav_nl:'Newsletter', nl_title:'Newsletter por email', nl_help:'Envía un email a los leads que dieron su correo. Incluye siempre un enlace de baja automático. Prueba primero contigo.', nl_scope:'Destinatarios', nl_scope_all:'Todos con email', nl_scope_sel:'Seleccionados en la Base de datos', nl_count:'{n} destinatarios con email · {u} dados de baja se excluyen', nl_subject:'Asunto', nl_ph_subject:'Asunto del email', nl_body:'Mensaje', nl_ph_body:'Escribe el email. Deja una línea en blanco entre párrafos.', nl_test:'Enviar prueba', nl_ph_test:'tu@email.com', nl_send:'Enviar', nl_send_n:'Enviar a {n}', nl_sending:'⏳ Enviando…', nl_sent:'✓ Enviados {s} · {f} fallidos', nl_test_ok:'✓ Prueba enviada', nl_no_recip:'No hay destinatarios con email en esta selección.', nl_need:'Escribe asunto y mensaje.', nl_test_need:'Pon un email de prueba válido.', cfm_nl:'¿Enviar el newsletter a {n} personas? No se puede deshacer.', nl_fmt:'Formato: **negrita** · *cursiva* · ## Título · - lista · [texto](enlace) · [[Botón|enlace]] · ![imagen](url). El botón "Enviar prueba" te muestra cómo queda.', nl_mode:'Contenido del email', nl_mode_compose:'Escribirlo aquí', nl_mode_brevo:'Usar una plantilla de Brevo', nl_template:'Plantilla de Brevo', nl_template_hint:'Solo aparecen las plantillas transaccionales activas de Brevo. Personaliza con {{params.name}}; añade {{params.unsub}} en el pie para la baja.', nl_no_templates:'No hay plantillas transaccionales en Brevo (créala en Brevo → Transactional → Templates)', nl_pick_template:'Elige una plantilla de Brevo.', nl_when:'Programar para (opcional)', nl_when_hint:'Déjalo vacío para enviar ahora. Con fecha, se envía solo a esa hora (los destinatarios se recalculan al disparar).', nl_schedule:'Programar', nl_schedule_n:'Programar · {n} dest.', nl_scheduled_ok:'✓ Programado', cfm_nl_sched:'¿Programar el envío a {n} personas?', nl_sched_title:'Programados', nl_sched_sel:'sel.', nl_sched_all:'todos',
+      e_owner:'Propietario', e_followup:'Próximo seguimiento', e_tags:'Etiquetas', ph_tag:'Añadir etiqueta…', f_activity:'Actividad',
+      tl_empty:'Sin actividad registrada', tl_created:'Lead creado', tl_imported:'Importado de Meta', tl_status:'Estado', tl_owner:'Asignado a', tl_appt:'Cita agendada', tl_note:'Nota actualizada', tl_tag:'Etiqueta añadida', tl_archived:'Archivado', tl_restored:'Restaurado', tl_enriched:'Datos enriquecidos', tl_outreach:'Conversación iniciada (intro)', tl_fu_reminded:'Recordatorio de seguimiento enviado', tl_newsletter:'Newsletter enviado',
+      al_save:'No se pudo guardar', edit_tpl:'✎ Editar plantillas…', locale:'es-ES' },
+    en:{ brand:'CRM BBM', login_title:'Conversations panel', login_sub:'CRM BBM · team access', ph_pw:'Password', btn_enter:'Sign in', err_pw:'Wrong password',
+      nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_media:'Photos & videos', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español',
+      m_media:'Bot photos & videos', media_help:'The bot sends these files when they help the sale. Upload a file (⬆ button) or paste a public URL, give it a short label (e.g. "roads") and — importantly — in "when to use" describe the situation the bot should send it in (e.g. "when they ask what the roads or tarmac are like"). That is what the bot reads to decide; the caption is what the customer sees.', btn_media_add:'+ Add file', media_empty:'No files yet. Add the first one 👇', mt_image:'Photo', mt_video:'Video', mr_ph_label:'label (e.g. intro)', mr_ph_url:'upload ⬆ or paste a public URL', mr_ph_use:'when to use it (e.g. if they ask about the roads)', mr_ph_cap:'caption the customer sees (optional)', al_media_url:'Each file needs a label and a URL (upload a file or paste a URL).', al_media_saved:'Library saved ✓', ti_media_up:'Upload file from device', al_media_big:'File too large (max 16 MB).', al_media_uploaded:'File uploaded ✓',
+      h_conv:'Conversations', st_wait:'to reply', st_int:'interested', st_book:'booking', st_today:'today',
+      ph_search_lead:'Search lead…', chip_all:'All', chip_wait:'🔔 To reply', chip_int:'🟡 Interested', chip_book:'🔴 Booking',
+      pick_lead:'Select a lead', nochat:'Pick a conversation on the left', ph_reply:'Type to take over…', t_canned:'Quick replies', t_attach:'Send photo/video', t_send:'Send', by_bot:'Sent by the bot', by_human:'Sent manually', detail_empty:'Select a lead to see their card',
+      cal_new:'+ New appointment', cal_upcoming:'Upcoming', cal_none:'No upcoming appointments', dow:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+      h_db:'Database', ph_search_client:'Search client…', btn_import:'⬆ Import Meta', ti_import:'Upload the leads CSV you download from Meta Lead Ads', btn_enrich:'🔄 Update from chats', ti_enrich:'Reads conversations and fills in missing data', btn_csv:'⬇ Export CSV',
+      m_canned:'Quick replies', m_canned_help:'One per line · format', m_canned_fmt:'Title | text', btn_cancel:'Cancel', btn_save:'Save',
+      m_appt:'New appointment', m_appt_edit:'Edit appointment', l_lead:'Lead', ph_lead:'Name or phone (optional)', l_datetime:'Date & time', l_title:'Title', ph_call:'Call with…', btn_save_appt:'Save appointment',
+      l_closer:'Assigned closer', l_notes_appt:'Appointment notes', ph_notes_appt:'What was discussed, for the closer…', btn_delete_appt:'Delete appointment', btn_close:'Close', btn_edit_appt:'Edit appointment', av_nolead:'No lead', av_noone:'Unassigned', av_nonotes:'No notes',
+      i_exploring:'exploring', i_interested:'interested', i_booking:'booking', i_escalate:'question',
+      c_name:'Name', c_phone:'WhatsApp', c_email:'Email', c_country:'Country', c_tour:'Model', c_package:'Plan', c_delivery:'Delivery', c_travel:'Start date', c_status:'Status', c_intent:'Intent', c_lastact:'Last act.', c_appt:'Call',
+      s_blank:'—', s_new:'🆕 New', s_quoted:'💬 Quoted', s_won:'✅ Won', s_lost:'❌ Lost', s_noshow:'🚫 No-show',
+      e_status:'Status', e_name:'Name', e_country:'Country', e_email:'Email', e_tour:'Bike model', e_package:'Rental plan', e_delivery:'Delivery location', e_insurance:'Insurance', e_payment:'Payment method', e_travel:'Start date', e_savecard:'Save card', e_notes:'Internal notes', ph_notes:'Team notes…', e_savenotes:'Save notes',
+      ph_pkg:'Weekly / Monthly / Annual', ph_delivery:'e.g. Canggu, hotel X', ph_insurance:'Gold / Diamond / none', ph_payment:'Card / Crypto / Transfer', ph_egmonth:'e.g. 15 August 2026',
+      f_intent:'Intent', f_lastact:'Last activity', f_messages:'Messages', f_followups:'Follow-ups sent', f_after24:'after 24h', f_nextappt:'Next appointment', wa_open:'Open in WhatsApp',
+      p_resume:'🤖 Resume bot', p_pause:'✋ Pause bot', hint_paused:"You're in control · the bot is paused for this lead", hint_active:'The bot replies on its own · type and you take over',
+      win_open_a:'🟢 24h window open · closes in ', win_closed:'🔴 24h window closed — WhatsApp blocks free text (a template is required)', win_closed_ph:'24h window closed', win_never:'🔴 Customer hasn\'t messaged yet — WhatsApp blocks free text until they start (or use a template)',
+      ago_now:'now', ago_yest:'yesterday', of:'of', more:'more',
+      store_redis:'🟢 Redis · persistent', store_ram:'🟠 RAM · NOT persistent — set up Redis',
+      empty_results:'No results', empty_clients:'No clients yet', empty_convs:'No conversations yet', no_msgs:'No saved messages', no_tpl:'No templates yet',
+      flash_saved:'✓ Saved', flash_err:'✕ Error', imp_ing:'⏳ Importing ', imp_new:'new', imp_upd:'upd.', enr_ing:'⏳ Reading chats…', enr_done:'updated',
+      al_status:"Couldn't save status", al_pkg:"Couldn't save package", al_nolead:'No leads found in the file (is it the Meta Lead Ads CSV?).', al_imp:'Import error', al_tpl:"Couldn't save templates",
+      al_send:"Couldn't send: ", al_send2:"\n\nIf it's been 24h+ since the customer's last message, WhatsApp blocks free text (a template is required).", cfm_cancel:'Cancel this appointment?',
+      notify_wait:'🔔 Lead to reply', notify_hot:'🔴 Hot lead (booking)',
+      view_table:'Table', view_kanban:'Kanban',
+      m_total:'Total', m_week:'New 7d', m_new:'New', m_quoted:'Quoted', m_won:'Won', m_lost:'Lost', m_pipeline:'Pipeline', m_revenue:'Revenue',
+      tab_active:'Active', tab_won:'Won', tab_lost:'Lost', tab_noshow:'No-show', tab_archived:'Archived', tab_all:'All',
+      c_value:'Value', c_owner:'Owner', c_followup:'Follow-up', c_tags:'Tags',
+      f_all_intent:'Any intent', f_all_pkg:'Any package', f_all_source:'Any source', f_all_country:'Any country', f_all_tag:'Any tag', f_due:'Follow-up due', f_clear:'Clear filters',
+      bulk_sel:'selected', bulk_status:'Set status…', bulk_owner:'Assign owner…', bulk_tag:'+ Tag', bulk_archive:'Archive', bulk_restore:'Restore', bulk_export:'Export', bulk_delete:'Delete', bulk_clear:'Clear selection',
+      prompt_tag:'Tag name:', cfm_delete:'Delete this lead permanently? This cannot be undone.', cfm_delete_n:'Delete {n} leads permanently? This cannot be undone.',
+      act_archive:'Archive', act_restore:'Restore', act_open:'Open conversation', act_delete:'Delete',
+      act_outreach:'💬 Start conversation', act_reoutreach:'💬 Resend intro', bulk_outreach:'💬 Start conv.',
+      outreach_ing:'⏳ Sending…', outreach_ok:'Intro sent', outreach_err:'Could not start the conversation. Is the intro template (INTRO_TEMPLATE_NAME) configured in Railway?',
+      q_assign:'Assign', q_call:'Schedule call', call_title:'Call with', al_appt_date:'Set date and time', pre_bot:'Bot: ', pre_you:'You: ', act_call:'📞 Schedule call', cal_today:'Today',
+      nav_nl:'Newsletter', nl_title:'Email newsletter', nl_help:'Email the leads who gave you their address. Every email includes an automatic unsubscribe link. Test it on yourself first.', nl_scope:'Recipients', nl_scope_all:'Everyone with an email', nl_scope_sel:'Selected in the Database', nl_count:'{n} recipients with email · {u} unsubscribed excluded', nl_subject:'Subject', nl_ph_subject:'Email subject', nl_body:'Message', nl_ph_body:'Write the email. Leave a blank line between paragraphs.', nl_test:'Send test', nl_ph_test:'you@email.com', nl_send:'Send', nl_send_n:'Send to {n}', nl_sending:'⏳ Sending…', nl_sent:'✓ Sent {s} · {f} failed', nl_test_ok:'✓ Test sent', nl_no_recip:'No recipients with an email in this selection.', nl_need:'Write a subject and message.', nl_test_need:'Enter a valid test email.', cfm_nl:'Send the newsletter to {n} people? This cannot be undone.', nl_fmt:'Formatting: **bold** · *italic* · ## Heading · - list · [text](link) · [[Button|link]] · ![image](url). The "Send test" button shows you how it looks.', nl_mode:'Email content', nl_mode_compose:'Write it here', nl_mode_brevo:'Use a Brevo template', nl_template:'Brevo template', nl_template_hint:'Only Brevo active transactional templates show up. Personalize with {{params.name}}; add {{params.unsub}} in the footer for opt-out.', nl_no_templates:'No transactional templates in Brevo (create one in Brevo → Transactional → Templates)', nl_pick_template:'Pick a Brevo template.', nl_when:'Schedule for (optional)', nl_when_hint:'Leave empty to send now. With a date, it sends by itself at that time (recipients are recomputed when it fires).', nl_schedule:'Schedule', nl_schedule_n:'Schedule · {n} recip.', nl_scheduled_ok:'✓ Scheduled', cfm_nl_sched:'Schedule the send to {n} people?', nl_sched_title:'Scheduled', nl_sched_sel:'sel.', nl_sched_all:'everyone',
+      e_owner:'Owner', e_followup:'Next follow-up', e_tags:'Tags', ph_tag:'Add tag…', f_activity:'Activity',
+      tl_empty:'No activity yet', tl_created:'Lead created', tl_imported:'Imported from Meta', tl_status:'Status', tl_owner:'Assigned to', tl_appt:'Appointment booked', tl_note:'Note updated', tl_tag:'Tag added', tl_archived:'Archived', tl_restored:'Restored', tl_enriched:'Data enriched', tl_outreach:'Conversation started (intro)', tl_fu_reminded:'Follow-up reminder sent', tl_newsletter:'Newsletter sent',
+      al_save:"Couldn't save", edit_tpl:'✎ Edit templates…', locale:'en-GB' }
+  };
+  var LANG = localStorage.getItem('botpanel_lang') || 'es';
+  // Banderas SVG (los emoji de bandera no renderizan en Windows/Edge → se verían "GB"/"ES").
+  var FLAG={
+    gb:'<svg class="flag" viewBox="0 0 60 30" preserveAspectRatio="xMidYMid slice"><rect width="60" height="30" fill="#012169"/><path d="M0 0 60 30M60 0 0 30" stroke="#fff" stroke-width="6"/><path d="M0 0 60 30M60 0 0 30" stroke="#C8102E" stroke-width="4"/><path d="M30 0V30M0 15H60" stroke="#fff" stroke-width="10"/><path d="M30 0V30M0 15H60" stroke="#C8102E" stroke-width="6"/></svg>',
+    es:'<svg class="flag" viewBox="0 0 3 2" preserveAspectRatio="xMidYMid slice"><rect width="3" height="2" fill="#c60b1e"/><rect y=".5" width="3" height="1" fill="#ffc400"/></svg>'
+  };
+  function t(k){ var d=I18N[LANG]||I18N.es; return (d[k]!=null)?d[k]:(I18N.es[k]!=null?I18N.es[k]:k); }
+  function applyStaticI18n(){
+    document.documentElement.lang = LANG;
+    document.title = t('brand') + ' · ' + t('h_conv');
+    var n;
+    n=document.querySelectorAll('[data-i18n]'); for(var i=0;i<n.length;i++) n[i].textContent=t(n[i].getAttribute('data-i18n'));
+    n=document.querySelectorAll('[data-ph]'); for(var j=0;j<n.length;j++) n[j].placeholder=t(n[j].getAttribute('data-ph'));
+    n=document.querySelectorAll('[data-ti]'); for(var m=0;m<n.length;m++) n[m].title=t(n[m].getAttribute('data-ti'));
+    var dows=document.querySelectorAll('.cal-dow span'), dw=t('dow');
+    if(dows.length===7 && dw && dw.length===7){ for(var d2=0;d2<7;d2++) dows[d2].textContent=dw[d2]; }
+    var lt=document.getElementById('langToggle'); if(lt){ var toEN=(LANG==='es'); lt.innerHTML=(toEN?FLAG.gb:FLAG.es)+'<span>'+(toEN?'EN':'ES')+'</span>'; }
+    rebuildI18nVars();
+  }
+  function setLang(lng){
+    LANG=lng; try{ localStorage.setItem('botpanel_lang',lng); }catch(e){}
+    applyStaticI18n();
+    if(typeof render==='function') render();
+    var app=document.getElementById('app');
+    if(app.classList.contains('dbmode')){ renderDb(); if(typeof loadHealth==='function') loadHealth(); }
+    if(app.classList.contains('calmode')) renderCal();
+    if(app.classList.contains('mediamode')) renderMediaRows();
+    if(app.classList.contains('nlmode')) nlUpdateCount();
+    var inSection=['dbmode','calmode','mediamode','nlmode'].some(function(m){return app.classList.contains(m);});
+    if(active && !inSection) open_(active);
+  }
+  // Reconstruye las estructuras con texto traducido según el idioma activo.
+  function rebuildI18nVars(){
+    LABEL = {exploring:t('i_exploring'),interested:t('i_interested'),booking:t('i_booking'),escalate:t('i_escalate')};
+    STATUS_LABEL = {'':t('s_blank'),new:t('s_new'),quoted:t('s_quoted'),won:t('s_won'),lost:t('s_lost'),noshow:t('s_noshow')};
+    ST_OPTS = [['',t('s_blank')],['new',t('s_new')],['quoted',t('s_quoted')],['won',t('s_won')],['lost',t('s_lost')],['noshow',t('s_noshow')]];
+    DB_COLS = [['hot','🔥'],['name',t('c_name')],['phone',t('c_phone')],['email',t('c_email')],['country',t('c_country')],['model',t('c_tour')],['plan',t('c_package')],['deliveryLocation',t('c_delivery')],['owner',t('c_owner')],['appt',t('c_appt')],['nextFollowUp',t('c_followup')],['startDate',t('c_travel')],['status',t('c_status')],['intent',t('c_intent')],['tags',t('c_tags')],['updatedAt',t('c_lastact')]];
+  }
+
+  function api(path){ return fetch('/admin/api/' + path, { headers: { 'X-Admin-Key': KEY } }); }
+  function apiPost(path, body){ return fetch('/admin/api/' + path, { method:'POST', headers: { 'Content-Type':'application/json', 'X-Admin-Key': KEY }, body:JSON.stringify(body) }); }
+
+  function tryAuth(k){
+    KEY = k;
+    return fetch('/admin/api/leads', { headers: { 'X-Admin-Key': k } }).then(function(r){
+      if(!r.ok) throw 0;
+      return r.json();
+    }).then(function(L){
+      sessionStorage.setItem('botpanel_key', k);
+      if(location.search) history.replaceState(null, '', location.pathname); // no dejar la key en la URL
+      document.getElementById('login').style.display = 'none';
+      document.getElementById('app').classList.add('on');
+      if(window.Notification && Notification.permission === 'default'){ try{ Notification.requestPermission(); }catch(e){} }
+      leads = L; processAlerts(L); render(); start();
+      if(/\/db\/?$/.test(location.pathname)) document.getElementById('navDb').click(); // URL dedicada → abrir BD
+      return true;
+    });
+  }
+
+  document.getElementById('enter').onclick = function(){
+    var k = document.getElementById('pw').value.trim();
+    tryAuth(k).catch(function(){ document.getElementById('err').textContent = t('err_pw'); });
+  };
+  document.getElementById('pw').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('enter').click(); });
+  document.getElementById('logout').onclick = function(){ sessionStorage.removeItem('botpanel_key'); location.href = location.pathname; };
+
+  // ── tema claro/oscuro (persistente) ──
+  var theme = localStorage.getItem('botpanel_theme') || 'light';
+  function applyTheme(t){ document.body.classList.toggle('dark', t === 'dark'); }
+  applyTheme(theme);
+  document.getElementById('themeToggle').onclick = function(){
+    theme = (theme === 'dark' ? 'light' : 'dark');
+    localStorage.setItem('botpanel_theme', theme);
+    applyTheme(theme);
+  };
+  document.getElementById('langToggle').onclick = function(){ setLang(LANG==='es'?'en':'es'); };
+
+  // ── helpers ──
+  function esc(s){ var d=document.createElement('div'); d.textContent = s==null?'':s; return d.innerHTML; }
+  function initials(n){ n=(n||'').trim(); if(!n) return '#'; var p=n.split(/\s+/); return (p[0][0]+(p[1]?p[1][0]:'')).toUpperCase(); }
+  var PALETTE=['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d'];
+  function color(s){ var h=0; s=s||''; for(var i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return PALETTE[h%PALETTE.length]; }
+  function ago(ts){ var s=Math.floor((Date.now()-ts)/1000); if(s<60)return t('ago_now'); if(s<3600)return Math.floor(s/60)+'m'; if(s<86400)return Math.floor(s/3600)+'h'; var d=Math.floor(s/86400); return d===1?t('ago_yest'):d+'d'; }
+  var LABEL={exploring:'explorando',interested:'interesado',booking:'reserva',escalate:'duda'};
+
+  // ── render list ──
+  function render(){
+    var f = leads.filter(function(l){
+      if(l.archived) return false; // archivados: solo en la Database (pestaña Archivados)
+      if(filter==='waiting' && !l.waiting) return false;
+      if(filter==='interested' && l.intent!=='interested' && l.intent!=='booking') return false;
+      if(filter==='booking' && l.intent!=='booking') return false;
+      if(search){ var hay=((l.name||'')+' '+l.phone+' '+(l.lastMessage||'')).toLowerCase(); if(hay.indexOf(search)<0) return false; }
+      return true;
+    });
+    var vis = leads.filter(function(l){ return !l.archived; });
+    document.getElementById('count').textContent = vis.length;
+    var ni=0, nb=0, nt=0, nw=0, dayAgo=Date.now()-86400000;
+    vis.forEach(function(l){ if(l.intent==='interested')ni++; if(l.intent==='booking')nb++; if(l.updatedAt>dayAgo)nt++; if(l.waiting)nw++; });
+    document.getElementById('stInt').textContent=ni;
+    document.getElementById('stBook').textContent=nb;
+    document.getElementById('stNew').textContent=nt;
+    document.getElementById('stWait').textContent=nw;
+    document.getElementById('stWaitWrap').classList.toggle('on', nw>0);
+    // Orden de inbox: "por responder" arriba, luego por última actividad (más reciente primero).
+    f.sort(function(a,b){ var aw=a.waiting?1:0, bw=b.waiting?1:0; return aw!==bw ? bw-aw : (b.updatedAt||0)-(a.updatedAt||0); });
+    var box = document.getElementById('leads');
+    if(!f.length){ box.innerHTML = '<div class="empty">'+(leads.length?t('empty_results'):t('empty_convs'))+'</div>'; return; }
+    box.innerHTML = f.map(function(l){
+      var c = color(l.name||l.phone), it = l.intent||'exploring';
+      var dotc = it==='booking'?'var(--red)':it==='interested'?'var(--amber)':it==='escalate'?'#9ca3af':'var(--green)';
+      var pill = l.waiting ? '<span class="wpill">NUEVO</span>' : '<span class="dot" style="background:'+dotc+'"></span>';
+      var pre = l.lastBy==='bot' ? '<span class="pre">'+t('pre_bot')+'</span>' : l.lastBy==='human' ? '<span class="pre">'+t('pre_you')+'</span>' : '';
+      return '<div class="row'+(l.phone===active?' active':'')+(l.waiting?' wait':'')+'" onclick="open_(\''+l.phone+'\')">'
+        + '<div class="av" style="background:'+c+'">'+esc(initials(l.name||l.phone))+'</div>'
+        + '<div class="mid"><div class="nm">'+esc(l.name||l.phone)+'</div><div class="ms">'+pre+esc(l.lastMessage||'')+'</div></div>'
+        + '<div class="rt"><span class="tm">'+ago(l.updatedAt)+'</span>'+pill+'</div></div>';
+    }).join('');
+  }
+
+  document.getElementById('q').oninput = function(e){ search = e.target.value.toLowerCase().trim(); render(); };
+  Array.prototype.forEach.call(document.querySelectorAll('.chip'), function(ch){
+    ch.onclick = function(){ document.querySelectorAll('.chip').forEach(function(c){c.classList.remove('on');}); ch.classList.add('on'); filter = ch.dataset.f; render(); };
+  });
+  document.getElementById('back').onclick = function(){ var a=document.getElementById('app'); a.classList.remove('showchat'); a.classList.remove('showdetail'); };
+  // Ficha del lead en móvil: abrir/cerrar como overlay a pantalla completa
+  document.getElementById('detBtn').onclick = function(){ document.getElementById('app').classList.add('showdetail'); };
+  document.getElementById('detClose').onclick = function(){ document.getElementById('app').classList.remove('showdetail'); };
+
+  // ── open conversation ──
+  // Render de los mensajes del chat (reutilizado por open_ y el refresco en vivo).
+  var activeConvSig = '';
+  function linkify(s){ return s.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>'); }
+  function msgTime(ts){ var d=new Date(ts); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+  function msgHTML(m){
+    var meta=[];
+    if(m.role==='assistant') meta.push('<span class="mby" title="'+(m.by==='human'?t('by_human'):t('by_bot'))+'">'+(m.by==='human'?'🧑':'🤖')+'</span>');
+    if(m.ts) meta.push('<span class="mtime">'+msgTime(m.ts)+'</span>');
+    var body;
+    if(m.media && m.media.url){
+      body = (m.media.type==='video'
+          ? '<video class="mmedia" src="'+esc(m.media.url)+'" controls preload="metadata"></video>'
+          : '<img class="mmedia" src="'+esc(m.media.url)+'" loading="lazy" onclick="window.open(this.src,\'_blank\')">')
+        + (m.media.caption ? '<div class="mcap">'+esc(m.media.caption)+'</div>' : '');
+    } else {
+      body = linkify(esc(m.content)).replace(/\n/g,'<br>');
+    }
+    return '<div class="m '+m.role+(m.media?' hasmedia':'')+'">'+body+(meta.length?'<div class="mmeta">'+meta.join('')+'</div>':'')+'</div>';
+  }
+  function renderMsgs(C, forceBottom){
+    var box = document.getElementById('msgs');
+    var prevTop = box.scrollTop;
+    var nearBottom = forceBottom || (box.scrollHeight - box.scrollTop - box.clientHeight < 80);
+    box.innerHTML = C.length ? C.map(msgHTML).join('') : '<div class="nochat">'+t('no_msgs')+'</div>';
+    box.scrollTop = nearBottom ? box.scrollHeight : prevTop; // al fondo si seguía el hilo; si leía arriba, no le muevas
+  }
+  // Refresca los mensajes del chat activo sin re-pintar si no cambió (evita parpadeo/salto de scroll).
+  function loadConv(phone){
+    api('conv/'+encodeURIComponent(phone)).then(function(r){return r.json();}).then(function(C){
+      if(active!==phone) return;
+      var sig = C.length+'|'+(C.length?C[C.length-1].content:'');
+      if(sig===activeConvSig) return;
+      activeConvSig = sig; renderMsgs(C);
+    }).catch(function(){});
+  }
+  window.loadConv=loadConv;
+  function open_(phone){
+    active = phone; render();
+    var _app=document.getElementById('app'); _app.classList.add('showchat'); _app.classList.remove('showdetail');
+    var l = leads.filter(function(x){return x.phone===phone;})[0] || {phone:phone};
+    var c = color(l.name||phone), it = l.intent||'exploring';
+
+    var av = document.getElementById('ctAv'); av.style.display='flex'; av.style.background=c; av.textContent=initials(l.name||phone);
+    document.getElementById('ctName').textContent = l.name || phone;
+    document.getElementById('ctPhone').textContent = '+' + phone;
+
+    curLead = l;
+    document.getElementById('pauseBtn').style.display = 'block';
+    document.getElementById('composer').style.display = 'flex';
+    document.getElementById('sendHint').style.display = 'block';
+    updatePauseUI(!!l.paused);
+    updateWindowUI(l);
+
+    api('conv/' + encodeURIComponent(phone)).then(function(r){return r.json();}).then(function(C){
+      if(active!==phone) return; // cambió de chat mientras cargaba
+      activeConvSig = C.length+'|'+(C.length?C[C.length-1].content:'');
+      renderMsgs(C, true); // al abrir, siempre al fondo
+
+      document.getElementById('detail').innerHTML =
+        '<div class="big" style="background:'+c+'">'+esc(initials(l.name||phone))+'</div>'
+        + '<div class="dn">'+esc(l.name||phone)+'</div><div class="dp">+'+esc(phone)+'</div>'
+        + '<div class="dbadge"><span class="badge i-'+it+'">'+(LABEL[it]||it)+'</span></div>'
+        + '<a class="wa" href="https://wa.me/'+esc(phone)+'" target="_blank"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.5 15.3L2 22l4.8-1.4A10 10 0 1 0 12 2zm0 18a8 8 0 0 1-4.1-1.1l-.3-.2-2.8.8.8-2.8-.2-.3A8 8 0 1 1 12 20z"/></svg>'+t('wa_open')+'</a>'
+        + '<div class="field"><div class="k">'+t('f_intent')+'</div><div class="v">'+(LABEL[it]||it)+'</div></div>'
+        + '<div class="field"><div class="k">'+t('f_lastact')+'</div><div class="v">'+ago(l.updatedAt)+'</div></div>'
+        + '<div class="field"><div class="k">'+t('f_messages')+'</div><div class="v">'+C.length+'</div></div>'
+        + (l.followups ? '<div class="field"><div class="k">'+t('f_followups')+'</div><div class="v">'+l.followups+' '+t('f_after24')+'</div></div>' : '')
+        + apptFieldHTML(phone)
+        + crmEditorHTML(l);
+    });
+  }
+  window.open_ = open_;
+
+  // ── editor CRM de la ficha (estado, campos editables, notas) ──
+  function crmEditorHTML(l){
+    var st = l.status||'';
+    function opt(v,lbl){ return '<option value="'+v+'"'+(st===v?' selected':'')+'>'+lbl+'</option>'; }
+    return ''
+      // ── acciones rápidas ──
+      + '<div class="qbar">'
+        + '<div class="qa-row"><span class="qa-lbl">'+t('q_assign')+'</span>'
+          + OWNER_OPTS.filter(function(o){return o;}).map(function(o){ return '<button class="qa-own'+((l.owner||'')===o?' on':'')+'" onclick="qAssign(\''+o+'\')">'+esc(o)+'</button>'; }).join('')
+        + '</div>'
+        + '<div style="display:flex;gap:6px"><button class="qbtn call" onclick="fichaScheduleCall()">📞 '+t('q_call')+'</button>'
+          + '<button class="qbtn out" id="edOutreach" onclick="fichaOutreach()">'+(l.outreached?t('act_reoutreach'):t('act_outreach'))+'</button></div>'
+      + '</div>'
+      // ── actividad (timeline) arriba ──
+      + '<div class="edit"><label>'+t('f_activity')+'</label>'+tlHTML(l)+'</div>'
+      // ── formulario editable ──
+      + '<div class="edit"><label>'+t('e_status')+'</label><select id="edStatus" onchange="saveStatus()">'
+        + '<option value=""'+(st===''?' selected':'')+'>'+t('s_blank')+'</option>'
+        + opt('new',t('s_new'))+opt('quoted',t('s_quoted'))+opt('won',t('s_won'))+opt('lost',t('s_lost'))+opt('noshow',t('s_noshow'))
+      + '</select></div>'
+      + '<div class="edit"><label>'+t('e_name')+'</label><input id="edName" value="'+esc(l.name||'')+'"></div>'
+      + '<div class="edit"><label>'+t('e_country')+'</label><input id="edCountry" value="'+esc(l.country||'')+'"></div>'
+      + '<div class="edit"><label>'+t('e_email')+'</label><input id="edEmail" value="'+esc(l.email||'')+'"></div>'
+      + '<div class="edit"><label>'+t('e_tour')+'</label><input id="edTour" value="'+esc(l.model||'')+'"></div>'
+      + '<div class="edit"><label>'+t('e_package')+'</label><input id="edPackage" value="'+esc(l.plan||'')+'" placeholder="'+t('ph_pkg')+'"></div>'
+      + '<div class="edit"><label>'+t('e_delivery')+'</label><input id="edDelivery" value="'+esc(l.deliveryLocation||'')+'" placeholder="'+t('ph_delivery')+'"></div>'
+      + '<div class="edit"><label>'+t('e_insurance')+'</label><input id="edInsurance" value="'+esc(l.insuranceTier||'')+'" placeholder="'+t('ph_insurance')+'"></div>'
+      + '<div class="edit"><label>'+t('e_payment')+'</label><input id="edPayment" value="'+esc(l.paymentMethod||'')+'" placeholder="'+t('ph_payment')+'"></div>'
+      + '<div class="edit"><label>'+t('e_travel')+'</label><input id="edTravel" value="'+esc(l.startDate||'')+'" placeholder="'+t('ph_egmonth')+'"></div>'
+      + '<div class="edit"><label>'+t('e_owner')+'</label><select id="edOwner">'+OWNER_OPTS.map(function(v){return '<option value="'+esc(v)+'"'+((l.owner||'')===v?' selected':'')+'>'+esc(v||'—')+'</option>';}).join('')+'</select></div>'
+      + '<div class="edit"><label>'+t('e_followup')+'</label><input id="edFollow" type="date" value="'+(l.nextFollowUp?esc(String(l.nextFollowUp).slice(0,10)):'')+'"></div>'
+      + '<button class="savebtn" id="edSave" onclick="saveLeadFields()">'+t('e_savecard')+'</button>'
+      + '<div class="edit"><label>'+t('e_tags')+'</label><div class="tags" id="edTags">'+tagsChips(l)+'</div>'
+        + '<div style="display:flex;gap:6px;margin-top:6px"><input id="edTagNew" placeholder="'+t('ph_tag')+'" style="flex:1"><button class="savebtn" style="width:auto;margin:0;padding:8px 12px" onclick="leadAddTag()">+</button></div></div>'
+      + '<div class="edit"><label>'+t('e_notes')+'</label><textarea id="edNotes" placeholder="'+t('ph_notes')+'">'+esc(l.notes||'')+'</textarea>'
+        + '<button class="savebtn" id="edNotesSave" onclick="saveNote()">'+t('e_savenotes')+'</button></div>'
+      + '<div style="display:flex;gap:8px;margin-top:10px">'
+        + (l.archived ? '<button class="savebtn" style="background:var(--ink-soft)" onclick="fichaArchive(false)">'+t('act_restore')+'</button>' : '<button class="savebtn" style="background:var(--ink-soft)" onclick="fichaArchive(true)">'+t('act_archive')+'</button>')
+        + '<button class="savebtn" style="background:var(--red)" onclick="fichaDelete()">'+t('act_delete')+'</button></div>';
+  }
+  function tagsChips(l){
+    var tg=Array.isArray(l.tags)?l.tags:[];
+    return tg.length ? tg.map(function(x){ return '<span class="tag" style="'+tagColor(x)+'">'+esc(x)+' <b style="cursor:pointer" onclick="leadRemoveTag(\''+esc(x).replace(/'/g,'')+'\')">×</b></span>'; }).join('') : '<span class="db-dim" style="font-size:12px">—</span>';
+  }
+  var TL_ICON={created:'✨',imported:'⬆️',status:'🔁',owner:'👤',appt:'📞',note:'📝',tag:'🏷️',archived:'📦',restored:'♻️',enriched:'🔍',outreach:'💬',fu_reminded:'📅',newsletter:'📧'};
+  function tlHTML(l){
+    var h=Array.isArray(l.history)?l.history.slice().reverse():[];
+    if(!h.length) return '<div class="db-dim" style="font-size:12px;padding:6px 0">'+t('tl_empty')+'</div>';
+    return '<div class="tl">'+h.slice(0,30).map(function(e){
+      var txt=t('tl_'+e.type)||e.type;
+      if(e.type==='status') txt=t('tl_status')+': '+(STATUS_LABEL[e.to]||e.to||'—');
+      else if(e.type==='owner') txt=t('tl_owner')+': '+(e.to||'—');
+      else if(e.type==='appt') txt=t('tl_appt')+': '+esc(e.title||'');
+      else if(e.type==='tag') txt=t('tl_tag')+': '+esc(e.to||'');
+      return '<div class="tli"><span class="ic2">'+(TL_ICON[e.type]||'•')+'</span><div><div>'+txt+'</div><div class="tlt">'+fmtWhen(new Date(e.ts).toISOString())+'</div></div></div>';
+    }).join('')+'</div>';
+  }
+  function leadAddTag(){
+    if(!curLead) return; var inp=document.getElementById('edTagNew'), v=(inp.value||'').trim(); if(!v) return;
+    var tags=Array.isArray(curLead.tags)?curLead.tags.slice():[]; if(tags.indexOf(v)>=0){ inp.value=''; return; }
+    tags.push(v);
+    apiPost('lead',{phone:curLead.phone,tags:tags}).then(function(r){ if(!r.ok) throw 0; syncLead({tags:tags}); inp.value=''; document.getElementById('edTags').innerHTML=tagsChips(curLead); if(document.getElementById('app').classList.contains('dbmode')) renderTable(); }).catch(function(){ alert(t('al_save')); });
+  }
+  function leadRemoveTag(tag){
+    if(!curLead) return; var tags=(Array.isArray(curLead.tags)?curLead.tags:[]).filter(function(x){return x!==tag;});
+    apiPost('lead',{phone:curLead.phone,tags:tags}).then(function(r){ if(!r.ok) throw 0; syncLead({tags:tags}); document.getElementById('edTags').innerHTML=tagsChips(curLead); if(document.getElementById('app').classList.contains('dbmode')) renderTable(); }).catch(function(){ alert(t('al_save')); });
+  }
+  function fichaArchive(arch){
+    if(!curLead) return; apiPost('archive',{phone:curLead.phone,archived:arch}).then(function(r){ if(!r.ok) throw 0; syncLead({archived:arch}); open_(curLead.phone); }).catch(function(){ alert(t('al_save')); });
+  }
+  function fichaDelete(){
+    if(!curLead) return; if(!confirm(t('cfm_delete'))) return; var ph=curLead.phone;
+    apiPost('lead/delete',{phone:ph}).then(function(r){ if(!r.ok) throw 0; leads=leads.filter(function(x){return x.phone!==ph;}); curLead=null; active=null; document.getElementById('detail').innerHTML='<div class="ph-detail">'+t('detail_empty')+'</div>'; document.getElementById('app').classList.remove('showchat'); render(); }).catch(function(){ alert(t('al_save')); });
+  }
+  function fichaOutreach(){
+    if(!curLead) return; var b=document.getElementById('edOutreach'); if(b){ b.disabled=true; b.textContent=t('outreach_ing'); }
+    apiPost('outreach',{phone:curLead.phone}).then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); }).then(function(o){
+      if(!o.ok) throw ((o.j&&o.j.error)||'error');
+      syncLead({outreached:true}); if(b){ b.disabled=false; b.textContent='✓ '+t('outreach_ok'); }
+    }).catch(function(e){ if(b){ b.disabled=false; b.textContent=t('act_outreach'); } alert(t('outreach_err')+(typeof e==='string'?'\n\n'+e:'')); });
+  }
+  function rowOutreach(phone){ closeRowMenu();
+    apiPost('outreach',{phone:phone}).then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); }).then(function(o){
+      if(!o.ok) throw ((o.j&&o.j.error)||'error'); var L=leads.filter(function(x){return x.phone===phone;})[0]; if(L)L.outreached=true;
+    }).catch(function(e){ alert(t('outreach_err')+(typeof e==='string'?'\n\n'+e:'')); });
+  }
+  function qAssign(owner){ if(!curLead) return; var v=(curLead.owner===owner)?'':owner;
+    apiPost('lead',{phone:curLead.phone,owner:v}).then(function(r){ if(!r.ok) throw 0; syncLead({owner:v}); if(active) open_(active); }).catch(function(){ alert(t('al_save')); });
+  }
+  // Fecha/hora por defecto al agendar: mañana a las 10:00 (en local del navegador), lista para ajustar.
+  function defaultApptWhen(){ var d=new Date(); d.setDate(d.getDate()+1); d.setHours(10,0,0,0);
+    return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)+'T10:00'; }
+  // Abre el modal de cita ya rellenado para un lead concreto (usado desde la ficha y desde la tabla).
+  function scheduleCallFor(lead){ if(!lead) return;
+    var who=(lead.name||lead.phone);
+    openApptCreate();
+    document.getElementById('amLead').value=who+' (+'+lead.phone+')';
+    document.getElementById('amTitle').value=t('call_title')+' '+who;
+    document.getElementById('amWhen').value=defaultApptWhen();
+    fillCloserOpts(lead.owner||''); // el closer por defecto = quien lleva el lead; se puede cambiar
+  }
+  function fichaScheduleCall(){ scheduleCallFor(curLead); }
+  function rowScheduleCall(phone){ closeRowMenu(); scheduleCallFor(leads.filter(function(x){return x.phone===phone;})[0]); }
+  window.rowScheduleCall=rowScheduleCall;
+  window.leadAddTag=leadAddTag; window.leadRemoveTag=leadRemoveTag; window.fichaArchive=fichaArchive; window.fichaDelete=fichaDelete; window.fichaOutreach=fichaOutreach; window.rowOutreach=rowOutreach; window.qAssign=qAssign; window.fichaScheduleCall=fichaScheduleCall;
+  function flash(id, ok){
+    var b = document.getElementById(id); if(!b) return; var orig = b.textContent;
+    b.textContent = ok ? t('flash_saved') : t('flash_err'); b.classList.add(ok?'ok':'bad');
+    setTimeout(function(){ b.textContent = orig; b.classList.remove('ok','bad'); }, 1500);
+  }
+  function syncLead(fields){ Object.assign(curLead, fields); var L = leads.filter(function(x){return x.phone===curLead.phone;})[0]; if(L) Object.assign(L, fields); }
+  function saveStatus(){
+    if(!curLead) return; var v = document.getElementById('edStatus').value;
+    apiPost('status',{phone:curLead.phone,status:v}).then(function(r){ if(!r.ok) throw 0; syncLead({status:v}); }).catch(function(){ alert(t('al_status')); });
+  }
+  function saveNote(){
+    if(!curLead) return; var v = document.getElementById('edNotes').value;
+    apiPost('note',{phone:curLead.phone,notes:v}).then(function(r){ if(!r.ok) throw 0; syncLead({notes:v}); flash('edNotesSave',true); }).catch(function(){ flash('edNotesSave',false); });
+  }
+  function saveLeadFields(){
+    if(!curLead) return;
+    var body = { phone:curLead.phone,
+      name:document.getElementById('edName').value.trim(),
+      country:document.getElementById('edCountry').value.trim(),
+      email:document.getElementById('edEmail').value.trim(),
+      model:document.getElementById('edTour').value.trim(),
+      plan:document.getElementById('edPackage').value.trim(),
+      deliveryLocation:document.getElementById('edDelivery').value.trim(),
+      insuranceTier:document.getElementById('edInsurance').value.trim(),
+      paymentMethod:document.getElementById('edPayment').value.trim(),
+      startDate:document.getElementById('edTravel').value.trim(),
+      owner:document.getElementById('edOwner').value,
+      nextFollowUp:document.getElementById('edFollow').value };
+    apiPost('lead',body).then(function(r){ if(!r.ok) throw 0;
+      syncLead(body);
+      document.getElementById('ctName').textContent = body.name || curLead.phone;
+      flash('edSave',true); render();
+    }).catch(function(){ flash('edSave',false); });
+  }
+  window.saveStatus = saveStatus; window.saveNote = saveNote; window.saveLeadFields = saveLeadFields;
+
+  // ── toma de control: responder a mano + pausar el bot ──
+  function appendBubble(role, content, opts){
+    var box = document.getElementById('msgs');
+    if(box.querySelector('.nochat')) box.innerHTML = '';
+    opts = opts || {};
+    var m = { role:role, content:content, ts:Date.now(), by:opts.by, media:opts.media };
+    box.insertAdjacentHTML('beforeend', msgHTML(m));
+    activeConvSig = ''; // fuerza que el próximo loadConv re-sincronice con el servidor
+    box.scrollTop = box.scrollHeight;
+  }
+  function updatePauseUI(paused){
+    var btn = document.getElementById('pauseBtn'), hint = document.getElementById('sendHint');
+    if(paused){ btn.textContent = t('p_resume'); btn.classList.add('paused'); hint.textContent = t('hint_paused'); }
+    else { btn.textContent = t('p_pause'); btn.classList.remove('paused'); hint.textContent = t('hint_active'); }
+  }
+  // Indicador de la ventana de 24h de WhatsApp (texto libre solo dentro de ella)
+  function updateWindowUI(l){
+    var el = document.getElementById('winInfo'), ta = document.getElementById('reply'), btn = document.getElementById('sendBtn');
+    var t2 = l && l.lastInboundAt;
+    if(!t2){ // el cliente aún no ha escrito → la ventana de 24h no está abierta: no se puede texto libre
+      el.className = 'wininfo closed'; el.innerHTML = t('win_never');
+      ta.disabled = true; btn.disabled = true; ta.placeholder = t('win_closed_ph'); return;
+    }
+    var left = 24*3600000 - (Date.now() - t2);
+    if(left > 0){
+      var h = Math.floor(left/3600000), m = Math.floor((left%3600000)/60000);
+      el.className = 'wininfo open';
+      el.innerHTML = t('win_open_a') + (h>0 ? h+'h ' : '') + m + 'm';
+      ta.disabled = false; btn.disabled = false; ta.placeholder = t('ph_reply');
+    } else {
+      el.className = 'wininfo closed';
+      el.innerHTML = t('win_closed');
+      ta.disabled = true; btn.disabled = true; ta.placeholder = t('win_closed_ph');
+    }
+  }
+
+  // ── avisos: sonido + notificación de escritorio al entrar un lead nuevo ──
+  var seenWait = {}, seenBook = {}, alertsReady = false, actx = null;
+  function beep(){
+    try{
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if(actx.state === 'suspended') actx.resume();
+      var o = actx.createOscillator(), g = actx.createGain();
+      o.connect(g); g.connect(actx.destination); o.type = 'sine'; o.frequency.value = 880;
+      g.gain.setValueAtTime(0.001, actx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.18, actx.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.35);
+      o.start(); o.stop(actx.currentTime + 0.36);
+    }catch(e){}
+  }
+  function notify(title, body){
+    try{
+      if(window.Notification && Notification.permission === 'granted'){
+        var n = new Notification(title, { body: body || '' });
+        n.onclick = function(){ window.focus(); n.close(); };
+        setTimeout(function(){ try{ n.close(); }catch(e){} }, 8000);
+      }
+    }catch(e){}
+  }
+  function processAlerts(L){
+    var nw = [], nb = [], curW = {}, curB = {};
+    L.forEach(function(l){
+      if(l.waiting){ curW[l.phone] = 1; if(!seenWait[l.phone]) nw.push(l); }
+      if(l.intent === 'booking'){ curB[l.phone] = 1; if(!seenBook[l.phone]) nb.push(l); }
+    });
+    seenWait = curW; seenBook = curB;
+    if(!alertsReady){ alertsReady = true; return; } // primer load: solo sembrar, no avisar
+    if(nw.length || nb.length){
+      beep();
+      var l = nw[0] || nb[0];
+      var title = nw.length ? t('notify_wait') : t('notify_hot');
+      notify(title, (l.name || ('+' + l.phone)) + (l.lastMessage ? ' — ' + l.lastMessage : ''));
+    }
+  }
+  function togglePause(){
+    if(!curLead) return;
+    var ns = !curLead.paused;
+    apiPost('pause', { phone: curLead.phone, paused: ns }).then(function(r){ return r.json(); }).then(function(){
+      curLead.paused = ns; updatePauseUI(ns);
+      var L = leads.filter(function(x){ return x.phone === curLead.phone; })[0]; if(L) L.paused = ns;
+    });
+  }
+  function sendMsg(){
+    if(!curLead) return;
+    var ta = document.getElementById('reply'), txt = ta.value.trim(); if(!txt) return;
+    var btn = document.getElementById('sendBtn'); btn.disabled = true;
+    apiPost('send', { phone: curLead.phone, text: txt }).then(function(r){
+      if(!r.ok) return r.json().then(function(e){ throw e; });
+      ta.value = ''; ta.style.height = 'auto'; appendBubble('assistant', txt, {by:'human'});
+      curLead.paused = true; updatePauseUI(true);
+      var L = leads.filter(function(x){ return x.phone === curLead.phone; })[0]; if(L) L.paused = true;
+    }).catch(function(e){
+      alert(t('al_send') + ((e && e.error) || 'error') + t('al_send2'));
+    }).then(function(){ btn.disabled = false; });
+  }
+  // Enviar una foto/vídeo a mano desde el chat: subir → send-media. La caja de texto (si hay) va de pie.
+  function sendMediaFromComposer(file){
+    if(!curLead) return;
+    if(file.size>16*1024*1024){ alert(t('al_media_big')); return; }
+    var ta=document.getElementById('reply'), caption=ta.value.trim();
+    var ab=document.getElementById('attachBtn'); ab.disabled=true; ab.textContent='⏳';
+    var fr=new FileReader();
+    fr.onload=function(){
+      apiPost('media/upload',{dataUrl:fr.result}).then(function(r){ if(!r.ok) return r.json().then(function(e){throw e;}); return r.json(); }).then(function(d){
+        return apiPost('send-media',{phone:curLead.phone,url:d.url,type:d.type,caption:caption}).then(function(r2){ if(!r2.ok) return r2.json().then(function(e){throw e;}); return d; });
+      }).then(function(d){
+        ta.value=''; ta.style.height='auto';
+        appendBubble('assistant', caption, {by:'human', media:{type:d.type,url:d.url,caption:caption}});
+        curLead.paused=true; updatePauseUI(true);
+        var L=leads.filter(function(x){return x.phone===curLead.phone;})[0]; if(L)L.paused=true;
+      }).catch(function(e){ alert(t('al_send')+((e&&e.error)||'error')+t('al_send2')); }).then(function(){ ab.disabled=false; ab.textContent='📎'; });
+    };
+    fr.readAsDataURL(file);
+  }
+  document.getElementById('pauseBtn').onclick = togglePause;
+  document.getElementById('sendBtn').onclick = sendMsg;
+  document.getElementById('attachBtn').onclick = function(){ if(document.getElementById('reply').disabled) return; document.getElementById('attachFile').click(); };
+  document.getElementById('attachFile').onchange = function(e){ var f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) sendMediaFromComposer(f); };
+  (function(){
+    var ta = document.getElementById('reply');
+    ta.addEventListener('input', function(){ ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'; });
+    ta.addEventListener('keydown', function(e){ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendMsg(); } });
+  })();
+
+  // ── respuestas rápidas (canned replies) ──
+  var canned = [];
+  function loadCanned(){ api('canned').then(function(r){return r.json();}).then(function(C){ canned = Array.isArray(C)?C:[]; }).catch(function(){}); }
+  function renderCannedPop(){
+    var pop = document.getElementById('cannedPop');
+    pop.innerHTML = (canned.length ? canned.map(function(c,i){
+      return '<div class="ci" onclick="useCanned('+i+')"><div class="ct">'+esc(c.title)+'</div><div class="cx">'+esc(c.text)+'</div></div>';
+    }).join('') : '<div class="ci" style="color:#9aa3b5;cursor:default">'+t('no_tpl')+'</div>')
+    + '<div class="cedit" id="cannedEditLink">'+t('edit_tpl')+'</div>';
+    document.getElementById('cannedEditLink').onclick = editCanned;
+  }
+  function toggleCanned(){
+    var pop = document.getElementById('cannedPop');
+    if(pop.classList.contains('on')){ pop.classList.remove('on'); return; }
+    renderCannedPop(); pop.classList.add('on');
+  }
+  function useCanned(i){
+    var c = canned[i]; if(!c) return;
+    var ta = document.getElementById('reply');
+    ta.value = ta.value ? (ta.value.replace(/\s*$/,'') + ' ' + c.text) : c.text;
+    ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'; ta.focus();
+    document.getElementById('cannedPop').classList.remove('on');
+  }
+  function editCanned(){
+    document.getElementById('cannedPop').classList.remove('on');
+    document.getElementById('cannedText').value = canned.map(function(c){ return c.title + ' | ' + c.text; }).join('\n');
+    document.getElementById('cannedModal').style.display = 'flex';
+  }
+  function saveCanned(){
+    var lines = document.getElementById('cannedText').value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+    var list = lines.map(function(l){ var i = l.indexOf('|'); return i<0 ? { title:l.slice(0,30), text:l } : { title:l.slice(0,i).trim(), text:l.slice(i+1).trim() }; });
+    apiPost('canned',{list:list}).then(function(r){ if(!r.ok) throw 0; canned = list; document.getElementById('cannedModal').style.display='none'; }).catch(function(){ alert(t('al_tpl')); });
+  }
+  window.useCanned = useCanned;
+  document.getElementById('cannedBtn').onclick = toggleCanned;
+  document.getElementById('cannedCancel').onclick = function(){ document.getElementById('cannedModal').style.display='none'; };
+  document.getElementById('cannedSave').onclick = saveCanned;
+  document.addEventListener('click', function(e){
+    var pop = document.getElementById('cannedPop'), btn = document.getElementById('cannedBtn');
+    if(pop && pop.classList.contains('on') && !pop.contains(e.target) && e.target !== btn) pop.classList.remove('on');
+  });
+
+  // ── CALENDARIO ──
+  function loadAppts(cb){ api('appts').then(function(r){return r.json();}).then(function(A){ appts = A; if(cb) cb(); }).catch(function(){}); }
+  function sameDay(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+  function timeOf(iso){ var d=new Date(iso); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+  function fmtWhen(iso){ var d=new Date(iso); return d.toLocaleDateString(t('locale'),{weekday:'short',day:'numeric',month:'short'})+' · '+timeOf(iso); }
+  function nextApptFor(phone){ var now=Date.now()-3600000; return appts.filter(function(a){ return a.phone===phone && new Date(a.when).getTime()>=now; }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); })[0]; }
+  function apptFieldHTML(phone){ var a=nextApptFor(phone); if(!a) return ''; return '<div class="field"><div class="k">'+t('f_nextappt')+'</div><div class="v">'+esc(a.title)+'<br><span style="color:var(--accent);font-size:13px">'+fmtWhen(a.when)+'</span>'+(a.closer?'<br><span style="font-size:12px;color:var(--ink-soft)">👤 '+esc(a.closer)+'</span>':'')+'</div></div>'; }
+
+  // ── modal de cita: crear / editar (mismo modal, reutiliza OWNER_OPTS como lista de closers) ──
+  function fillCloserOpts(sel){ var s=document.getElementById('amCloser'); s.innerHTML=OWNER_OPTS.map(function(v){return '<option value="'+esc(v)+'">'+esc(v||'—')+'</option>';}).join(''); s.value=sel||''; }
+  function openApptCreate(){ editingApptId=null; buildLeadsDL();
+    document.getElementById('amHead').textContent=t('m_appt'); document.getElementById('amErr').textContent='';
+    document.getElementById('amLead').value=''; document.getElementById('amWhen').value=''; document.getElementById('amTitle').value=''; document.getElementById('amNotes').value=''; fillCloserOpts('');
+    document.getElementById('amDelete').style.display='none';
+    document.getElementById('apptModal').style.display='flex';
+  }
+  function openApptEdit(id){ var a=appts.filter(function(x){return x.id===id;})[0]; if(!a) return; editingApptId=id; buildLeadsDL();
+    document.getElementById('amHead').textContent=t('m_appt_edit'); document.getElementById('amErr').textContent='';
+    document.getElementById('amLead').value=a.name?(a.name+(a.phone?' (+'+a.phone+')':'')):(a.phone?'+'+a.phone:'');
+    document.getElementById('amWhen').value=(a.when||'').slice(0,16); document.getElementById('amTitle').value=a.title||''; document.getElementById('amNotes').value=a.notes||''; fillCloserOpts(a.closer||'');
+    document.getElementById('amDelete').style.display='';
+    document.getElementById('apptModal').style.display='flex';
+  }
+  window.openApptEdit=openApptEdit;
+
+  // Vista rápida de solo lectura: el clic en una cita abre esto, NO el editor (evita cambios accidentales).
+  var viewingApptId=null;
+  var AVIC={
+    cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+    user:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+    closer:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></svg>',
+    note:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>',
+    go:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'
+  };
+  function avRow(ic,k,v){ return '<div class="av-row"><span class="av-ic">'+ic+'</span><span class="av-main"><span class="av-k">'+esc(k)+'</span>'+v+'</span></div>'; }
+  function openApptView(id){ var a=appts.filter(function(x){return x.id===id;})[0]; if(!a) return; viewingApptId=id;
+    document.getElementById('avTitle').textContent=a.title||t('m_appt');
+    var rows='';
+    // fecha (destacada en acento)
+    rows+=avRow(AVIC.cal, t('l_datetime'), '<span class="av-v accent">'+esc(fmtWhen(a.when))+'</span>');
+    // lead → fila-botón que abre WhatsApp si hay teléfono
+    var leadTxt=a.name?(esc(a.name)+(a.phone?' <span class="av-empty">(+'+esc(a.phone)+')</span>':'')):(a.phone?('+'+esc(a.phone)):('<span class="av-empty">'+t('av_nolead')+'</span>'));
+    if(a.phone){
+      rows+='<button type="button" class="av-row" onclick="window.open(\'https://wa.me/'+esc(a.phone)+'\',\'_blank\')" title="'+t('wa_open')+'">'
+        +'<span class="av-ic">'+AVIC.user+'</span><span class="av-main"><span class="av-k">'+t('l_lead')+'</span><span class="av-v">'+leadTxt+'</span></span>'
+        +'<span class="av-go">'+AVIC.go+'</span></button>';
+    } else {
+      rows+=avRow(AVIC.user, t('l_lead'), '<span class="av-v">'+leadTxt+'</span>');
+    }
+    // closer
+    rows+=avRow(AVIC.closer, t('l_closer'), a.closer?('<span class="av-v">'+esc(a.closer)+'</span>'):('<span class="av-v av-empty">'+t('av_noone')+'</span>'));
+    // notas (panel legible)
+    var notes=a.notes?('<div class="av-notes">'+esc(a.notes).replace(/\n/g,'<br>')+'</div>'):('<span class="av-v av-empty">'+t('av_nonotes')+'</span>');
+    rows+='<div class="av-row"><span class="av-ic">'+AVIC.note+'</span><span class="av-main"><span class="av-k">'+t('l_notes_appt')+'</span>'+notes+'</span></div>';
+    document.getElementById('avBody').innerHTML=rows;
+    document.getElementById('apptViewModal').style.display='flex';
+  }
+  window.openApptView=openApptView;
+
+  // ── Biblioteca de media (fotos/vídeos que el bot puede enviar) ──
+  var mediaItems = [];
+  function loadMedia(cb){ api('media').then(function(r){return r.json();}).then(function(A){ mediaItems = Array.isArray(A)?A:[]; if(cb)cb(); }).catch(function(){ mediaItems=[]; if(cb)cb(); }); }
+  function readMediaFromDOM(){
+    var rows=document.querySelectorAll('#mediaList .media-row');
+    mediaItems=Array.prototype.map.call(rows,function(row){
+      return { id:row.getAttribute('data-id')||'', label:row.querySelector('.mr-label').value.trim(),
+        type:row.querySelector('.mr-type').value, url:row.querySelector('.mr-url').value.trim(),
+        use:row.querySelector('.mr-use').value.trim(),
+        caption:row.querySelector('.mr-cap').value.trim() };
+    });
+  }
+  function renderMediaRows(){
+    var list=document.getElementById('mediaList');
+    if(!mediaItems.length){ list.innerHTML='<div class="media-empty">'+t('media_empty')+'</div>'; return; }
+    list.innerHTML=mediaItems.map(function(m,i){
+      var img=(m.type||'image')==='image', vid=(m.type||'image')==='video';
+      return '<div class="media-row" data-id="'+esc(m.id||'')+'">'
+        +'<div class="mr-top"><input class="mr-label" value="'+esc(m.label||'')+'" placeholder="'+t('mr_ph_label')+'">'
+        +'<select class="mr-type"><option value="image"'+(img?' selected':'')+'>'+t('mt_image')+'</option><option value="video"'+(vid?' selected':'')+'>'+t('mt_video')+'</option></select>'
+        +'<button class="mr-del" onclick="mediaDelRow('+i+')" title="'+t('bulk_delete')+'">✕</button></div>'
+        +'<div class="mr-urlrow"><input class="mr-url" value="'+esc(m.url||'')+'" placeholder="'+t('mr_ph_url')+'">'
+        +'<button class="mr-up" onclick="mediaPick('+i+')" title="'+t('ti_media_up')+'">⬆</button>'
+        +'<input type="file" class="mr-file" accept="image/*,video/*" style="display:none" onchange="mediaUpload('+i+',this)"></div>'
+        +'<input class="mr-use" value="'+esc(m.use||'')+'" placeholder="'+t('mr_ph_use')+'">'
+        +'<input class="mr-cap" value="'+esc(m.caption||'')+'" placeholder="'+t('mr_ph_cap')+'"></div>';
+    }).join('');
+  }
+  function mediaDelRow(i){ readMediaFromDOM(); mediaItems.splice(i,1); renderMediaRows(); }
+  window.mediaDelRow=mediaDelRow;
+  function mediaPick(i){ var rows=document.querySelectorAll('#mediaList .media-row'); var f=rows[i]&&rows[i].querySelector('.mr-file'); if(f) f.click(); }
+  function mediaUpload(i,input){
+    var file=input.files&&input.files[0]; if(!file) return;
+    var errEl=document.getElementById('mediaErr');
+    if(file.size>16*1024*1024){ errEl.style.color=''; errEl.textContent=t('al_media_big'); input.value=''; return; }
+    var rows=document.querySelectorAll('#mediaList .media-row'); var up=rows[i]&&rows[i].querySelector('.mr-up');
+    if(up){ up.textContent='⏳'; up.disabled=true; }
+    var fr=new FileReader();
+    fr.onload=function(){
+      apiPost('media/upload',{dataUrl:fr.result}).then(function(r){ if(!r.ok) return r.json().then(function(e){throw e;}); return r.json(); }).then(function(d){
+        readMediaFromDOM();
+        mediaItems[i]=mediaItems[i]||{label:'',type:'image',url:'',caption:''};
+        mediaItems[i].url=d.url; mediaItems[i].type=d.type;
+        if(!mediaItems[i].label){ mediaItems[i].label=(file.name||'').replace(/\.[^.]+$/,'').slice(0,40); }
+        renderMediaRows();
+        errEl.style.color='var(--accent)'; errEl.textContent=t('al_media_uploaded'); setTimeout(function(){ errEl.textContent=''; errEl.style.color=''; },1600);
+      }).catch(function(e){ if(up){ up.textContent='⬆'; up.disabled=false; } errEl.style.color=''; errEl.textContent=(e&&e.error)||t('al_save'); });
+    };
+    fr.readAsDataURL(file);
+  }
+  window.mediaPick=mediaPick; window.mediaUpload=mediaUpload;
+  function openMedia(){ document.getElementById('mediaErr').textContent=''; loadMedia(function(){ renderMediaRows(); }); }
+  window.openMedia=openMedia;
+
+  function renderCal(){
+    if(calY==null){ var n=new Date(); calY=n.getFullYear(); calM=n.getMonth(); }
+    document.getElementById('calMonth').textContent = new Date(calY,calM,1).toLocaleDateString(t('locale'),{month:'long',year:'numeric'});
+    var startDow=(new Date(calY,calM,1).getDay()+6)%7, daysInMonth=new Date(calY,calM+1,0).getDate(), today=new Date();
+    var html='';
+    for(var i=0;i<42;i++){
+      var d=new Date(calY,calM,i-startDow+1);
+      var out=d.getMonth()!==calM, isToday=sameDay(d,today);
+      var da=appts.filter(function(a){ return sameDay(new Date(a.when),d); }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); });
+      var chips=da.slice(0,3).map(function(a){ return '<div class="appt" onclick="openApptView(\''+a.id+'\')" title="'+esc(a.title)+(a.closer?' · '+esc(a.closer):'')+'">'+timeOf(a.when)+' '+esc(a.title)+'</div>'; }).join('');
+      if(da.length>3) chips+='<div class="appt" style="background:none;border:0;color:#9aa3b5">+'+(da.length-3)+' '+t('more')+'</div>';
+      html+='<div class="cal-day'+(out?' out':'')+(isToday?' today':'')+'"><span class="dnum">'+d.getDate()+'</span>'+(isToday?'<span class="todaytag">'+t('cal_today')+'</span>':'')+chips+'</div>';
+    }
+    document.getElementById('calGrid').innerHTML=html;
+    var now=Date.now()-3600000;
+    var up=appts.filter(function(a){ return new Date(a.when).getTime()>=now; }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); }).slice(0,12);
+    document.getElementById('upList').innerHTML = up.length ? up.map(function(a){
+      return '<div class="up" style="cursor:pointer" onclick="openApptView(\''+a.id+'\')"><span class="del" onclick="cancelAppt(event,\''+a.id+'\')">✕</span><div class="ut">'+esc(a.title)+'</div><div class="uw">'+fmtWhen(a.when)+'</div>'+((a.name||a.phone)?'<div class="un">'+esc(a.name||('+'+a.phone))+'</div>':'')+(a.closer?'<div class="un" style="color:var(--accent)">👤 '+esc(a.closer)+'</div>':'')+'</div>';
+    }).join('') : '<div style="color:#9aa3b5;font-size:13px">'+t('cal_none')+'</div>';
+  }
+
+  function cancelAppt(e,id){ e.stopPropagation(); if(!confirm(t('cfm_cancel'))) return; fetch('/admin/api/appts/'+id,{method:'DELETE',headers:{'X-Admin-Key':KEY}}).then(function(){ loadAppts(renderCal); }); }
+  window.cancelAppt=cancelAppt;
+
+  function buildLeadsDL(){ document.getElementById('leadsDL').innerHTML = leads.map(function(l){ return '<option value="'+esc((l.name||l.phone)+' (+'+l.phone+')')+'">'; }).join(''); }
+  // ── BASE DE DATOS: tabla de TODOS los clientes ──
+  var dbSearch = '', dbPage = 1, DB_PAGE_SIZE = 25;
+  var isMobile = window.matchMedia && window.matchMedia('(max-width:760px)').matches;
+  var dbTab = 'active', dbView = (isMobile?'kanban':'table'), dbSort = {key:'hot', dir:-1}, dbSelected = {};
+  var dbFilters = {intent:'', pkg:'', source:'', country:'', tag:'', due:false};
+  var DB_COLS = [
+    ['hot','🔥'],
+    ['name','Nombre'],['phone','WhatsApp'],['email','Email'],['country','País'],
+    ['model','Modelo'],['plan','Plan'],['deliveryLocation','Entrega'],['owner','Owner'],['appt','Cita'],
+    ['nextFollowUp','Seguimiento'],['startDate','Fecha inicio'],['status','Estado'],['intent','Intención'],['tags','Tags'],['updatedAt','Últ. act.']
+  ];
+  var STATUS_LABEL = {'':'—',new:'🆕 Nuevo',quoted:'💬 Cotizado',won:'✅ Ganado',lost:'❌ Perdido',noshow:'🚫 No-show'};
+  var ST_OPTS = [['','—'],['new','🆕 Nuevo'],['quoted','💬 Cotizado'],['won','✅ Ganado'],['lost','❌ Perdido'],['noshow','🚫 No-show']];
+  var PKG_OPTS = ['','Bronze','Silver','Gold','Platinum','Titanium','Diamond'];
+  var OWNER_OPTS = ['']; // BBM aun no ha confirmado su equipo de closers — no inventar nombres
+  var ORDER = {'':0,new:1,quoted:2,won:3,lost:4,noshow:5};
+  // ponytail: sin PKG_PRICE — el precio del alquiler depende de modelo × periodo (tabla completa
+  // en context-balibest.md), no es un valor fijo por plan como en el tour. leadValue siempre 0.
+  function leadValue(){ return 0; }
+  // Prioridad de lead: score 0-~200 con campos que ya llegan del servidor. ponytail: heurística de ranking, ajustar pesos si el owner discrepa del orden.
+  function leadScore(l){
+    if(!l || l.archived) return 0;
+    var s=0;
+    if(l.waiting) s+=150;                                  // cliente escribió y espera respuesta: domina siempre (techo no-waiting = 145)
+    var it=l.intent||'exploring';
+    s += it==='booking'?60 : it==='escalate'?50 : it==='interested'?35 : 0;
+    if(isOverdue(l)) s+=25;                                // seguimiento vencido
+    var h=(Date.now()-(l.updatedAt||0))/3600000;           // recencia: hasta +20 en las últimas 48h
+    if(h>=0 && h<48) s += 20*(1-h/48);
+    return Math.round(s);
+  }
+  function hotWhy(l,s){
+    var r=[]; if(l.waiting) r.push('esperando respuesta');
+    var it=l.intent||''; if(it==='booking') r.push('quiere reservar'); else if(it==='escalate') r.push('pide humano'); else if(it==='interested') r.push('interesado');
+    if(isOverdue(l)) r.push('seguimiento vencido');
+    return 'Prioridad '+s+(r.length?' · '+r.join(' · '):'');
+  }
+  function money(n){ return n ? '$'+n.toLocaleString('en-US') : ''; }
+  function leadSource(l){ return l.source==='meta-form' ? 'meta' : 'chat'; }
+  function todayISO(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+  function isOverdue(l){ return l.nextFollowUp && String(l.nextFollowUp).slice(0,10) <= todayISO(); }
+  function tagColor(s){ var h=0; s=s||''; for(var i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; var hue=h%360; return 'background:hsla('+hue+',70%,50%,.15);color:hsl('+hue+',60%,38%)'; }
+  // País por prefijo telefónico (E.164). Se fuerza desde el número; ignora country manual.
+  var DIAL={
+    '1':['us','United States'],'7':['ru','Russia'],'20':['eg','Egypt'],'27':['za','South Africa'],'30':['gr','Greece'],'31':['nl','Netherlands'],'32':['be','Belgium'],'33':['fr','France'],'34':['es','Spain'],'36':['hu','Hungary'],'39':['it','Italy'],'40':['ro','Romania'],'41':['ch','Switzerland'],'43':['at','Austria'],'44':['gb','United Kingdom'],'45':['dk','Denmark'],'46':['se','Sweden'],'47':['no','Norway'],'48':['pl','Poland'],'49':['de','Germany'],
+    '51':['pe','Peru'],'52':['mx','Mexico'],'53':['cu','Cuba'],'54':['ar','Argentina'],'55':['br','Brazil'],'56':['cl','Chile'],'57':['co','Colombia'],'58':['ve','Venezuela'],'60':['my','Malaysia'],'61':['au','Australia'],'62':['id','Indonesia'],'63':['ph','Philippines'],'64':['nz','New Zealand'],'65':['sg','Singapore'],'66':['th','Thailand'],
+    '81':['jp','Japan'],'82':['kr','South Korea'],'84':['vn','Vietnam'],'86':['cn','China'],'90':['tr','Turkey'],'91':['in','India'],'92':['pk','Pakistan'],'94':['lk','Sri Lanka'],'95':['mm','Myanmar'],'98':['ir','Iran'],
+    '212':['ma','Morocco'],'213':['dz','Algeria'],'216':['tn','Tunisia'],'234':['ng','Nigeria'],'254':['ke','Kenya'],'351':['pt','Portugal'],'352':['lu','Luxembourg'],'353':['ie','Ireland'],'354':['is','Iceland'],'356':['mt','Malta'],'357':['cy','Cyprus'],'358':['fi','Finland'],'359':['bg','Bulgaria'],'370':['lt','Lithuania'],'371':['lv','Latvia'],'372':['ee','Estonia'],'380':['ua','Ukraine'],'385':['hr','Croatia'],'386':['si','Slovenia'],'420':['cz','Czechia'],'421':['sk','Slovakia'],'852':['hk','Hong Kong'],'855':['kh','Cambodia'],'856':['la','Laos'],'880':['bd','Bangladesh'],'886':['tw','Taiwan'],
+    '961':['lb','Lebanon'],'962':['jo','Jordan'],'965':['kw','Kuwait'],'966':['sa','Saudi Arabia'],'968':['om','Oman'],'971':['ae','UAE'],'972':['il','Israel'],'973':['bh','Bahrain'],'974':['qa','Qatar'],'977':['np','Nepal'],'598':['uy','Uruguay'],'593':['ec','Ecuador'],'591':['bo','Bolivia'],'595':['py','Paraguay'],'502':['gt','Guatemala'],'506':['cr','Costa Rica'],'507':['pa','Panama']
+  };
+  var DIAL_CODES=Object.keys(DIAL).sort(function(a,b){return b.length-a.length;}); // más largo primero
+  function countryOf(phone){ var d=(phone||'').replace(/\D/g,''); if(!d) return null;
+    for(var i=0;i<DIAL_CODES.length;i++){ if(d.indexOf(DIAL_CODES[i])===0){ var e=DIAL[DIAL_CODES[i]]; return {iso:e[0],name:e[1]}; } }
+    return null; // ponytail: +1 = NANP compartido, por defecto US; prefijo desconocido = sin país
+  }
+  function leadCountry(l){ var c=countryOf(l&&l.phone); return c?c.name:''; }
+  function flagSpan(iso){ return '<span class="fi fi-'+iso+'"></span>'; }
+  function leadInTab(l){
+    if(dbTab==='all') return true;
+    if(dbTab==='archived') return !!l.archived;
+    if(l.archived) return false;
+    var st=l.status||'';
+    if(dbTab==='active') return st===''||st==='new'||st==='quoted';
+    return st===dbTab; // won / lost / noshow
+  }
+  function dbSorted(arr){
+    var k=dbSort.key, dir=dbSort.dir;
+    return arr.slice().sort(function(a,b){
+      var va,vb;
+      if(k==='hot'){ va=leadScore(a); vb=leadScore(b); }
+      else if(k==='country'){ va=leadCountry(a).toLowerCase(); vb=leadCountry(b).toLowerCase(); }
+      else if(k==='appt'){ var pa=nextApptFor(a.phone),pb=nextApptFor(b.phone); va=pa?new Date(pa.when).getTime():Infinity; vb=pb?new Date(pb.when).getTime():Infinity; } // sin cita = al final
+      else if(k==='status'){ va=ORDER[a.status||'']||0; vb=ORDER[b.status||'']||0; }
+      else if(k==='updatedAt'||k==='createdAt'){ va=a[k]||0; vb=b[k]||0; }
+      else { va=(a[k]||'').toString().toLowerCase(); vb=(b[k]||'').toString().toLowerCase(); }
+      return va<vb ? -dir : (va>vb ? dir : 0);
+    });
+  }
+  // Celda de la tabla: estado/paquete = desplegable editable con color; intención = etiqueta de color.
+  function dbCell(l,key){
+    if(key==='hot'){
+      var hs=leadScore(l), lvl=hs>=90?'hi':hs>=45?'mid':'lo';
+      return '<td class="db-hot h-'+lvl+'" title="'+esc(hotWhy(l,hs))+'">'+(lvl==='lo'?'·':'🔥')+'</td>';
+    }
+    if(key==='status'){
+      var st=l.status||'';
+      var o=ST_OPTS.map(function(x){return '<option value="'+x[0]+'"'+(st===x[0]?' selected':'')+'>'+x[1]+'</option>';}).join('');
+      return '<td onclick="event.stopPropagation()"><select class="db-sel st-'+(st||'none')+'" onchange="dbSetStatus(\''+l.phone+'\',this)">'+o+'</select></td>';
+    }
+    if(key==='plan'){
+      var pk=l.plan||'', opts=PKG_OPTS.slice(); if(pk && opts.indexOf(pk)<0) opts.unshift(pk);
+      var o2=opts.map(function(v){return '<option value="'+esc(v)+'"'+(pk===v?' selected':'')+'>'+esc(v||'—')+'</option>';}).join('');
+      return '<td onclick="event.stopPropagation()"><select class="db-sel" onchange="dbSetPackage(\''+l.phone+'\',this)">'+o2+'</select></td>';
+    }
+    if(key==='intent'){
+      var it=l.intent||'exploring';
+      return '<td><span class="db-badge it-'+it+'">'+(LABEL[it]||it)+'</span></td>';
+    }
+    if(key==='owner'){
+      var ow=l.owner||'';
+      var oo=OWNER_OPTS.map(function(v){return '<option value="'+esc(v)+'"'+(ow===v?' selected':'')+'>'+esc(v||'—')+'</option>';}).join('');
+      return '<td onclick="event.stopPropagation()"><select class="db-sel" onchange="dbSetOwner(\''+l.phone+'\',this)">'+oo+'</select></td>';
+    }
+    if(key==='nextFollowUp'){
+      var fu=l.nextFollowUp?String(l.nextFollowUp).slice(0,10):'';
+      return '<td onclick="event.stopPropagation()"><input type="date" class="db-sel" value="'+fu+'" onchange="dbSetFollowUp(\''+l.phone+'\',this)"></td>';
+    }
+    if(key==='tags'){
+      var tg=Array.isArray(l.tags)?l.tags:[];
+      return '<td>'+(tg.length?'<div class="tags">'+tg.map(function(x){return '<span class="tag" style="'+tagColor(x)+'">'+esc(x)+'</span>';}).join('')+'</div>':'<span class="db-dim">—</span>')+'</td>';
+    }
+    if(key==='country'){
+      var c=countryOf(l.phone);
+      return '<td>'+(c?'<span class="db-country">'+flagSpan(c.iso)+esc(c.name)+'</span>':'<span class="db-dim">—</span>')+'</td>';
+    }
+    if(key==='appt'){
+      var ap=nextApptFor(l.phone);
+      if(!ap) return '<td class="db-dim">—</td>';
+      return '<td onclick="event.stopPropagation()"><span class="db-appt" onclick="openApptView(\''+ap.id+'\')" title="'+esc(ap.title)+(ap.closer?' · '+esc(ap.closer):'')+'">📞 '+esc(fmtWhen(ap.when))+'</span></td>';
+    }
+    var raw=dbVal(l,key), cls=(key==='name'?'db-nm':((raw===''||raw==='—')?'db-dim':''));
+    return '<td'+(cls?' class="'+cls+'"':'')+'>'+esc(raw||'—')+'</td>';
+  }
+  function dbSetStatus(phone,sel){
+    var v=sel.value;
+    apiPost('status',{phone:phone,status:v}).then(function(r){ if(!r.ok) throw 0;
+      sel.className='db-sel st-'+(v||'none');
+      var L=leads.filter(function(x){return x.phone===phone;})[0]; if(L)L.status=v;
+      if(curLead&&curLead.phone===phone){ curLead.status=v; var es=document.getElementById('edStatus'); if(es)es.value=v; }
+    }).catch(function(){ alert('No se pudo guardar el estado'); });
+  }
+  function dbSetPackage(phone,sel){
+    var v=sel.value;
+    apiPost('lead',{phone:phone,plan:v}).then(function(r){ if(!r.ok) throw 0;
+      var L=leads.filter(function(x){return x.phone===phone;})[0]; if(L)L.plan=v;
+      if(curLead&&curLead.phone===phone){ curLead.plan=v; var ep=document.getElementById('edPackage'); if(ep)ep.value=v; }
+    }).catch(function(){ alert('No se pudo guardar el plan'); });
+  }
+  function dbSetOwner(phone,sel){
+    var v=sel.value;
+    apiPost('lead',{phone:phone,owner:v}).then(function(r){ if(!r.ok) throw 0;
+      var L=leads.filter(function(x){return x.phone===phone;})[0]; if(L)L.owner=v;
+      if(curLead&&curLead.phone===phone){ curLead.owner=v; var eo=document.getElementById('edOwner'); if(eo)eo.value=v; }
+    }).catch(function(){ alert(t('al_save')); });
+  }
+  function dbSetFollowUp(phone,inp){
+    var v=inp.value;
+    apiPost('lead',{phone:phone,nextFollowUp:v}).then(function(r){ if(!r.ok) throw 0;
+      var L=leads.filter(function(x){return x.phone===phone;})[0]; if(L)L.nextFollowUp=v;
+      renderTable();
+      if(curLead&&curLead.phone===phone){ curLead.nextFollowUp=v; var ef=document.getElementById('edFollow'); if(ef)ef.value=v; }
+    }).catch(function(){ alert(t('al_save')); });
+  }
+  window.dbSetStatus=dbSetStatus; window.dbSetPackage=dbSetPackage; window.dbSetOwner=dbSetOwner; window.dbSetFollowUp=dbSetFollowUp;
+  function dbVal(l,k){
+    if(k==='phone') return '+'+l.phone;
+    if(k==='updatedAt') return ago(l.updatedAt);
+    if(k==='intent') return LABEL[l.intent]||l.intent||'explorando';
+    if(k==='status') return STATUS_LABEL[l.status||'']||l.status||'—';
+    if(k==='country') return leadCountry(l); // país derivado del prefijo (coherente con la tabla y el CSV)
+    if(k==='appt'){ var a=nextApptFor(l.phone); return a?(fmtWhen(a.when)+(a.closer?' · '+a.closer:'')):''; }
+    var v=l[k]; return (v==null||v==='')?'':String(v);
+  }
+  function dbFiltered(){
+    return leads.filter(function(l){
+      if(!leadInTab(l)) return false;
+      if(dbFilters.intent && (l.intent||'exploring')!==dbFilters.intent) return false;
+      if(dbFilters.pkg && (l.plan||'')!==dbFilters.pkg) return false;
+      if(dbFilters.source && leadSource(l)!==dbFilters.source) return false;
+      if(dbFilters.country && leadCountry(l)!==dbFilters.country) return false;
+      if(dbFilters.tag && !(Array.isArray(l.tags)&&l.tags.indexOf(dbFilters.tag)>=0)) return false;
+      if(dbFilters.due && !isOverdue(l)) return false;
+      if(dbSearch){ var hay=((l.name||'')+' '+l.phone+' '+(l.email||'')+' '+(l.plan||'')+' '+(l.model||'')+' '+(l.deliveryLocation||'')+' '+leadCountry(l)+' '+(l.owner||'')+' '+(Array.isArray(l.tags)?l.tags.join(' '):'')).toLowerCase(); if(hay.indexOf(dbSearch)<0) return false; }
+      return true;
+    });
+  }
+  // ── orquestador de la vista BD ──
+  function renderDb(){
+    renderMetrics(); renderTabs(); renderFilters(); renderBulk();
+    var isK = dbView==='kanban';
+    document.getElementById('dbTable').style.display = isK?'none':'';
+    document.getElementById('dbKanban').style.display = isK?'flex':'none';
+    document.getElementById('dbViewTable').classList.toggle('on', !isK);
+    document.getElementById('dbViewKanban').classList.toggle('on', isK);
+    if(isK){ renderKanban(); document.getElementById('dbFoot').innerHTML=''; return; }
+    renderTable();
+  }
+  function cntTab(tab){ return leads.filter(function(l){
+    if(tab==='all') return true;
+    if(tab==='archived') return !!l.archived;
+    if(l.archived) return false;
+    var st=l.status||'';
+    if(tab==='active') return st===''||st==='new'||st==='quoted';
+    return st===tab;
+  }).length; }
+  function renderMetrics(){
+    var m={total:0,week:0,nq:0,quoted:0,won:0,lost:0}, wk=Date.now()-7*86400000;
+    leads.forEach(function(l){ if(l.archived) return; m.total++; var st=l.status||''; var ca=l.createdAt||l.updatedAt||0; if(ca>=wk)m.week++;
+      if(st===''||st==='new')m.nq++; if(st==='quoted')m.quoted++; if(st==='won')m.won++; if(st==='lost')m.lost++; });
+    function mt(v,l2,cls,oc){ return '<div class="metric'+(oc?' click':'')+'"'+(oc?' onclick="'+oc+'"':'')+'><span class="mv'+(cls?' '+cls:'')+'">'+v+'</span><span class="ml">'+l2+'</span></div>'; }
+    // ponytail: sin Pipeline/Ingresos — no hay precio fijo por plan (depende de modelo x periodo), mostrar $0 sería falso
+    document.getElementById('dbMetrics').innerHTML =
+      mt(m.total,t('m_total')) + mt(m.week,t('m_week')) +
+      mt(m.nq,t('m_new'),'m-new',"dbGoTab('active')") + mt(m.quoted,t('m_quoted'),'m-quoted',"dbGoTab('active')") +
+      mt(m.won,t('m_won'),'m-won',"dbGoTab('won')") + mt(m.lost,t('m_lost'),'m-lost',"dbGoTab('lost')");
+  }
+  function renderTabs(){
+    var tabs=[['active','tab_active'],['won','tab_won'],['lost','tab_lost'],['noshow','tab_noshow'],['archived','tab_archived'],['all','tab_all']];
+    document.getElementById('dbTabs').innerHTML = tabs.map(function(x){
+      return '<button class="db-tab'+(dbTab===x[0]?' on':'')+'" onclick="dbGoTab(\''+x[0]+'\')">'+t(x[1])+'<span class="tc">'+cntTab(x[0])+'</span></button>';
+    }).join('');
+  }
+  function dbGoTab(tab){ dbTab=tab; dbPage=1; dbSelected={}; renderDb(); }
+  window.dbGoTab=dbGoTab;
+  function renderFilters(){
+    var countries={}, tags={};
+    leads.forEach(function(l){ var cn=leadCountry(l); if(cn) countries[cn]=1; if(Array.isArray(l.tags)) l.tags.forEach(function(x){tags[x]=1;}); });
+    function sel(id,cur,opts,ph){ return '<select onchange="dbSetFilter(\''+id+'\',this.value)"><option value="">'+ph+'</option>'+opts.map(function(o){return '<option value="'+esc(o[0])+'"'+(cur===o[0]?' selected':'')+'>'+esc(o[1])+'</option>';}).join('')+'</select>'; }
+    var html = sel('intent',dbFilters.intent,[['exploring',t('i_exploring')],['interested',t('i_interested')],['booking',t('i_booking')],['escalate',t('i_escalate')]],t('f_all_intent'))
+      + sel('pkg',dbFilters.pkg,PKG_OPTS.filter(function(p){return p;}).map(function(p){return [p,p];}),t('f_all_pkg'))
+      + sel('source',dbFilters.source,[['meta','Meta'],['chat','Chat']],t('f_all_source'))
+      + sel('country',dbFilters.country,Object.keys(countries).sort().map(function(c){return [c,c];}),t('f_all_country'));
+    var tagKeys=Object.keys(tags).sort(); if(tagKeys.length) html += sel('tag',dbFilters.tag,tagKeys.map(function(c){return [c,c];}),t('f_all_tag'));
+    html += '<label style="font-size:12.5px;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" '+(dbFilters.due?'checked':'')+' onchange="dbSetFilter(\'due\',this.checked)">'+t('f_due')+'</label>';
+    if(dbFilters.intent||dbFilters.pkg||dbFilters.source||dbFilters.country||dbFilters.tag||dbFilters.due) html += '<button class="fclear" onclick="dbClearFilters()">'+t('f_clear')+'</button>';
+    document.getElementById('dbFilters').innerHTML = html;
+  }
+  function dbSetFilter(k,v){ dbFilters[k]=v; dbPage=1; renderDb(); }
+  function dbClearFilters(){ dbFilters={intent:'',pkg:'',source:'',country:'',tag:'',due:false}; dbPage=1; renderDb(); }
+  window.dbSetFilter=dbSetFilter; window.dbClearFilters=dbClearFilters;
+  // ── selección múltiple + lote ──
+  function selectedPhones(){ return Object.keys(dbSelected).filter(function(p){return dbSelected[p];}); }
+  function renderBulk(){
+    var sel=selectedPhones(), bar=document.getElementById('dbBulk');
+    if(!sel.length){ bar.style.display='none'; bar.innerHTML=''; return; }
+    bar.style.display='flex';
+    var stOpts=ST_OPTS.map(function(x){return '<option value="'+x[0]+'">'+x[1]+'</option>';}).join('');
+    var owOpts=OWNER_OPTS.map(function(v){return '<option value="'+esc(v)+'">'+esc(v||'—')+'</option>';}).join('');
+    bar.innerHTML = '<b>'+sel.length+'</b> '+t('bulk_sel')
+      + '<select onchange="bulkAct(\'status\',this.value);this.value=\'\'"><option value="">'+t('bulk_status')+'</option>'+stOpts+'</select>'
+      + '<select onchange="bulkAct(\'owner\',this.value);this.value=\'\'"><option value="">'+t('bulk_owner')+'</option>'+owOpts+'</select>'
+      + '<button onclick="bulkTag()">'+t('bulk_tag')+'</button>'
+      + '<button onclick="bulkAct(\'outreach\')">'+t('bulk_outreach')+'</button>'
+      + (dbTab==='archived' ? '<button onclick="bulkAct(\'restore\')">'+t('bulk_restore')+'</button>' : '<button onclick="bulkAct(\'archive\')">'+t('bulk_archive')+'</button>')
+      + '<button onclick="bulkExport()">'+t('bulk_export')+'</button>'
+      + '<button class="danger" onclick="bulkAct(\'delete\')">'+t('bulk_delete')+'</button>'
+      + '<button class="fclear" onclick="dbClearSel()">'+t('bulk_clear')+'</button>';
+  }
+  function dbClearSel(){ dbSelected={}; renderTable(); renderBulk(); }
+  function bulkAct(action,value){
+    var phones=selectedPhones(); if(!phones.length) return;
+    if(action==='delete' && !confirm(t('cfm_delete_n').replace('{n}',phones.length))) return;
+    apiPost('bulk',{phones:phones,action:action,value:value}).then(function(r){return r.json();}).then(function(){
+      return api('leads').then(function(r){return r.json();}).then(function(L){ leads=L; dbSelected={}; renderDb(); });
+    }).catch(function(){ alert(t('al_save')); });
+  }
+  function bulkTag(){ var tag=prompt(t('prompt_tag')); if(tag){ tag=tag.trim(); if(tag) bulkAct('tag',tag); } }
+  function bulkExport(){ exportCsv(selectedPhones()); }
+  window.dbClearSel=dbClearSel; window.bulkAct=bulkAct; window.bulkTag=bulkTag; window.bulkExport=bulkExport;
+  function selRow(phone,on){ if(on) dbSelected[phone]=true; else delete dbSelected[phone]; renderBulk(); }
+  function selAll(on){ var f=dbSorted(dbFiltered()), start=(dbPage-1)*DB_PAGE_SIZE; f.slice(start,start+DB_PAGE_SIZE).forEach(function(l){ if(on)dbSelected[l.phone]=true; else delete dbSelected[l.phone]; }); renderTable(); renderBulk(); }
+  window.toggleSel=function(ph,el){ selRow(ph,el.checked); }; window.toggleSelAll=function(el){ selAll(el.checked); };
+  // ── tabla ──
+  function renderTable(){
+    var f=dbSorted(dbFiltered()), total=f.length;
+    document.getElementById('dbCount').textContent=total;
+    var tbl=document.getElementById('dbTable'), foot=document.getElementById('dbFoot');
+    if(!total){ tbl.innerHTML='<div class="db-empty">'+(leads.length?t('empty_results'):t('empty_clients'))+'</div>'; foot.innerHTML=''; return; }
+    var pages=Math.max(1, Math.ceil(total/DB_PAGE_SIZE));
+    if(dbPage>pages) dbPage=pages; if(dbPage<1) dbPage=1;
+    var start=(dbPage-1)*DB_PAGE_SIZE, pageRows=f.slice(start, start+DB_PAGE_SIZE);
+    var allSel=pageRows.length && pageRows.every(function(l){return dbSelected[l.phone];});
+    function arrow(k){ return dbSort.key===k ? '<span class="sa">'+(dbSort.dir<0?'▼':'▲')+'</span>' : ''; }
+    var th='<tr><th class="chk"><input type="checkbox" '+(allSel?'checked':'')+' onchange="toggleSelAll(this)"></th>'
+      + DB_COLS.map(function(c){ return '<th class="sortable" onclick="dbSetSort(\''+c[0]+'\')">'+c[1]+arrow(c[0])+'</th>'; }).join('')
+      + '<th></th></tr>';
+    var rows=pageRows.map(function(l){
+      var rc=[]; if(leadScore(l)>=90) rc.push('hot'); if(isOverdue(l)) rc.push('overdue');
+      return '<tr'+(rc.length?' class="'+rc.join(' ')+'"':'')+' onclick="openFromDb(\''+l.phone+'\')">'
+        + '<td class="chk" onclick="event.stopPropagation()"><input type="checkbox" '+(dbSelected[l.phone]?'checked':'')+' onchange="toggleSel(\''+l.phone+'\',this)"></td>'
+        + DB_COLS.map(function(c){ return dbCell(l,c[0]); }).join('')
+        + '<td onclick="event.stopPropagation()"><span class="kebab" onclick="rowMenu(event,\''+l.phone+'\')">⋮</span></td></tr>';
+    }).join('');
+    tbl.innerHTML='<table class="db"><thead>'+th+'</thead><tbody>'+rows+'</tbody></table>';
+    foot.innerHTML = '<span>'+(start+1)+'–'+(start+pageRows.length)+' '+t('of')+' '+total+'</span>'
+      +'<div class="db-pager">'
+      +'<button '+(dbPage<=1?'disabled':'')+' onclick="dbGo(1)">«</button>'
+      +'<button '+(dbPage<=1?'disabled':'')+' onclick="dbGo('+(dbPage-1)+')">‹</button>'
+      +'<span class="db-pg">'+dbPage+' / '+pages+'</span>'
+      +'<button '+(dbPage>=pages?'disabled':'')+' onclick="dbGo('+(dbPage+1)+')">›</button>'
+      +'<button '+(dbPage>=pages?'disabled':'')+' onclick="dbGo('+pages+')">»</button></div>';
+  }
+  function dbSetSort(k){ if(dbSort.key===k) dbSort.dir=-dbSort.dir; else { dbSort.key=k; dbSort.dir=(k==='name'||k==='country'||k==='owner'||k==='email'||k==='appt')?1:-1; } renderTable(); }
+  window.dbSetSort=dbSetSort;
+  function dbGo(p){ dbPage=p; renderTable(); var w=document.querySelector('.db-wrap'); if(w) w.scrollTop=0; }
+  window.dbGo=dbGo;
+  // ── menú de fila (archivar / restaurar / borrar) ──
+  function rowMenu(ev,phone){
+    ev.stopPropagation(); closeRowMenu();
+    var l=leads.filter(function(x){return x.phone===phone;})[0]||{};
+    var m=document.createElement('div'); m.className='rowmenu'; m.id='rowmenu';
+    m.innerHTML = '<div onclick="rowScheduleCall(\''+phone+'\')">'+t('act_call')+'</div>'
+      + '<div onclick="rowOutreach(\''+phone+'\')">'+t('act_outreach')+'</div>'
+      + (l.archived ? '<div onclick="rowArchive(\''+phone+'\',false)">'+t('act_restore')+'</div>' : '<div onclick="rowArchive(\''+phone+'\',true)">'+t('act_archive')+'</div>')
+      + '<div onclick="openFromDb(\''+phone+'\')">'+t('act_open')+'</div>'
+      + '<div class="danger" onclick="rowDelete(\''+phone+'\')">'+t('act_delete')+'</div>';
+    ev.currentTarget.appendChild(m);
+    setTimeout(function(){ document.addEventListener('click', closeRowMenu, {once:true}); },0);
+  }
+  function closeRowMenu(){ var m=document.getElementById('rowmenu'); if(m) m.remove(); }
+  function rowArchive(phone,arch){ closeRowMenu(); apiPost('archive',{phone:phone,archived:arch}).then(function(r){return r.json();}).then(function(){ var L=leads.filter(function(x){return x.phone===phone;})[0]; if(L)L.archived=arch; renderDb(); }).catch(function(){alert(t('al_save'));}); }
+  function rowDelete(phone){ closeRowMenu(); if(!confirm(t('cfm_delete'))) return; apiPost('lead/delete',{phone:phone}).then(function(r){return r.json();}).then(function(){ leads=leads.filter(function(x){return x.phone!==phone;}); delete dbSelected[phone]; renderDb(); }).catch(function(){alert(t('al_save'));}); }
+  window.rowMenu=rowMenu; window.rowArchive=rowArchive; window.rowDelete=rowDelete;
+  // ── kanban (drag & drop entre estados) ──
+  function renderKanban(){
+    var cols=[['new','s_new'],['quoted','s_quoted'],['won','s_won'],['lost','s_lost'],['noshow','s_noshow']];
+    var data=leads.filter(function(l){ if(l.archived) return false;
+      if(dbFilters.intent && (l.intent||'exploring')!==dbFilters.intent) return false;
+      if(dbFilters.pkg && (l.plan||'')!==dbFilters.pkg) return false;
+      if(dbFilters.source && leadSource(l)!==dbFilters.source) return false;
+      if(dbFilters.country && leadCountry(l)!==dbFilters.country) return false;
+      if(dbFilters.tag && !(Array.isArray(l.tags)&&l.tags.indexOf(dbFilters.tag)>=0)) return false;
+      if(dbSearch){ var hay=((l.name||'')+' '+l.phone+' '+(l.email||'')+' '+leadCountry(l)).toLowerCase(); if(hay.indexOf(dbSearch)<0) return false; }
+      return true;
+    });
+    document.getElementById('dbKanban').innerHTML = cols.map(function(c){
+      var items=data.filter(function(l){ var st=l.status||''; return (c[0]==='new') ? (st===''||st==='new') : st===c[0]; });
+      var cards=items.map(function(l){
+        return '<div class="kcard" draggable="true" data-phone="'+l.phone+'" ondragstart="kDrag(event)" onclick="openFromDb(\''+l.phone+'\')">'
+          + '<div class="kn">'+esc(l.name||('+'+l.phone))+'</div>'
+          + '<div class="km"><span>'+esc(l.plan||l.model||leadCountry(l))+'</span></div>'
+          // Selector de estado (táctil): en móvil el drag&drop no funciona, así se cambia con un toque.
+          + '<select class="kstatus" onclick="event.stopPropagation()" onchange="kSetStatus(event,\''+l.phone+'\')">'
+            + ST_OPTS.map(function(x){return '<option value="'+x[0]+'"'+((l.status||'')===x[0]?' selected':'')+'>'+x[1]+'</option>';}).join('')
+          + '</select></div>';
+      }).join('');
+      return '<div class="kcol" data-status="'+c[0]+'" ondragover="kOver(event)" ondragleave="kLeave(event)" ondrop="kDrop(event)"><h4>'+t(c[1])+'<span class="kc">'+items.length+'</span></h4><div class="kcards">'+cards+'</div></div>';
+    }).join('');
+  }
+  var kDragPhone=null;
+  function kDrag(e){ kDragPhone=e.target.getAttribute('data-phone'); if(e.dataTransfer) e.dataTransfer.effectAllowed='move'; }
+  function kOver(e){ e.preventDefault(); e.currentTarget.classList.add('dragover'); }
+  function kLeave(e){ e.currentTarget.classList.remove('dragover'); }
+  function kDrop(e){ e.preventDefault(); e.currentTarget.classList.remove('dragover'); var st=e.currentTarget.getAttribute('data-status'), phone=kDragPhone; kDragPhone=null; if(!phone) return;
+    var L=leads.filter(function(x){return x.phone===phone;})[0]; if(!L || (L.status||'')===st) return;
+    L.status=st; renderKanban(); renderMetrics(); renderTabs();
+    apiPost('status',{phone:phone,status:st}).catch(function(){ alert(t('al_save')); });
+  }
+  window.kDrag=kDrag; window.kOver=kOver; window.kLeave=kLeave; window.kDrop=kDrop;
+  // Cambiar estado desde el selector de la tarjeta (funciona en móvil; equivalente al drop).
+  function kSetStatus(e,phone){ e.stopPropagation(); var v=e.target.value;
+    var L=leads.filter(function(x){return x.phone===phone;})[0]; if(!L||(L.status||'')===v) return;
+    L.status=v; renderKanban(); renderMetrics(); renderTabs();
+    apiPost('status',{phone:phone,status:v}).catch(function(){ alert(t('al_save')); });
+  }
+  window.kSetStatus=kSetStatus;
+  document.getElementById('dbViewTable').onclick=function(){ dbView='table'; renderDb(); };
+  document.getElementById('dbViewKanban').onclick=function(){ dbView='kanban'; renderDb(); };
+  function openFromDb(phone){
+    var a=document.getElementById('app'); a.classList.remove('dbmode'); setNav('navConv'); open_(phone);
+  }
+  window.openFromDb=openFromDb;
+  function loadHealth(){
+    api('health').then(function(r){return r.json();}).then(function(h){
+      var el=document.getElementById('dbStore');
+      if(h.storage==='redis'){ el.className='db-store ok'; el.textContent=t('store_redis'); }
+      else { el.className='db-store ram'; el.textContent=t('store_ram'); }
+    }).catch(function(){});
+  }
+  function exportCsv(only){
+    var f=dbSorted(dbFiltered());
+    if(only && only.length){ var set={}; only.forEach(function(p){set[p]=1;}); f=f.filter(function(l){return set[l.phone];}); }
+    function cell(s){ s=(s==null?'':String(s)); return '"'+s.replace(/"/g,'""')+'"'; }
+    var lines=[DB_COLS.map(function(c){return cell(c[1]);}).join(',')];
+    f.forEach(function(l){ lines.push(DB_COLS.map(function(c){
+      if(c[0]==='updatedAt') return cell(new Date(l.updatedAt).toISOString());
+      if(c[0]==='phone') return cell('+'+l.phone);
+      if(c[0]==='status') return cell(STATUS_LABEL[l.status||'']||l.status||'');
+      if(c[0]==='intent') return cell(LABEL[l.intent]||l.intent||'');
+      if(c[0]==='value') return cell(leadValue(l)||'');
+      if(c[0]==='tags') return cell(Array.isArray(l.tags)?l.tags.join('; '):'');
+      return cell(l[c[0]]);
+    }).join(',')); });
+    var blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+    var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='clientes_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); },1000);
+  }
+
+  // ── IMPORTAR CSV de Meta Lead Ads (UTF-16, separado por tabuladores) ──
+  function parseMetaCsv(text){
+    if(text && text.charCodeAt(0)===0xFEFF) text=text.slice(1); // quitar BOM
+    var lines=text.split(/\r?\n/).filter(function(l){ return l.replace(/\t/g,'').trim().length; });
+    if(lines.length<2) return [];
+    function cells(line){ return line.split('\t').map(function(c){ c=c.trim(); if(c.length>1&&c.charAt(0)==='"'&&c.charAt(c.length-1)==='"') c=c.slice(1,-1); return c; }); }
+    var hdr=cells(lines[0]).map(function(h){ return h.toLowerCase().replace(/[^a-z0-9_?]/g,''); });
+    var idx={}; hdr.forEach(function(h,i){ idx[h]=i; });
+    function col(c,n){ var i=idx[n]; return (i==null||i>=c.length)?'':(c[i]||''); }
+    // ponytail: sin mapeo de campo "plan" — BBM aún no tiene un formulario de Meta Lead Ads
+    // propio; cuando lo tenga, mapear aquí su columna real de plan/modelo en vez de adivinar.
+    var out=[];
+    for(var k=1;k<lines.length;k++){
+      var c=cells(lines[k]); var phone=(col(c,'whatsapp_number')||'').replace(/\D/g,'');
+      if(!phone) continue;
+      out.push({ whatsapp:phone, name:col(c,'full_name'), email:(col(c,'email')||'').toLowerCase(),
+        createdTime:col(c,'created_time'), source:col(c,'campaign_name') });
+    }
+    return out;
+  }
+  function importMetaFile(file){
+    var rd=new FileReader();
+    rd.onload=function(){
+      var buf=new Uint8Array(rd.result), enc='utf-8';
+      if(buf[0]===0xFF&&buf[1]===0xFE) enc='utf-16le'; else if(buf[0]===0xFE&&buf[1]===0xFF) enc='utf-16be';
+      var text; try{ text=new TextDecoder(enc).decode(buf); }catch(e){ text=new TextDecoder('utf-8').decode(buf); }
+      var rows; try{ rows=parseMetaCsv(text); }catch(e){ rows=[]; }
+      if(!rows.length){ alert(t('al_nolead')); return; }
+      var b=document.getElementById('dbImport'), orig=b.textContent; b.disabled=true; b.textContent=t('imp_ing')+rows.length+'…';
+      apiPost('import',{rows:rows}).then(function(r){return r.json();}).then(function(j){
+        return api('leads').then(function(r){return r.json();}).then(function(L){ leads=L; dbPage=1; renderDb();
+          b.textContent='✓ '+j.created+' '+t('imp_new')+' · '+j.updated+' '+t('imp_upd'); setTimeout(function(){ b.textContent=orig; b.disabled=false; },3500);
+        });
+      }).catch(function(){ b.textContent=t('err_short'); setTimeout(function(){ b.textContent=orig; b.disabled=false; },3000); });
+    };
+    rd.readAsArrayBuffer(file);
+  }
+
+  // ── Newsletter por email ──
+  var NL_EMAIL=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  // Destinatarios según el alcance elegido (espejo de la lógica del servidor): email válido,
+  // no archivados, no dados de baja, sin emails duplicados.
+  function nlRecipients(){
+    var scope=document.getElementById('nlScope').value, phones=[], seen={}, unsub=0;
+    leads.forEach(function(l){
+      if(l.archived) return;
+      if(scope==='selected' && !dbSelected[l.phone]) return;
+      var e=(l.email||'').toLowerCase().trim();
+      if(!NL_EMAIL.test(e)) return;
+      if(l.emailUnsub){ unsub++; return; }
+      if(seen[e]) return; seen[e]=1;
+      phones.push(l.phone);
+    });
+    return {phones:phones, count:phones.length, unsub:unsub};
+  }
+  function nlUpdateCount(){
+    var r=nlRecipients();
+    document.getElementById('nlCount').textContent=t('nl_count').replace('{n}',r.count).replace('{u}',r.unsub);
+    var b=document.getElementById('nlSend'), sched=!!document.getElementById('nlWhen').value;
+    b.textContent = r.count ? t(sched?'nl_schedule_n':'nl_send_n').replace('{n}',r.count) : t(sched?'nl_schedule':'nl_send');
+    b.disabled=!r.count;
+  }
+  // Lista de campañas programadas (con cancelar).
+  function nlFmtWhen(ts){ return new Date(ts).toLocaleString(t('locale'),{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); }
+  function nlLoadScheduled(){
+    var box=document.getElementById('nlSchedList');
+    api('newsletter/scheduled').then(function(r){return r.json();}).then(function(list){
+      if(!Array.isArray(list)||!list.length){ box.innerHTML=''; return; }
+      box.innerHTML='<div class="nl-sched-h">'+t('nl_sched_title')+'</div>'+list.map(function(c){
+        var scope=c.scope==null?t('nl_sched_all'):(c.scope+' '+t('nl_sched_sel'));
+        return '<div class="nl-sched-row"><div class="nl-sched-info"><b>'+esc(c.subject||'')+'</b><span>'+nlFmtWhen(c.when)+' · '+scope+'</span></div><button title="✕" onclick="nlCancelSched(\''+c.id+'\')">✕</button></div>';
+      }).join('');
+    }).catch(function(){ box.innerHTML=''; });
+  }
+  function nlCancelSched(id){ apiPost('newsletter/cancel',{id:id}).then(function(r){return r.json();}).then(function(){ nlLoadScheduled(); }).catch(function(){}); }
+  window.nlCancelSched=nlCancelSched;
+  // Modo de contenido: escribir aquí (compose) vs plantilla de Brevo (brevo).
+  var nlTemplatesLoaded=false;
+  function nlApplyMode(){
+    var brevo=document.getElementById('nlMode').value==='brevo';
+    document.getElementById('nlBrevoWrap').style.display=brevo?'':'none';
+    document.getElementById('nlComposeWrap').style.display=brevo?'none':'';
+    if(brevo && !nlTemplatesLoaded) nlLoadTemplates();
+  }
+  function nlLoadTemplates(){
+    var sel=document.getElementById('nlTemplate'), err=document.getElementById('nlErr');
+    sel.innerHTML='<option value="">…</option>';
+    api('brevo-templates').then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); }).then(function(o){
+      if(!o.ok) throw ((o.j&&o.j.error)||'error');
+      var list=Array.isArray(o.j)?o.j:[];
+      nlTemplatesLoaded=true;
+      sel.innerHTML = list.length ? list.map(function(t){ return '<option value="'+t.id+'">'+esc(t.name)+(t.subject?(' — '+esc(t.subject)):'')+'</option>'; }).join('')
+        : '<option value="">'+t('nl_no_templates')+'</option>';
+    }).catch(function(e){ sel.innerHTML='<option value="">'+t('nl_no_templates')+'</option>'; err.style.color=''; err.textContent=(typeof e==='string'?e:t('al_save')); });
+  }
+  // Datos del modo actual para el payload/validación.
+  function nlContent(){
+    if(document.getElementById('nlMode').value==='brevo'){
+      var id=document.getElementById('nlTemplate').value;
+      return /^\d+$/.test(id) ? {templateId:id} : null; // ignora el placeholder "…" / "sin plantillas"
+    }
+    var subject=document.getElementById('nlSubject').value.trim(), body=document.getElementById('nlBody').value.trim();
+    return (subject&&body) ? {subject:subject,body:body} : null;
+  }
+  function openNewsletter(){ document.getElementById('nlErr').textContent=''; nlApplyMode(); nlUpdateCount(); nlLoadScheduled(); }
+  function nlPost(payload, btn){ var orig=btn.textContent, err=document.getElementById('nlErr'); err.style.color=''; btn.disabled=true; btn.textContent=t('nl_sending');
+    return apiPost('newsletter',payload).then(function(res){ return res.json().then(function(j){ return {ok:res.ok,j:j}; }); })
+      .then(function(o){ if(!o.ok) throw ((o.j&&o.j.error)||'error'); return o.j; })
+      .catch(function(e){ err.style.color=''; err.textContent=(typeof e==='string'?e:t('al_save')); throw e; })
+      .then(function(j){ btn.disabled=false; btn.textContent=orig; return j; }, function(e){ btn.disabled=false; btn.textContent=orig; });
+  }
+
+  function clearModes(a){ a.classList.remove('calmode','dbmode','mediamode','nlmode'); }
+  function setNav(id){ ['navConv','navCal','navDb','navMedia','navNewsletter'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
+
+  function setUrl(p){ try{ history.replaceState(null,'',p); }catch(e){} }
+  document.getElementById('navConv').onclick=function(){ clearModes(document.getElementById('app')); setNav('navConv'); setUrl('/admin'); };
+  document.getElementById('navCal').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('calmode'); setNav('navCal'); setUrl('/admin'); buildLeadsDL(); loadAppts(renderCal); };
+  document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dbmode'); setNav('navDb'); setUrl('/admin/db'); dbPage=1; loadHealth(); loadAppts(renderDb); };
+  document.getElementById('navMedia').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('mediamode'); setNav('navMedia'); setUrl('/admin'); openMedia(); };
+  document.getElementById('navNewsletter').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('nlmode'); setNav('navNewsletter'); setUrl('/admin'); openNewsletter(); };
+  document.getElementById('nlScope').onchange=function(){ nlUpdateCount(); };
+  document.getElementById('nlMode').onchange=function(){ nlApplyMode(); };
+  document.getElementById('nlWhen').onchange=function(){ nlUpdateCount(); };
+  document.getElementById('nlTestBtn').onclick=function(){
+    var to=document.getElementById('nlTest').value.trim();
+    var err=document.getElementById('nlErr');
+    if(!NL_EMAIL.test(to)){ err.style.color=''; err.textContent=t('nl_test_need'); return; }
+    var c=nlContent();
+    if(!c){ err.style.color=''; err.textContent=t(document.getElementById('nlMode').value==='brevo'?'nl_pick_template':'nl_need'); return; }
+    c.testTo=to;
+    nlPost(c, this).then(function(j){ if(j){ err.style.color='var(--accent)'; err.textContent=t('nl_test_ok'); } });
+  };
+  document.getElementById('nlSend').onclick=function(){
+    var err=document.getElementById('nlErr');
+    var c=nlContent();
+    if(!c){ err.style.color=''; err.textContent=t(document.getElementById('nlMode').value==='brevo'?'nl_pick_template':'nl_need'); return; }
+    var r=nlRecipients();
+    if(!r.count){ err.style.color=''; err.textContent=t('nl_no_recip'); return; }
+    var whenVal=document.getElementById('nlWhen').value;
+    if(!confirm(t(whenVal?'cfm_nl_sched':'cfm_nl').replace('{n}',r.count))) return;
+    if(document.getElementById('nlScope').value==='selected') c.phones=r.phones;
+    // datetime-local = hora local del navegador → a ISO absoluto (UTC) para que el servidor no la malinterprete.
+    if(whenVal) c.when=new Date(whenVal).toISOString();
+    nlPost(c, this).then(function(j){ if(!j) return;
+      if(j.scheduled){ err.style.color='var(--accent)'; err.textContent=t('nl_scheduled_ok'); document.getElementById('nlWhen').value=''; nlUpdateCount(); nlLoadScheduled(); }
+      else { err.style.color='var(--accent)'; err.textContent=t('nl_sent').replace('{s}',j.sent||0).replace('{f}',j.failed||0); }
+    });
+  };
+  document.getElementById('mediaAdd').onclick=function(){ readMediaFromDOM(); mediaItems.push({id:'',label:'',type:'image',url:'',caption:''}); renderMediaRows(); };
+  document.getElementById('mediaSave').onclick=function(){
+    readMediaFromDOM();
+    mediaItems=mediaItems.filter(function(m){ return m.label||m.url||m.caption; }); // quita filas vacías
+    var bad=mediaItems.some(function(m){ return !m.label || !/^https?:\/\//i.test(m.url); });
+    var errEl=document.getElementById('mediaErr');
+    if(bad){ renderMediaRows(); errEl.style.color=''; errEl.textContent=t('al_media_url'); return; }
+    apiPost('media',{items:mediaItems}).then(function(r){return r.json();}).then(function(A){
+      mediaItems=Array.isArray(A)?A:mediaItems; renderMediaRows();
+      errEl.style.color='var(--accent)'; errEl.textContent=t('al_media_saved');
+      setTimeout(function(){ errEl.textContent=''; errEl.style.color=''; },1800);
+    }).catch(function(){ errEl.style.color=''; errEl.textContent=t('al_save'); });
+  };
+  document.getElementById('dbQ').oninput=function(e){ dbSearch=e.target.value.toLowerCase().trim(); dbPage=1; renderDb(); };
+  document.getElementById('dbCsv').onclick=function(){ exportCsv(); };
+  document.getElementById('dbImport').onclick=function(){ document.getElementById('dbFile').click(); };
+  document.getElementById('dbFile').onchange=function(e){ var f=e.target.files&&e.target.files[0]; if(f) importMetaFile(f); e.target.value=''; };
+  document.getElementById('dbEnrich').onclick=function(){
+    var b=this, orig=b.textContent; b.disabled=true; b.textContent=t('enr_ing');
+    apiPost('enrich-all',{}).then(function(r){return r.json();}).then(function(j){
+      return api('leads').then(function(r){return r.json();}).then(function(L){
+        leads=L; renderDb();
+        b.textContent='✓ '+(j.enriched||0)+' '+t('enr_done'); setTimeout(function(){ b.textContent=orig; b.disabled=false; },2800);
+      });
+    }).catch(function(){ b.textContent=t('err_short'); setTimeout(function(){ b.textContent=orig; b.disabled=false; },2800); });
+  };
+  document.getElementById('calPrev').onclick=function(){ calM--; if(calM<0){calM=11;calY--;} renderCal(); };
+  document.getElementById('calNext').onclick=function(){ calM++; if(calM>11){calM=0;calY++;} renderCal(); };
+  document.getElementById('newAppt').onclick=function(){ openApptCreate(); };
+  document.getElementById('avClose').onclick=function(){ document.getElementById('apptViewModal').style.display='none'; viewingApptId=null; };
+  document.getElementById('avEdit').onclick=function(){ var id=viewingApptId; document.getElementById('apptViewModal').style.display='none'; viewingApptId=null; if(id) openApptEdit(id); };
+  document.getElementById('amCancel').onclick=function(){ document.getElementById('apptModal').style.display='none'; editingApptId=null; };
+  document.getElementById('amDelete').onclick=function(){ if(!editingApptId) return; if(!confirm(t('cfm_cancel'))) return;
+    fetch('/admin/api/appts/'+editingApptId,{method:'DELETE',headers:{'X-Admin-Key':KEY}}).then(function(){
+      document.getElementById('apptModal').style.display='none'; editingApptId=null; loadAppts(renderCal);
+    });
+  };
+  document.getElementById('amSave').onclick=function(){
+    var when=document.getElementById('amWhen').value;
+    if(!when){ document.getElementById('amErr').textContent=t('al_appt_date'); return; }
+    var lv=document.getElementById('amLead').value.trim(), phone='', name='', m=lv.match(/\((\+?\d[\d ]*)\)/);
+    if(m){ phone=m[1].replace(/\D/g,''); name=lv.replace(/\s*\(.*\)\s*/,'').trim(); }
+    else if(/^\+?\d[\d ]*$/.test(lv)){ phone=lv.replace(/\D/g,''); }
+    else { name=lv; }
+    var title=document.getElementById('amTitle').value.trim()||'Cita';
+    var closer=document.getElementById('amCloser').value, notes=document.getElementById('amNotes').value.trim();
+    var payload={phone:phone,name:name,title:title,when:when,closer:closer,notes:notes};
+    if(editingApptId) payload.id=editingApptId;
+    apiPost('appts',payload).then(function(r){return r.json();}).then(function(){
+      document.getElementById('apptModal').style.display='none'; editingApptId=null;
+      loadAppts(renderCal);
+      // refrescar leads + ficha abierta para mostrar la cita y el evento en el timeline
+      api('leads').then(function(r){return r.json();}).then(function(L){ leads=L; if(active) open_(active); if(document.getElementById('app').classList.contains('dbmode')) renderTable(); });
+    });
+  };
+
+  // ── refresco ──
+  var timer = null;
+  function start(){
+    loadAppts();
+    loadCanned();
+    if(timer) clearInterval(timer);
+    timer = setInterval(function(){
+      api('leads').then(function(r){return r.json();}).then(function(L){
+        leads = L; processAlerts(L); render();
+        if(document.getElementById('app').classList.contains('dbmode')) renderDb();
+        if(active){ var al = leads.filter(function(x){return x.phone===active;})[0]; if(al){ curLead = al; updatePauseUI(!!al.paused); updateWindowUI(al); } loadConv(active); }
+      });
+      loadAppts(function(){ if(document.getElementById('app').classList.contains('calmode')) renderCal(); });
+    }, 10000);
+  }
+
+  // aplicar idioma (después de declarar todas las variables) — traduce login + estáticos
+  applyStaticI18n();
+
+  // auto-login si viene ?key= o hay sesión
+  if(KEY){ tryAuth(KEY).catch(function(){ /* mostrar login */ }); }
+</script>
+</body>
+</html>

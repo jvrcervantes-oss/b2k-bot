@@ -45,7 +45,8 @@ un servicio separado que apunta a este mismo repo con su propia config.
 | `BOT_CONTEXT` | El contexto del negocio (system prompt completo) — solo se usa si `CONTEXT_FILE` no existe en el repo | ver bot-config del proyecto |
 | `CONTEXT_FILE` | (Opcional) nombre del archivo de contexto a cargar del repo | `context-balibest.md` (default: `context.md`) |
 | `BOT_MODEL` | (Opcional) modelo de Claude | `claude-sonnet-4-6` |
-| `BOT_VERTICAL` | (Opcional) `tour` (default) o `rental` — selecciona el bloque de cierre en `BASE_INSTRUCTIONS` (tour = agendar videollamada; rental = cerrar directo en el chat) | `rental` |
+| `BOT_VERTICAL` | (Opcional) `tour` (default) o `rental` — selecciona el bloque de cierre en `BASE_INSTRUCTIONS`, los campos que extrae `enrichLeadFromConversation` y el mapeo de `LEAD_KEYMAP` (tour = agendar videollamada + tour/package/riders/pillions; rental = cerrar directo en el chat + model/plan/startDate/deliveryLocation/insuranceTier/paymentMethod) | `rental` |
+| `PANEL_FILE` | (Opcional) nombre del archivo del panel `/admin` a cargar del repo — cada vertical tiene columnas y campos de ficha distintos | `panel-rental.html` (default: `panel.html`) |
 
 > ⚠️ **El Sheet del CRM debe estar COMPARTIDO con el `client_email` de la Service Account (permiso Editor).** Si no, la API responde `404 — Requested entity was not found` aunque la autenticación sea correcta. Las variables `GOOGLE_CREDENTIALS` / `GOOGLE_TOKEN` de versiones antiguas ya **no se usan** — se pueden borrar.
 

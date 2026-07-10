@@ -25,6 +25,7 @@ const {
   BOT_MODEL,
   BOT_VERTICAL,            // "tour" (default) o "rental" — selecciona el bloque de cierre en BASE_INSTRUCTIONS
   CONTEXT_FILE,            // nombre del archivo de contexto a cargar del repo (default "context.md")
+  PANEL_FILE,              // nombre del archivo del panel /admin a cargar del repo (default "panel.html")
   REDIS_URL,
   STRIPE_SECRET_KEY,
   STRIPE_SUCCESS_URL,
@@ -319,6 +320,13 @@ const LEAD_KEYMAP = {
   dates: "travelDate", date: "travelDate", traveldate: "travelDate", travel: "travelDate",
   tags: "tags", tag: "tags",
   followup: "nextFollowUp", nextfollowup: "nextFollowUp", followupdate: "nextFollowUp",
+  // BOT_VERTICAL=rental (ver RENTAL_CLOSE_AND_TAGGING) — llaves que solo emite el vertical de alquiler.
+  model: "model",
+  plan: "plan",
+  start_date: "startDate", startdate: "startDate",
+  delivery_location: "deliveryLocation", deliverylocation: "deliveryLocation", delivery: "deliveryLocation",
+  insurance_tier: "insuranceTier", insurancetier: "insuranceTier", insurance: "insuranceTier",
+  payment_method: "paymentMethod", paymentmethod: "paymentMethod", payment: "paymentMethod",
 };
 
 // 1) El formulario de Instagram llega como el PRIMER mensaje de WhatsApp (texto plano).
@@ -384,7 +392,9 @@ async function logEvent(phone, type, meta) {
 // ─── ENRIQUECIMIENTO: rellena la ficha leyendo la conversación con el LLM ──────
 // Para leads antiguos (p.ej. Keith) cuyos datos están en el chat pero no en la ficha.
 const EXTRACT_MODEL = process.env.EXTRACT_MODEL || MODEL;
-const KEY_FIELDS = ["email", "country", "tour", "package", "riders", "pillions", "travelDate"];
+const KEY_FIELDS = BOT_VERTICAL === "rental"
+  ? ["email", "country", "model", "plan", "startDate", "deliveryLocation"]
+  : ["email", "country", "tour", "package", "riders", "pillions", "travelDate"];
 function leadMissingKeyFields(l) {
   if (!l) return true;
   return KEY_FIELDS.some((k) => l[k] == null || l[k] === "");
@@ -407,12 +417,18 @@ async function enrichLeadFromConversation(phone, { force = false } = {}) {
       model: EXTRACT_MODEL,
       max_tokens: 300,
       thinking: { type: "disabled" }, // extractor JSON: sin thinking (en Sonnet 5 iría ON por defecto y rompería el parseo/max_tokens)
-      system:
-        'You extract CRM fields from a WhatsApp sales chat for a motorcycle tour company. ' +
-        'Return ONLY a compact JSON object — no prose, no code fences. Keys: ' +
-        'name, email, country, tour ("Bali to Komodo" or "7 Islands"), ' +
-        'package ("Roundtrip" | "Extreme" | "Deluxe"), riders (integer), pillions (integer), ' +
-        'travelDate (free text like "late 2027"). Use null for anything not clearly stated by the customer. Never guess.',
+      system: BOT_VERTICAL === "rental"
+        ? 'You extract CRM fields from a WhatsApp sales chat for a motorbike rental company. ' +
+          'Return ONLY a compact JSON object — no prose, no code fences. Keys: ' +
+          'name, email, country, model (vehicle model the customer wants), ' +
+          'plan (rental period: daily/weekly/fortnight/monthly/semestral/annual), ' +
+          'startDate (free text like "next Monday" or a date), deliveryLocation (free text). ' +
+          'Use null for anything not clearly stated by the customer. Never guess.'
+        : 'You extract CRM fields from a WhatsApp sales chat for a motorcycle tour company. ' +
+          'Return ONLY a compact JSON object — no prose, no code fences. Keys: ' +
+          'name, email, country, tour ("Bali to Komodo" or "7 Islands"), ' +
+          'package ("Roundtrip" | "Extreme" | "Deluxe"), riders (integer), pillions (integer), ' +
+          'travelDate (free text like "late 2027"). Use null for anything not clearly stated by the customer. Never guess.',
       messages: [{ role: "user", content: transcript }],
     });
     let txt = ((r.content[0] && r.content[0].text) || "").trim();
@@ -424,10 +440,13 @@ async function enrichLeadFromConversation(phone, { force = false } = {}) {
   }
   // Solo rellenar campos VACÍOS: nunca pisar lo que ya hay (p.ej. ediciones manuales).
   const fields = {};
-  ["name", "email", "country", "tour", "package", "travelDate"].forEach((k) => {
+  const textFields = BOT_VERTICAL === "rental"
+    ? ["name", "email", "country", "model", "plan", "startDate", "deliveryLocation"]
+    : ["name", "email", "country", "tour", "package", "travelDate"];
+  textFields.forEach((k) => {
     if (data[k] && (lead[k] == null || lead[k] === "")) fields[k] = String(data[k]).slice(0, 120);
   });
-  ["riders", "pillions"].forEach((k) => {
+  (BOT_VERTICAL === "rental" ? [] : ["riders", "pillions"]).forEach((k) => {
     const n = parseInt(data[k], 10);
     if (data[k] != null && !isNaN(n) && (lead[k] == null || lead[k] === "")) fields[k] = n;
   });
@@ -1401,9 +1420,10 @@ app.post("/webhook", async (req, res) => {
 
 // ─── PANEL WEB (control de chats del bot) ─────────────────────────
 // HTML del panel en panel.html (estilo HighLevel). Fallback mínimo si falta el archivo.
-const ADMIN_HTML = fs.existsSync("panel.html")
-  ? fs.readFileSync("panel.html", "utf8")
-  : "<!doctype html><meta charset='utf-8'><body style='font-family:sans-serif;padding:40px'>Panel: falta panel.html en el despliegue.</body>";
+const panelFileName = PANEL_FILE || "panel.html";
+const ADMIN_HTML = fs.existsSync(panelFileName)
+  ? fs.readFileSync(panelFileName, "utf8")
+  : `<!doctype html><meta charset='utf-8'><body style='font-family:sans-serif;padding:40px'>Panel: falta ${panelFileName} en el despliegue.</body>`;
 
 function adminAuth(req, res) {
   if (!ADMIN_PASSWORD) { res.status(503).json({ error: "panel no configurado (falta ADMIN_PASSWORD)" }); return false; }
