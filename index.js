@@ -9,7 +9,9 @@ import Stripe from "stripe";
 import crypto from "crypto";
 
 const app = express();
-app.use(express.json({ limit: "20mb" })); // 20mb: permite subir fotos/vídeos locales (base64) desde el panel
+// verify: guarda el body crudo — la firma X-Hub-Signature-256 de Meta se calcula sobre los bytes
+// exactos recibidos, no sobre el JSON re-serializado (re-serializar cambia el orden/espacios y rompe el HMAC).
+app.use(express.json({ limit: "20mb", verify: (req, _res, buf) => { req.rawBody = buf; } })); // 20mb: permite subir fotos/vídeos locales (base64) desde el panel
 
 // ─── CONFIGURACIÓN (variables de entorno — distintas por proyecto) ──
 const {
@@ -17,6 +19,7 @@ const {
   WHATSAPP_TOKEN,
   WHATSAPP_PHONE_ID,
   WHATSAPP_VERIFY_TOKEN,
+  META_APP_SECRET,         // App Secret de la app de Meta — activa la verificación X-Hub-Signature-256 de los POST del webhook
   ANTHROPIC_API_KEY,
   GOOGLE_SERVICE_ACCOUNT,
   SHEET_ID,
@@ -1210,7 +1213,39 @@ app.get("/webhook", (req, res) => {
 });
 
 // ─── WEBHOOK — RECIBE MENSAJES ────────────────────────────────────
+// Firma: el VERIFY_TOKEN solo protege el handshake GET; los POST se autentican con
+// X-Hub-Signature-256 (HMAC-SHA256 del raw body con el App Secret). Sin META_APP_SECRET
+// configurado se acepta todo (compatibilidad hasta añadir la variable en Railway).
+function validSignature(req) {
+  if (!META_APP_SECRET) return true;
+  const header = req.get("x-hub-signature-256") || "";
+  if (!header.startsWith("sha256=") || !req.rawBody) return false;
+  const expected = "sha256=" + crypto.createHmac("sha256", META_APP_SECRET).update(req.rawBody).digest("hex");
+  const a = Buffer.from(header);
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+// Dedup por wamid: Meta reintenta la entrega si no confirma rápido → el mismo mensaje
+// puede llegar 2+ veces y el bot respondería doble. TTL 24h (los reintentos son de minutos).
+const fallbackSeenWamids = new Set();
+async function alreadyProcessed(wamid) {
+  if (!wamid) return false;
+  if (redisClient) {
+    const first = await redisClient.set(`wamid:${wamid}`, "1", { NX: true, EX: 86400 });
+    return first === null; // null = la clave ya existía → duplicado
+  }
+  if (fallbackSeenWamids.has(wamid)) return true;
+  fallbackSeenWamids.add(wamid);
+  if (fallbackSeenWamids.size > 5000) fallbackSeenWamids.clear(); // ponytail: cap burdo; Redis es el camino real
+  return false;
+}
+
 app.post("/webhook", async (req, res) => {
+  if (!validSignature(req)) {
+    console.warn(`[${PROJECT_NAME}] Webhook POST con firma inválida — descartado`);
+    return res.sendStatus(403);
+  }
   res.sendStatus(200);
 
   try {
@@ -1218,6 +1253,10 @@ app.post("/webhook", async (req, res) => {
     const change = entry?.changes?.[0];
     const message = change?.value?.messages?.[0];
     if (!message || message.type !== "text") return;
+    if (await alreadyProcessed(message.id)) {
+      console.log(`[${PROJECT_NAME}] Mensaje duplicado (reintento de Meta) ignorado: ${message.id}`);
+      return;
+    }
 
     const from = message.from;
     const text = message.text.body;
@@ -2004,6 +2043,7 @@ app.listen(PORT, async () => {
   console.log(`[${PROJECT_NAME}] Bot escuchando en puerto ${PORT}`);
   console.log(`[${PROJECT_NAME}] OWNER_PHONE: ${OWNER_PHONE ? normalizePhone(OWNER_PHONE) : "⚠️  NO CONFIGURADO"}`);
   console.log(`[${PROJECT_NAME}] CRM (BD): ${redisClient ? "Redis (persistente)" : "RAM (volátil — configura REDIS_URL)"}`);
+  console.log(`[${PROJECT_NAME}] Firma webhook: ${META_APP_SECRET ? "🟢 X-Hub-Signature-256 activa" : "⚠️  SIN verificar — añade META_APP_SECRET en Railway"}`);
   console.log(`[${PROJECT_NAME}] Email (Brevo): ${MAIL_READY ? "🟢 listo" : `⚠️  NO configurado → BREVO_API_KEY=${BREVO_API_KEY ? "ok" : "FALTA"}, MAIL_FROM=${MAIL_FROM ? "ok" : "FALTA"}`}`);
   if (!MAIL_READY) {
     // Lista los NOMBRES de claves relacionadas que el proceso SÍ ve (sin valores) → delata un typo de nombre.
