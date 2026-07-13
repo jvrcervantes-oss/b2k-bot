@@ -762,7 +762,7 @@
       i_exploring:'explorando', i_interested:'interesado', i_booking:'reserva', i_escalate:'duda',
       c_name:'Nombre', c_phone:'WhatsApp', c_email:'Email', c_country:'País', c_tour:'Modelo', c_package:'Plan', c_delivery:'Entrega', c_travel:'Fecha inicio', c_status:'Estado', c_intent:'Intención', c_lastact:'Últ. act.', c_appt:'Cita',
       s_blank:'—', s_new:'🆕 Nuevo', s_quoted:'💬 Cotizado', s_won:'✅ Ganado', s_lost:'❌ Perdido', s_noshow:'🚫 No-show',
-      e_status:'Estado', e_name:'Nombre', e_country:'País', e_email:'Email', e_tour:'Modelo de moto', e_package:'Plan de alquiler', e_delivery:'Lugar de entrega', e_insurance:'Seguro', e_payment:'Método de pago', e_travel:'Fecha de inicio', e_savecard:'Guardar ficha', e_notes:'Notas internas', ph_notes:'Notas del equipo…', e_savenotes:'Guardar notas',
+      e_status:'Estado', e_name:'Nombre', e_country:'País', e_email:'Email', e_tour:'Modelo de moto', e_package:'Plan de alquiler', e_delivery:'Lugar de entrega', e_insurance:'Seguro', e_payment:'Método de pago', e_value:'Valor del trato (IDR)', e_travel:'Fecha de inicio', e_savecard:'Guardar ficha', e_notes:'Notas internas', ph_notes:'Notas del equipo…', e_savenotes:'Guardar notas',
       ph_pkg:'Semanal / Mensual / Anual', ph_delivery:'ej. Canggu, hotel X', ph_insurance:'Gold / Diamond / ninguno', ph_payment:'Tarjeta / Crypto / Transferencia', ph_egmonth:'ej. 15 agosto 2026',
       f_intent:'Intención', f_lastact:'Última actividad', f_messages:'Mensajes', f_followups:'Seguimientos enviados', f_after24:'tras 24h', f_nextappt:'Próxima cita', wa_open:'Abrir en WhatsApp',
       p_resume:'🤖 Reactivar bot', p_pause:'✋ Pausar bot', hint_paused:'Tú tienes el control · el bot está en pausa para este lead', hint_active:'El bot responde solo · si escribes tú, tomas el control',
@@ -804,7 +804,7 @@
       i_exploring:'exploring', i_interested:'interested', i_booking:'booking', i_escalate:'question',
       c_name:'Name', c_phone:'WhatsApp', c_email:'Email', c_country:'Country', c_tour:'Model', c_package:'Plan', c_delivery:'Delivery', c_travel:'Start date', c_status:'Status', c_intent:'Intent', c_lastact:'Last act.', c_appt:'Call',
       s_blank:'—', s_new:'🆕 New', s_quoted:'💬 Quoted', s_won:'✅ Won', s_lost:'❌ Lost', s_noshow:'🚫 No-show',
-      e_status:'Status', e_name:'Name', e_country:'Country', e_email:'Email', e_tour:'Bike model', e_package:'Rental plan', e_delivery:'Delivery location', e_insurance:'Insurance', e_payment:'Payment method', e_travel:'Start date', e_savecard:'Save card', e_notes:'Internal notes', ph_notes:'Team notes…', e_savenotes:'Save notes',
+      e_status:'Status', e_name:'Name', e_country:'Country', e_email:'Email', e_tour:'Bike model', e_package:'Rental plan', e_delivery:'Delivery location', e_insurance:'Insurance', e_payment:'Payment method', e_value:'Deal value (IDR)', e_travel:'Start date', e_savecard:'Save card', e_notes:'Internal notes', ph_notes:'Team notes…', e_savenotes:'Save notes',
       ph_pkg:'Weekly / Monthly / Annual', ph_delivery:'e.g. Canggu, hotel X', ph_insurance:'Gold / Diamond / none', ph_payment:'Card / Crypto / Transfer', ph_egmonth:'e.g. 15 August 2026',
       f_intent:'Intent', f_lastact:'Last activity', f_messages:'Messages', f_followups:'Follow-ups sent', f_after24:'after 24h', f_nextappt:'Next appointment', wa_open:'Open in WhatsApp',
       p_resume:'🤖 Resume bot', p_pause:'✋ Pause bot', hint_paused:"You're in control · the bot is paused for this lead", hint_active:'The bot replies on its own · type and you take over',
@@ -1064,6 +1064,7 @@
       + '<div class="edit"><label>'+t('e_delivery')+'</label><input id="edDelivery" value="'+esc(l.deliveryLocation||'')+'" placeholder="'+t('ph_delivery')+'"></div>'
       + '<div class="edit"><label>'+t('e_insurance')+'</label><input id="edInsurance" value="'+esc(l.insuranceTier||'')+'" placeholder="'+t('ph_insurance')+'"></div>'
       + '<div class="edit"><label>'+t('e_payment')+'</label><input id="edPayment" value="'+esc(l.paymentMethod||'')+'" placeholder="'+t('ph_payment')+'"></div>'
+      + '<div class="edit"><label>'+t('e_value')+'</label><input id="edValue" type="number" min="0" step="1000" value="'+(leadValue(l)||'')+'" placeholder="2450000"></div>'
       + '<div class="edit"><label>'+t('e_travel')+'</label><input id="edTravel" value="'+esc(l.startDate||'')+'" placeholder="'+t('ph_egmonth')+'"></div>'
       + '<div class="edit"><label>'+t('e_owner')+'</label><select id="edOwner">'+OWNER_OPTS.map(function(v){return '<option value="'+esc(v)+'"'+((l.owner||'')===v?' selected':'')+'>'+esc(v||'—')+'</option>';}).join('')+'</select></div>'
       + '<div class="edit"><label>'+t('e_followup')+'</label><input id="edFollow" type="date" value="'+(l.nextFollowUp?esc(String(l.nextFollowUp).slice(0,10)):'')+'"></div>'
@@ -1166,6 +1167,7 @@
       deliveryLocation:document.getElementById('edDelivery').value.trim(),
       insuranceTier:document.getElementById('edInsurance').value.trim(),
       paymentMethod:document.getElementById('edPayment').value.trim(),
+      dealValue:document.getElementById('edValue').value.trim(),
       startDate:document.getElementById('edTravel').value.trim(),
       owner:document.getElementById('edOwner').value,
       nextFollowUp:document.getElementById('edFollow').value };
@@ -1499,7 +1501,8 @@
   var ORDER = {'':0,new:1,quoted:2,won:3,lost:4,noshow:5};
   // ponytail: sin PKG_PRICE — el precio del alquiler depende de modelo × periodo (tabla completa
   // en context-balibest.md), no es un valor fijo por plan como en el tour. leadValue siempre 0.
-  function leadValue(){ return 0; }
+  // Valor del trato: lo pone el bot al cotizar ([LEAD value=...]) o el estudio a mano en la ficha.
+  function leadValue(l){ return parseInt(l&&l.dealValue,10)>0 ? parseInt(l.dealValue,10) : 0; }
   // Prioridad de lead: score 0-~200 con campos que ya llegan del servidor. ponytail: heurística de ranking, ajustar pesos si el owner discrepa del orden.
   function leadScore(l){
     if(!l || l.archived) return 0;
@@ -1518,7 +1521,8 @@
     if(isOverdue(l)) r.push('seguimiento vencido');
     return 'Prioridad '+s+(r.length?' · '+r.join(' · '):'');
   }
-  function money(n){ return n ? '$'+n.toLocaleString('en-US') : ''; }
+  // IDR compacto: 2450000 → "2.45M", 600000 → "600k" (los importes IDR completos no caben en la métrica)
+  function money(n){ if(!n) return ''; if(n>=1e9) return (n/1e9).toFixed(2).replace(/\.?0+$/,'')+'B IDR'; if(n>=1e6) return (n/1e6).toFixed(2).replace(/\.?0+$/,'')+'M IDR'; if(n>=1e3) return Math.round(n/1e3)+'k IDR'; return n+' IDR'; }
   function leadSource(l){ return l.source==='meta-form' ? 'meta' : 'chat'; }
   function todayISO(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
   function isOverdue(l){ return l.nextFollowUp && String(l.nextFollowUp).slice(0,10) <= todayISO(); }
@@ -1677,15 +1681,17 @@
     return st===tab;
   }).length; }
   function renderMetrics(){
-    var m={total:0,week:0,nq:0,quoted:0,won:0,lost:0}, wk=Date.now()-7*86400000;
+    var m={total:0,week:0,nq:0,quoted:0,won:0,lost:0,pipe:0,rev:0}, wk=Date.now()-7*86400000;
     leads.forEach(function(l){ if(l.archived) return; m.total++; var st=l.status||''; var ca=l.createdAt||l.updatedAt||0; if(ca>=wk)m.week++;
-      if(st===''||st==='new')m.nq++; if(st==='quoted')m.quoted++; if(st==='won')m.won++; if(st==='lost')m.lost++; });
+      if(st===''||st==='new')m.nq++; if(st==='quoted')m.quoted++; if(st==='won')m.won++; if(st==='lost')m.lost++;
+      if(st===''||st==='new'||st==='quoted')m.pipe+=leadValue(l); if(st==='won')m.rev+=leadValue(l); });
     function mt(v,l2,cls,oc){ return '<div class="metric'+(oc?' click':'')+'"'+(oc?' onclick="'+oc+'"':'')+'><span class="mv'+(cls?' '+cls:'')+'">'+v+'</span><span class="ml">'+l2+'</span></div>'; }
-    // ponytail: sin Pipeline/Ingresos — no hay precio fijo por plan (depende de modelo x periodo), mostrar $0 sería falso
+    // Pipeline/Ingresos desde dealValue (el bot lo captura al cotizar; editable en la ficha)
     document.getElementById('dbMetrics').innerHTML =
       mt(m.total,t('m_total')) + mt(m.week,t('m_week')) +
       mt(m.nq,t('m_new'),'m-new',"dbGoTab('active')") + mt(m.quoted,t('m_quoted'),'m-quoted',"dbGoTab('active')") +
-      mt(m.won,t('m_won'),'m-won',"dbGoTab('won')") + mt(m.lost,t('m_lost'),'m-lost',"dbGoTab('lost')");
+      mt(m.won,t('m_won'),'m-won',"dbGoTab('won')") + mt(m.lost,t('m_lost'),'m-lost',"dbGoTab('lost')") +
+      mt(money(m.pipe)||'0',t('m_pipeline')) + mt(money(m.rev)||'0',t('m_revenue'),'m-rev');
   }
   function renderTabs(){
     var tabs=[['active','tab_active'],['won','tab_won'],['lost','tab_lost'],['noshow','tab_noshow'],['archived','tab_archived'],['all','tab_all']];
