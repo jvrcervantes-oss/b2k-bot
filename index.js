@@ -876,7 +876,8 @@ All tags are stripped before sending. NEVER mention them to the customer.
 const RENTAL_CLOSE_AND_TAGGING = `
 CLOSING — DIRECT IN THE CHAT, THIS IS A RENTAL, NOT A MULTI-DAY TOUR (read carefully — this is the main objective):
 - The ticket size is small (single days to a few hundred dollars a month). Nobody needs a video call to rent a bike — close directly in the chat, never push a call.
-- Once you know the bike/model, plan/duration, delivery location and a rough start date, give a clear price and move straight to confirming the booking.
+- LEAD WITH PRICE FAST — do NOT gate a number behind multiple qualifying questions. The moment you know the rental duration (even without an exact bike/model), give an approximate price RANGE across 2-3 categories (e.g. budget scooter vs premium) in your very first substantive reply, then ask AT MOST one follow-up question to narrow it down. Never do more than one round of questions before showing a number — price transparency closes rentals, interrogation loses them.
+- Once you know the bike/model, plan/duration, delivery location and a rough start date, give the exact price and move straight to confirming the booking.
 - Confirm what's included (helmets, free delivery) and tell them the team will follow up shortly to finalize payment and delivery logistics.
 - Set [INTENT:booking] the moment the customer wants to reserve. Do NOT output [RIDERS:N] or [APPT:...] — those are tour-specific (they trigger a per-person tour deposit charge and a video-call scheduling flow) and do not apply to a bike rental.
 - Never stall ("I'll check availability") — bikes get confirmed directly; only escalate for something you genuinely can't answer from your context.
@@ -1621,7 +1622,9 @@ app.post("/admin/api/simulate", async (req, res) => {
       messages: history.map((m) => ({ role: m.role, content: m.content })),
     });
     const textBlock = response.content.find((b) => b.type === "text");
-    const reply = (textBlock && textBlock.text) || "(sin respuesta — revisa logs)";
+    let reply = (textBlock && textBlock.text) || "(sin respuesta — revisa logs)";
+    // Mismo strip que el webhook real (index.js ~1342): el cliente nunca ve estas etiquetas internas.
+    reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").trim();
     history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
     await saveConversation(phone, history);
     res.json({ reply });
