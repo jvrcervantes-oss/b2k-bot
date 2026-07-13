@@ -28,6 +28,7 @@ const {
   BOT_MODEL,
   BOT_VERTICAL,            // "tour" (default) o "rental" — selecciona el bloque de cierre en BASE_INSTRUCTIONS
   BOT_PERSONA_NAME,        // nombre de la persona del bot (default "Daniel" = B2K); BBM debe definir el suyo
+  OPENAI_API_KEY,          // opcional: activa la transcripción de notas de voz (Whisper); sin ella se pide el texto
   CONTEXT_FILE,            // nombre del archivo de contexto a cargar del repo (default "context.md")
   PANEL_FILE,              // nombre del archivo del panel /admin a cargar del repo (default "panel.html")
   REDIS_URL,
@@ -140,6 +141,7 @@ async function escPush(customerPhone, customerName, question) {
   } else {
     fallbackEscQueue.unshift(entry);
   }
+  return entry; // string exacto encolado → permite lRem selectivo si el owner responde citando
 }
 
 async function escPop() {
@@ -336,6 +338,7 @@ const LEAD_KEYMAP = {
   delivery_location: "deliveryLocation", deliverylocation: "deliveryLocation", delivery: "deliveryLocation",
   insurance_tier: "insuranceTier", insurancetier: "insuranceTier", insurance: "insuranceTier",
   payment_method: "paymentMethod", paymentmethod: "paymentMethod", payment: "paymentMethod",
+  value: "dealValue", dealvalue: "dealValue", // precio total cotizado → métrica de ingresos del panel
 };
 
 // 1) El formulario de Instagram llega como el PRIMER mensaje de WhatsApp (texto plano).
@@ -366,6 +369,7 @@ function parseLeadTag(reply) {
     let v = pair.slice(i + 1).trim();
     if (!k || !v || /^(unknown|n\/?a|tbd|\?+)$/i.test(v)) return;
     if (k === "riders" || k === "pillions") { const n = parseInt(v, 10); if (!isNaN(n)) out[k] = n; }
+    else if (k === "dealValue") { const n = parseInt(v.replace(/\D/g, ""), 10); if (!isNaN(n) && n > 0) out[k] = n; } // acepta "2,450,000 IDR" → 2450000
     else if (k === "tags") { out.tags = (out.tags || []).concat(v.split(",").map((s) => s.trim()).filter(Boolean)); }
     else out[k] = v.slice(0, 120);
   });
@@ -918,7 +922,8 @@ LEAD DATA TAGGING — fill the CRM as you learn things (do this consistently):
 - Whenever you LEARN or CONFIRM a concrete fact about the lead, append a SILENT data tag at the very end of your message, on its own new line:
   [LEAD key=value; key=value]
 - It is stripped before sending — the customer NEVER sees it. Include ONLY the fields you are now sure of; omit anything you don't know yet. NEVER guess or invent a value.
-- Valid keys: model (bike/scooter model) · plan (daily/weekly/monthly/semestral/annual) · start_date · delivery_location · insurance_tier · payment_method · name · email · country · tags (short labels, comma-separated) · followup (a date YYYY-MM-DD for the next time the team should reach out).
+- Valid keys: model (bike/scooter model) · plan (daily/weekly/monthly/semestral/annual) · start_date · delivery_location · insurance_tier · payment_method · value (total quoted price for THEIR chosen bike+plan, digits only in IDR, e.g. value=2450000 — update it if the quote changes) · name · email · country · tags (short labels, comma-separated) · followup (a date YYYY-MM-DD for the next time the team should reach out).
+- Whenever you quote a concrete total price for the customer's chosen bike and plan, include value=<digits> in the LEAD tag — it feeds the revenue metrics in the CRM. Only the price of what they're actually leaning toward, never a range.
 - Send it the moment you learn each thing, and again (with the fuller set) as more is confirmed — re-sending a known field is fine, it just updates the record.
 - WAITLIST / DEFER — MANDATORY, NEVER SKIP. The instant the customer defers ("let me think about it", "maybe next month", "not right now"), you MUST end THAT SAME message with a LEAD tag carrying a followup date so they aren't silently lost. A promise like "I'll make a note" WITHOUT the tag = the lead is silently lost. Never do that.
   Format: [LEAD tags=followup; followup=YYYY-MM-DD]
@@ -1057,7 +1062,7 @@ async function createStripeSession(numRiders) {
 async function sendWhatsAppResult(to, message) {
   const toClean = normalizePhone(to);
   try {
-    await axios.post(
+    const resp = await axios.post(
       `https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/messages`,
       {
         messaging_product: "whatsapp",
@@ -1072,7 +1077,8 @@ async function sendWhatsAppResult(to, message) {
         },
       }
     );
-    return { ok: true };
+    // id (wamid) del mensaje enviado: permite enlazar la respuesta-cita del owner con su escalación
+    return { ok: true, id: resp.data?.messages?.[0]?.id };
   } catch (e) {
     const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
     return { ok: false, error: detail };
@@ -1082,6 +1088,31 @@ async function sendWhatsAppResult(to, message) {
 async function sendWhatsApp(to, message) {
   const r = await sendWhatsAppResult(to, message);
   if (!r.ok) console.error(`[${PROJECT_NAME}] Error enviando WhatsApp a ${normalizePhone(to)}:`, r.error);
+}
+
+// ─── TRANSCRIPCIÓN DE NOTAS DE VOZ (Whisper) ─────────────────────
+// Se activa añadiendo OPENAI_API_KEY en Railway; sin ella devuelve null y el webhook
+// cae al fallback de "escríbemelo en texto". Flujo: media id de Meta → URL firmada →
+// descarga del audio → Whisper → texto.
+async function transcribeAudio(mediaId) {
+  if (!OPENAI_API_KEY || !mediaId) return null;
+  try {
+    const meta = await axios.get(`https://graph.facebook.com/v21.0/${mediaId}`,
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, timeout: 15000 });
+    const bin = await axios.get(meta.data.url,
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, responseType: "arraybuffer", timeout: 30000, maxContentLength: 25 * 1024 * 1024 });
+    const fd = new FormData(); // global en Node 18+
+    fd.append("file", new Blob([bin.data], { type: meta.data.mime_type || "audio/ogg" }), "voice.ogg");
+    fd.append("model", "whisper-1");
+    const r = await axios.post("https://api.openai.com/v1/audio/transcriptions", fd,
+      { headers: { Authorization: `Bearer ${OPENAI_API_KEY}` }, timeout: 60000 });
+    const out = ((r.data && r.data.text) || "").trim();
+    if (out) console.log(`[${PROJECT_NAME}] Nota de voz transcrita (${out.length} chars)`);
+    return out || null;
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] transcribeAudio error: ${e.response?.status || ""} ${e.message}`);
+    return null;
+  }
 }
 
 // Marca el mensaje entrante como leído (ticks azules) y, opcionalmente, muestra el indicador
@@ -1309,9 +1340,18 @@ app.post("/webhook", async (req, res) => {
       const where = [loc.name, loc.address].filter(Boolean).join(", ") || `${loc.latitude},${loc.longitude}`;
       text = `(I'm sharing my location: ${where})`;
     } else if (!isOwner(from)) {
-      // ── Media que el bot no puede leer (audio/foto/vídeo/documento): antes se ignoraba en
-      //    silencio → el lead creía que le leímos y se perdía. Ahora queda registrado y se le
-      //    pide el texto; si el bot está en pausa, solo se registra y se marca "por responder".
+      // ── Nota de voz → transcripción (Whisper) y entra al flujo normal como texto ──
+      if (message.type === "audio" || message.type === "voice") {
+        const mediaId = (message.audio && message.audio.id) || (message.voice && message.voice.id);
+        const transcript = await transcribeAudio(mediaId);
+        if (transcript) text = `🎤 ${transcript}`;
+      }
+      if (text !== undefined) {
+        // transcrita con éxito → sigue por el flujo normal de texto (no entra al fallback)
+      } else {
+      // ── Media que el bot no puede leer (audio sin OPENAI_API_KEY/foto/vídeo/documento): antes
+      //    se ignoraba en silencio → el lead creía que le leímos y se perdía. Ahora queda
+      //    registrado y se le pide el texto; en pausa, solo se registra y se marca "por responder".
       const KIND_LABEL = { image: "[foto]", video: "[vídeo]", audio: "[audio]", voice: "[audio]", document: "[documento]", sticker: "[sticker]", contacts: "[contacto]" };
       const label = KIND_LABEL[message.type] || `[${message.type}]`;
       const history = await getConversation(from);
@@ -1334,13 +1374,27 @@ app.post("/webhook", async (req, res) => {
       await saveConversation(from, history);
       await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "exploring", ask, "bot");
       return;
+      }
     } else {
       return; // owner mandó media: nada que reenviar
     }
 
     // ── Mensaje del dueño: reenviar al cliente pendiente ──────────
     if (isOwner(from)) {
-      const pending = await escPop();
+      // Si el owner responde CITANDO el aviso de escalación (reply de WhatsApp), se enruta a ESE
+      // cliente en concreto — con varias escalaciones abiertas ya no va a ciegas al más antiguo.
+      let pending = null;
+      const ctxId = message.context && message.context.id;
+      if (ctxId && redisClient) {
+        const raw = await redisClient.get(`escmap:${ctxId}`);
+        if (raw) {
+          pending = JSON.parse(raw);
+          await redisClient.lRem("esc_queue", 1, raw); // quitarla de la cola para no reenviarla doble
+          await redisClient.del(`escmap:${ctxId}`);
+          console.log(`[${PROJECT_NAME}] Owner respondió citando → enrutado exacto a ${pending.customerName || pending.customerPhone}`);
+        }
+      }
+      if (!pending) pending = await escPop();
       if (pending) {
         console.log(`[${PROJECT_NAME}] Owner respondió escalación → reenviando a ${pending.customerName || pending.customerPhone}`);
         await sendWhatsApp(
@@ -1508,11 +1562,14 @@ app.post("/webhook", async (req, res) => {
 
     // ── Escalación: notificar al dueño en silencio ────────────────
     if (intent === "escalate" && OWNER_PHONE) {
-      await escPush(from, profileName, text);
-      await sendWhatsApp(
+      const entry = await escPush(from, profileName, text);
+      const rNotif = await sendWhatsAppResult(
         OWNER_PHONE,
-        `❓ ${PROJECT_NAME} — pregunta sin respuesta\n\n*${profileName || from}* pregunta:\n"${text}"\n\nResponde a este mensaje y se lo reenviaré.`
+        `❓ ${PROJECT_NAME} — pregunta sin respuesta\n\n*${profileName || from}* pregunta:\n"${text}"\n\nResponde CITANDO este mensaje (mantén pulsado → Responder) y se lo reenviaré.`
       );
+      // Mapa wamid→escalación: si el owner responde citando, se enruta a este cliente exacto.
+      if (rNotif.ok && rNotif.id && redisClient) await redisClient.setEx(`escmap:${rNotif.id}`, 7 * 86400, entry);
+      if (!rNotif.ok) console.error(`[${PROJECT_NAME}] Error enviando escalación al owner: ${rNotif.error}`);
       console.log(`[${PROJECT_NAME}] Escalación registrada — ${profileName || from}: "${text.slice(0, 60)}"`);
     }
 
@@ -1742,9 +1799,13 @@ app.post("/admin/api/lead", async (req, res) => {
   // Incluye los campos del vertical rental (model/plan/...): el panel-rental los envía y sin
   // ellos aquí se descartaban en silencio — editar la ficha de BBM perdía esos datos.
   ["name", "country", "email", "tour", "package", "riders", "pillions", "travelDate", "owner", "nextFollowUp", "tags", "archived",
-   "model", "plan", "startDate", "deliveryLocation", "insuranceTier", "paymentMethod"].forEach((k) => {
+   "model", "plan", "startDate", "deliveryLocation", "insuranceTier", "paymentMethod", "dealValue"].forEach((k) => {
     if (req.body[k] != null) fields[k] = req.body[k];
   });
+  if (fields.dealValue != null) { // normaliza: "2,450,000" / "2450000 IDR" / "" → entero (0 = borrar)
+    const n = parseInt(String(fields.dealValue).replace(/\D/g, ""), 10);
+    fields.dealValue = isNaN(n) ? 0 : n;
+  }
   await updateLeadFields(phone, fields);
   writeLeadToSheet(phone, fields); // best-effort (solo escribe las llaves con columna mapeada)
   if (fields.owner != null && (fields.owner || "") !== (prev.owner || "")) logEvent(phone, "owner", { to: fields.owner || "" });
