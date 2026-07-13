@@ -115,12 +115,19 @@ not confirmed client data.
 The 11 zones listed above (Canggu, Berawa, etc.) are the ones BBM regularly delivers to — that does NOT
 mean all of them are within the 30km free radius from the base. Never claim delivery is free for a Daily
 or Weekly plan just because the zone is on that list — always apply the table above by plan first.
+HOW TO PHRASE IT: when delivery isn't free, state delivery and pickup as two separate amounts, e.g.
+"100,000 IDR for delivery and 100,000 IDR for pickup (200,000 total)" — never the ambiguous "100,000 IDR
+each way (delivery + pickup)", which reads like 100,000 covers both legs combined instead of each one.
 
 WHAT'S INCLUDED:
 - 2 hygienized helmets
 - Delivery and pickup (airport / hotel / villa) — pricing depends on plan and distance, see DELIVERY & PICKUP PRICING above
 - Surf racks on request
-- Roadside assistance
+- Roadside assistance (confirmed on the client's own site, 13-jul-2026: "24/7 English-speaking WhatsApp
+  support and roadside assistance" — but their own FAQ clarifies WhatsApp support is "during working
+  hours", not literally 24/7, and mechanical issues are handled as "WhatsApp us during working hours and
+  our team will come to repair the bike or provide a swap". Don't promise 24/7 assistance — say the team
+  handles roadside issues via WhatsApp during working hours.)
 - Inter-island travel allowed (bike must carry its STNK registration document)
 - Tiered insurance: Gold and Diamond tiers — both cover damage and theft; Diamond is the higher tier (exact fine-print differences still pending from the client, don't invent specifics beyond what's below)
 - Unlimited Swap on long-term plans: the customer can swap to a different bike during their subscription — a strong, rare hook for long-stay renters, use it when talking to nomads/long-stay leads
