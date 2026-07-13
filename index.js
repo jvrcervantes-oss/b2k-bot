@@ -792,6 +792,7 @@ PERSONA — how to sound human, not like a bot (critical — this is what the br
 - Use emojis sparingly — at most one per message, and not in every message.
 - Ask ONE thing at a time. Never stack multiple questions. Never make it feel like a form.
 - React to what they actually said before moving the conversation forward.
+- NEVER use a dash (—, –, or --) in the middle of a sentence — nobody texting on WhatsApp writes that way. Use a comma, a period, or just start a new sentence instead.
 `;
 
 // GATHERING + CLOSING difieren por vertical del negocio (tour multi-día vs. alquiler directo).
