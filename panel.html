@@ -211,11 +211,15 @@
   #app.dbmode #list,#app.dbmode #chat,#app.dbmode #detail{display:none}
   #app.dbmode #dbView{display:flex}
   /* secciones a pantalla completa (media, newsletter) — mismo patrón que dbView */
-  #mediaView,#nlView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
+  #mediaView,#nlView,#simView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
   #app.mediamode #list,#app.mediamode #chat,#app.mediamode #detail{display:none}
   #app.mediamode #mediaView{display:flex}
   #app.nlmode #list,#app.nlmode #chat,#app.nlmode #detail{display:none}
   #app.nlmode #nlView{display:flex}
+  #app.simmode #list,#app.simmode #chat,#app.simmode #detail{display:none}
+  #app.simmode #simView{display:flex}
+  #simMsgs{flex:1;overflow-y:auto;padding:22px 26px;display:flex;flex-direction:column;gap:8px;background:#f0f2f5}
+  body.dark #simMsgs{background:#0b111c}
   .sec-top{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;background:var(--card);border-bottom:1px solid var(--line)}
   .sec-top h2{font-size:18px;font-weight:700}
   .sec-body{flex:1;overflow-y:auto;padding:24px;width:100%;max-width:740px;margin:0 auto;box-sizing:border-box}
@@ -417,7 +421,7 @@
     nav{position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;flex-direction:row;justify-content:space-around;align-items:center;padding:7px 4px calc(24px + env(safe-area-inset-bottom,0px));gap:0;z-index:60;border-top:1px solid rgba(255,255,255,.10)}
     nav .brand,nav .spacer{display:none}
     nav .ic{width:46px;height:40px}
-    #dbView,#calView,#mediaView,#nlView{grid-column:1/-1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+    #dbView,#calView,#mediaView,#nlView,#simView{grid-column:1/-1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
     /* Conversaciones: lista por defecto; al abrir un chat = pantalla completa, sin barra */
     #list{display:flex;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
     #chat{display:none}
@@ -549,6 +553,7 @@
     <div class="ic" id="navDb" data-ti="nav_db" title="Base de datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="ic" id="navMedia" data-ti="nav_media" title="Fotos y vídeos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="ic" id="navNewsletter" data-ti="nav_nl" title="Newsletter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" id="navSim" data-ti="nav_sim" title="Simulador"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12c0 4.418-4.03 8-9 8-1.06 0-2.076-.163-3.017-.463L3 21l1.35-3.746C3.494 15.85 3 14.482 3 13c0-4.418 4.03-8 9-8s9 3.582 9 8z" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 12h.01M12 12h.01M16 12h.01" stroke-linecap="round"/></svg></div>
     <div class="spacer"></div>
     <div class="ic" id="langToggle" data-ti="nav_lang">EN</div>
     <div class="ic" data-ti="nav_theme" id="themeToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
@@ -684,6 +689,16 @@
       <div id="nlSchedList" class="nl-sched"></div>
     </div>
   </div>
+
+  <!-- simulador: prueba el bot sin WhatsApp ni Meta -->
+  <div id="simView">
+    <div class="sec-top"><h2 data-i18n="sim_title">Simulador</h2><button class="btn-ghost" id="simReset" data-i18n="sim_reset">↺ Reiniciar</button></div>
+    <div id="simMsgs"><div class="nochat" id="simEmpty"><span data-i18n="sim_help">Escribe como si fueras un cliente. Habla con el mismo motor y el mismo contexto que usa el bot real — no se manda nada por WhatsApp ni se crea ningún lead.</span></div></div>
+    <div class="composer" style="display:flex">
+      <textarea id="simInput" rows="1" data-ph="sim_ph" placeholder="Escribe un mensaje de prueba…"></textarea>
+      <button id="simSend" title="Enviar">➤</button>
+    </div>
+  </div>
 </div>
 
 <!-- modal respuestas rápidas -->
@@ -771,6 +786,7 @@
       outreach_ing:'⏳ Enviando…', outreach_ok:'Intro enviada', outreach_err:'No se pudo iniciar la conversación. ¿Está configurada la plantilla de intro (INTRO_TEMPLATE_NAME) en Railway?',
       q_assign:'Asignar', q_call:'Agendar llamada', call_title:'Llamada con', al_appt_date:'Pon fecha y hora', pre_bot:'Bot: ', pre_you:'Tú: ', act_call:'📞 Agendar llamada', cal_today:'Hoy',
       nav_nl:'Newsletter', nl_title:'Newsletter por email', nl_help:'Envía un email a los leads que dieron su correo. Incluye siempre un enlace de baja automático. Prueba primero contigo.', nl_scope:'Destinatarios', nl_scope_all:'Todos con email', nl_scope_sel:'Seleccionados en la Base de datos', nl_count:'{n} destinatarios con email · {u} dados de baja se excluyen', nl_subject:'Asunto', nl_ph_subject:'Asunto del email', nl_body:'Mensaje', nl_ph_body:'Escribe el email. Deja una línea en blanco entre párrafos.', nl_test:'Enviar prueba', nl_ph_test:'tu@email.com', nl_send:'Enviar', nl_send_n:'Enviar a {n}', nl_sending:'⏳ Enviando…', nl_sent:'✓ Enviados {s} · {f} fallidos', nl_test_ok:'✓ Prueba enviada', nl_no_recip:'No hay destinatarios con email en esta selección.', nl_need:'Escribe asunto y mensaje.', nl_test_need:'Pon un email de prueba válido.', cfm_nl:'¿Enviar el newsletter a {n} personas? No se puede deshacer.', nl_fmt:'Formato: **negrita** · *cursiva* · ## Título · - lista · [texto](enlace) · [[Botón|enlace]] · ![imagen](url). El botón "Enviar prueba" te muestra cómo queda.', nl_mode:'Contenido del email', nl_mode_compose:'Escribirlo aquí', nl_mode_brevo:'Usar una plantilla de Brevo', nl_template:'Plantilla de Brevo', nl_template_hint:'Solo aparecen las plantillas transaccionales activas de Brevo. Personaliza con {{params.name}}; añade {{params.unsub}} en el pie para la baja.', nl_no_templates:'No hay plantillas transaccionales en Brevo (créala en Brevo → Transactional → Templates)', nl_pick_template:'Elige una plantilla de Brevo.', nl_when:'Programar para (opcional)', nl_when_hint:'Déjalo vacío para enviar ahora. Con fecha, se envía solo a esa hora (los destinatarios se recalculan al disparar).', nl_schedule:'Programar', nl_schedule_n:'Programar · {n} dest.', nl_scheduled_ok:'✓ Programado', cfm_nl_sched:'¿Programar el envío a {n} personas?', nl_sched_title:'Programados', nl_sched_sel:'sel.', nl_sched_all:'todos',
+      nav_sim:'Simulador', sim_title:'Simulador', sim_reset:'↺ Reiniciar', sim_ph:'Escribe un mensaje de prueba…', sim_help:'Escribe como si fueras un cliente. Habla con el mismo motor y el mismo contexto que usa el bot real — no se manda nada por WhatsApp ni se crea ningún lead.',
       e_owner:'Propietario', e_followup:'Próximo seguimiento', e_tags:'Etiquetas', ph_tag:'Añadir etiqueta…', f_activity:'Actividad',
       tl_empty:'Sin actividad registrada', tl_created:'Lead creado', tl_imported:'Importado de Meta', tl_status:'Estado', tl_owner:'Asignado a', tl_appt:'Cita agendada', tl_note:'Nota actualizada', tl_tag:'Etiqueta añadida', tl_archived:'Archivado', tl_restored:'Restaurado', tl_enriched:'Datos enriquecidos', tl_outreach:'Conversación iniciada (intro)', tl_fu_reminded:'Recordatorio de seguimiento enviado', tl_newsletter:'Newsletter enviado',
       al_save:'No se pudo guardar', edit_tpl:'✎ Editar plantillas…', locale:'es-ES' },
@@ -812,6 +828,7 @@
       outreach_ing:'⏳ Sending…', outreach_ok:'Intro sent', outreach_err:'Could not start the conversation. Is the intro template (INTRO_TEMPLATE_NAME) configured in Railway?',
       q_assign:'Assign', q_call:'Schedule call', call_title:'Call with', al_appt_date:'Set date and time', pre_bot:'Bot: ', pre_you:'You: ', act_call:'📞 Schedule call', cal_today:'Today',
       nav_nl:'Newsletter', nl_title:'Email newsletter', nl_help:'Email the leads who gave you their address. Every email includes an automatic unsubscribe link. Test it on yourself first.', nl_scope:'Recipients', nl_scope_all:'Everyone with an email', nl_scope_sel:'Selected in the Database', nl_count:'{n} recipients with email · {u} unsubscribed excluded', nl_subject:'Subject', nl_ph_subject:'Email subject', nl_body:'Message', nl_ph_body:'Write the email. Leave a blank line between paragraphs.', nl_test:'Send test', nl_ph_test:'you@email.com', nl_send:'Send', nl_send_n:'Send to {n}', nl_sending:'⏳ Sending…', nl_sent:'✓ Sent {s} · {f} failed', nl_test_ok:'✓ Test sent', nl_no_recip:'No recipients with an email in this selection.', nl_need:'Write a subject and message.', nl_test_need:'Enter a valid test email.', cfm_nl:'Send the newsletter to {n} people? This cannot be undone.', nl_fmt:'Formatting: **bold** · *italic* · ## Heading · - list · [text](link) · [[Button|link]] · ![image](url). The "Send test" button shows you how it looks.', nl_mode:'Email content', nl_mode_compose:'Write it here', nl_mode_brevo:'Use a Brevo template', nl_template:'Brevo template', nl_template_hint:'Only Brevo active transactional templates show up. Personalize with {{params.name}}; add {{params.unsub}} in the footer for opt-out.', nl_no_templates:'No transactional templates in Brevo (create one in Brevo → Transactional → Templates)', nl_pick_template:'Pick a Brevo template.', nl_when:'Schedule for (optional)', nl_when_hint:'Leave empty to send now. With a date, it sends by itself at that time (recipients are recomputed when it fires).', nl_schedule:'Schedule', nl_schedule_n:'Schedule · {n} recip.', nl_scheduled_ok:'✓ Scheduled', cfm_nl_sched:'Schedule the send to {n} people?', nl_sched_title:'Scheduled', nl_sched_sel:'sel.', nl_sched_all:'everyone',
+      nav_sim:'Simulator', sim_title:'Simulator', sim_reset:'↺ Reset', sim_ph:'Type a test message…', sim_help:'Type as if you were a customer. It talks to the same engine and context as the real bot — nothing is sent over WhatsApp and no lead is created.',
       e_owner:'Owner', e_followup:'Next follow-up', e_tags:'Tags', ph_tag:'Add tag…', f_activity:'Activity',
       tl_empty:'No activity yet', tl_created:'Lead created', tl_imported:'Imported from Meta', tl_status:'Status', tl_owner:'Assigned to', tl_appt:'Appointment booked', tl_note:'Note updated', tl_tag:'Tag added', tl_archived:'Archived', tl_restored:'Restored', tl_enriched:'Data enriched', tl_outreach:'Conversation started (intro)', tl_fu_reminded:'Follow-up reminder sent', tl_newsletter:'Newsletter sent',
       al_save:"Couldn't save", edit_tpl:'✎ Edit templates…', locale:'en-GB' }
@@ -1970,8 +1987,8 @@
       .then(function(j){ btn.disabled=false; btn.textContent=orig; return j; }, function(e){ btn.disabled=false; btn.textContent=orig; });
   }
 
-  function clearModes(a){ a.classList.remove('calmode','dbmode','mediamode','nlmode'); }
-  function setNav(id){ ['navConv','navCal','navDb','navMedia','navNewsletter'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
+  function clearModes(a){ a.classList.remove('calmode','dbmode','mediamode','nlmode','simmode'); }
+  function setNav(id){ ['navConv','navCal','navDb','navMedia','navNewsletter','navSim'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
 
   function setUrl(p){ try{ history.replaceState(null,'',p); }catch(e){} }
   document.getElementById('navConv').onclick=function(){ clearModes(document.getElementById('app')); setNav('navConv'); setUrl('/admin'); };
@@ -1979,6 +1996,39 @@
   document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dbmode'); setNav('navDb'); setUrl('/admin/db'); dbPage=1; loadHealth(); loadAppts(renderDb); };
   document.getElementById('navMedia').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('mediamode'); setNav('navMedia'); setUrl('/admin'); openMedia(); };
   document.getElementById('navNewsletter').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('nlmode'); setNav('navNewsletter'); setUrl('/admin'); openNewsletter(); };
+  document.getElementById('navSim').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('simmode'); setNav('navSim'); setUrl('/admin'); };
+
+  // ── Simulador: habla con el mismo motor sin WhatsApp; conversación en su propia sesión de Redis (sim:*) ──
+  var simSession = Math.random().toString(36).slice(2, 10);
+  function simAddMsg(role, text){
+    var empty = document.getElementById('simEmpty'); if(empty) empty.style.display = 'none';
+    var box = document.getElementById('simMsgs');
+    var div = document.createElement('div');
+    div.className = 'm ' + (role === 'user' ? 'user' : 'assistant');
+    div.textContent = text;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+  function simSend(){
+    var inp = document.getElementById('simInput');
+    var text = inp.value.trim();
+    if(!text) return;
+    inp.value = '';
+    simAddMsg('user', text);
+    var btn = document.getElementById('simSend'); btn.disabled = true;
+    apiPost('simulate', { session: simSession, text: text }).then(function(r){ return r.json(); }).then(function(d){
+      btn.disabled = false;
+      simAddMsg('assistant', d.error ? ('⚠️ ' + d.error) : (d.reply || '(sin respuesta)'));
+    }).catch(function(){ btn.disabled = false; simAddMsg('assistant', '⚠️ error de red'); });
+  }
+  document.getElementById('simSend').onclick = simSend;
+  document.getElementById('simInput').addEventListener('keydown', function(e){ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); simSend(); } });
+  document.getElementById('simReset').onclick = function(){
+    apiPost('simulate/reset', { session: simSession }).then(function(){
+      document.getElementById('simMsgs').innerHTML = '<div class="nochat" id="simEmpty"><span data-i18n="sim_help"></span></div>';
+      applyStaticI18n();
+    });
+  };
   document.getElementById('nlScope').onchange=function(){ nlUpdateCount(); };
   document.getElementById('nlMode').onchange=function(){ nlApplyMode(); };
   document.getElementById('nlWhen').onchange=function(){ nlUpdateCount(); };

@@ -1593,6 +1593,51 @@ app.post("/admin/api/note", async (req, res) => {
 });
 
 // ── CRM: estado de pipeline manual (new/quoted/won/lost/noshow) ──
+// ── Simulador: prueba el bot desde el panel sin WhatsApp ni Meta. Mismo motor/contexto que el
+// webhook real (Claude + BASE_INSTRUCTIONS + context file), pero no envía nada por WhatsApp ni
+// toca el CRM de leads reales — la conversación vive en su propia clave de Redis (sim:<session>).
+app.post("/admin/api/simulate", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { session, text } = req.body || {};
+  if (!text) return res.status(400).json({ error: "text requerido" });
+  const phone = `sim:${session || "default"}`;
+  try {
+    const history = await getConversation(phone);
+    history.push({ role: "user", content: text, ts: Date.now() });
+    const mediaLib = await getMediaLib();
+    const mediaHint = mediaLib.length
+      ? "\n\nMEDIA YOU CAN SEND (real photos/videos that reinforce the pitch — use sparingly, at most 1–2 per conversation, only when it genuinely helps). For each item, 'when to use' tells you the situation to send it in; match it to what the customer is talking about. Available:\n"
+        + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.use ? " — when to use: " + m.use : ""}${m.caption ? " [caption sent to customer: \"" + m.caption + "\"]" : ""}`).join("\n")
+        + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send a media item when its 'when to use' genuinely matches the moment. Only send labels from this list; never invent one."
+      : "";
+    const response = await claudeMessage({
+      model: MODEL,
+      max_tokens: 500,
+      thinking: { type: "disabled" },
+      system: [
+        { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
+        ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
+      ],
+      messages: history.map((m) => ({ role: m.role, content: m.content })),
+    });
+    const textBlock = response.content.find((b) => b.type === "text");
+    const reply = (textBlock && textBlock.text) || "(sin respuesta — revisa logs)";
+    history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
+    await saveConversation(phone, history);
+    res.json({ reply });
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] simulate error: ${e.message}`);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/admin/api/simulate/reset", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { session } = req.body || {};
+  await saveConversation(`sim:${session || "default"}`, []);
+  res.json({ ok: true });
+});
+
 app.post("/admin/api/status", async (req, res) => {
   if (!adminAuth(req, res)) return;
   const { phone, status } = req.body || {};
