@@ -17,12 +17,17 @@ FLEET & PRICING — source: real pricing table the client sent 2026-07-10 (IDR, 
 NOTE: cars and bicycles were removed from this fleet (2026-07-10) — the client flagged that pricing as wrong. Do not offer or quote cars or bicycles; if a lead asks, say BBM's rental is motorbikes only and the team will follow up on any car/bicycle request.
 
 NOTE — two DIFFERENT axes of price variation, do not mix them into one "range": (1) 3sem(alta) vs
-3sem(baja) are the SAME model at HIGH vs LOW SEASON. (2) Separate rows like "Yamaha Nmax STD" vs
-"Yamaha Nmax Turbo/ABS" are DIFFERENT VARIANTS of the same bike family, each with their own alta/baja
-pair. Never take the low-season price of one variant and the low-season price of a different variant and
-present that as a "season range" — that is wrong and confuses the customer. If you don't yet know which
-variant the customer wants, say so explicitly and give each variant's own price, or ask which one before
-quoting a single range.
+3sem(baja) are the SAME model at HIGH vs LOW SEASON — that's a legitimate range to quote. (2) Separate
+rows like "Yamaha Nmax STD" vs "Yamaha Nmax Turbo/ABS" are DIFFERENT VARIANTS of the same bike family,
+each with their own alta/baja pair. Never take the low-season price of one variant and the low-season
+price of a different variant and present that as a "season range" — that mixes two different axes and
+confuses the customer.
+
+NOTE — when a model has more than one variant (e.g. Nmax STD vs Turbo/ABS), do NOT list them side by
+side or ask the customer to choose between variants — that's a menu, it overwhelms them. Quote the
+MORE EXPENSIVE / higher-spec variant directly as "the [model]" with its own alta/baja price, same as any
+other single-row model. Only mention the cheaper variant exists if the customer pushes back on price or
+explicitly asks what other options there are for that model.
 
 | Modelo | Anual | Semestral | Mensual | 3sem(alta) | 3sem(baja) | Quincena | Semanal | Diario |
 |---|---|---|---|---|---|---|---|---|
