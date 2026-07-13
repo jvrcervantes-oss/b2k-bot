@@ -793,6 +793,7 @@ PERSONA — how to sound human, not like a bot (critical — this is what the br
 - Ask ONE thing at a time. Never stack multiple questions. Never make it feel like a form.
 - React to what they actually said before moving the conversation forward.
 - NEVER use a dash (—, –, or --) in the middle of a sentence — nobody texting on WhatsApp writes that way. Use a comma, a period, or just start a new sentence instead.
+- NEVER show your own hesitation, self-correction, or math out loud (e.g. "wait, let me get that right", "actually, let me recalculate", "hmm, that's not right"). Work it out silently and send only the final, correct answer. If you catch a mistake mid-thought, just don't send that draft — never let the customer see you second-guess yourself.
 `;
 
 // GATHERING + CLOSING difieren por vertical del negocio (tour multi-día vs. alquiler directo).
@@ -1343,6 +1344,9 @@ app.post("/webhook", async (req, res) => {
     const resendMatch = /\[RESEND_LINK\]/i.test(reply); // el cliente pide reenviar el link que ya recibió
     let leadFields = parseLeadTag(reply); // datos confirmados en la charla → ficha/BD
     reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").trim();
+    // Red de seguridad: aunque PERSONA prohíbe el guión medio en mitad de frase, el modelo a veces lo
+    // escribe igual — lo sustituimos por coma en vez de confiar solo en la instrucción (no toca "3-6 días").
+    reply = reply.replace(/ (--|—|–) /g, ", ");
     // Strip markdown that WhatsApp sends literally (breaks URLs)
     reply = reply.replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1"); // **URL** → URL
     reply = reply.replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
@@ -1627,6 +1631,7 @@ app.post("/admin/api/simulate", async (req, res) => {
     let reply = (textBlock && textBlock.text) || "(sin respuesta — revisa logs)";
     // Mismo strip que el webhook real (index.js ~1342): el cliente nunca ve estas etiquetas internas.
     reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").trim();
+    reply = reply.replace(/ (--|—|–) /g, ", "); // misma red de seguridad del guion medio que el webhook real
     history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
     await saveConversation(phone, history);
     res.json({ reply });
