@@ -11,7 +11,7 @@ import crypto from "crypto";
 const app = express();
 // verify: guarda el body crudo — la firma X-Hub-Signature-256 de Meta se calcula sobre los bytes
 // exactos recibidos, no sobre el JSON re-serializado (re-serializar cambia el orden/espacios y rompe el HMAC).
-app.use(express.json({ limit: "20mb", verify: (req, _res, buf) => { req.rawBody = buf; } })); // 20mb: permite subir fotos/vídeos locales (base64) desde el panel
+app.use(express.json({ limit: "30mb", verify: (req, _res, buf) => { req.rawBody = buf; } })); // 30mb: un vídeo de 16MB en base64 ocupa ~21.3MB; con 20mb el upload del panel fallaba en el parser
 
 // ─── CONFIGURACIÓN (variables de entorno — distintas por proyecto) ──
 const {
@@ -27,6 +27,7 @@ const {
   BOT_CONTEXT,
   BOT_MODEL,
   BOT_VERTICAL,            // "tour" (default) o "rental" — selecciona el bloque de cierre en BASE_INSTRUCTIONS
+  BOT_PERSONA_NAME,        // nombre de la persona del bot (default "Daniel" = B2K); BBM debe definir el suyo
   CONTEXT_FILE,            // nombre del archivo de contexto a cargar del repo (default "context.md")
   PANEL_FILE,              // nombre del archivo del panel /admin a cargar del repo (default "panel.html")
   REDIS_URL,
@@ -88,6 +89,7 @@ async function claudeMessage(params, tries = 3) {
   throw lastErr;
 }
 const MODEL = BOT_MODEL || "claude-sonnet-4-6";
+const PERSONA_NAME = BOT_PERSONA_NAME || "Daniel"; // default = persona de B2K (retrocompatible)
 
 const contextFileName = CONTEXT_FILE || "context.md";
 const CONTEXT = fs.existsSync(contextFileName)
@@ -120,8 +122,10 @@ async function getConversation(phone) {
   return fallbackMemory[phone] || [];
 }
 
+// Se guardan hasta 100 mensajes (historial que ve el panel/CRM en un takeover humano);
+// el prompt del bot usa solo los últimos 20 (slice al construir los messages de Claude).
 async function saveConversation(phone, messages) {
-  const trimmed = messages.slice(-20);
+  const trimmed = messages.slice(-100);
   if (redisClient) {
     await redisClient.setEx(`conv:${phone}`, CONV_TTL, JSON.stringify(trimmed));
   } else {
@@ -413,12 +417,12 @@ async function enrichLeadFromConversation(phone, { force = false } = {}) {
   const history = await getConversation(phone);
   if (!history || history.length < 2) return null;
   const transcript = history
-    .map((m) => `${m.role === "user" ? "Customer" : "Daniel"}: ${m.content}`)
+    .map((m) => `${m.role === "user" ? "Customer" : PERSONA_NAME}: ${m.content}`)
     .join("\n")
     .slice(-6000);
   let data = null;
   try {
-    const r = await anthropic.messages.create({
+    const r = await claudeMessage({ // mismo wrapper con retries/stream que el bot (anti "Premature close")
       model: EXTRACT_MODEL,
       max_tokens: 300,
       thinking: { type: "disabled" }, // extractor JSON: sin thinking (en Sonnet 5 iría ON por defecto y rompería el parseo/max_tokens)
@@ -507,7 +511,11 @@ async function enrichSweep(limit = 20) {
 
 // ─── RESPUESTAS RÁPIDAS (canned replies, compartidas por proyecto) ──
 let fallbackCanned = null;
-const DEFAULT_CANNED = [
+const DEFAULT_CANNED = BOT_VERTICAL === "rental" ? [
+  { title: "Saludo", text: "Hey! Thanks for reaching out 🙌 Which bike are you after, and for how long?" },
+  { title: "Pedir datos", text: "To give you an exact quote: which model, how many days, and where should we deliver it?" },
+  { title: "Confirmar entrega", text: "We deliver straight to your hotel or villa. What's the address?" },
+] : [
   { title: "Saludo", text: "Hey! Thanks for reaching out 🙌 How can I help you plan your ride?" },
   { title: "Pedir datos", text: "To give you an exact quote — which tour, how many riders, and roughly when were you thinking of traveling?" },
   { title: "Proponer videollamada", text: "Want to hop on a quick video call with the team? It's free, about 30 minutes, zero pressure — they'll walk you through everything." },
@@ -1076,6 +1084,18 @@ async function sendWhatsApp(to, message) {
   if (!r.ok) console.error(`[${PROJECT_NAME}] Error enviando WhatsApp a ${normalizePhone(to)}:`, r.error);
 }
 
+// Marca el mensaje entrante como leído (ticks azules) y, opcionalmente, muestra el indicador
+// "escribiendo…" hasta 25s o hasta que llegue la respuesta. Best-effort: nunca rompe el flujo.
+async function markRead(messageId, typing = false) {
+  if (!messageId || !WHATSAPP_PHONE_ID || !WHATSAPP_TOKEN) return;
+  const payload = { messaging_product: "whatsapp", status: "read", message_id: messageId };
+  if (typing) payload.typing_indicator = { type: "text" };
+  try {
+    await axios.post(`https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/messages`, payload,
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" } });
+  } catch (e) { /* best-effort */ }
+}
+
 // ─── BIBLIOTECA DE MEDIA (fotos/vídeos que el bot puede enviar; se gestiona desde el panel) ──
 let fallbackMediaLib = [];
 async function getMediaLib() {
@@ -1175,7 +1195,8 @@ async function sendIntro(phone) {
   await updateLeadFields(phone, { outreached: true, outreachedAt: Date.now() });
   try {
     const history = await getConversation(phone);
-    history.push({ role: "assistant", content: `Hey ${firstName}! 👋 Saw you filled out our Instagram form — I'm Daniel from ${PROJECT_NAME}, here to help with your trip. What would you like to know?`, ts: Date.now(), by: "bot" });
+    const helpWith = BOT_VERTICAL === "rental" ? "your rental" : "your trip";
+    history.push({ role: "assistant", content: `Hey ${firstName}! 👋 Saw you filled out our Instagram form — I'm ${PERSONA_NAME} from ${PROJECT_NAME}, here to help with ${helpWith}. What would you like to know?`, ts: Date.now(), by: "bot" });
     await saveConversation(phone, history);
   } catch (e) { /* best-effort */ }
   await logEvent(phone, "outreach");
@@ -1270,15 +1291,52 @@ app.post("/webhook", async (req, res) => {
     const entry = req.body.entry?.[0];
     const change = entry?.changes?.[0];
     const message = change?.value?.messages?.[0];
-    if (!message || message.type !== "text") return;
+    if (!message) return;
     if (await alreadyProcessed(message.id)) {
       console.log(`[${PROJECT_NAME}] Mensaje duplicado (reintento de Meta) ignorado: ${message.id}`);
       return;
     }
 
     const from = message.from;
-    const text = message.text.body;
     const profileName = change.value.contacts?.[0]?.profile?.name || "";
+
+    // ── Ubicación compartida → texto: el flujo normal la aprovecha (p.ej. dirección de entrega) ──
+    let text;
+    if (message.type === "text") {
+      text = message.text.body;
+    } else if (message.type === "location" && message.location) {
+      const loc = message.location;
+      const where = [loc.name, loc.address].filter(Boolean).join(", ") || `${loc.latitude},${loc.longitude}`;
+      text = `(I'm sharing my location: ${where})`;
+    } else if (!isOwner(from)) {
+      // ── Media que el bot no puede leer (audio/foto/vídeo/documento): antes se ignoraba en
+      //    silencio → el lead creía que le leímos y se perdía. Ahora queda registrado y se le
+      //    pide el texto; si el bot está en pausa, solo se registra y se marca "por responder".
+      const KIND_LABEL = { image: "[foto]", video: "[vídeo]", audio: "[audio]", voice: "[audio]", document: "[documento]", sticker: "[sticker]", contacts: "[contacto]" };
+      const label = KIND_LABEL[message.type] || `[${message.type}]`;
+      const history = await getConversation(from);
+      history.push({ role: "user", content: label, ts: Date.now() });
+      await setInbound(from, Date.now());
+      await resetFollowup(from);
+      const prev = await getLead(from);
+      if (await isPaused(from)) {
+        await saveConversation(from, history);
+        await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "interested", label, "client");
+        await setWaiting(from, true);
+        return;
+      }
+      markRead(message.id); // best-effort
+      const ask = (message.type === "audio" || message.type === "voice")
+        ? "Sorry! I can't listen to voice notes on this end yet. Could you type it out for me? 🙏"
+        : "I can't open attachments on this end yet. Could you type out the details for me? 🙏";
+      await sendWhatsApp(from, ask);
+      history.push({ role: "assistant", content: ask, ts: Date.now(), by: "bot" });
+      await saveConversation(from, history);
+      await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "exploring", ask, "bot");
+      return;
+    } else {
+      return; // owner mandó media: nada que reenviar
+    }
 
     // ── Mensaje del dueño: reenviar al cliente pendiente ──────────
     if (isOwner(from)) {
@@ -1320,6 +1378,7 @@ app.post("/webhook", async (req, res) => {
 
     await setInbound(from, Date.now()); // reinicia la ventana de 24h de WhatsApp
     await resetFollowup(from);           // respondió → reinicia la cadencia de seguimiento
+    markRead(message.id, true);          // ticks azules + "escribiendo…" mientras Claude responde
 
     // Media disponible (gestionada desde el panel): se inyecta para que el bot solo ofrezca lo que existe.
     const mediaLib = await getMediaLib();
@@ -1340,7 +1399,7 @@ app.post("/webhook", async (req, res) => {
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
       ],
-      messages: history.map((m) => ({ role: m.role, content: m.content })), // solo role+content (ts/by/media son internos)
+      messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // prompt = últimos 20; el resto es historial del panel
     });
 
     const _textBlock = response.content.find((b) => b.type === "text");
@@ -1639,7 +1698,7 @@ app.post("/admin/api/simulate", async (req, res) => {
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
       ],
-      messages: history.map((m) => ({ role: m.role, content: m.content })),
+      messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // mismo recorte que el webhook real
     });
     const textBlock = response.content.find((b) => b.type === "text");
     let reply = (textBlock && textBlock.text) || "(sin respuesta — revisa logs)";
@@ -1680,7 +1739,10 @@ app.post("/admin/api/lead", async (req, res) => {
   if (!phone) return res.status(400).json({ error: "phone requerido" });
   const prev = (await getLead(phone)) || {};
   const fields = {};
-  ["name", "country", "email", "tour", "package", "riders", "pillions", "travelDate", "owner", "nextFollowUp", "tags", "archived"].forEach((k) => {
+  // Incluye los campos del vertical rental (model/plan/...): el panel-rental los envía y sin
+  // ellos aquí se descartaban en silencio — editar la ficha de BBM perdía esos datos.
+  ["name", "country", "email", "tour", "package", "riders", "pillions", "travelDate", "owner", "nextFollowUp", "tags", "archived",
+   "model", "plan", "startDate", "deliveryLocation", "insuranceTier", "paymentMethod"].forEach((k) => {
     if (req.body[k] != null) fields[k] = req.body[k];
   });
   await updateLeadFields(phone, fields);
@@ -1702,7 +1764,7 @@ app.post("/admin/api/archive", async (req, res) => {
 // ── CRM: borrar definitivamente un lead (irreversible) ──
 async function deleteLead(phone) {
   if (redisClient) {
-    await redisClient.del(`lead:${phone}`, `notes:${phone}`, `status:${phone}`, `conv:${phone}`, `paused:${phone}`, `waiting:${phone}`, `inbound:${phone}`, `followup:${phone}`, `notified:${phone}`);
+    await redisClient.del(`lead:${phone}`, `notes:${phone}`, `status:${phone}`, `conv:${phone}`, `paused:${phone}`, `waiting:${phone}`, `inbound:${phone}`, `followup:${phone}`, `notified:${phone}`, `lastlink:${phone}`);
     await redisClient.zRem("leads_index", phone);
   } else {
     delete fallbackLeads[phone]; delete fallbackNotes[phone]; delete fallbackStatus[phone];
@@ -1819,7 +1881,21 @@ app.post("/admin/api/media", async (req, res) => {
     caption: String(m.caption || "").trim().slice(0, 300),
     use: String(m.use || "").trim().slice(0, 300), // cuándo enviarlo (guía interna para el bot; NO se envía al cliente)
   })).filter((m) => /^https?:\/\//i.test(m.url) && m.label);
-  try { res.json(await setMediaLib(clean)); } catch (e) { res.status(500).json({ error: e.message }); }
+  try {
+    // GC de blobs: los archivos subidos al panel viven en Redis sin TTL; al quitar un item
+    // de la biblioteca, su blob quedaba huérfano para siempre (crecimiento de memoria).
+    const blobId = (u) => (String(u || "").match(/\/media\/([a-z0-9]+)$/i) || [])[1];
+    const old = await getMediaLib();
+    const keep = new Set(clean.map((m) => blobId(m.url)).filter(Boolean));
+    for (const o of old) {
+      const id = blobId(o.url);
+      if (id && !keep.has(id)) {
+        if (redisClient) await redisClient.del(`mediablob:${id}`);
+        else delete fallbackBlobs[id];
+      }
+    }
+    res.json(await setMediaLib(clean));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ─── NEWSLETTER POR EMAIL ─────────────────────────────────────────
