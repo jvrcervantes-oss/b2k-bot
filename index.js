@@ -92,7 +92,9 @@ const CONTEXT = fs.existsSync(contextFileName)
   : BOT_CONTEXT;
 
 // ─── REDIS ────────────────────────────────────────────────────────
-const CONV_TTL = 7 * 24 * 60 * 60;
+// 30 días: alineado con la cadencia de follow-up (30 días, ver setFollowupCount) — antes
+// eran 7 y el bot podía mandar un recordatorio del día 25 sin memoria de la charla.
+const CONV_TTL = 30 * 24 * 60 * 60;
 const fallbackMemory = {};
 const fallbackEscQueue = [];
 let redisClient = null;
