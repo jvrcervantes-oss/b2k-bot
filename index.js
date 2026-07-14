@@ -1526,6 +1526,18 @@ async function markLeadPaid(phone, provider, amountIDR) {
   if (!lead || !(parseInt(lead.dealValue, 10) > 0)) await updateLeadFields(phone, { dealValue: Math.round(amountIDR) });
   await logEvent(phone, "payment", { provider, amount: Math.round(amountIDR), from: prevStatus || "", to: "won" });
   console.log(`[${PROJECT_NAME}] Pago confirmado (${provider}): ${phone} — ${amountIDR} IDR → status=won`);
+
+  // Confirmación al propio cliente (no solo al owner) — queda en el chat como un mensaje más del bot.
+  const custMsg = `✅ Payment received — ${Math.round(amountIDR).toLocaleString("id-ID")} IDR. Thank you! Your booking is confirmed, our team will follow up shortly to arrange delivery.`;
+  const rCust = await sendWhatsAppResult(phone, custMsg);
+  if (rCust.ok) {
+    const history = await getConversation(phone);
+    history.push({ role: "assistant", content: custMsg, ts: Date.now(), by: "bot" });
+    await saveConversation(phone, history);
+  } else {
+    console.error(`[${PROJECT_NAME}] No se pudo confirmar el pago al cliente ${phone}: ${rCust.error}`);
+  }
+
   if (OWNER_PHONE) {
     await sendWhatsApp(
       OWNER_PHONE,
@@ -2060,56 +2072,6 @@ app.post("/admin/api/note", async (req, res) => {
 });
 
 // ── CRM: estado de pipeline manual (new/quoted/won/lost/noshow) ──
-// ── Simulador: prueba el bot desde el panel sin WhatsApp ni Meta. Mismo motor/contexto que el
-// webhook real (Claude + BASE_INSTRUCTIONS + context file), pero no envía nada por WhatsApp ni
-// toca el CRM de leads reales — la conversación vive en su propia clave de Redis (sim:<session>).
-app.post("/admin/api/simulate", async (req, res) => {
-  if (!adminAuth(req, res)) return;
-  const { session, text } = req.body || {};
-  if (!text) return res.status(400).json({ error: "text requerido" });
-  const phone = `sim:${session || "default"}`;
-  try {
-    const history = await getConversation(phone);
-    history.push({ role: "user", content: text, ts: Date.now() });
-    const mediaLib = await getMediaLib();
-    const mediaHint = mediaLib.length
-      ? "\n\nMEDIA YOU CAN SEND (real photos/videos that reinforce the pitch — use sparingly, at most 1–2 per conversation, only when it genuinely helps). For each item, 'when to use' tells you the situation to send it in; match it to what the customer is talking about. Available:\n"
-        + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.use ? " — when to use: " + m.use : ""}${m.caption ? " [caption sent to customer: \"" + m.caption + "\"]" : ""}`).join("\n")
-        + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send a media item when its 'when to use' genuinely matches the moment. Only send labels from this list; never invent one."
-      : "";
-    const stockHint = await buildStockHint(); // mismo inventario que ve el bot real, para que el simulador no mienta
-    const response = await claudeMessage({
-      model: MODEL,
-      max_tokens: 500,
-      thinking: { type: "disabled" },
-      system: [
-        { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
-        ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
-        ...(stockHint ? [{ type: "text", text: stockHint }] : []),
-      ],
-      messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // mismo recorte que el webhook real
-    });
-    const textBlock = response.content.find((b) => b.type === "text");
-    let reply = (textBlock && textBlock.text) || "(sin respuesta — revisa logs)";
-    // Mismo strip que el webhook real (index.js ~1342): el cliente nunca ve estas etiquetas internas.
-    reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").trim();
-    reply = reply.replace(/ (--|—|–) /g, ", "); // misma red de seguridad del guion medio que el webhook real
-    history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
-    await saveConversation(phone, history);
-    res.json({ reply });
-  } catch (e) {
-    console.error(`[${PROJECT_NAME}] simulate error: ${e.message}`);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.post("/admin/api/simulate/reset", async (req, res) => {
-  if (!adminAuth(req, res)) return;
-  const { session } = req.body || {};
-  await saveConversation(`sim:${session || "default"}`, []);
-  res.json({ ok: true });
-});
-
 app.post("/admin/api/status", async (req, res) => {
   if (!adminAuth(req, res)) return;
   const { phone, status } = req.body || {};
