@@ -1519,7 +1519,9 @@ async function alreadyProcessedPayment(id) {
 
 // Marca el lead como pagado: status=won, dealValue si no lo tenía ya, timeline + aviso al owner.
 // Compartida por los dos webhooks para no duplicar la lógica de negocio.
-async function markLeadPaid(phone, provider, amountIDR) {
+// receiptUrl (opcional): recibo oficial del propio proveedor (Stripe receipt_url / Xendit invoice_url
+// re-consultado por id) — se manda al cliente en vez de inventar un recibo propio.
+async function markLeadPaid(phone, provider, amountIDR, receiptUrl) {
   const lead = await getLead(phone);
   const prevStatus = await getStatus(phone);
   if (prevStatus !== "won") await setStatus(phone, "won");
@@ -1528,7 +1530,8 @@ async function markLeadPaid(phone, provider, amountIDR) {
   console.log(`[${PROJECT_NAME}] Pago confirmado (${provider}): ${phone} — ${amountIDR} IDR → status=won`);
 
   // Confirmación al propio cliente (no solo al owner) — queda en el chat como un mensaje más del bot.
-  const custMsg = `✅ Payment received — ${Math.round(amountIDR).toLocaleString("id-ID")} IDR. Thank you! Your booking is confirmed, our team will follow up shortly to arrange delivery.`;
+  const custMsg = `✅ Payment received — ${Math.round(amountIDR).toLocaleString("id-ID")} IDR. Thank you! Your booking is confirmed, our team will follow up shortly to arrange delivery.`
+    + (receiptUrl ? `\n\nYour receipt: ${receiptUrl}` : "");
   const rCust = await sendWhatsAppResult(phone, custMsg);
   if (rCust.ok) {
     const history = await getConversation(phone);
@@ -1559,7 +1562,14 @@ app.post("/webhook/xendit", async (req, res) => {
     if (await alreadyProcessedPayment(`xendit:${id || external_id}`)) return res.sendStatus(200);
     const m = /^paylink_(\d+)_/.exec(external_id || "");
     if (!m) { console.warn(`[${PROJECT_NAME}] Xendit PAID sin phone parseable en external_id: ${external_id}`); return res.sendStatus(200); }
-    await markLeadPaid(m[1], "xendit", amount);
+    // Recibo: se re-consulta ESTA invoice por id (no el "último link" guardado, que podría ser de
+    // otro proveedor si se mandaron los dos) — invoice_url no viaja en el callback, solo en la API.
+    let receiptUrl = null;
+    try {
+      const invRes = await axios.get(`https://api.xendit.co/v2/invoices/${id}`, { auth: { username: XENDIT_SECRET_KEY, password: "" }, timeout: 10000 });
+      receiptUrl = invRes.data && invRes.data.invoice_url;
+    } catch (e) { console.warn(`[${PROJECT_NAME}] No se pudo obtener el invoice_url de Xendit para el recibo:`, e.message); }
+    await markLeadPaid(m[1], "xendit", amount, receiptUrl);
     res.sendStatus(200);
   } catch (e) {
     console.error(`[${PROJECT_NAME}] /webhook/xendit error:`, e.message);
@@ -1585,7 +1595,16 @@ app.post("/webhook/stripe", async (req, res) => {
     if (await alreadyProcessedPayment(`stripe:${event.id}`)) return res.sendStatus(200);
     const phone = session.client_reference_id || (session.metadata && session.metadata.phone);
     if (!phone) { console.warn(`[${PROJECT_NAME}] Stripe checkout.session.completed sin phone — sesión ${session.id}`); return res.sendStatus(200); }
-    await markLeadPaid(phone, "stripe", session.amount_total || 0); // IDR es zero-decimal: amount_total ya viene en IDR enteros
+    // Recibo oficial de Stripe: el webhook llega "plano" (sin expandir), hace falta una consulta
+    // aparte al PaymentIntent → latest_charge.receipt_url (página hospedada por Stripe, no la creamos nosotros).
+    let receiptUrl = null;
+    try {
+      if (session.payment_intent) {
+        const pi = await stripeClient.paymentIntents.retrieve(session.payment_intent, { expand: ["latest_charge"] });
+        receiptUrl = pi.latest_charge && pi.latest_charge.receipt_url;
+      }
+    } catch (e) { console.warn(`[${PROJECT_NAME}] No se pudo obtener el receipt_url de Stripe:`, e.message); }
+    await markLeadPaid(phone, "stripe", session.amount_total || 0, receiptUrl); // IDR es zero-decimal: amount_total ya viene en IDR enteros
     res.sendStatus(200);
   } catch (e) {
     console.error(`[${PROJECT_NAME}] /webhook/stripe error:`, e.message);
