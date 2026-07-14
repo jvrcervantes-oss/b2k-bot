@@ -93,6 +93,13 @@
     nav .ic{width:42px;justify-content:center;padding:9px 0;gap:0}
   }
   @media(max-width:1100px){#app.on{grid-template-columns:64px 320px 1fr}#detail{display:none}}
+  /* sidebar colapsada a mano (botón navToggle, persiste en localStorage) — mismo rail que el breakpoint de arriba */
+  #app.on.navCollapsed{grid-template-columns:64px 340px 1fr 300px}
+  #app.on.navCollapsed nav{padding:14px 8px;align-items:center}
+  #app.on.navCollapsed nav .lbl,#app.on.navCollapsed .brandtx{display:none}
+  #app.on.navCollapsed .brandrow{padding:2px 0 12px}
+  #app.on.navCollapsed nav .ic{width:42px;justify-content:center;padding:9px 0;gap:0}
+  @media(max-width:1100px){#app.on.navCollapsed{grid-template-columns:64px 320px 1fr}}
 
   /* sidebar */
   nav{background:var(--nav);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:14px 10px;gap:2px}
@@ -368,6 +375,8 @@
   .qbtn{flex:1;border:0;border-radius:9px;padding:10px;font-weight:600;font-size:12.5px;cursor:pointer;color:#fff}
   .qbtn.call{background:var(--accent)}
   .qbtn.out{background:#16a34a}
+  .qbtn.win{background:#16a34a;width:100%}
+  .qbtn.win:disabled{background:var(--green-soft);color:var(--green)}
   #calView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
   #app.calmode #list,#app.calmode #chat,#app.calmode #detail{display:none}
   #app.calmode #calView{display:flex}
@@ -631,6 +640,7 @@
       <div class="brand">B</div>
       <div class="brandtx"><b>Bali Best</b><span>Motorcycle CRM</span></div>
     </div>
+    <div class="ic" id="navToggle" data-ti="nav_toggle" title="Colapsar menú"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="navToggleIcon"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_toggle">Colapsar menú</span></div>
     <div class="ic" id="navDash" data-ti="nav_dash" title="Dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span class="lbl" data-i18n="nav_dash">Dashboard</span></div>
     <div class="ic on" id="navConv" data-ti="nav_conv" title="Conversaciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_conv">Conversaciones</span></div>
     <div class="ic" id="navCal" data-ti="nav_cal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_cal">Calendario</span></div>
@@ -835,13 +845,17 @@
   var KEY = new URLSearchParams(location.search).get('key') || sessionStorage.getItem('botpanel_key') || '';
   var leads = [], filter = 'all', search = '', active = null, curLead = null;
   var appts = [], calY = null, calM = null, editingApptId = null;
+  var dropoff = null;
+  function loadDropoff(cb){ api('dropoff').then(function(r){return r.json();}).then(function(D){ dropoff = D; if(cb) cb(); }).catch(function(){}); }
 
   // ── i18n (ES / EN) ──────────────────────────────────────────────
   var I18N = {
     es:{ brand:'CRM BBM', login_title:'Panel de conversaciones', login_sub:'CRM BBM · acceso del equipo', ph_pw:'Contraseña', btn_enter:'Entrar', err_pw:'Contraseña incorrecta',
-      nav_conv:'Conversaciones', nav_cal:'Calendario', nav_db:'Base de datos', nav_media:'Fotos y vídeos', nav_theme:'Cambiar tema', nav_logout:'Salir', nav_lang:'English',
-      nav_dash:'Dashboard', da_kpi_won:'Motos alquiladas', da_week:'esta semana', da_kpi_rev:'Ingresos', da_rev_sub:'de alquileres ganados', da_kpi_pipe:'Pipeline abierto', da_act:'leads activos', da_kpi_conv:'Conversión', da_decided:'decididos', da_bystatus:'Leads por estado', da_leg_won:'ganados', da_leg_lost:'perdidos / no-show', da_next:'Próximas citas', da_viewcal:'Ver calendario →', da_viewdb:'Ver base de datos →', da_top:'Top motos', da_none:'Sin datos todavía', da_nocitas:'No hay citas próximas', da_s_new:'Nuevos', da_s_quoted:'Cotizados', da_s_won:'Ganados', da_s_lost:'Perdidos', da_s_noshow:'No-show',
+      nav_conv:'Conversaciones', nav_cal:'Calendario', nav_db:'Base de datos', nav_media:'Fotos y vídeos', nav_theme:'Cambiar tema', nav_logout:'Salir', nav_lang:'English', nav_toggle:'Colapsar menú',
+      nav_dash:'Dashboard', da_kpi_won:'Motos alquiladas', da_week:'esta semana', da_kpi_rev:'Ingresos', da_rev_sub:'de alquileres ganados', da_kpi_pipe:'Pipeline abierto', da_act:'leads activos', da_kpi_conv:'Conversión', da_decided:'decididos', da_bystatus:'Leads por estado', da_leg_won:'ganados', da_leg_lost:'perdidos / no-show', da_next:'Próximas citas', da_viewcal:'Ver calendario →', da_viewdb:'Ver base de datos →', da_top:'Motos alquiladas', da_none:'Sin datos todavía', da_nocitas:'No hay citas próximas', da_s_new:'Nuevos', da_s_quoted:'Cotizados', da_s_won:'Ganados', da_s_lost:'Perdidos', da_s_noshow:'No-show',
       da_kpi_out:'En la calle', da_out_sub:'con devolución pendiente', da_ev:'Entregas y devoluciones', da_ev_del:'Entrega', da_ev_ret:'Devolución', da_noev:'Nada programado con fecha. Rellena "Fecha inicio" y "Fecha devolución" en la ficha del lead (o deja que el bot las capture).', e_return:'Fecha devolución', c_return:'Devolución', ph_date:'p. ej. 2026-07-20',
+      da_dropoff:'Por qué no cierran', da_dropoff_list:'Leads fríos recientes', da_dropoff_empty:'Sin leads fríos que analizar (ningún lead lleva 3+ días sin novedad).', da_dropoff_scanned:'Analizados {n} de {t} leads fríos',
+      da_drop_price:'Se calló tras el precio', da_drop_location:'Se calló tras la ubicación/entrega', da_drop_insurance_deposit:'Se calló tras seguro/depósito', da_drop_documents:'Se calló tras pedir documentos', da_drop_availability:'Se calló tras disponibilidad del modelo', da_drop_payment:'Se calló tras el pago', da_drop_other:'Se calló en otro punto', da_drop_no_data:'Sin historial de chat (caducado a los 30 días) o sin respuesta del bot',
       m_media:'Fotos y vídeos del bot', media_help:'El bot envía estos archivos cuando ayudan a vender. Sube el archivo (botón ⬆) o pega una URL pública, ponle una etiqueta corta (ej. "carreteras") y —importante— en "cuándo usarlo" describe la situación en la que el bot debe enviarlo (ej. "cuando pregunten cómo son las carreteras o el estado del asfalto"). Eso es lo que el bot lee para decidir; el pie de foto es lo que ve el cliente.', btn_media_add:'+ Añadir archivo', media_empty:'Aún no hay archivos. Añade el primero 👇', mt_image:'Foto', mt_video:'Vídeo', mr_ph_label:'etiqueta (ej. intro)', mr_ph_url:'sube ⬆ o pega una URL pública', mr_ph_use:'cuándo usarlo (ej. si preguntan por las carreteras)', mr_ph_cap:'pie de foto que ve el cliente (opcional)', al_media_url:'Cada archivo necesita una etiqueta y una URL (sube el archivo o pega una URL).', al_media_saved:'Biblioteca guardada ✓', ti_media_up:'Subir archivo del equipo', al_media_big:'Archivo demasiado grande (máx 16 MB).', al_media_uploaded:'Archivo subido ✓',
       h_conv:'Conversaciones', st_wait:'por responder', st_int:'interesados', st_book:'en reserva', st_today:'hoy',
       ph_search_lead:'Buscar lead…', chip_all:'Todos', chip_wait:'🔔 Por responder', chip_int:'🟡 Interesados', chip_book:'🔴 Reserva',
@@ -876,16 +890,18 @@
       act_archive:'Archivar', act_restore:'Restaurar', act_open:'Abrir conversación', act_delete:'Borrar',
       act_outreach:'💬 Iniciar conversación', act_reoutreach:'💬 Reenviar intro', bulk_outreach:'💬 Iniciar conv.',
       outreach_ing:'⏳ Enviando…', outreach_ok:'Intro enviada', outreach_err:'No se pudo iniciar la conversación. ¿Está configurada la plantilla de intro (INTRO_TEMPLATE_NAME) en Railway?',
-      q_assign:'Asignar', q_call:'Agendar llamada', call_title:'Llamada con', al_appt_date:'Pon fecha y hora', pre_bot:'Bot: ', pre_you:'Tú: ', act_call:'📞 Agendar llamada', cal_today:'Hoy',
+      q_assign:'Asignar', q_call:'Agendar llamada', q_markwon:'Marcar venta cerrada', call_title:'Llamada con', al_appt_date:'Pon fecha y hora', pre_bot:'Bot: ', pre_you:'Tú: ', act_call:'📞 Agendar llamada', cal_today:'Hoy',
       nav_nl:'Newsletter', nl_title:'Newsletter por email', nl_help:'Envía un email a los leads que dieron su correo. Incluye siempre un enlace de baja automático. Prueba primero contigo.', nl_scope:'Destinatarios', nl_scope_all:'Todos con email', nl_scope_sel:'Seleccionados en la Base de datos', nl_count:'{n} destinatarios con email · {u} dados de baja se excluyen', nl_subject:'Asunto', nl_ph_subject:'Asunto del email', nl_body:'Mensaje', nl_ph_body:'Escribe el email. Deja una línea en blanco entre párrafos.', nl_test:'Enviar prueba', nl_ph_test:'tu@email.com', nl_send:'Enviar', nl_send_n:'Enviar a {n}', nl_sending:'⏳ Enviando…', nl_sent:'✓ Enviados {s} · {f} fallidos', nl_test_ok:'✓ Prueba enviada', nl_no_recip:'No hay destinatarios con email en esta selección.', nl_need:'Escribe asunto y mensaje.', nl_test_need:'Pon un email de prueba válido.', cfm_nl:'¿Enviar el newsletter a {n} personas? No se puede deshacer.', nl_fmt:'Formato: **negrita** · *cursiva* · ## Título · - lista · [texto](enlace) · [[Botón|enlace]] · ![imagen](url). El botón "Enviar prueba" te muestra cómo queda.', nl_mode:'Contenido del email', nl_mode_compose:'Escribirlo aquí', nl_mode_brevo:'Usar una plantilla de Brevo', nl_template:'Plantilla de Brevo', nl_template_hint:'Solo aparecen las plantillas transaccionales activas de Brevo. Personaliza con {{params.name}}; añade {{params.unsub}} en el pie para la baja.', nl_no_templates:'No hay plantillas transaccionales en Brevo (créala en Brevo → Transactional → Templates)', nl_pick_template:'Elige una plantilla de Brevo.', nl_when:'Programar para (opcional)', nl_when_hint:'Déjalo vacío para enviar ahora. Con fecha, se envía solo a esa hora (los destinatarios se recalculan al disparar).', nl_schedule:'Programar', nl_schedule_n:'Programar · {n} dest.', nl_scheduled_ok:'✓ Programado', cfm_nl_sched:'¿Programar el envío a {n} personas?', nl_sched_title:'Programados', nl_sched_sel:'sel.', nl_sched_all:'todos',
       nav_sim:'Simulador', sim_title:'Simulador', sim_reset:'↺ Reiniciar', sim_ph:'Escribe un mensaje de prueba…', sim_help:'Escribe como si fueras un cliente. Habla con el mismo motor y el mismo contexto que usa el bot real — no se manda nada por WhatsApp ni se crea ningún lead.',
       e_owner:'Propietario', e_followup:'Próximo seguimiento', e_tags:'Etiquetas', ph_tag:'Añadir etiqueta…', f_activity:'Actividad',
       tl_empty:'Sin actividad registrada', tl_created:'Lead creado', tl_imported:'Importado de Meta', tl_status:'Estado', tl_owner:'Asignado a', tl_appt:'Cita agendada', tl_note:'Nota actualizada', tl_tag:'Etiqueta añadida', tl_archived:'Archivado', tl_restored:'Restaurado', tl_enriched:'Datos enriquecidos', tl_outreach:'Conversación iniciada (intro)', tl_fu_reminded:'Recordatorio de seguimiento enviado', tl_newsletter:'Newsletter enviado',
       al_save:'No se pudo guardar', edit_tpl:'✎ Editar plantillas…', locale:'es-ES' },
     en:{ brand:'CRM BBM', login_title:'Conversations panel', login_sub:'CRM BBM · team access', ph_pw:'Password', btn_enter:'Sign in', err_pw:'Wrong password',
-      nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_media:'Photos & videos', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español',
-      nav_dash:'Dashboard', da_kpi_won:'Bikes rented', da_week:'this week', da_kpi_rev:'Revenue', da_rev_sub:'from won rentals', da_kpi_pipe:'Open pipeline', da_act:'active leads', da_kpi_conv:'Conversion', da_decided:'decided', da_bystatus:'Leads by status', da_leg_won:'won', da_leg_lost:'lost / no-show', da_next:'Upcoming appointments', da_viewcal:'View calendar →', da_viewdb:'View database →', da_top:'Top bikes', da_none:'No data yet', da_nocitas:'No upcoming appointments', da_s_new:'New', da_s_quoted:'Quoted', da_s_won:'Won', da_s_lost:'Lost', da_s_noshow:'No-show',
+      nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_media:'Photos & videos', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español', nav_toggle:'Collapse menu',
+      nav_dash:'Dashboard', da_kpi_won:'Bikes rented', da_week:'this week', da_kpi_rev:'Revenue', da_rev_sub:'from won rentals', da_kpi_pipe:'Open pipeline', da_act:'active leads', da_kpi_conv:'Conversion', da_decided:'decided', da_bystatus:'Leads by status', da_leg_won:'won', da_leg_lost:'lost / no-show', da_next:'Upcoming appointments', da_viewcal:'View calendar →', da_viewdb:'View database →', da_top:'Bikes rented', da_none:'No data yet', da_nocitas:'No upcoming appointments', da_s_new:'New', da_s_quoted:'Quoted', da_s_won:'Won', da_s_lost:'Lost', da_s_noshow:'No-show',
       da_kpi_out:'Out now', da_out_sub:'awaiting return', da_ev:'Deliveries & returns', da_ev_del:'Delivery', da_ev_ret:'Return', da_noev:'Nothing scheduled with a date. Fill "Start date" and "Return date" on the lead (or let the bot capture them).', e_return:'Return date', c_return:'Return', ph_date:'e.g. 2026-07-20',
+      da_dropoff:'Why deals don\'t close', da_dropoff_list:'Recently cold leads', da_dropoff_empty:'No cold leads to analyze (no lead has been quiet for 3+ days).', da_dropoff_scanned:'Analyzed {n} of {t} cold leads',
+      da_drop_price:'Went quiet after the price', da_drop_location:'Went quiet after location/delivery', da_drop_insurance_deposit:'Went quiet after insurance/deposit', da_drop_documents:'Went quiet after documents were asked', da_drop_availability:'Went quiet after model availability', da_drop_payment:'Went quiet after payment', da_drop_other:'Went quiet elsewhere', da_drop_no_data:'No chat history (expired after 30 days) or no bot reply',
       m_media:'Bot photos & videos', media_help:'The bot sends these files when they help the sale. Upload a file (⬆ button) or paste a public URL, give it a short label (e.g. "roads") and — importantly — in "when to use" describe the situation the bot should send it in (e.g. "when they ask what the roads or tarmac are like"). That is what the bot reads to decide; the caption is what the customer sees.', btn_media_add:'+ Add file', media_empty:'No files yet. Add the first one 👇', mt_image:'Photo', mt_video:'Video', mr_ph_label:'label (e.g. intro)', mr_ph_url:'upload ⬆ or paste a public URL', mr_ph_use:'when to use it (e.g. if they ask about the roads)', mr_ph_cap:'caption the customer sees (optional)', al_media_url:'Each file needs a label and a URL (upload a file or paste a URL).', al_media_saved:'Library saved ✓', ti_media_up:'Upload file from device', al_media_big:'File too large (max 16 MB).', al_media_uploaded:'File uploaded ✓',
       h_conv:'Conversations', st_wait:'to reply', st_int:'interested', st_book:'booking', st_today:'today',
       ph_search_lead:'Search lead…', chip_all:'All', chip_wait:'🔔 To reply', chip_int:'🟡 Interested', chip_book:'🔴 Booking',
@@ -920,7 +936,7 @@
       act_archive:'Archive', act_restore:'Restore', act_open:'Open conversation', act_delete:'Delete',
       act_outreach:'💬 Start conversation', act_reoutreach:'💬 Resend intro', bulk_outreach:'💬 Start conv.',
       outreach_ing:'⏳ Sending…', outreach_ok:'Intro sent', outreach_err:'Could not start the conversation. Is the intro template (INTRO_TEMPLATE_NAME) configured in Railway?',
-      q_assign:'Assign', q_call:'Schedule call', call_title:'Call with', al_appt_date:'Set date and time', pre_bot:'Bot: ', pre_you:'You: ', act_call:'📞 Schedule call', cal_today:'Today',
+      q_assign:'Assign', q_call:'Schedule call', q_markwon:'Mark deal closed', call_title:'Call with', al_appt_date:'Set date and time', pre_bot:'Bot: ', pre_you:'You: ', act_call:'📞 Schedule call', cal_today:'Today',
       nav_nl:'Newsletter', nl_title:'Email newsletter', nl_help:'Email the leads who gave you their address. Every email includes an automatic unsubscribe link. Test it on yourself first.', nl_scope:'Recipients', nl_scope_all:'Everyone with an email', nl_scope_sel:'Selected in the Database', nl_count:'{n} recipients with email · {u} unsubscribed excluded', nl_subject:'Subject', nl_ph_subject:'Email subject', nl_body:'Message', nl_ph_body:'Write the email. Leave a blank line between paragraphs.', nl_test:'Send test', nl_ph_test:'you@email.com', nl_send:'Send', nl_send_n:'Send to {n}', nl_sending:'⏳ Sending…', nl_sent:'✓ Sent {s} · {f} failed', nl_test_ok:'✓ Test sent', nl_no_recip:'No recipients with an email in this selection.', nl_need:'Write a subject and message.', nl_test_need:'Enter a valid test email.', cfm_nl:'Send the newsletter to {n} people? This cannot be undone.', nl_fmt:'Formatting: **bold** · *italic* · ## Heading · - list · [text](link) · [[Button|link]] · ![image](url). The "Send test" button shows you how it looks.', nl_mode:'Email content', nl_mode_compose:'Write it here', nl_mode_brevo:'Use a Brevo template', nl_template:'Brevo template', nl_template_hint:'Only Brevo active transactional templates show up. Personalize with {{params.name}}; add {{params.unsub}} in the footer for opt-out.', nl_no_templates:'No transactional templates in Brevo (create one in Brevo → Transactional → Templates)', nl_pick_template:'Pick a Brevo template.', nl_when:'Schedule for (optional)', nl_when_hint:'Leave empty to send now. With a date, it sends by itself at that time (recipients are recomputed when it fires).', nl_schedule:'Schedule', nl_schedule_n:'Schedule · {n} recip.', nl_scheduled_ok:'✓ Scheduled', cfm_nl_sched:'Schedule the send to {n} people?', nl_sched_title:'Scheduled', nl_sched_sel:'sel.', nl_sched_all:'everyone',
       nav_sim:'Simulator', sim_title:'Simulator', sim_reset:'↺ Reset', sim_ph:'Type a test message…', sim_help:'Type as if you were a customer. It talks to the same engine and context as the real bot — nothing is sent over WhatsApp and no lead is created.',
       e_owner:'Owner', e_followup:'Next follow-up', e_tags:'Tags', ph_tag:'Add tag…', f_activity:'Activity',
@@ -1005,6 +1021,22 @@
     applyTheme(theme);
   };
   document.getElementById('langToggle').onclick = function(){ setLang(LANG==='es'?'en':'es'); };
+
+  // ── sidebar colapsable a mano (persistente; solo cambia el icono, la etiqueta la gestiona el i18n normal) ──
+  var navCollapsed = localStorage.getItem('botpanel_navcollapsed') === '1';
+  function applyNavCollapsed(v){
+    document.getElementById('app').classList.toggle('navCollapsed', v);
+    var ic = document.getElementById('navToggleIcon');
+    if(ic) ic.outerHTML = v
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="navToggleIcon"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="navToggleIcon"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+  applyNavCollapsed(navCollapsed);
+  document.getElementById('navToggle').onclick = function(){
+    navCollapsed = !navCollapsed;
+    localStorage.setItem('botpanel_navcollapsed', navCollapsed ? '1' : '0');
+    applyNavCollapsed(navCollapsed);
+  };
 
   // ── helpers ──
   function esc(s){ var d=document.createElement('div'); d.textContent = s==null?'':s; return d.innerHTML; }
@@ -1144,6 +1176,9 @@
         + '</div>'
         + '<div style="display:flex;gap:6px"><button class="qbtn call" onclick="fichaScheduleCall()">📞 '+t('q_call')+'</button>'
           + '<button class="qbtn out" id="edOutreach" onclick="fichaOutreach()">'+(l.outreached?t('act_reoutreach'):t('act_outreach'))+'</button></div>'
+        + (st==='won'
+            ? '<button class="qbtn win" disabled style="opacity:.7;cursor:default">'+t('s_won')+'</button>'
+            : '<button class="qbtn win" id="qWinBtn" onclick="qMarkWon()">✅ '+t('q_markwon')+'</button>')
       + '</div>'
       // ── actividad (timeline) arriba ──
       + '<div class="edit"><label>'+t('f_activity')+'</label>'+tlHTML(l)+'</div>'
@@ -1249,6 +1284,16 @@
     if(!curLead) return; var v = document.getElementById('edStatus').value;
     apiPost('status',{phone:curLead.phone,status:v}).then(function(r){ if(!r.ok) throw 0; syncLead({status:v}); }).catch(function(){ alert(t('al_status')); });
   }
+  // acción rápida: marcar la venta como cerrada sin abrir el desplegable de estado
+  function qMarkWon(){
+    if(!curLead) return;
+    apiPost('status',{phone:curLead.phone,status:'won'}).then(function(r){ if(!r.ok) throw 0;
+      syncLead({status:'won'});
+      var es=document.getElementById('edStatus'); if(es) es.value='won';
+      open_(curLead.phone); render();
+    }).catch(function(){ alert(t('al_status')); });
+  }
+  window.qMarkWon = qMarkWon;
   function saveNote(){
     if(!curLead) return; var v = document.getElementById('edNotes').value;
     apiPost('note',{phone:curLead.phone,notes:v}).then(function(r){ if(!r.ok) throw 0; syncLead({notes:v}); flash('edNotesSave',true); }).catch(function(){ flash('edNotesSave',false); });
@@ -1608,7 +1653,7 @@
     var now=Date.now()-3600000;
     var up=appts.filter(function(a){ return new Date(a.when).getTime()>=now; }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); }).slice(0,5);
     var citas=up.length?up.map(function(a){ return '<div class="dlrow" onclick="openApptView(\''+a.id+'\')"><div class="dlic">📅</div><div class="dlmain"><div class="dlt">'+esc(a.title)+'</div><div class="dls">'+esc(a.name||(a.phone?'+'+a.phone:''))+(a.closer?' · '+esc(a.closer):'')+'</div></div><div class="dlw">'+fmtWhen(a.when)+'</div></div>'; }).join(''):'<div class="dash-empty">'+t('da_nocitas')+'</div>';
-    var mc={}; leads.forEach(function(l){ if(l.archived) return; var mo=(l.model||'').trim(); if(!mo) return; mc[mo]=(mc[mo]||0)+1; });
+    var mc={}; leads.forEach(function(l){ if(l.archived || (l.status||'')!=='won') return; var mo=(l.model||'').trim(); if(!mo) return; mc[mo]=(mc[mo]||0)+1; });
     var top=Object.keys(mc).map(function(k){ return [k,mc[k]]; }).sort(function(a,b){ return b[1]-a[1]; }).slice(0,5);
     var tmx=top.length?top[0][1]:1, COLS=['var(--accent)','var(--violet)','var(--green)','var(--amber)','var(--red)'];
     var topHtml=top.length?top.map(function(x,i){ return '<div class="lbrow"><div class="lbtop"><span class="lbname">'+esc(x[0])+'</span><span class="lbval">'+x[1]+'</span></div><div class="lbtrack"><div class="lbfill" style="background:'+COLS[i%5]+';width:'+Math.round(x[1]/tmx*100)+'%"></div></div></div>'; }).join(''):'<div class="dash-empty">'+t('da_none')+'</div>';
@@ -1622,7 +1667,28 @@
       + '<div class="dash-card"><h3>'+t('da_next')+'<a onclick="document.getElementById(\'navCal\').click()">'+t('da_viewcal')+'</a></h3>'+citas+'</div>'
       + '<div class="dash-card"><h3>'+t('da_top')+'</h3>'+topHtml+'</div>'
       + '</div>';
+    html+='<div class="dash-grid" style="margin-top:16px">'+renderDropoffCard()+'</div>';
     el.innerHTML=html;
+  }
+  // por qué se enfrían los leads que no cerraron: último tema que tocó el bot antes del silencio
+  var DROPOFF_CAT={price:'💰',location:'📍',insurance_deposit:'🛡️',documents:'🪪',availability:'🏍️',payment:'💳',other:'❓',no_data:'🕸️'};
+  function renderDropoffCard(){
+    if(!dropoff){
+      return '<div class="dash-card"><h3>'+t('da_dropoff')+'</h3><div class="dash-empty">'+t('da_none')+'</div></div>'
+        + '<div class="dash-card"><h3>'+t('da_dropoff_list')+'</h3><div class="dash-empty">'+t('da_none')+'</div></div>';
+    }
+    var buckets=dropoff.buckets||{}, items=dropoff.items||[];
+    var cats=Object.keys(buckets).sort(function(a,b){ return buckets[b]-buckets[a]; });
+    var mx=1; cats.forEach(function(k){ if(buckets[k]>mx)mx=buckets[k]; });
+    var barsHtml=cats.length ? '<div class="bars">'+cats.map(function(k){
+        return '<div class="bar"><span class="bv">'+buckets[k]+'</span><div class="bfill" style="background:var(--accent);height:'+Math.max(3,Math.round(buckets[k]/mx*100))+'%"></div><span class="bl">'+(DROPOFF_CAT[k]||'')+' '+t('da_drop_'+k)+'</span></div>';
+      }).join('')+'</div>' : '<div class="dash-empty">'+t('da_dropoff_empty')+'</div>';
+    var sub=cats.length ? '<div class="ks" style="margin-top:10px">'+t('da_dropoff_scanned').replace('{n}',dropoff.scanned).replace('{t}',dropoff.total)+'</div>' : '';
+    var list=items.slice(0,6).map(function(it){
+        return '<div class="dlrow" onclick="dashOpenLead(\''+it.phone+'\')"><div class="dlic">'+(DROPOFF_CAT[it.category]||'❓')+'</div><div class="dlmain"><div class="dlt">'+esc(it.name||('+'+it.phone))+'</div><div class="dls">'+esc(t('da_drop_'+it.category))+(it.lastMessage?' · '+esc(it.lastMessage):'')+'</div></div><div class="dlw">'+ago(it.updatedAt)+'</div></div>';
+      }).join('') || '<div class="dash-empty">'+t('da_dropoff_empty')+'</div>';
+    return '<div class="dash-card"><h3>'+t('da_dropoff')+'</h3>'+barsHtml+sub+'</div>'
+      + '<div class="dash-card"><h3>'+t('da_dropoff_list')+'</h3>'+list+'</div>';
   }
 
   function renderCal(){
@@ -2160,7 +2226,7 @@
 
   function setUrl(p){ try{ history.replaceState(null,'',p); }catch(e){} }
   document.getElementById('navConv').onclick=function(){ clearModes(document.getElementById('app')); setNav('navConv'); setUrl('/admin'); };
-  document.getElementById('navDash').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dashmode'); setNav('navDash'); setUrl('/admin/dash'); renderDash(); loadAppts(renderDash); api('leads').then(function(r){return r.json();}).then(function(L){ leads=L; renderDash(); }).catch(function(){}); };
+  document.getElementById('navDash').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dashmode'); setNav('navDash'); setUrl('/admin/dash'); renderDash(); loadAppts(renderDash); loadDropoff(renderDash); api('leads').then(function(r){return r.json();}).then(function(L){ leads=L; renderDash(); }).catch(function(){}); };
   document.getElementById('navCal').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('calmode'); setNav('navCal'); setUrl('/admin'); buildLeadsDL(); loadAppts(renderCal); };
   document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dbmode'); setNav('navDb'); setUrl('/admin/db'); dbPage=1; loadHealth(); loadAppts(renderDb); };
   document.getElementById('navMedia').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('mediamode'); setNav('navMedia'); setUrl('/admin'); openMedia(); };

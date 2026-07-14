@@ -203,6 +203,52 @@ async function listLeads() {
   })));
 }
 
+// ─── ANÁLISIS DE ABANDONO (panel: por qué se enfría un lead que no cerró) ──
+// Clasifica el último mensaje del bot antes de que el cliente dejara de escribir.
+// ponytail: heurística de keywords sobre el texto, no NLP — si da falsos positivos
+// frecuentes, subir a un clasificador con Claude (mismo patrón que enrichLeadFromConversation).
+const DROPOFF_COLD_MS = 3 * 24 * 60 * 60 * 1000; // 3 días sin actividad = lead frío
+const DROPOFF_MAX_SCAN = 200; // tope de conversaciones leídas por request; se reporta scanned/total, no se oculta
+
+function classifyDropoff(text) {
+  const t = (text || "").toLowerCase();
+  if (!t) return "no_data";
+  if (/\b(idr|rp\.?\s?\d|precio|price|\d{1,3}\.\d{3}\.\d{3}|per (day|week|month|night|hour))\b/.test(t)) return "price";
+  if (/\b(delivery|entrega|ubicaci[oó]n|location|address|direcci[oó]n|canggu|berawa|pererenan|umalas|seminyak|kuta|sanur|ubud|uluwatu|denpasar|airport|aeropuerto)\b/.test(t)) return "location";
+  if (/\b(insurance|seguro|deposit|dep[oó]sito)\b/.test(t)) return "insurance_deposit";
+  if (/\b(passport|pasaporte|licen[sc]e|licencia|document|documento)\b/.test(t)) return "documents";
+  if (/\b(available|disponib|stock|modelo|model)\b/.test(t)) return "availability";
+  if (/\b(payment|pago|transfer|stripe|card|tarjeta)\b/.test(t)) return "payment";
+  return "other";
+}
+
+// Solo mira leads que no cerraron (status !== "won") y llevan DROPOFF_COLD_MS sin actividad.
+async function computeDropoff() {
+  const leads = await listLeads();
+  const now = Date.now();
+  const cold = leads
+    .filter((l) => !l.archived && l.status !== "won" && now - (l.updatedAt || 0) > DROPOFF_COLD_MS)
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const scan = cold.slice(0, DROPOFF_MAX_SCAN);
+  const buckets = {};
+  const items = [];
+  for (const l of scan) {
+    const conv = await getConversation(l.phone);
+    const lastBot = [...conv].reverse().find((m) => m.role === "assistant");
+    const category = lastBot ? classifyDropoff(lastBot.content) : "no_data";
+    buckets[category] = (buckets[category] || 0) + 1;
+    items.push({
+      phone: l.phone,
+      name: l.name || "",
+      status: l.status || "",
+      category,
+      updatedAt: l.updatedAt,
+      lastMessage: lastBot ? String(lastBot.content).slice(0, 160) : "",
+    });
+  }
+  return { total: cold.length, scanned: scan.length, buckets, items };
+}
+
 // Nivel de aviso ya enviado al owner para ese lead (anti-spam).
 // Orden: exploring < interested < booking
 const NOTIFY_RANK = { interested: 1, booking: 2 };
@@ -1626,6 +1672,12 @@ app.get(["/admin/db", "/admin/dash"], (req, res) => {
 app.get("/admin/api/leads", async (req, res) => {
   if (!adminAuth(req, res)) return;
   try { res.json(await listLeads()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Dashboard: por qué se enfrían los leads que no cerraron (último mensaje del bot antes del silencio).
+app.get("/admin/api/dropoff", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try { res.json({ ok: true, ...(await computeDropoff()) }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Enriquecer un lead: extrae de su conversación los datos que falten en la ficha.
