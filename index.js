@@ -39,7 +39,7 @@ const {
   XENDIT_CALLBACK_TOKEN,   // token de verificación del webhook de Xendit (Dashboard → Callbacks, no es el secret key)
   STRIPE_WEBHOOK_SECRET,   // firma del webhook de Stripe (Dashboard → Webhooks → signing secret, whsec_...)
   SUPABASE_URL,            // proyecto Supabase para el inventario de motos (pntvipemiczzfrnhixlb)
-  SUPABASE_SERVICE_KEY,    // service_role key de ese proyecto Supabase
+  SUPABASE_SERVICE_KEY,    // service_role key (opcional — solo fallback si falta la anon; hoy nada escribe en Supabase)
   SUPABASE_ANON_KEY,       // key "anon": RLS ya da SELECT público en products/product_pricing/serialized_items
   ADMIN_PASSWORD,
   ALERT_TEMPLATE_NAME,
@@ -1109,49 +1109,31 @@ async function writeLeadToSheet(phone, vals) {
   }
 }
 
-// ─── INVENTARIO DE MOTOS (Supabase: tabla "moto_inventory", columnas model/total_units) ──
+// ─── INVENTARIO DE MOTOS (Supabase BBM: products + serialized_items, el sistema real del cliente) ──
 // Vía REST de Supabase (PostgREST) con axios — igual que Xendit, sin añadir el SDK de Supabase
-// para dos queries. Disponibilidad = total en Supabase − leads status=won cuyo rango
-// startDate..endDate cubre hoy (mismo cálculo que "En la calle" del dashboard).
-const INVENTORY_TTL_MS = 5 * 60 * 1000; // 5 min: evita leer Supabase + escanear leads en cada mensaje del bot
+// para una query. El estado por unidad (available/rented/maintenance/retired) lo mantiene al día
+// el propio sistema de gestión del cliente, así que es la ÚNICA fuente de verdad: no se cruza con
+// los leads del CRM (haría doble descuento en cuanto el equipo marque la unidad como rented).
+// products.name = modelo real (p.ej. "Honda Scoopy"); products.model = tier (Bronze/Silver/…).
+const INVENTORY_TTL_MS = 5 * 60 * 1000; // 5 min: evita leer Supabase en cada mensaje del bot
 let inventorySnap = null, inventorySnapAt = 0;
 
-// mismo parser dd/mm/aaaa + ISO que dashDate() en el panel — texto libre no parseable no cuenta.
-function parseLeadDate(s) {
-  if (!s) return null;
-  s = String(s).trim();
-  const m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
-  if (m) { let y = +m[3]; if (y < 100) y += 2000; const d = new Date(y, +m[2] - 1, +m[1]); return isNaN(d.getTime()) ? null : d; }
-  const d = new Date(s);
-  return isNaN(d.getTime()) ? null : d;
-}
-
 async function computeInventorySnapshot() {
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) return null;
-  const res = await axios.get(`${SUPABASE_URL}/rest/v1/moto_inventory`, {
-    params: { select: "model,total_units" },
-    headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
+  const key = SUPABASE_ANON_KEY || SUPABASE_SERVICE_KEY; // anon basta: RLS da SELECT público
+  if (!SUPABASE_URL || !key) return null;
+  const res = await axios.get(`${SUPABASE_URL}/rest/v1/products`, {
+    params: { select: "name,serialized_items(status)" },
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
     timeout: 10000,
   });
-  const totals = {};
-  for (const row of res.data || []) {
-    const model = (row.model || "").trim();
-    const n = parseInt(row.total_units, 10);
-    if (model && !isNaN(n)) totals[model] = n;
+  const totals = {}, available = {};
+  for (const p of res.data || []) {
+    const name = (p.name || "").trim();
+    const items = (p.serialized_items || []).filter((u) => u.status !== "retired");
+    if (!name || !items.length) continue;
+    totals[name] = (totals[name] || 0) + items.length;
+    available[name] = (available[name] || 0) + items.filter((u) => u.status === "available").length;
   }
-  if (!Object.keys(totals).length) return { totals: {}, available: {} };
-  const leads = await listLeads();
-  const today = new Date(); today.setHours(12, 0, 0, 0);
-  const active = {};
-  for (const l of leads) {
-    if (l.archived || l.status !== "won") continue;
-    const model = (l.model || "").trim();
-    if (!model || totals[model] == null) continue;
-    const sd = parseLeadDate(l.startDate), ed = parseLeadDate(l.endDate);
-    if (sd && ed && sd <= today && ed >= today) active[model] = (active[model] || 0) + 1;
-  }
-  const available = {};
-  for (const model of Object.keys(totals)) available[model] = Math.max(0, totals[model] - (active[model] || 0));
   return { totals, available };
 }
 
@@ -2073,7 +2055,7 @@ app.get("/admin/api/inventory", async (req, res) => {
   try {
     const r = await axios.get(`${SUPABASE_URL}/rest/v1/products`, {
       params: {
-        select: "id,name,model,sku,product_pricing(daily_rate,weekly_rate,fortnight_rate,monthly_rate,biannual_rate,yearly_rate),serialized_items(id,serial_number,license_plate,bbm_code,status,condition)",
+        select: "id,name,model,sku,product_pricing(daily_rate,weekly_rate,fortnight_rate,three_week_low_rate,three_week_high_rate,monthly_rate,biannual_rate,yearly_rate),serialized_items(id,serial_number,license_plate,bbm_code,status,condition)",
         order: "name.asc",
       },
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },

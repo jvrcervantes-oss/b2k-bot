@@ -770,6 +770,10 @@
       <h2><span data-i18n="h_flota">Flota de motos</span> <span class="count" id="flotaCount">0</span></h2>
       <div class="db-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg><input id="flotaQ" data-ph="ph_search_flota" placeholder="Buscar modelo, matrícula, código…"></div>
     </div>
+    <div class="chips" id="flotaTabs" style="padding-top:10px">
+      <button class="chip on" data-ftab="unidades" data-i18n="ft_unidades">Unidades</button>
+      <button class="chip" data-ftab="tarifas" data-i18n="ft_tarifas">Tarifas</button>
+    </div>
     <div class="db-metrics" id="flotaMetrics"></div>
     <div class="db-wrap"><div id="flotaTable"></div></div>
   </div>
@@ -916,7 +920,7 @@
       ph_search_lead:'Buscar lead…', chip_all:'Todos', chip_wait:'🔔 Por responder', chip_int:'🟡 Interesados', chip_book:'🔴 Reserva',
       pick_lead:'Selecciona un lead', nochat:'Elige una conversación de la izquierda', ph_reply:'Escribe para tomar el control…', t_canned:'Respuestas rápidas', t_attach:'Enviar foto/vídeo', t_send:'Enviar', by_bot:'Enviado por el bot', by_human:'Enviado a mano', detail_empty:'Selecciona un lead para ver su ficha',
       cal_new:'+ Nueva cita', cal_upcoming:'Próximas citas', cal_none:'Sin citas próximas', dow:['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'],
-      h_flota:'Flota de motos', ph_search_flota:'Buscar modelo, matrícula, código…',
+      h_flota:'Flota de motos', ph_search_flota:'Buscar modelo, matrícula, código…', ft_unidades:'Unidades', ft_tarifas:'Tarifas',
       h_db:'Base de datos', ph_search_client:'Buscar cliente…', btn_import:'⬆ Importar Meta', ti_import:'Sube el CSV de leads que descargas de Meta Lead Ads', btn_enrich:'🔄 Actualizar desde chats', ti_enrich:'Lee las conversaciones y rellena los datos que falten', btn_csv:'⬇ Exportar CSV',
       m_canned:'Respuestas rápidas', m_canned_help:'Una por línea · formato', m_canned_fmt:'Título | texto', btn_cancel:'Cancelar', btn_save:'Guardar',
       m_appt:'Nueva cita', m_appt_edit:'Editar cita', l_lead:'Lead', ph_lead:'Nombre o teléfono (opcional)', l_datetime:'Fecha y hora', l_title:'Título', ph_call:'Llamada con…', btn_save_appt:'Guardar cita',
@@ -962,7 +966,7 @@
       ph_search_lead:'Search lead…', chip_all:'All', chip_wait:'🔔 To reply', chip_int:'🟡 Interested', chip_book:'🔴 Booking',
       pick_lead:'Select a lead', nochat:'Pick a conversation on the left', ph_reply:'Type to take over…', t_canned:'Quick replies', t_attach:'Send photo/video', t_send:'Send', by_bot:'Sent by the bot', by_human:'Sent manually', detail_empty:'Select a lead to see their card',
       cal_new:'+ New appointment', cal_upcoming:'Upcoming', cal_none:'No upcoming appointments', dow:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
-      h_flota:'Motorbike fleet', ph_search_flota:'Search model, plate, code…',
+      h_flota:'Motorbike fleet', ph_search_flota:'Search model, plate, code…', ft_unidades:'Units', ft_tarifas:'Rates',
       h_db:'Database', ph_search_client:'Search client…', btn_import:'⬆ Import Meta', ti_import:'Upload the leads CSV you download from Meta Lead Ads', btn_enrich:'🔄 Update from chats', ti_enrich:'Reads conversations and fills in missing data', btn_csv:'⬇ Export CSV',
       m_canned:'Quick replies', m_canned_help:'One per line · format', m_canned_fmt:'Title | text', btn_cancel:'Cancel', btn_save:'Save',
       m_appt:'New appointment', m_appt_edit:'Edit appointment', l_lead:'Lead', ph_lead:'Name or phone (optional)', l_datetime:'Date & time', l_title:'Title', ph_call:'Call with…', btn_save_appt:'Save appointment',
@@ -2190,11 +2194,15 @@
     document.getElementById('flotaTable').innerHTML = '<div class="db-empty">Cargando…</div>';
     api('inventory').then(function(r){return r.json();}).then(function(P){ flotaProducts = Array.isArray(P) ? P : []; renderFlota(); }).catch(function(){ document.getElementById('flotaTable').innerHTML = '<div class="db-empty">Error al cargar la flota.</div>'; });
   }
+  var flotaTab = 'unidades';
+  // PostgREST devuelve el embedding como objeto o array según la FK — normalizar aquí.
+  function pricingOf(p){ var pp = p.product_pricing; return (Array.isArray(pp) ? pp[0] : pp) || {}; }
   function renderFlota(){
+    if(flotaTab === 'tarifas'){ renderTarifas(); return; }
     var q = (document.getElementById('flotaQ').value || '').toLowerCase();
     var units = []; // aplanado: una fila por moto física, con su modelo y tarifa
     flotaProducts.forEach(function(p){
-      var pricing = p.product_pricing || {};
+      var pricing = pricingOf(p);
       (p.serialized_items || []).forEach(function(u){
         units.push({ product: p, pricing: pricing, unit: u });
       });
@@ -2227,6 +2235,35 @@
     document.getElementById('flotaTable').innerHTML =
       '<table class="db"><thead><tr><th>Modelo</th><th>Código</th><th>Matrícula</th><th>Estado</th><th>Condición</th><th>Diario</th><th>Mensual</th></tr></thead><tbody>'+rows+'</tbody></table>';
   }
+  // Tarifas por modelo — SOLO LECTURA: los precios se editan en el sistema de gestión de BBM, no aquí.
+  function renderTarifas(){
+    var q = (document.getElementById('flotaQ').value || '').toLowerCase();
+    var prods = flotaProducts.filter(function(p){
+      return !q || [p.name, p.model, p.sku].some(function(v){ return v && String(v).toLowerCase().indexOf(q)>-1; });
+    });
+    document.getElementById('flotaCount').textContent = prods.length;
+    document.getElementById('flotaMetrics').innerHTML =
+      '<div class="metric"><span class="mv">'+prods.length+'</span><span class="ml">Modelos</span></div>' +
+      '<div class="metric"><span class="mv" style="font-size:13px;font-weight:500">Solo lectura — se edita en el sistema de BBM</span><span class="ml">Fuente: Supabase</span></div>';
+    if(!prods.length){ document.getElementById('flotaTable').innerHTML = '<div class="db-empty">Sin modelos que coincidan.</div>'; return; }
+    var rows = prods.map(function(p){
+      var pr = pricingOf(p);
+      function c(v){ return v==null ? '<td class="db-dim">—</td>' : '<td>'+money(v)+'</td>'; }
+      return '<tr>' +
+        '<td class="db-nm">'+esc(p.name)+'<div class="db-dim">'+esc(p.model||'')+'</div></td>' +
+        c(pr.daily_rate)+c(pr.weekly_rate)+c(pr.fortnight_rate)+c(pr.three_week_low_rate)+c(pr.three_week_high_rate)+c(pr.monthly_rate)+c(pr.biannual_rate)+c(pr.yearly_rate) +
+      '</tr>';
+    }).join('');
+    document.getElementById('flotaTable').innerHTML =
+      '<table class="db"><thead><tr><th>Modelo</th><th>Diario</th><th>Semanal</th><th>Quincena</th><th>3 sem (baja)</th><th>3 sem (alta)</th><th>Mensual</th><th>Semestral</th><th>Anual</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  }
+  document.getElementById('flotaTabs').addEventListener('click', function(e){
+    var b = e.target.closest('[data-ftab]'); if(!b) return;
+    flotaTab = b.getAttribute('data-ftab');
+    var chips = document.querySelectorAll('#flotaTabs .chip');
+    for (var i=0;i<chips.length;i++) chips[i].classList.toggle('on', chips[i]===b);
+    renderFlota();
+  });
   document.getElementById('flotaQ').addEventListener('input', renderFlota);
   function exportCsv(only){
     var f=dbSorted(dbFiltered());
