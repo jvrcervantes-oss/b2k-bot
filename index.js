@@ -1217,7 +1217,7 @@ async function createStripeCheckoutIDR(amountIDR, description, phone) {
       cancel_url: STRIPE_CANCEL_URL || "https://balibestmotorcycle.com/",
     });
     console.log(`[${PROJECT_NAME}] Stripe (rental) session: ${amountIDR} IDR`);
-    return session.url;
+    return { url: session.url, id: session.id }; // id hace falta para poder anularla luego (sessions.expire)
   } catch (e) {
     console.error(`[${PROJECT_NAME}] Stripe (rental) session error:`, e.message);
     return null;
@@ -1241,10 +1241,27 @@ async function createXenditInvoice(amountIDR, description, phone) {
       { auth: { username: XENDIT_SECRET_KEY, password: "" }, timeout: 15000 }
     );
     console.log(`[${PROJECT_NAME}] Xendit invoice: ${amountIDR} IDR`);
-    return res.data && res.data.invoice_url;
+    // id hace falta para poder anularla luego (POST /invoices/:id/expire!)
+    return res.data && { url: res.data.invoice_url, id: res.data.id };
   } catch (e) {
     console.error(`[${PROJECT_NAME}] Xendit invoice error:`, e.response ? JSON.stringify(e.response.data) : e.message);
     return null;
+  }
+}
+
+// Anula un link de pago pendiente en el proveedor. Verificado contra el código fuente real de cada
+// SDK (la doc de Xendit se contradecía entre fuentes): Stripe solo funciona con la sesión en estado
+// "open" (falla si ya se pagó/expiró); Xendit expira la invoice sea cual sea su estado actual.
+async function cancelPaymentLink(provider, refId) {
+  if (provider === "stripe") {
+    if (!stripeClient) throw new Error("Stripe no configurado");
+    await stripeClient.checkout.sessions.expire(refId);
+  } else if (provider === "xendit") {
+    if (!XENDIT_SECRET_KEY) throw new Error("Xendit no configurado");
+    // Ruta real confirmada en el código fuente del SDK oficial: sin /v2/, con "!" literal al final.
+    await axios.post(`https://api.xendit.co/invoices/${refId}/expire!`, {}, { auth: { username: XENDIT_SECRET_KEY, password: "" }, timeout: 15000 });
+  } else {
+    throw new Error("provider desconocido");
   }
 }
 
@@ -1949,11 +1966,53 @@ app.get("/admin/api/invoices", async (req, res) => {
           provider: e.provider || "",
           amount: e.amount || 0,
           kind: e.type, // "paylink" = link generado/enviado · "payment" = pago confirmado por el proveedor
+          cancelled: !!e.cancelled,
+          hasRef: !!e.refId, // el panel solo ofrece "Cancelar" si hay refId (paylinks creados antes de este cambio no lo tienen)
         });
       }
     }
     rows.sort((a, b) => b.ts - a.ts);
     res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Anula en el proveedor (Stripe/Xendit) un link de pago que aún no se ha pagado. Identifica el
+// evento por phone+ts (no hay id propio: los eventos viven dentro del history del lead).
+app.post("/admin/api/invoice/cancel", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, ts } = req.body || {};
+  if (!phone || !ts) return res.status(400).json({ error: "phone y ts requeridos" });
+  try {
+    const lead = await getLead(phone);
+    const history = Array.isArray(lead && lead.history) ? lead.history : [];
+    const ev = history.find((e) => e.ts === ts && e.type === "paylink");
+    if (!ev) return res.status(404).json({ error: "No se encontró ese link de pago" });
+    if (ev.cancelled) return res.json({ ok: true }); // ya estaba cancelado, idempotente
+    if (!ev.refId) return res.status(400).json({ error: "Este link se creó antes de poder anularse — bórralo en vez de cancelarlo" });
+    await cancelPaymentLink(ev.provider, ev.refId);
+    ev.cancelled = true;
+    ev.cancelledAt = Date.now();
+    await updateLeadFields(phone, { history });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] /admin/api/invoice/cancel error:`, e.response ? JSON.stringify(e.response.data) : e.message);
+    res.status(502).json({ error: "No se pudo anular el link en el proveedor — puede que ya esté pagado o expirado" });
+  }
+});
+
+// Quita una fila de Facturas del panel (paylink o payment). No revierte ningún cobro real ni toca
+// status/dealValue del lead — solo borra ese evento de su timeline, es puramente de visualización.
+app.post("/admin/api/invoice/delete", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, ts } = req.body || {};
+  if (!phone || !ts) return res.status(400).json({ error: "phone y ts requeridos" });
+  try {
+    const lead = await getLead(phone);
+    const history = Array.isArray(lead && lead.history) ? lead.history : [];
+    const next = history.filter((e) => !(e.ts === ts && (e.type === "paylink" || e.type === "payment")));
+    if (next.length === history.length) return res.status(404).json({ error: "No se encontró esa factura" });
+    await updateLeadFields(phone, { history: next });
+    res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2019,20 +2078,21 @@ app.post("/admin/api/paylink", async (req, res) => {
   const amt = parseInt(amount, 10);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ error: "amount inválido" });
   const desc = (description || `${PROJECT_NAME || "BBM"} — Rental payment`).toString();
-  let url = null;
+  let created = null;
   if (provider === "stripe") {
     if (!stripeClient) return res.status(503).json({ error: "Stripe no configurado (falta STRIPE_SECRET_KEY en Railway)" });
-    url = await createStripeCheckoutIDR(amt, desc, phone);
+    created = await createStripeCheckoutIDR(amt, desc, phone);
   } else if (provider === "xendit") {
     if (!XENDIT_SECRET_KEY) return res.status(503).json({ error: "Xendit no configurado (falta XENDIT_SECRET_KEY en Railway)" });
-    url = await createXenditInvoice(amt, desc, phone);
+    created = await createXenditInvoice(amt, desc, phone);
   } else {
     return res.status(400).json({ error: "provider debe ser 'stripe' o 'xendit'" });
   }
-  if (!url) return res.status(502).json({ error: `No se pudo crear el link de pago (${provider})` });
-  await setLastLink(phone, url);
-  await logEvent(phone, "paylink", { provider, amount: amt });
-  res.json({ ok: true, url });
+  if (!created) return res.status(502).json({ error: `No se pudo crear el link de pago (${provider})` });
+  await setLastLink(phone, created.url);
+  // refId (session/invoice id) queda en el evento para poder anularlo luego desde /admin/api/invoice/cancel.
+  await logEvent(phone, "paylink", { provider, amount: amt, refId: created.id });
+  res.json({ ok: true, url: created.url });
 });
 
 // Responder a mano (toma de control). Envía por WhatsApp y pausa el bot para ese lead.
