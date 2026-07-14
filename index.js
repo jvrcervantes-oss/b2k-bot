@@ -213,7 +213,7 @@ async function listLeads() {
 // Clasifica el último mensaje del bot antes de que el cliente dejara de escribir.
 // ponytail: heurística de keywords sobre el texto, no NLP — si da falsos positivos
 // frecuentes, subir a un clasificador con Claude (mismo patrón que enrichLeadFromConversation).
-const DROPOFF_COLD_MS = 3 * 24 * 60 * 60 * 1000; // 3 días sin actividad = lead frío
+const DROPOFF_COLD_MS = 24 * 60 * 60 * 1000; // 24h sin actividad = lead frío — en un alquiler la decisión es rápida (quien quiere una moto la quiere ya), 3 días era demasiado margen para este negocio
 const DROPOFF_MAX_SCAN = 200; // tope de conversaciones leídas por request; se reporta scanned/total, no se oculta
 
 function classifyDropoff(text) {
