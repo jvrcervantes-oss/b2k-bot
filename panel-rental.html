@@ -6,22 +6,33 @@
 <title>BBM CRM · Conversaciones</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.5.0/css/flag-icons.min.css" rel="stylesheet">
 <style>
   :root{
-    --nav:#161e2e; --nav-2:#0f1623; --bg:#f5f6f8; --card:#ffffff;
-    --line:#e6e8ee; --line-2:#eef0f4; --ink:#1c2433; --ink-soft:#6b7488;
-    --accent:#ea580c; --accent-soft:#fdece0;
-    --green:#16a34a; --amber:#d97706; --red:#dc2626;
-    --bot:#ea580c;
+    --nav:#ffffff; --nav-2:#f8f9fb; --bg:#f3f4f7; --card:#ffffff;
+    --line:#e7e9ef; --line-2:#eef0f4; --ink:#141a27; --ink-soft:#5b6475;
+    --faint:#98a1b3;
+    --accent:#2f66f5; --accent-soft:#eaf1ff;
+    --green:#149e6a; --green-soft:#e3f6ec;
+    --amber:#cf8a17; --amber-soft:#f9f0dc;
+    --red:#e05146; --red-soft:#fbeceb;
+    --violet:#6d54f0; --violet-soft:#eeecff;
+    --bot:#2f66f5;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --sh:0 1px 2px rgba(16,24,40,.05),0 2px 6px rgba(16,24,40,.04);
+    --grad:linear-gradient(135deg,#2f66f5,#6d54f0);
   }
   /* ── MODO OSCURO ── (redefine variables + corrige colores claros fijos) */
   body.dark{
-    --nav:#0b111c; --nav-2:#0b111c; --bg:#0d1420; --card:#161e2e;
+    --nav:#161e2e; --nav-2:#0b111c; --bg:#0d1420; --card:#161e2e;
     --line:#28324a; --line-2:#202a3e; --ink:#e7ebf3; --ink-soft:#9aa6bd;
-    --accent:#f97316; --accent-soft:#3a2415;
-    --bot:#f97316;
+    --faint:#6f7b97;
+    --accent:#5b8bff; --accent-soft:#1e2c4f;
+    --green-soft:#123423; --amber-soft:#34291a; --red-soft:#3c201c;
+    --violet:#8f7bff; --violet-soft:#272144;
+    --bot:#2f66f5;
+    --sh:0 1px 2px rgba(0,0,0,.3),0 2px 6px rgba(0,0,0,.25);
   }
   body.dark #chat{background:#0b111c}
   body.dark .row:hover{background:rgba(255,255,255,.04)}
@@ -56,13 +67,13 @@
   body.dark .wininfo.closed{background:rgba(220,38,38,.14);color:#f87171}
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
-  body{font-family:'Inter',-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;-webkit-font-smoothing:antialiased}
+  body{font-family:'Manrope',-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;-webkit-font-smoothing:antialiased}
   button{font-family:inherit;cursor:pointer}
 
   /* ── LOGIN ── */
-  #login{position:fixed;inset:0;background:linear-gradient(135deg,#0f1623,#1b2740);display:flex;align-items:center;justify-content:center;z-index:50}
+  #login{position:fixed;inset:0;background:linear-gradient(135deg,#141a27 0%,#1e3a8a 55%,#3b2f8f 100%);display:flex;align-items:center;justify-content:center;z-index:50}
   #login .box{background:#fff;border-radius:18px;padding:36px 34px;width:340px;box-shadow:0 30px 70px -30px rgba(0,0,0,.6)}
-  #login .logo{width:42px;height:42px;border-radius:11px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:20px;margin-bottom:18px}
+  #login .logo{width:42px;height:42px;border-radius:11px;background:var(--grad);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:20px;margin-bottom:18px}
   #login h1{font-size:19px;font-weight:700;margin-bottom:4px}
   #login p{color:var(--ink-soft);font-size:13px;margin-bottom:20px}
   #login input{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:14px;margin-bottom:12px;outline:none}
@@ -71,23 +82,35 @@
   #login .err{color:var(--red);font-size:12.5px;height:16px;margin-top:2px}
 
   /* ── SHELL ── */
-  #app{display:none;height:100vh;overflow:hidden;grid-template-columns:64px 340px 1fr 300px}
+  #app{display:none;height:100vh;overflow:hidden;grid-template-columns:220px 340px 1fr 300px}
   #app.on{display:grid}
+  /* sidebar colapsado a rail de iconos en pantallas medianas */
+  @media(max-width:1360px) and (min-width:761px){
+    #app.on{grid-template-columns:64px 340px 1fr 300px}
+    nav{padding:14px 8px;align-items:center}
+    nav .lbl,nav .brandtx{display:none}
+    .brandrow{padding:2px 0 12px}
+    nav .ic{width:42px;justify-content:center;padding:9px 0;gap:0}
+  }
   @media(max-width:1100px){#app.on{grid-template-columns:64px 320px 1fr}#detail{display:none}}
 
-  /* nav rail */
-  nav{background:var(--nav);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:6px}
-  nav .brand{width:38px;height:38px;border-radius:10px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;margin-bottom:10px}
-  nav .ic{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#8893a8;cursor:pointer;transition:transform .15s cubic-bezier(.2,.7,.3,1),background .15s ease,color .15s ease,box-shadow .15s ease}
-  nav .ic:hover{background:rgba(255,255,255,.10);color:#fff;transform:translateY(-1px)}
-  nav .ic:active{transform:translateY(0) scale(.9)}
-  nav .ic.on{background:rgba(255,255,255,.10);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
-  nav .ic.on:hover{background:rgba(255,255,255,.16)}
+  /* sidebar */
+  nav{background:var(--nav);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:14px 10px;gap:2px}
+  .brandrow{display:flex;align-items:center;gap:10px;padding:2px 6px 14px}
+  nav .brand{width:36px;height:36px;border-radius:10px;background:var(--grad);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;flex-shrink:0}
+  .brandtx{line-height:1.15;min-width:0}
+  .brandtx b{display:block;font-size:13.5px;font-weight:800;letter-spacing:-.01em;white-space:nowrap}
+  .brandtx span{font-size:10.5px;color:var(--faint);font-weight:600;white-space:nowrap}
+  nav .ic{display:flex;align-items:center;gap:11px;width:100%;padding:9px 10px;border-radius:9px;color:var(--ink-soft);cursor:pointer;font-size:13px;font-weight:700;transition:transform .15s cubic-bezier(.2,.7,.3,1),background .15s ease,color .15s ease,box-shadow .15s ease}
+  nav .ic:hover{background:var(--bg);color:var(--ink)}
+  nav .ic:active{transform:scale(.97)}
+  nav .ic.on{background:var(--accent-soft);color:var(--accent)}
   nav .ic:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  nav .ic svg{width:20px;height:20px;transition:transform .15s cubic-bezier(.2,.7,.3,1)}
-  nav .ic:hover svg{transform:scale(1.12)}
+  nav .ic svg{width:19px;height:19px;flex-shrink:0;transition:transform .15s cubic-bezier(.2,.7,.3,1)}
+  nav .ic:hover svg{transform:scale(1.1)}
+  nav .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* toggle de idioma: bandera SVG + código */
-  #langToggle{gap:4px;font-size:10.5px;font-weight:700;letter-spacing:.02em}
+  #langToggle{gap:8px;font-size:11px;font-weight:700;letter-spacing:.02em}
   nav .ic svg.flag{width:18px;height:13px;border-radius:2px;flex-shrink:0;box-shadow:0 0 0 1px rgba(0,0,0,.18)}
   nav .ic:hover svg.flag{transform:scale(1.08)}
   nav .spacer{flex:1}
@@ -103,7 +126,7 @@
   .search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--ink-soft)}
   .chips{display:flex;gap:7px;padding:0 18px 12px;flex-wrap:wrap}
   .chip{font-size:12px;font-weight:500;padding:5px 11px;border-radius:999px;border:1px solid var(--line);color:var(--ink-soft);background:#fff}
-  .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
   #leads{flex:1;overflow-y:auto}
   .row{display:flex;gap:11px;padding:12px 18px;border-bottom:1px solid var(--line-2);cursor:pointer;align-items:center}
   .row:hover{background:#fafbfc}
@@ -119,8 +142,8 @@
   .empty{padding:50px 24px;text-align:center;color:#9aa3b5;font-size:13px}
 
   /* lead "por responder" (control humano + mensaje del cliente sin contestar) */
-  .row.wait{background:#fff7ed}
-  .row.wait:hover{background:#ffedd5}
+  .row.wait{background:var(--amber-soft)}
+  .row.wait:hover{background:#f3e5c4}
   .row.wait .nm{font-weight:700}
   .wpill{font-size:9.5px;font-weight:700;color:#fff;background:var(--red);border-radius:999px;padding:1px 7px;letter-spacing:.02em}
   .stWaitWrap{display:none}
@@ -129,14 +152,14 @@
 
   /* indicador de ventana de 24h de WhatsApp */
   .wininfo{font-size:11.5px;font-weight:500;padding:7px 20px;border-top:1px solid var(--line);display:none;align-items:center;gap:6px}
-  .wininfo.open{display:flex;color:#15803d;background:#f0fdf4}
-  .wininfo.closed{display:flex;color:#b91c1c;background:#fef2f2}
+  .wininfo.open{display:flex;color:var(--green);background:var(--green-soft)}
+  .wininfo.closed{display:flex;color:var(--red);background:var(--red-soft)}
 
-  .badge{font-size:10.5px;font-weight:600;padding:2px 9px;border-radius:999px;text-transform:capitalize}
-  .i-exploring{background:#dcfce7;color:#15803d}
-  .i-interested{background:#fef3c7;color:#b45309}
-  .i-booking{background:#fee2e2;color:#b91c1c}
-  .i-escalate{background:#e5e7eb;color:#4b5563}
+  .badge{font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:999px;text-transform:capitalize}
+  .i-exploring{background:var(--green-soft);color:var(--green)}
+  .i-interested{background:var(--amber-soft);color:var(--amber)}
+  .i-booking{background:var(--red-soft);color:var(--red)}
+  .i-escalate{background:var(--violet-soft);color:var(--violet)}
 
   /* chat column */
   #chat{display:flex;flex-direction:column;min-width:0;min-height:0;background:#f0f2f5}
@@ -164,7 +187,7 @@
   .stats{display:flex;gap:16px;padding:0 18px 10px;font-size:12px;color:var(--ink-soft)}
   .stats b{color:var(--ink);font-weight:700}
   .pausebtn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 12px;font-size:12.5px;font-weight:600;color:var(--ink-soft);white-space:nowrap}
-  .pausebtn.paused{background:#fef3c7;border-color:#fcd34d;color:#b45309}
+  .pausebtn.paused{background:var(--amber-soft);border-color:#e6cf9d;color:var(--amber)}
   .composer{background:var(--card);border-top:1px solid var(--line);padding:12px 16px;display:flex;align-items:flex-end;gap:10px}
   .composer textarea{flex:1;border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-family:inherit;font-size:13.5px;resize:none;outline:none;max-height:120px;line-height:1.4}
   .composer textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
@@ -255,11 +278,11 @@
   .db-badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap}
   .db-sel{font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:7px;padding:4px 7px;background:var(--card);color:inherit;cursor:pointer;outline:none;max-width:160px}
   .db-sel:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
-  .it-booking{background:rgba(220,38,38,.13);color:#dc2626}
-  .it-interested{background:rgba(217,119,6,.16);color:#b45309}
-  .it-exploring{background:rgba(22,163,74,.13);color:#16a34a}
-  .it-escalate{background:rgba(107,114,128,.16);color:#6b7280}
-  .st-new{border-color:rgba(37,99,235,.55);background:rgba(37,99,235,.10);color:#2563eb}
+  .it-booking{background:rgba(224,81,70,.13);color:var(--red)}
+  .it-interested{background:rgba(207,138,23,.15);color:var(--amber)}
+  .it-exploring{background:rgba(20,158,106,.13);color:var(--green)}
+  .it-escalate{background:rgba(109,84,240,.13);color:var(--violet)}
+  .st-new{border-color:rgba(47,102,245,.55);background:rgba(47,102,245,.10);color:var(--accent)}
   .st-quoted{border-color:rgba(217,119,6,.55);background:rgba(217,119,6,.12);color:#b45309}
   .st-won{border-color:rgba(22,163,74,.55);background:rgba(22,163,74,.13);color:#15803d}
   .st-lost{border-color:rgba(220,38,38,.55);background:rgba(220,38,38,.10);color:#dc2626}
@@ -418,9 +441,9 @@
   @media(max-width:760px){
     #app.on{grid-template-columns:1fr}
     /* la barra respeta el safe-area del móvil (home indicator) + un mínimo de 16px por si no lo reporta */
-    nav{position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;flex-direction:row;justify-content:space-around;align-items:center;padding:7px 4px calc(24px + env(safe-area-inset-bottom,0px));gap:0;z-index:60;border-top:1px solid rgba(255,255,255,.10)}
-    nav .brand,nav .spacer{display:none}
-    nav .ic{width:46px;height:40px}
+    nav{position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;flex-direction:row;justify-content:space-around;align-items:center;padding:7px 4px calc(24px + env(safe-area-inset-bottom,0px));gap:0;z-index:60;border-top:1px solid var(--line);border-right:0;box-shadow:0 -4px 16px rgba(16,24,40,.06)}
+    .brandrow,nav .spacer,nav .lbl{display:none}
+    nav .ic{width:46px;height:40px;justify-content:center;padding:0;gap:0}
     #dbView,#calView,#mediaView,#nlView,#simView{grid-column:1/-1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
     /* Conversaciones: lista por defecto; al abrir un chat = pantalla completa, sin barra */
     #list{display:flex;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
@@ -528,6 +551,14 @@
   .media-row .mr-del{width:30px;height:30px;flex-shrink:0;border:1px solid var(--line);background:var(--card);color:#dc2626;border-radius:8px;cursor:pointer;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;transition:background .15s ease,border-color .15s ease}
   .media-row .mr-del:hover{background:#fee2e2;border-color:#dc2626}
   body.dark .media-row .mr-del:hover{background:#3b1a1a}
+
+  /* ── Reskin 2026 (diseño "Bali Best Motorcycle CRM"): tipografía y superficies ── */
+  .count,.stats b,.metric .mv,.row .tm,.db-pg,.m .mtime,.kcol .kc,.db-tab .tc,.wpill{font-family:var(--mono)}
+  #list .head h2,.db-top h2,.sec-top h2,.cal-nav h2,.modal-box h3,#login h1{font-weight:800;letter-spacing:-.02em}
+  .metric,.kcard,.up{box-shadow:var(--sh)}
+  .metric{border-radius:12px;background:var(--card)}
+  .modal-box,#login .box{border-radius:16px}
+  .db-badge,.db-tag,.tag{font-weight:700}
 </style>
 </head>
 <body>
@@ -547,17 +578,20 @@
 <!-- APP -->
 <div id="app">
   <nav>
-    <div class="brand">B</div>
-    <div class="ic on" id="navConv" data-ti="nav_conv" title="Conversaciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="ic" id="navCal" data-ti="nav_cal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="ic" id="navDb" data-ti="nav_db" title="Base de datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="ic" id="navMedia" data-ti="nav_media" title="Fotos y vídeos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="ic" id="navNewsletter" data-ti="nav_nl" title="Newsletter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="ic" id="navSim" data-ti="nav_sim" title="Simulador"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12c0 4.418-4.03 8-9 8-1.06 0-2.076-.163-3.017-.463L3 21l1.35-3.746C3.494 15.85 3 14.482 3 13c0-4.418 4.03-8 9-8s9 3.582 9 8z" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 12h.01M12 12h.01M16 12h.01" stroke-linecap="round"/></svg></div>
+    <div class="brandrow">
+      <div class="brand">B</div>
+      <div class="brandtx"><b>Bali Best</b><span>Motorcycle CRM</span></div>
+    </div>
+    <div class="ic on" id="navConv" data-ti="nav_conv" title="Conversaciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_conv">Conversaciones</span></div>
+    <div class="ic" id="navCal" data-ti="nav_cal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_cal">Calendario</span></div>
+    <div class="ic" id="navDb" data-ti="nav_db" title="Base de datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_db">Base de datos</span></div>
+    <div class="ic" id="navMedia" data-ti="nav_media" title="Fotos y vídeos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_media">Fotos y vídeos</span></div>
+    <div class="ic" id="navNewsletter" data-ti="nav_nl" title="Newsletter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_nl">Newsletter</span></div>
+    <div class="ic" id="navSim" data-ti="nav_sim" title="Simulador"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12c0 4.418-4.03 8-9 8-1.06 0-2.076-.163-3.017-.463L3 21l1.35-3.746C3.494 15.85 3 14.482 3 13c0-4.418 4.03-8 9-8s9 3.582 9 8z" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 12h.01M12 12h.01M16 12h.01" stroke-linecap="round"/></svg><span class="lbl" data-i18n="nav_sim">Simulador</span></div>
     <div class="spacer"></div>
     <div class="ic" id="langToggle" data-ti="nav_lang">EN</div>
-    <div class="ic" data-ti="nav_theme" id="themeToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="ic" data-ti="nav_logout" id="logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" data-ti="nav_theme" id="themeToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_theme">Cambiar tema</span></div>
+    <div class="ic" data-ti="nav_logout" id="logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_logout">Salir</span></div>
   </nav>
 
   <!-- list -->
