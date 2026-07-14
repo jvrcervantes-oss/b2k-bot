@@ -35,6 +35,9 @@ const {
   STRIPE_SECRET_KEY,
   STRIPE_SUCCESS_URL,
   STRIPE_CANCEL_URL,
+  XENDIT_SECRET_KEY,       // pasarela Xendit (alternativa/complemento a Stripe — QRIS, VA, e-wallets, tarjeta)
+  INVENTORY_SHEET_ID,      // Google Sheet de inventario de motos (pestaña "Modelo | Total unidades")
+  INVENTORY_TAB,           // nombre de la pestaña del Sheet de inventario (default "Inventario")
   ADMIN_PASSWORD,
   ALERT_TEMPLATE_NAME,
   ALERT_TEMPLATE_LANG,
@@ -954,7 +957,9 @@ CLOSING — DIRECT IN THE CHAT, THIS IS A RENTAL, NOT A MULTI-DAY TOUR (read car
 - Once you know the bike/model, plan/duration, delivery location and a rough start date, give the exact price and move straight to confirming the booking.
 - Confirm what's included (helmets, free delivery) and tell them the team will follow up shortly to finalize payment and delivery logistics.
 - Set [INTENT:booking] the moment the customer wants to reserve. Do NOT output [RIDERS:N] or [APPT:...] — those are tour-specific (they trigger a per-person tour deposit charge and a video-call scheduling flow) and do not apply to a bike rental.
-- Never stall ("I'll check availability") — bikes get confirmed directly; only escalate for something you genuinely can't answer from your context.
+- Don't stall with vague hedges ("let me check availability, I'll get back to you") — you have a LIVE STOCK block below (when it's present in your context) telling you exactly how many units of each model are free right now. Read it before confirming a specific model.
+- STOCK CHECK: if the model the customer wants shows 0 available in LIVE STOCK for the dates they want, say so plainly, don't confirm the booking, and immediately offer the closest available alternative (same tier, or the next tier up) that DOES have stock. If a model isn't listed in LIVE STOCK at all (no inventory data for it) or there's no LIVE STOCK block in your context, proceed exactly as before — don't invent a stock number, don't tell the customer to "wait for a check" either, just confirm normally.
+- RESEND: if the customer asks to resend a payment link the team already sent them ("can you send it again?", "resend the link"), output [RESEND_LINK] on its own new line. The server re-attaches the exact same link (no new charge). If no link was ever sent, don't output [RESEND_LINK] — say the team will send it shortly.
 
 COMMERCIAL INSTINCT — you're not just taking an order, you're selling. Stay direct (one line, then move
 on), but always look for the real opportunity to get BBM the better outcome:
@@ -996,6 +1001,19 @@ const BASE_INSTRUCTIONS = BOT_VERTICAL === "rental"
 
 function buildSystemPrompt() {
   return `${CONTEXT}\n\n${BASE_INSTRUCTIONS}`;
+}
+
+// Bloque de stock: va APARTE del system cacheado de arriba (mismo patrón que mediaHint en el
+// webhook/simulador) — cambia cada pocos minutos, y si viviera dentro del bloque con
+// cache_control se rompería el prompt caching en cada refresco de inventario.
+async function buildStockHint() {
+  if (BOT_VERTICAL !== "rental") return "";
+  const snap = await getInventorySnapshot();
+  if (!snap || !Object.keys(snap.available).length) return "";
+  const lines = Object.keys(snap.available).map((m) => `${m}: ${snap.available[m]}/${snap.totals[m]}`);
+  return "\n\nLIVE STOCK — units available now / total (refreshed every few minutes; a model NOT listed "
+    + "here has no inventory data yet, follow the normal flow for it — don't claim it's sold out):\n"
+    + lines.join("\n");
 }
 
 // ─── GOOGLE SHEETS ────────────────────────────────────────────────
@@ -1088,6 +1106,65 @@ async function writeLeadToSheet(phone, vals) {
   }
 }
 
+// ─── INVENTARIO DE MOTOS (Google Sheet propio: "Modelo | Total unidades") ──────────
+// Independiente del CRM_SHEET_SYNC de arriba (ese es el espejo heredado de leads). Usa la misma
+// Service Account, otra hoja: INVENTORY_SHEET_ID. Disponibilidad = total del Sheet − leads
+// status=won cuyo rango startDate..endDate cubre hoy (mismo cálculo que "En la calle" del dashboard).
+const INVENTORY_TTL_MS = 5 * 60 * 1000; // 5 min: evita leer el Sheet + escanear leads en cada mensaje del bot
+let inventorySnap = null, inventorySnapAt = 0;
+
+// mismo parser dd/mm/aaaa + ISO que dashDate() en el panel — texto libre no parseable no cuenta.
+function parseLeadDate(s) {
+  if (!s) return null;
+  s = String(s).trim();
+  const m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
+  if (m) { let y = +m[3]; if (y < 100) y += 2000; const d = new Date(y, +m[2] - 1, +m[1]); return isNaN(d.getTime()) ? null : d; }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+async function computeInventorySnapshot() {
+  if (!INVENTORY_SHEET_ID || !GOOGLE_SERVICE_ACCOUNT) return null;
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: INVENTORY_SHEET_ID,
+    range: `${INVENTORY_TAB || "Inventario"}!A2:B500`,
+  });
+  const totals = {};
+  for (const row of res.data.values || []) {
+    const model = (row[0] || "").trim();
+    const n = parseInt(row[1], 10);
+    if (model && !isNaN(n)) totals[model] = n;
+  }
+  if (!Object.keys(totals).length) return { totals: {}, available: {} };
+  const leads = await listLeads();
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  const active = {};
+  for (const l of leads) {
+    if (l.archived || l.status !== "won") continue;
+    const model = (l.model || "").trim();
+    if (!model || totals[model] == null) continue;
+    const sd = parseLeadDate(l.startDate), ed = parseLeadDate(l.endDate);
+    if (sd && ed && sd <= today && ed >= today) active[model] = (active[model] || 0) + 1;
+  }
+  const available = {};
+  for (const model of Object.keys(totals)) available[model] = Math.max(0, totals[model] - (active[model] || 0));
+  return { totals, available };
+}
+
+// Cacheado: si el Sheet falla (no compartido, cuota, etc.) se queda con la última copia buena en
+// vez de tirar el chequeo de stock — mejor stock desactualizado que romper el flujo de venta.
+async function getInventorySnapshot() {
+  if (inventorySnap && Date.now() - inventorySnapAt < INVENTORY_TTL_MS) return inventorySnap;
+  try {
+    inventorySnap = await computeInventorySnapshot();
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] Inventario: error leyendo el Sheet — ${e.message}`);
+  }
+  inventorySnapAt = Date.now();
+  return inventorySnap;
+}
+
 // ─── STRIPE CHECKOUT SESSION ─────────────────────────────────────
 async function createStripeSession(numRiders) {
   if (!stripeClient) return null;
@@ -1113,6 +1190,54 @@ async function createStripeSession(numRiders) {
     return session.url;
   } catch (e) {
     console.error(`[${PROJECT_NAME}] Stripe session error:`, e.message);
+    return null;
+  }
+}
+
+// ─── PAGOS RENTAL (Stripe genérico + Xendit) — importe dinámico en IDR, no un deposit fijo por persona ──
+// Distinta de createStripeSession (arriba): esa es específica del tour ($1000/rider). Esta la usa
+// el panel para cobrar el importe que se acuerde (deposit o total) en un alquiler de moto.
+async function createStripeCheckoutIDR(amountIDR, description) {
+  if (!stripeClient) return null;
+  try {
+    // IDR es moneda "zero-decimal" en Stripe: unit_amount va en IDR enteros, sin ×100.
+    const session = await stripeClient.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [{
+        price_data: { currency: "idr", product_data: { name: description.slice(0, 250) }, unit_amount: Math.round(amountIDR) },
+        quantity: 1,
+      }],
+      mode: "payment",
+      success_url: STRIPE_SUCCESS_URL || "https://balibestmotorcycle.com/?booking=confirmed",
+      cancel_url: STRIPE_CANCEL_URL || "https://balibestmotorcycle.com/",
+    });
+    console.log(`[${PROJECT_NAME}] Stripe (rental) session: ${amountIDR} IDR`);
+    return session.url;
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] Stripe (rental) session error:`, e.message);
+    return null;
+  }
+}
+
+async function createXenditInvoice(amountIDR, description, phone) {
+  if (!XENDIT_SECRET_KEY) return null;
+  try {
+    const res = await axios.post(
+      "https://api.xendit.co/v2/invoices",
+      {
+        external_id: `${PROJECT_NAME || "bot"}-${phone}-${Date.now()}`,
+        amount: Math.round(amountIDR),
+        currency: "IDR",
+        description: description.slice(0, 250),
+        success_redirect_url: STRIPE_SUCCESS_URL || "https://balibestmotorcycle.com/?booking=confirmed",
+        failure_redirect_url: STRIPE_CANCEL_URL || "https://balibestmotorcycle.com/",
+      },
+      { auth: { username: XENDIT_SECRET_KEY, password: "" }, timeout: 15000 }
+    );
+    console.log(`[${PROJECT_NAME}] Xendit invoice: ${amountIDR} IDR`);
+    return res.data && res.data.invoice_url;
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] Xendit invoice error:`, e.response ? JSON.stringify(e.response.data) : e.message);
     return null;
   }
 }
@@ -1500,6 +1625,7 @@ app.post("/webhook", async (req, res) => {
         + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.use ? " — when to use: " + m.use : ""}${m.caption ? " [caption sent to customer: \"" + m.caption + "\"]" : ""}`).join("\n")
         + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send a media item when its 'when to use' genuinely matches the moment. Only send labels from this list; never invent one."
       : "";
+    const stockHint = await buildStockHint(); // inventario (rental): mismo patrón que mediaHint, bloque aparte sin cachear
     // Streaming (no create): evita el "Premature close" en respuestas no-stream y mantiene viva la conexión.
     const response = await claudeMessage({
       model: MODEL,
@@ -1507,10 +1633,11 @@ app.post("/webhook", async (req, res) => {
       thinking: { type: "disabled" }, // respuestas cortas y baratas; en Sonnet 5 el thinking va ON por defecto y se comería el max_tokens
       // Prompt caching: el system (~11.5k tok fijos: context.md + BASE_INSTRUCTIONS) es idéntico en cada turno.
       // Con cache_control, la 1ª vez paga 1.25x y el resto de la charla (dentro de 5 min) paga 0.1x → ~-78% del coste de system.
-      // mediaHint va en bloque aparte tras el prefijo cacheado (cambia solo al editar la media library).
+      // mediaHint/stockHint van en bloque aparte tras el prefijo cacheado (cambian solos, sin invalidar la caché).
       system: [
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
+        ...(stockHint ? [{ type: "text", text: stockHint }] : []),
       ],
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // prompt = últimos 20; el resto es historial del panel
     });
@@ -1739,6 +1866,31 @@ app.get("/admin/api/conv/:phone", async (req, res) => {
   try { res.json(await getConversation(req.params.phone)); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Genera un link de pago (Stripe o Xendit) por el importe que decida el equipo — no lo envía,
+// solo lo crea y lo guarda como "último link" (para [RESEND_LINK]); el panel lo manda con /admin/api/send.
+app.post("/admin/api/paylink", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, provider, amount, description } = req.body || {};
+  if (!phone || !provider || !amount) return res.status(400).json({ error: "phone, provider y amount requeridos" });
+  const amt = parseInt(amount, 10);
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ error: "amount inválido" });
+  const desc = (description || `${PROJECT_NAME || "BBM"} — Rental payment`).toString();
+  let url = null;
+  if (provider === "stripe") {
+    if (!stripeClient) return res.status(503).json({ error: "Stripe no configurado (falta STRIPE_SECRET_KEY en Railway)" });
+    url = await createStripeCheckoutIDR(amt, desc);
+  } else if (provider === "xendit") {
+    if (!XENDIT_SECRET_KEY) return res.status(503).json({ error: "Xendit no configurado (falta XENDIT_SECRET_KEY en Railway)" });
+    url = await createXenditInvoice(amt, desc, phone);
+  } else {
+    return res.status(400).json({ error: "provider debe ser 'stripe' o 'xendit'" });
+  }
+  if (!url) return res.status(502).json({ error: `No se pudo crear el link de pago (${provider})` });
+  await setLastLink(phone, url);
+  await logEvent(phone, "paylink", { provider, amount: amt });
+  res.json({ ok: true, url });
+});
+
 // Responder a mano (toma de control). Envía por WhatsApp y pausa el bot para ese lead.
 app.post("/admin/api/send", async (req, res) => {
   if (!adminAuth(req, res)) return;
@@ -1812,6 +1964,7 @@ app.post("/admin/api/simulate", async (req, res) => {
         + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.use ? " — when to use: " + m.use : ""}${m.caption ? " [caption sent to customer: \"" + m.caption + "\"]" : ""}`).join("\n")
         + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send a media item when its 'when to use' genuinely matches the moment. Only send labels from this list; never invent one."
       : "";
+    const stockHint = await buildStockHint(); // mismo inventario que ve el bot real, para que el simulador no mienta
     const response = await claudeMessage({
       model: MODEL,
       max_tokens: 500,
@@ -1819,6 +1972,7 @@ app.post("/admin/api/simulate", async (req, res) => {
       system: [
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
+        ...(stockHint ? [{ type: "text", text: stockHint }] : []),
       ],
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // mismo recorte que el webhook real
     });
