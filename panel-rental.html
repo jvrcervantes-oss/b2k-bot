@@ -567,14 +567,15 @@
   /* ── Dashboard de métricas (diseño mockup: KPIs + barras + donut + listas) ── */
   .dash-scroll{flex:1;overflow-y:auto}
   .dash-inner{padding:24px 26px 40px;max-width:1320px;width:100%}
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:20px}
   .kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:var(--sh)}
   .kpi .kt{display:flex;justify-content:space-between;align-items:flex-start;font-size:12.5px;font-weight:700;color:var(--ink-soft)}
   .kpi .kic{width:34px;height:34px;flex:none;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px}
   .kpi .kv{font-family:var(--mono);font-size:27px;font-weight:600;letter-spacing:-.02em;margin:12px 0 4px}
   .kpi .ks{font-size:12px;color:var(--ink-soft);font-weight:600}
   .dash-grid{display:grid;grid-template-columns:1.55fr 1fr;gap:16px;margin-bottom:20px}
-  .dash-grid2{display:grid;grid-template-columns:1.4fr 1fr;gap:16px}
+  .dash-grid2{display:grid;grid-template-columns:1.15fr 1.15fr 1fr;gap:16px}
+  .evchip{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap;flex:none}
   .dash-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;box-shadow:var(--sh);min-width:0}
   .dash-card h3{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:800;margin-bottom:16px}
   .dash-card h3 a{font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;white-space:nowrap}
@@ -840,6 +841,7 @@
     es:{ brand:'CRM BBM', login_title:'Panel de conversaciones', login_sub:'CRM BBM · acceso del equipo', ph_pw:'Contraseña', btn_enter:'Entrar', err_pw:'Contraseña incorrecta',
       nav_conv:'Conversaciones', nav_cal:'Calendario', nav_db:'Base de datos', nav_media:'Fotos y vídeos', nav_theme:'Cambiar tema', nav_logout:'Salir', nav_lang:'English',
       nav_dash:'Dashboard', da_kpi_won:'Motos alquiladas', da_week:'esta semana', da_kpi_rev:'Ingresos', da_rev_sub:'de alquileres ganados', da_kpi_pipe:'Pipeline abierto', da_act:'leads activos', da_kpi_conv:'Conversión', da_decided:'decididos', da_bystatus:'Leads por estado', da_leg_won:'ganados', da_leg_lost:'perdidos / no-show', da_next:'Próximas citas', da_viewcal:'Ver calendario →', da_viewdb:'Ver base de datos →', da_top:'Top motos', da_none:'Sin datos todavía', da_nocitas:'No hay citas próximas', da_s_new:'Nuevos', da_s_quoted:'Cotizados', da_s_won:'Ganados', da_s_lost:'Perdidos', da_s_noshow:'No-show',
+      da_kpi_out:'En la calle', da_out_sub:'con devolución pendiente', da_ev:'Entregas y devoluciones', da_ev_del:'Entrega', da_ev_ret:'Devolución', da_noev:'Nada programado con fecha. Rellena "Fecha inicio" y "Fecha devolución" en la ficha del lead (o deja que el bot las capture).', e_return:'Fecha devolución', c_return:'Devolución', ph_date:'p. ej. 2026-07-20',
       m_media:'Fotos y vídeos del bot', media_help:'El bot envía estos archivos cuando ayudan a vender. Sube el archivo (botón ⬆) o pega una URL pública, ponle una etiqueta corta (ej. "carreteras") y —importante— en "cuándo usarlo" describe la situación en la que el bot debe enviarlo (ej. "cuando pregunten cómo son las carreteras o el estado del asfalto"). Eso es lo que el bot lee para decidir; el pie de foto es lo que ve el cliente.', btn_media_add:'+ Añadir archivo', media_empty:'Aún no hay archivos. Añade el primero 👇', mt_image:'Foto', mt_video:'Vídeo', mr_ph_label:'etiqueta (ej. intro)', mr_ph_url:'sube ⬆ o pega una URL pública', mr_ph_use:'cuándo usarlo (ej. si preguntan por las carreteras)', mr_ph_cap:'pie de foto que ve el cliente (opcional)', al_media_url:'Cada archivo necesita una etiqueta y una URL (sube el archivo o pega una URL).', al_media_saved:'Biblioteca guardada ✓', ti_media_up:'Subir archivo del equipo', al_media_big:'Archivo demasiado grande (máx 16 MB).', al_media_uploaded:'Archivo subido ✓',
       h_conv:'Conversaciones', st_wait:'por responder', st_int:'interesados', st_book:'en reserva', st_today:'hoy',
       ph_search_lead:'Buscar lead…', chip_all:'Todos', chip_wait:'🔔 Por responder', chip_int:'🟡 Interesados', chip_book:'🔴 Reserva',
@@ -883,6 +885,7 @@
     en:{ brand:'CRM BBM', login_title:'Conversations panel', login_sub:'CRM BBM · team access', ph_pw:'Password', btn_enter:'Sign in', err_pw:'Wrong password',
       nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_media:'Photos & videos', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español',
       nav_dash:'Dashboard', da_kpi_won:'Bikes rented', da_week:'this week', da_kpi_rev:'Revenue', da_rev_sub:'from won rentals', da_kpi_pipe:'Open pipeline', da_act:'active leads', da_kpi_conv:'Conversion', da_decided:'decided', da_bystatus:'Leads by status', da_leg_won:'won', da_leg_lost:'lost / no-show', da_next:'Upcoming appointments', da_viewcal:'View calendar →', da_viewdb:'View database →', da_top:'Top bikes', da_none:'No data yet', da_nocitas:'No upcoming appointments', da_s_new:'New', da_s_quoted:'Quoted', da_s_won:'Won', da_s_lost:'Lost', da_s_noshow:'No-show',
+      da_kpi_out:'Out now', da_out_sub:'awaiting return', da_ev:'Deliveries & returns', da_ev_del:'Delivery', da_ev_ret:'Return', da_noev:'Nothing scheduled with a date. Fill "Start date" and "Return date" on the lead (or let the bot capture them).', e_return:'Return date', c_return:'Return', ph_date:'e.g. 2026-07-20',
       m_media:'Bot photos & videos', media_help:'The bot sends these files when they help the sale. Upload a file (⬆ button) or paste a public URL, give it a short label (e.g. "roads") and — importantly — in "when to use" describe the situation the bot should send it in (e.g. "when they ask what the roads or tarmac are like"). That is what the bot reads to decide; the caption is what the customer sees.', btn_media_add:'+ Add file', media_empty:'No files yet. Add the first one 👇', mt_image:'Photo', mt_video:'Video', mr_ph_label:'label (e.g. intro)', mr_ph_url:'upload ⬆ or paste a public URL', mr_ph_use:'when to use it (e.g. if they ask about the roads)', mr_ph_cap:'caption the customer sees (optional)', al_media_url:'Each file needs a label and a URL (upload a file or paste a URL).', al_media_saved:'Library saved ✓', ti_media_up:'Upload file from device', al_media_big:'File too large (max 16 MB).', al_media_uploaded:'File uploaded ✓',
       h_conv:'Conversations', st_wait:'to reply', st_int:'interested', st_book:'booking', st_today:'today',
       ph_search_lead:'Search lead…', chip_all:'All', chip_wait:'🔔 To reply', chip_int:'🟡 Interested', chip_book:'🔴 Booking',
@@ -961,7 +964,7 @@
     LABEL = {exploring:t('i_exploring'),interested:t('i_interested'),booking:t('i_booking'),escalate:t('i_escalate')};
     STATUS_LABEL = {'':t('s_blank'),new:t('s_new'),quoted:t('s_quoted'),won:t('s_won'),lost:t('s_lost'),noshow:t('s_noshow')};
     ST_OPTS = [['',t('s_blank')],['new',t('s_new')],['quoted',t('s_quoted')],['won',t('s_won')],['lost',t('s_lost')],['noshow',t('s_noshow')]];
-    DB_COLS = [['hot','🔥'],['name',t('c_name')],['phone',t('c_phone')],['email',t('c_email')],['country',t('c_country')],['model',t('c_tour')],['plan',t('c_package')],['deliveryLocation',t('c_delivery')],['owner',t('c_owner')],['appt',t('c_appt')],['nextFollowUp',t('c_followup')],['startDate',t('c_travel')],['status',t('c_status')],['intent',t('c_intent')],['tags',t('c_tags')],['updatedAt',t('c_lastact')]];
+    DB_COLS = [['hot','🔥'],['name',t('c_name')],['phone',t('c_phone')],['email',t('c_email')],['country',t('c_country')],['model',t('c_tour')],['plan',t('c_package')],['deliveryLocation',t('c_delivery')],['owner',t('c_owner')],['appt',t('c_appt')],['nextFollowUp',t('c_followup')],['startDate',t('c_travel')],['endDate',t('c_return')],['status',t('c_status')],['intent',t('c_intent')],['tags',t('c_tags')],['updatedAt',t('c_lastact')]];
   }
 
   function api(path){ return fetch('/admin/api/' + path, { headers: { 'X-Admin-Key': KEY } }); }
@@ -1159,6 +1162,7 @@
       + '<div class="edit"><label>'+t('e_payment')+'</label><input id="edPayment" value="'+esc(l.paymentMethod||'')+'" placeholder="'+t('ph_payment')+'"></div>'
       + '<div class="edit"><label>'+t('e_value')+'</label><input id="edValue" type="number" min="0" step="1000" value="'+(leadValue(l)||'')+'" placeholder="2450000"></div>'
       + '<div class="edit"><label>'+t('e_travel')+'</label><input id="edTravel" value="'+esc(l.startDate||'')+'" placeholder="'+t('ph_egmonth')+'"></div>'
+      + '<div class="edit"><label>'+t('e_return')+'</label><input id="edReturn" value="'+esc(l.endDate||'')+'" placeholder="'+t('ph_date')+'"></div>'
       + '<div class="edit"><label>'+t('e_owner')+'</label><select id="edOwner">'+OWNER_OPTS.map(function(v){return '<option value="'+esc(v)+'"'+((l.owner||'')===v?' selected':'')+'>'+esc(v||'—')+'</option>';}).join('')+'</select></div>'
       + '<div class="edit"><label>'+t('e_followup')+'</label><input id="edFollow" type="date" value="'+(l.nextFollowUp?esc(String(l.nextFollowUp).slice(0,10)):'')+'"></div>'
       + '<button class="savebtn" id="edSave" onclick="saveLeadFields()">'+t('e_savecard')+'</button>'
@@ -1262,6 +1266,7 @@
       paymentMethod:document.getElementById('edPayment').value.trim(),
       dealValue:document.getElementById('edValue').value.trim(),
       startDate:document.getElementById('edTravel').value.trim(),
+      endDate:document.getElementById('edReturn').value.trim(),
       owner:document.getElementById('edOwner').value,
       nextFollowUp:document.getElementById('edFollow').value };
     apiPost('lead',body).then(function(r){ if(!r.ok) throw 0;
@@ -1552,6 +1557,15 @@
   window.openMedia=openMedia;
 
   // ── dashboard: métricas del negocio (calculadas de leads + citas reales) ──
+  // ponytail: parser dd/mm/aaaa europeo + Date.parse; texto libre no parseable no cuenta en métricas de fechas
+  function dashDate(s){
+    if(!s) return null; s=String(s).trim();
+    var m=s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
+    if(m){ var y=+m[3]; if(y<100)y+=2000; var d1=new Date(y,+m[2]-1,+m[1]); return isNaN(d1.getTime())?null:d1; }
+    var d=new Date(s); return isNaN(d.getTime())?null:d;
+  }
+  function dashOpenLead(phone){ var a=document.getElementById('app'); clearModes(a); setNav('navConv'); open_(phone); }
+  window.dashOpenLead=dashOpenLead;
   function renderDash(){
     var el=document.getElementById('dashBody'); if(!el) return;
     var m={total:0,nq:0,quoted:0,won:0,lost:0,noshow:0,pipe:0,rev:0,weekWon:0}, wk=Date.now()-7*86400000;
@@ -1561,11 +1575,23 @@
       else if(st==='lost')m.lost++; else if(st==='noshow')m.noshow++;
       if(st===''||st==='new'||st==='quoted')m.pipe+=leadValue(l); if(st==='won')m.rev+=leadValue(l); });
     var decided=m.won+m.lost+m.noshow, conv=decided?Math.round(m.won*100/decided):0, act=m.nq+m.quoted;
+    // alquileres con fechas: en la calle ahora + eventos de entrega/devolución
+    var sod=new Date(); sod.setHours(0,0,0,0); var eod=new Date(); eod.setHours(23,59,59,999);
+    var out=0, evs=[];
+    leads.forEach(function(l){
+      if(l.archived || (l.status||'')!=='won') return;
+      var sd=dashDate(l.startDate), ed=dashDate(l.endDate);
+      if(sd&&ed && sd<=eod && ed>=sod) out++;
+      if(sd&&sd>=sod) evs.push({d:sd,ret:false,l:l});
+      if(ed&&ed>=sod) evs.push({d:ed,ret:true,l:l});
+    });
+    evs.sort(function(a,b){ return a.d-b.d; }); evs=evs.slice(0,8);
     function kpi(icon,soft,color,label,val,sub){ return '<div class="kpi"><div class="kt"><span>'+label+'</span><span class="kic" style="background:'+soft+';color:'+color+'">'+icon+'</span></div><div class="kv">'+val+'</div><div class="ks">'+sub+'</div></div>'; }
     var html='<div class="kpis">'
-      + kpi('🏍️','var(--accent-soft)','var(--accent)',t('da_kpi_won'),m.won,'+'+m.weekWon+' '+t('da_week'))
+      + kpi('🛵','var(--accent-soft)','var(--accent)',t('da_kpi_out'),out,t('da_out_sub'))
+      + kpi('🏍️','var(--violet-soft)','var(--violet)',t('da_kpi_won'),m.won,'+'+m.weekWon+' '+t('da_week'))
       + kpi('💰','var(--green-soft)','var(--green)',t('da_kpi_rev'),money(m.rev)||'0',t('da_rev_sub'))
-      + kpi('📈','var(--violet-soft)','var(--violet)',t('da_kpi_pipe'),money(m.pipe)||'0',act+' '+t('da_act'))
+      + kpi('📈','var(--accent-soft)','var(--accent)',t('da_kpi_pipe'),money(m.pipe)||'0',act+' '+t('da_act'))
       + kpi('🎯','var(--amber-soft)','var(--amber)',t('da_kpi_conv'),conv+'%',m.won+'/'+decided+' '+t('da_decided'))
       + '</div>';
     // barras por estado
@@ -1586,7 +1612,13 @@
     var top=Object.keys(mc).map(function(k){ return [k,mc[k]]; }).sort(function(a,b){ return b[1]-a[1]; }).slice(0,5);
     var tmx=top.length?top[0][1]:1, COLS=['var(--accent)','var(--violet)','var(--green)','var(--amber)','var(--red)'];
     var topHtml=top.length?top.map(function(x,i){ return '<div class="lbrow"><div class="lbtop"><span class="lbname">'+esc(x[0])+'</span><span class="lbval">'+x[1]+'</span></div><div class="lbtrack"><div class="lbfill" style="background:'+COLS[i%5]+';width:'+Math.round(x[1]/tmx*100)+'%"></div></div></div>'; }).join(''):'<div class="dash-empty">'+t('da_none')+'</div>';
+    var evHtml=evs.length?evs.map(function(e){
+      var lbl=e.ret?t('da_ev_ret'):t('da_ev_del'), chipBg=e.ret?'var(--green-soft)':'var(--accent-soft)', chipFg=e.ret?'var(--green)':'var(--accent)';
+      var when=e.d.toLocaleDateString(t('locale'),{weekday:'short',day:'numeric',month:'short'});
+      return '<div class="dlrow" onclick="dashOpenLead(\''+e.l.phone+'\')"><div class="dlic">'+(e.ret?'🏁':'🛵')+'</div><div class="dlmain"><div class="dlt">'+esc(e.l.name||('+'+e.l.phone))+'</div><div class="dls">'+esc(e.l.model||e.l.plan||'')+'</div></div><span class="evchip" style="background:'+chipBg+';color:'+chipFg+'">'+lbl+'</span><div class="dlw">'+when+'</div></div>';
+    }).join(''):'<div class="dash-empty">'+t('da_noev')+'</div>';
     html+='<div class="dash-grid2">'
+      + '<div class="dash-card"><h3>'+t('da_ev')+'</h3>'+evHtml+'</div>'
       + '<div class="dash-card"><h3>'+t('da_next')+'<a onclick="document.getElementById(\'navCal\').click()">'+t('da_viewcal')+'</a></h3>'+citas+'</div>'
       + '<div class="dash-card"><h3>'+t('da_top')+'</h3>'+topHtml+'</div>'
       + '</div>';
@@ -1627,7 +1659,7 @@
     ['hot','🔥'],
     ['name','Nombre'],['phone','WhatsApp'],['email','Email'],['country','País'],
     ['model','Modelo'],['plan','Plan'],['deliveryLocation','Entrega'],['owner','Owner'],['appt','Cita'],
-    ['nextFollowUp','Seguimiento'],['startDate','Fecha inicio'],['status','Estado'],['intent','Intención'],['tags','Tags'],['updatedAt','Últ. act.']
+    ['nextFollowUp','Seguimiento'],['startDate','Fecha inicio'],['endDate','Devolución'],['status','Estado'],['intent','Intención'],['tags','Tags'],['updatedAt','Últ. act.']
   ];
   var STATUS_LABEL = {'':'—',new:'🆕 Nuevo',quoted:'💬 Cotizado',won:'✅ Ganado',lost:'❌ Perdido',noshow:'🚫 No-show'};
   var ST_OPTS = [['','—'],['new','🆕 Nuevo'],['quoted','💬 Cotizado'],['won','✅ Ganado'],['lost','❌ Perdido'],['noshow','🚫 No-show']];
