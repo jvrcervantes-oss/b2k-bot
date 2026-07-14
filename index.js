@@ -423,14 +423,26 @@ function parseLeadTag(reply) {
   return Object.keys(out).length ? out : null;
 }
 
+// Recorta cada tag a 40 caracteres, quita vacíos/duplicados y capa la lista a 20 —
+// única puerta de normalización, la usan tanto el auto-tag del bot como la edición manual del panel.
+function normalizeTags(arr) {
+  const seen = new Set(), out = [];
+  for (const raw of Array.isArray(arr) ? arr : []) {
+    const v = String(raw).trim().slice(0, 40);
+    if (!v || seen.has(v)) continue;
+    seen.add(v); out.push(v);
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
 // Guarda los campos extraídos en la BD (Redis) + Sheet, sin pisar con vacíos.
 async function captureLeadData(phone, fields) {
   if (!fields || !Object.keys(fields).length) return;
   // Las etiquetas se UNEN con las existentes (no pisan las que puso el estudio a mano).
   if (Array.isArray(fields.tags)) {
     const prev = (await getLead(phone)) || {};
-    const set = new Set([...(Array.isArray(prev.tags) ? prev.tags : []), ...fields.tags].map((s) => String(s).trim()).filter(Boolean));
-    fields = { ...fields, tags: Array.from(set).slice(0, 20) };
+    fields = { ...fields, tags: normalizeTags([...(Array.isArray(prev.tags) ? prev.tags : []), ...fields.tags]) };
     // await OBLIGATORIO: sin él, el SET de logEvent (solo history, leído pre-tags) aterriza
     // DESPUÉS del write de abajo y machaca tags/followup — los tags nunca llegaban a verse.
     if (fields.tags.length) await logEvent(phone, "tag", { to: fields.tags[fields.tags.length - 1] });
@@ -1859,6 +1871,9 @@ app.post("/admin/api/lead", async (req, res) => {
     const n = parseInt(String(fields.dealValue).replace(/\D/g, ""), 10);
     fields.dealValue = isNaN(n) ? 0 : n;
   }
+  // el panel manda la lista final (con el tag añadido o quitado) — normalizar SIN unir con la
+  // anterior, si no leadRemoveTag() nunca conseguiría borrar nada (la unión la devolvería).
+  if (Array.isArray(fields.tags)) fields.tags = normalizeTags(fields.tags);
   await updateLeadFields(phone, fields);
   writeLeadToSheet(phone, fields); // best-effort (solo escribe las llaves con columna mapeada)
   if (fields.owner != null && (fields.owner || "") !== (prev.owner || "")) logEvent(phone, "owner", { to: fields.owner || "" });

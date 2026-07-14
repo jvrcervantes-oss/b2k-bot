@@ -877,7 +877,7 @@
       store_redis:'🟢 Redis · persistente', store_ram:'🟠 RAM · NO persiste — configura Redis',
       empty_results:'Sin resultados', empty_clients:'Aún no hay clientes', empty_convs:'Aún no hay conversaciones', no_msgs:'Sin mensajes guardados', no_tpl:'Sin plantillas aún',
       flash_saved:'✓ Guardado', flash_err:'✕ Error', imp_ing:'⏳ Importando ', imp_new:'nuevos', imp_upd:'act.', enr_ing:'⏳ Leyendo chats…', enr_done:'actualizados',
-      al_status:'No se pudo guardar el estado', al_pkg:'No se pudo guardar el paquete', al_nolead:'No se han encontrado leads en el archivo (¿es el CSV de Meta Lead Ads?).', al_imp:'Error al importar', al_tpl:'No se pudieron guardar las plantillas',
+      al_status:'No se pudo guardar el estado', al_tags_max:'Máximo 20 etiquetas por lead', al_pkg:'No se pudo guardar el paquete', al_nolead:'No se han encontrado leads en el archivo (¿es el CSV de Meta Lead Ads?).', al_imp:'Error al importar', al_tpl:'No se pudieron guardar las plantillas',
       al_send:'No se pudo enviar: ', al_send2:'\n\nSi han pasado +24h desde el último mensaje del cliente, WhatsApp no permite texto libre (haría falta plantilla).', cfm_cancel:'¿Cancelar esta cita?',
       notify_wait:'🔔 Lead por responder', notify_hot:'🔴 Lead caliente (reserva)',
       view_table:'Tabla', view_kanban:'Kanban',
@@ -923,7 +923,7 @@
       store_redis:'🟢 Redis · persistent', store_ram:'🟠 RAM · NOT persistent — set up Redis',
       empty_results:'No results', empty_clients:'No clients yet', empty_convs:'No conversations yet', no_msgs:'No saved messages', no_tpl:'No templates yet',
       flash_saved:'✓ Saved', flash_err:'✕ Error', imp_ing:'⏳ Importing ', imp_new:'new', imp_upd:'upd.', enr_ing:'⏳ Reading chats…', enr_done:'updated',
-      al_status:"Couldn't save status", al_pkg:"Couldn't save package", al_nolead:'No leads found in the file (is it the Meta Lead Ads CSV?).', al_imp:'Import error', al_tpl:"Couldn't save templates",
+      al_status:"Couldn't save status", al_tags_max:'Maximum 20 tags per lead', al_pkg:"Couldn't save package", al_nolead:'No leads found in the file (is it the Meta Lead Ads CSV?).', al_imp:'Import error', al_tpl:"Couldn't save templates",
       al_send:"Couldn't send: ", al_send2:"\n\nIf it's been 24h+ since the customer's last message, WhatsApp blocks free text (a template is required).", cfm_cancel:'Cancel this appointment?',
       notify_wait:'🔔 Lead to reply', notify_hot:'🔴 Hot lead (booking)',
       view_table:'Table', view_kanban:'Kanban',
@@ -1202,7 +1202,7 @@
       + '<div class="edit"><label>'+t('e_followup')+'</label><input id="edFollow" type="date" value="'+(l.nextFollowUp?esc(String(l.nextFollowUp).slice(0,10)):'')+'"></div>'
       + '<button class="savebtn" id="edSave" onclick="saveLeadFields()">'+t('e_savecard')+'</button>'
       + '<div class="edit"><label>'+t('e_tags')+'</label><div class="tags" id="edTags">'+tagsChips(l)+'</div>'
-        + '<div style="display:flex;gap:6px;margin-top:6px"><input id="edTagNew" placeholder="'+t('ph_tag')+'" style="flex:1"><button class="savebtn" style="width:auto;margin:0;padding:8px 12px" onclick="leadAddTag()">+</button></div></div>'
+        + '<div style="display:flex;gap:6px;margin-top:6px"><input id="edTagNew" maxlength="40" placeholder="'+t('ph_tag')+'" style="flex:1"><button class="savebtn" style="width:auto;margin:0;padding:8px 12px" onclick="leadAddTag()">+</button></div></div>'
       + '<div class="edit"><label>'+t('e_notes')+'</label><textarea id="edNotes" placeholder="'+t('ph_notes')+'">'+esc(l.notes||'')+'</textarea>'
         + '<button class="savebtn" id="edNotesSave" onclick="saveNote()">'+t('e_savenotes')+'</button></div>'
       + '<div style="display:flex;gap:8px;margin-top:10px">'
@@ -1227,8 +1227,9 @@
     }).join('')+'</div>';
   }
   function leadAddTag(){
-    if(!curLead) return; var inp=document.getElementById('edTagNew'), v=(inp.value||'').trim(); if(!v) return;
+    if(!curLead) return; var inp=document.getElementById('edTagNew'), v=(inp.value||'').trim().slice(0,40); if(!v) return;
     var tags=Array.isArray(curLead.tags)?curLead.tags.slice():[]; if(tags.indexOf(v)>=0){ inp.value=''; return; }
+    if(tags.length>=20){ alert(t('al_tags_max')); return; }
     tags.push(v);
     apiPost('lead',{phone:curLead.phone,tags:tags}).then(function(r){ if(!r.ok) throw 0; syncLead({tags:tags}); inp.value=''; document.getElementById('edTags').innerHTML=tagsChips(curLead); if(document.getElementById('app').classList.contains('dbmode')) renderTable(); }).catch(function(){ alert(t('al_save')); });
   }
