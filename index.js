@@ -59,6 +59,8 @@ const {
   MAIL_COMPANY,            // pie legal del email (nombre + dirección física — obligatorio anti-spam)
   MAIL_UNSUB_SECRET,       // firma los links de baja; si falta, se usa ADMIN_PASSWORD como fallback
   MAIL_LOGO,               // (opcional) URL del logo para la cabecera del email; si no, se usa el nombre en texto
+  SUPABASE_URL,            // inventario de motos (BBM) — proyecto pntvipemiczzfrnhixlb
+  SUPABASE_ANON_KEY,       // key "anon": RLS ya da SELECT público en products/product_pricing/serialized_items
 } = process.env;
 
 // La BD del CRM es Redis (lead:phone + leads_index). El Google Sheet era un espejo
@@ -1668,6 +1670,23 @@ app.get("/admin/api/health", async (req, res) => {
     else count = Object.keys(fallbackLeads).length;
   } catch (e) { /* best-effort */ }
   res.json({ storage: redisClient ? "redis" : "ram", leads: count });
+});
+
+// Inventario de motos (Supabase, catálogo BBM): un catálogo por producto con su tarifa
+// y sus unidades físicas embebidas (PostgREST resuelve el join por la FK product_id).
+app.get("/admin/api/inventory", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return res.status(503).json({ error: "inventario no configurado (falta SUPABASE_URL/SUPABASE_ANON_KEY)" });
+  try {
+    const r = await axios.get(`${SUPABASE_URL}/rest/v1/products`, {
+      params: {
+        select: "id,name,model,sku,product_pricing(daily_rate,weekly_rate,fortnight_rate,monthly_rate,biannual_rate,yearly_rate),serialized_items(id,serial_number,license_plate,bbm_code,status,condition)",
+        order: "name.asc",
+      },
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    });
+    res.json(r.data);
+  } catch (e) { res.status(502).json({ error: e.response?.data?.message || e.message }); }
 });
 
 app.get("/admin/api/conv/:phone", async (req, res) => {
