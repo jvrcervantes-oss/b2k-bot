@@ -1899,6 +1899,33 @@ app.get("/admin/api/leads", async (req, res) => {
   try { res.json(await listLeads()); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Facturas: deriva de los eventos "paylink" (link generado) y "payment" (pago confirmado) que ya
+// quedan en el timeline de cada lead — no hay almacén aparte, es una vista sobre lo que ya existe.
+app.get("/admin/api/invoices", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try {
+    const leads = await listLeads();
+    const rows = [];
+    for (const l of leads) {
+      if (!Array.isArray(l.history)) continue;
+      for (const e of l.history) {
+        if (e.type !== "paylink" && e.type !== "payment") continue;
+        rows.push({
+          ts: e.ts,
+          phone: l.phone,
+          name: l.name || "",
+          model: l.model || "",
+          provider: e.provider || "",
+          amount: e.amount || 0,
+          kind: e.type, // "paylink" = link generado/enviado · "payment" = pago confirmado por el proveedor
+        });
+      }
+    }
+    rows.sort((a, b) => b.ts - a.ts);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Dashboard: por qué se enfrían los leads que no cerraron (último mensaje del bot antes del silencio).
 app.get("/admin/api/dropoff", async (req, res) => {
   if (!adminAuth(req, res)) return;

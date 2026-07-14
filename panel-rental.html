@@ -245,9 +245,11 @@
   #app.dashmode #list,#app.dashmode #chat,#app.dashmode #detail{display:none}
   #app.dashmode #dashView{display:flex}
   /* secciones a pantalla completa (media, newsletter) — mismo patrón que dbView */
-  #mediaView,#nlView,#simView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
+  #mediaView,#nlView,#simView,#invView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
   #app.mediamode #list,#app.mediamode #chat,#app.mediamode #detail{display:none}
   #app.mediamode #mediaView{display:flex}
+  #app.invmode #list,#app.invmode #chat,#app.invmode #detail{display:none}
+  #app.invmode #invView{display:flex}
   #app.nlmode #list,#app.nlmode #chat,#app.nlmode #detail{display:none}
   #app.nlmode #nlView{display:flex}
   #app.simmode #list,#app.simmode #chat,#app.simmode #detail{display:none}
@@ -458,7 +460,7 @@
     nav{position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;flex-direction:row;justify-content:space-around;align-items:center;padding:7px 4px calc(24px + env(safe-area-inset-bottom,0px));gap:0;z-index:60;border-top:1px solid var(--line);border-right:0;box-shadow:0 -4px 16px rgba(16,24,40,.06)}
     .brandrow,nav .spacer,nav .lbl{display:none}
     nav .ic{width:46px;height:40px;justify-content:center;padding:0;gap:0}
-    #dbView,#calView,#mediaView,#nlView,#simView,#dashView{grid-column:1/-1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+    #dbView,#calView,#mediaView,#nlView,#simView,#dashView,#invView{grid-column:1/-1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
     /* Conversaciones: lista por defecto; al abrir un chat = pantalla completa, sin barra */
     #list{display:flex;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
     #chat{display:none}
@@ -646,6 +648,7 @@
     <div class="ic on" id="navConv" data-ti="nav_conv" title="Conversaciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_conv">Conversaciones</span></div>
     <div class="ic" id="navCal" data-ti="nav_cal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_cal">Calendario</span></div>
     <div class="ic" id="navDb" data-ti="nav_db" title="Base de datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_db">Base de datos</span></div>
+    <div class="ic" id="navInv" data-ti="nav_inv" title="Facturas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 3h10a1 1 0 0 1 1 1v16l-3-2-2 2-2-2-2 2-2-2-3 2V4a1 1 0 0 1 1-1z"/><path d="M9 8h6M9 12h6M9 16h3" stroke-linecap="round"/></svg><span class="lbl" data-i18n="nav_inv">Facturas</span></div>
     <div class="ic" id="navMedia" data-ti="nav_media" title="Fotos y vídeos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_media">Fotos y vídeos</span></div>
     <div class="ic" id="navNewsletter" data-ti="nav_nl" title="Newsletter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_nl">Newsletter</span></div>
     <div class="ic" id="navSim" data-ti="nav_sim" title="Simulador"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12c0 4.418-4.03 8-9 8-1.06 0-2.076-.163-3.017-.463L3 21l1.35-3.746C3.494 15.85 3 14.482 3 13c0-4.418 4.03-8 9-8s9 3.582 9 8z" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 12h.01M12 12h.01M16 12h.01" stroke-linecap="round"/></svg><span class="lbl" data-i18n="nav_sim">Simulador</span></div>
@@ -745,6 +748,12 @@
     <div class="db-bulk" id="dbBulk" style="display:none"></div>
     <div class="db-wrap"><div id="dbTable"></div><div id="dbKanban" style="display:none"></div></div>
     <div class="db-foot" id="dbFoot"></div>
+  </div>
+
+  <!-- facturas: links de pago generados + pagos confirmados (Stripe/Xendit) -->
+  <div id="invView">
+    <div class="sec-top"><h2 data-i18n="nav_inv">Facturas</h2></div>
+    <div class="dash-scroll"><div class="dash-inner" id="invBody"></div></div>
   </div>
 
   <!-- sección: fotos y vídeos del bot -->
@@ -848,11 +857,24 @@
   var appts = [], calY = null, calM = null, editingApptId = null;
   var dropoff = null;
   function loadDropoff(cb){ api('dropoff').then(function(r){return r.json();}).then(function(D){ dropoff = D; if(cb) cb(); }).catch(function(){}); }
+  var invoices = null;
+  function loadInvoices(cb){ api('invoices').then(function(r){return r.json();}).then(function(D){ invoices = D; if(cb) cb(); }).catch(function(){}); }
+  function renderInvoices(){
+    var el=document.getElementById('invBody'); if(!el) return;
+    if(!invoices || !invoices.length){ el.innerHTML='<div class="dash-empty">'+t('inv_empty')+'</div>'; return; }
+    var rows=invoices.map(function(r){
+      var paid=r.kind==='payment';
+      var chipBg=paid?'var(--green-soft)':'var(--amber-soft)', chipFg=paid?'var(--green)':'var(--amber)';
+      var when=new Date(r.ts).toLocaleDateString(t('locale'),{day:'numeric',month:'short',year:'numeric'})+' · '+new Date(r.ts).toLocaleTimeString(t('locale'),{hour:'2-digit',minute:'2-digit'});
+      return '<div class="dlrow" onclick="dashOpenLead(\''+r.phone+'\')"><div class="dlic">'+(paid?'✅':'⏳')+'</div><div class="dlmain"><div class="dlt">'+esc(r.name||('+'+r.phone))+'</div><div class="dls">'+esc((r.provider||'').toUpperCase())+(r.model?' · '+esc(r.model):'')+' · '+when+'</div></div><span class="evchip" style="background:'+chipBg+';color:'+chipFg+'">'+(paid?t('inv_paid'):t('inv_sent'))+'</span><div class="dlw">'+(money(r.amount)||(r.amount+' IDR'))+'</div></div>';
+    }).join('');
+    el.innerHTML='<div class="dash-card">'+rows+'</div>';
+  }
 
   // ── i18n (ES / EN) ──────────────────────────────────────────────
   var I18N = {
     es:{ brand:'CRM BBM', login_title:'Panel de conversaciones', login_sub:'CRM BBM · acceso del equipo', ph_pw:'Contraseña', btn_enter:'Entrar', err_pw:'Contraseña incorrecta',
-      nav_conv:'Conversaciones', nav_cal:'Calendario', nav_db:'Base de datos', nav_media:'Fotos y vídeos', nav_theme:'Cambiar tema', nav_logout:'Salir', nav_lang:'English', nav_toggle:'Colapsar menú',
+      nav_conv:'Conversaciones', nav_cal:'Calendario', nav_db:'Base de datos', nav_inv:'Facturas', nav_media:'Fotos y vídeos', nav_theme:'Cambiar tema', nav_logout:'Salir', nav_lang:'English', nav_toggle:'Colapsar menú', inv_empty:'Aún no hay links de pago ni pagos registrados.', inv_paid:'Pagado', inv_sent:'Enviado',
       nav_dash:'Dashboard', da_kpi_won:'Motos alquiladas', da_week:'esta semana', da_kpi_rev:'Ingresos', da_rev_sub:'de alquileres ganados', da_kpi_pipe:'Pipeline abierto', da_act:'leads activos', da_kpi_conv:'Conversión', da_decided:'decididos', da_bystatus:'Leads por estado', da_leg_won:'ganados', da_leg_lost:'perdidos / no-show', da_next:'Próximas citas', da_viewcal:'Ver calendario →', da_viewdb:'Ver base de datos →', da_top:'Motos alquiladas', da_none:'Sin datos todavía', da_nocitas:'No hay citas próximas', da_s_new:'Nuevos', da_s_quoted:'Cotizados', da_s_won:'Ganados', da_s_lost:'Perdidos', da_s_noshow:'No-show',
       da_kpi_out:'En la calle', da_out_sub:'con devolución pendiente', da_ev:'Entregas y devoluciones', da_ev_del:'Entrega', da_ev_ret:'Devolución', da_noev:'Nada programado con fecha. Rellena "Fecha inicio" y "Fecha devolución" en la ficha del lead (o deja que el bot las capture).', e_return:'Fecha devolución', c_return:'Devolución', ph_date:'p. ej. 2026-07-20',
       da_dropoff:'Por qué no cierran', da_dropoff_list:'Leads fríos recientes', da_dropoff_empty:'Sin leads fríos que analizar (ningún lead lleva 3+ días sin novedad).', da_dropoff_scanned:'Analizados {n} de {t} leads fríos',
@@ -898,7 +920,7 @@
       tl_empty:'Sin actividad registrada', tl_created:'Lead creado', tl_imported:'Importado de Meta', tl_status:'Estado', tl_owner:'Asignado a', tl_appt:'Cita agendada', tl_note:'Nota actualizada', tl_tag:'Etiqueta añadida', tl_archived:'Archivado', tl_restored:'Restaurado', tl_enriched:'Datos enriquecidos', tl_outreach:'Conversación iniciada (intro)', tl_fu_reminded:'Recordatorio de seguimiento enviado', tl_newsletter:'Newsletter enviado', tl_payment:'Pago recibido',
       al_save:'No se pudo guardar', edit_tpl:'✎ Editar plantillas…', locale:'es-ES' },
     en:{ brand:'CRM BBM', login_title:'Conversations panel', login_sub:'CRM BBM · team access', ph_pw:'Password', btn_enter:'Sign in', err_pw:'Wrong password',
-      nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_media:'Photos & videos', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español', nav_toggle:'Collapse menu',
+      nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_inv:'Invoices', nav_media:'Photos & videos', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español', nav_toggle:'Collapse menu', inv_empty:'No payment links or payments recorded yet.', inv_paid:'Paid', inv_sent:'Sent',
       nav_dash:'Dashboard', da_kpi_won:'Bikes rented', da_week:'this week', da_kpi_rev:'Revenue', da_rev_sub:'from won rentals', da_kpi_pipe:'Open pipeline', da_act:'active leads', da_kpi_conv:'Conversion', da_decided:'decided', da_bystatus:'Leads by status', da_leg_won:'won', da_leg_lost:'lost / no-show', da_next:'Upcoming appointments', da_viewcal:'View calendar →', da_viewdb:'View database →', da_top:'Bikes rented', da_none:'No data yet', da_nocitas:'No upcoming appointments', da_s_new:'New', da_s_quoted:'Quoted', da_s_won:'Won', da_s_lost:'Lost', da_s_noshow:'No-show',
       da_kpi_out:'Out now', da_out_sub:'awaiting return', da_ev:'Deliveries & returns', da_ev_del:'Delivery', da_ev_ret:'Return', da_noev:'Nothing scheduled with a date. Fill "Start date" and "Return date" on the lead (or let the bot capture them).', e_return:'Return date', c_return:'Return', ph_date:'e.g. 2026-07-20',
       da_dropoff:'Why deals don\'t close', da_dropoff_list:'Recently cold leads', da_dropoff_empty:'No cold leads to analyze (no lead has been quiet for 3+ days).', da_dropoff_scanned:'Analyzed {n} of {t} cold leads',
@@ -973,7 +995,8 @@
     if(app.classList.contains('dashmode')) renderDash();
     if(app.classList.contains('mediamode')) renderMediaRows();
     if(app.classList.contains('nlmode')) nlUpdateCount();
-    var inSection=['dbmode','calmode','mediamode','nlmode','dashmode'].some(function(m){return app.classList.contains(m);});
+    if(app.classList.contains('invmode')) renderInvoices();
+    var inSection=['dbmode','calmode','mediamode','nlmode','dashmode','invmode'].some(function(m){return app.classList.contains(m);});
     if(active && !inSection) open_(active);
   }
   // Reconstruye las estructuras con texto traducido según el idioma activo.
@@ -2254,14 +2277,15 @@
       .then(function(j){ btn.disabled=false; btn.textContent=orig; return j; }, function(e){ btn.disabled=false; btn.textContent=orig; });
   }
 
-  function clearModes(a){ a.classList.remove('calmode','dbmode','mediamode','nlmode','simmode','dashmode'); }
-  function setNav(id){ ['navConv','navCal','navDb','navMedia','navNewsletter','navSim'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
+  function clearModes(a){ a.classList.remove('calmode','dbmode','mediamode','nlmode','simmode','dashmode','invmode'); }
+  function setNav(id){ ['navConv','navCal','navDb','navInv','navMedia','navNewsletter','navSim'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
 
   function setUrl(p){ try{ history.replaceState(null,'',p); }catch(e){} }
   document.getElementById('navConv').onclick=function(){ clearModes(document.getElementById('app')); setNav('navConv'); setUrl('/admin'); };
   document.getElementById('navDash').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dashmode'); setNav('navDash'); setUrl('/admin/dash'); renderDash(); loadAppts(renderDash); loadDropoff(renderDash); api('leads').then(function(r){return r.json();}).then(function(L){ leads=L; renderDash(); }).catch(function(){}); };
   document.getElementById('navCal').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('calmode'); setNav('navCal'); setUrl('/admin'); buildLeadsDL(); loadAppts(renderCal); };
   document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dbmode'); setNav('navDb'); setUrl('/admin/db'); dbPage=1; loadHealth(); loadAppts(renderDb); };
+  document.getElementById('navInv').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('invmode'); setNav('navInv'); setUrl('/admin'); renderInvoices(); loadInvoices(renderInvoices); };
   document.getElementById('navMedia').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('mediamode'); setNav('navMedia'); setUrl('/admin'); openMedia(); };
   document.getElementById('navNewsletter').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('nlmode'); setNav('navNewsletter'); setUrl('/admin'); openNewsletter(); };
   document.getElementById('navSim').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('simmode'); setNav('navSim'); setUrl('/admin'); };
