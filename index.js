@@ -335,6 +335,7 @@ const LEAD_KEYMAP = {
   model: "model",
   plan: "plan",
   start_date: "startDate", startdate: "startDate",
+  end_date: "endDate", enddate: "endDate", return_date: "endDate", returndate: "endDate",
   delivery_location: "deliveryLocation", deliverylocation: "deliveryLocation", delivery: "deliveryLocation",
   insurance_tier: "insuranceTier", insurancetier: "insuranceTier", insurance: "insuranceTier",
   payment_method: "paymentMethod", paymentmethod: "paymentMethod", payment: "paymentMethod",
@@ -406,7 +407,7 @@ async function logEvent(phone, type, meta) {
 // Para leads antiguos (p.ej. Keith) cuyos datos están en el chat pero no en la ficha.
 const EXTRACT_MODEL = process.env.EXTRACT_MODEL || MODEL;
 const KEY_FIELDS = BOT_VERTICAL === "rental"
-  ? ["email", "country", "model", "plan", "startDate", "deliveryLocation"]
+  ? ["email", "country", "model", "plan", "startDate", "endDate", "deliveryLocation"]
   : ["email", "country", "tour", "package", "riders", "pillions", "travelDate"];
 function leadMissingKeyFields(l) {
   if (!l) return true;
@@ -435,7 +436,7 @@ async function enrichLeadFromConversation(phone, { force = false } = {}) {
           'Return ONLY a compact JSON object — no prose, no code fences. Keys: ' +
           'name, email, country, model (vehicle model the customer wants), ' +
           'plan (rental period: daily/weekly/fortnight/monthly/semestral/annual), ' +
-          'startDate (free text like "next Monday" or a date), deliveryLocation (free text). ' +
+          'startDate (free text like "next Monday" or a date), endDate (return/end date of the rental, free text or a date), deliveryLocation (free text). ' +
           'Use null for anything not clearly stated by the customer. Never guess.'
         : 'You extract CRM fields from a WhatsApp sales chat for a motorcycle tour company. ' +
           'Return ONLY a compact JSON object — no prose, no code fences. Keys: ' +
@@ -454,7 +455,7 @@ async function enrichLeadFromConversation(phone, { force = false } = {}) {
   // Solo rellenar campos VACÍOS: nunca pisar lo que ya hay (p.ej. ediciones manuales).
   const fields = {};
   const textFields = BOT_VERTICAL === "rental"
-    ? ["name", "email", "country", "model", "plan", "startDate", "deliveryLocation"]
+    ? ["name", "email", "country", "model", "plan", "startDate", "endDate", "deliveryLocation"]
     : ["name", "email", "country", "tour", "package", "travelDate"];
   textFields.forEach((k) => {
     if (data[k] && (lead[k] == null || lead[k] === "")) fields[k] = String(data[k]).slice(0, 120);
@@ -922,7 +923,7 @@ LEAD DATA TAGGING — fill the CRM as you learn things (do this consistently):
 - Whenever you LEARN or CONFIRM a concrete fact about the lead, append a SILENT data tag at the very end of your message, on its own new line:
   [LEAD key=value; key=value]
 - It is stripped before sending — the customer NEVER sees it. Include ONLY the fields you are now sure of; omit anything you don't know yet. NEVER guess or invent a value.
-- Valid keys: model (bike/scooter model) · plan (daily/weekly/monthly/semestral/annual) · start_date · delivery_location · insurance_tier · payment_method · value (total quoted price for THEIR chosen bike+plan, digits only in IDR, e.g. value=2450000 — update it if the quote changes) · name · email · country · tags (short labels, comma-separated) · followup (a date YYYY-MM-DD for the next time the team should reach out).
+- Valid keys: model (bike/scooter model) · plan (daily/weekly/monthly/semestral/annual) · start_date · end_date (return/end date of the rental — when you know the start date and plan/duration, compute and tag it as YYYY-MM-DD) · delivery_location · insurance_tier · payment_method · value (total quoted price for THEIR chosen bike+plan, digits only in IDR, e.g. value=2450000 — update it if the quote changes) · name · email · country · tags (short labels, comma-separated) · followup (a date YYYY-MM-DD for the next time the team should reach out).
 - Whenever you quote a concrete total price for the customer's chosen bike and plan, include value=<digits> in the LEAD tag — it feeds the revenue metrics in the CRM. Only the price of what they're actually leaning toward, never a range.
 - Send it the moment you learn each thing, and again (with the fuller set) as more is confirmed — re-sending a known field is fine, it just updates the record.
 - WAITLIST / DEFER — MANDATORY, NEVER SKIP. The instant the customer defers ("let me think about it", "maybe next month", "not right now"), you MUST end THAT SAME message with a LEAD tag carrying a followup date so they aren't silently lost. A promise like "I'll make a note" WITHOUT the tag = the lead is silently lost. Never do that.
@@ -1799,7 +1800,7 @@ app.post("/admin/api/lead", async (req, res) => {
   // Incluye los campos del vertical rental (model/plan/...): el panel-rental los envía y sin
   // ellos aquí se descartaban en silencio — editar la ficha de BBM perdía esos datos.
   ["name", "country", "email", "tour", "package", "riders", "pillions", "travelDate", "owner", "nextFollowUp", "tags", "archived",
-   "model", "plan", "startDate", "deliveryLocation", "insuranceTier", "paymentMethod", "dealValue"].forEach((k) => {
+   "model", "plan", "startDate", "endDate", "deliveryLocation", "insuranceTier", "paymentMethod", "dealValue"].forEach((k) => {
     if (req.body[k] != null) fields[k] = req.body[k];
   });
   if (fields.dealValue != null) { // normaliza: "2,450,000" / "2450000 IDR" / "" → entero (0 = borrar)
