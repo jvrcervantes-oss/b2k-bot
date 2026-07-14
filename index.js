@@ -36,8 +36,10 @@ const {
   STRIPE_SUCCESS_URL,
   STRIPE_CANCEL_URL,
   XENDIT_SECRET_KEY,       // pasarela Xendit (alternativa/complemento a Stripe — QRIS, VA, e-wallets, tarjeta)
-  INVENTORY_SHEET_ID,      // Google Sheet de inventario de motos (pestaña "Modelo | Total unidades")
-  INVENTORY_TAB,           // nombre de la pestaña del Sheet de inventario (default "Inventario")
+  XENDIT_CALLBACK_TOKEN,   // token de verificación del webhook de Xendit (Dashboard → Callbacks, no es el secret key)
+  STRIPE_WEBHOOK_SECRET,   // firma del webhook de Stripe (Dashboard → Webhooks → signing secret, whsec_...)
+  SUPABASE_URL,            // proyecto Supabase para el inventario de motos (tabla moto_inventory)
+  SUPABASE_SERVICE_KEY,    // service_role key de ese proyecto Supabase
   ADMIN_PASSWORD,
   ALERT_TEMPLATE_NAME,
   ALERT_TEMPLATE_LANG,
@@ -1106,11 +1108,11 @@ async function writeLeadToSheet(phone, vals) {
   }
 }
 
-// ─── INVENTARIO DE MOTOS (Google Sheet propio: "Modelo | Total unidades") ──────────
-// Independiente del CRM_SHEET_SYNC de arriba (ese es el espejo heredado de leads). Usa la misma
-// Service Account, otra hoja: INVENTORY_SHEET_ID. Disponibilidad = total del Sheet − leads
-// status=won cuyo rango startDate..endDate cubre hoy (mismo cálculo que "En la calle" del dashboard).
-const INVENTORY_TTL_MS = 5 * 60 * 1000; // 5 min: evita leer el Sheet + escanear leads en cada mensaje del bot
+// ─── INVENTARIO DE MOTOS (Supabase: tabla "moto_inventory", columnas model/total_units) ──
+// Vía REST de Supabase (PostgREST) con axios — igual que Xendit, sin añadir el SDK de Supabase
+// para dos queries. Disponibilidad = total en Supabase − leads status=won cuyo rango
+// startDate..endDate cubre hoy (mismo cálculo que "En la calle" del dashboard).
+const INVENTORY_TTL_MS = 5 * 60 * 1000; // 5 min: evita leer Supabase + escanear leads en cada mensaje del bot
 let inventorySnap = null, inventorySnapAt = 0;
 
 // mismo parser dd/mm/aaaa + ISO que dashDate() en el panel — texto libre no parseable no cuenta.
@@ -1124,16 +1126,16 @@ function parseLeadDate(s) {
 }
 
 async function computeInventorySnapshot() {
-  if (!INVENTORY_SHEET_ID || !GOOGLE_SERVICE_ACCOUNT) return null;
-  const sheets = await getSheetsClient();
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: INVENTORY_SHEET_ID,
-    range: `${INVENTORY_TAB || "Inventario"}!A2:B500`,
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) return null;
+  const res = await axios.get(`${SUPABASE_URL}/rest/v1/moto_inventory`, {
+    params: { select: "model,total_units" },
+    headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
+    timeout: 10000,
   });
   const totals = {};
-  for (const row of res.data.values || []) {
-    const model = (row[0] || "").trim();
-    const n = parseInt(row[1], 10);
+  for (const row of res.data || []) {
+    const model = (row.model || "").trim();
+    const n = parseInt(row.total_units, 10);
     if (model && !isNaN(n)) totals[model] = n;
   }
   if (!Object.keys(totals).length) return { totals: {}, available: {} };
@@ -1152,14 +1154,14 @@ async function computeInventorySnapshot() {
   return { totals, available };
 }
 
-// Cacheado: si el Sheet falla (no compartido, cuota, etc.) se queda con la última copia buena en
-// vez de tirar el chequeo de stock — mejor stock desactualizado que romper el flujo de venta.
+// Cacheado: si Supabase falla (clave mal puesta, tabla no creada, etc.) se queda con la última
+// copia buena en vez de tirar el chequeo de stock — mejor stock desactualizado que romper la venta.
 async function getInventorySnapshot() {
   if (inventorySnap && Date.now() - inventorySnapAt < INVENTORY_TTL_MS) return inventorySnap;
   try {
     inventorySnap = await computeInventorySnapshot();
   } catch (e) {
-    console.error(`[${PROJECT_NAME}] Inventario: error leyendo el Sheet — ${e.message}`);
+    console.error(`[${PROJECT_NAME}] Inventario: error leyendo Supabase — ${e.response ? JSON.stringify(e.response.data) : e.message}`);
   }
   inventorySnapAt = Date.now();
   return inventorySnap;
@@ -1197,10 +1199,11 @@ async function createStripeSession(numRiders) {
 // ─── PAGOS RENTAL (Stripe genérico + Xendit) — importe dinámico en IDR, no un deposit fijo por persona ──
 // Distinta de createStripeSession (arriba): esa es específica del tour ($1000/rider). Esta la usa
 // el panel para cobrar el importe que se acuerde (deposit o total) en un alquiler de moto.
-async function createStripeCheckoutIDR(amountIDR, description) {
+async function createStripeCheckoutIDR(amountIDR, description, phone) {
   if (!stripeClient) return null;
   try {
     // IDR es moneda "zero-decimal" en Stripe: unit_amount va en IDR enteros, sin ×100.
+    // client_reference_id = phone: así el webhook sabe a qué lead aplicar el pago.
     const session = await stripeClient.checkout.sessions.create({
       payment_method_types: ["card"],
       line_items: [{
@@ -1208,6 +1211,8 @@ async function createStripeCheckoutIDR(amountIDR, description) {
         quantity: 1,
       }],
       mode: "payment",
+      client_reference_id: phone,
+      metadata: { phone },
       success_url: STRIPE_SUCCESS_URL || "https://balibestmotorcycle.com/?booking=confirmed",
       cancel_url: STRIPE_CANCEL_URL || "https://balibestmotorcycle.com/",
     });
@@ -1222,10 +1227,11 @@ async function createStripeCheckoutIDR(amountIDR, description) {
 async function createXenditInvoice(amountIDR, description, phone) {
   if (!XENDIT_SECRET_KEY) return null;
   try {
+    // external_id con prefijo fijo "paylink_" + phone: el webhook lo parsea para saber qué lead pagó.
     const res = await axios.post(
       "https://api.xendit.co/v2/invoices",
       {
-        external_id: `${PROJECT_NAME || "bot"}-${phone}-${Date.now()}`,
+        external_id: `paylink_${phone}_${Date.now()}`,
         amount: Math.round(amountIDR),
         currency: "IDR",
         description: description.slice(0, 250),
@@ -1494,6 +1500,86 @@ async function alreadyProcessed(wamid) {
   if (fallbackSeenWamids.size > 5000) fallbackSeenWamids.clear(); // ponytail: cap burdo; Redis es el camino real
   return false;
 }
+
+// ─── PAGOS: webhooks de Xendit y Stripe (detectan el pago solos y marcan el CRM) ─────
+// Idempotencia: mismo patrón NX+TTL que alreadyProcessed() de Meta, con su propio prefijo de
+// clave — Xendit/Stripe pueden reintentar la entrega y no debe duplicar el aviso al owner.
+const fallbackSeenPayEvents = new Set();
+async function alreadyProcessedPayment(id) {
+  if (!id) return false;
+  if (redisClient) {
+    const first = await redisClient.set(`paidevt:${id}`, "1", { NX: true, EX: 7 * 86400 });
+    return first === null;
+  }
+  if (fallbackSeenPayEvents.has(id)) return true;
+  fallbackSeenPayEvents.add(id);
+  if (fallbackSeenPayEvents.size > 5000) fallbackSeenPayEvents.clear(); // ponytail: cap burdo, igual que el de Meta
+  return false;
+}
+
+// Marca el lead como pagado: status=won, dealValue si no lo tenía ya, timeline + aviso al owner.
+// Compartida por los dos webhooks para no duplicar la lógica de negocio.
+async function markLeadPaid(phone, provider, amountIDR) {
+  const lead = await getLead(phone);
+  const prevStatus = await getStatus(phone);
+  if (prevStatus !== "won") await setStatus(phone, "won");
+  if (!lead || !(parseInt(lead.dealValue, 10) > 0)) await updateLeadFields(phone, { dealValue: Math.round(amountIDR) });
+  await logEvent(phone, "payment", { provider, amount: Math.round(amountIDR), from: prevStatus || "", to: "won" });
+  console.log(`[${PROJECT_NAME}] Pago confirmado (${provider}): ${phone} — ${amountIDR} IDR → status=won`);
+  if (OWNER_PHONE) {
+    await sendWhatsApp(
+      OWNER_PHONE,
+      `💰 ${PROJECT_NAME} — PAGO RECIBIDO (${provider === "xendit" ? "Xendit" : "Stripe"})\n\n*${(lead && lead.name) || phone}*\nTel: +${phone}\nImporte: ${Math.round(amountIDR).toLocaleString("id-ID")} IDR\n\nMarcado como Ganado en el CRM automáticamente.`
+    );
+  }
+}
+
+// Xendit verifica con un token estático en la cabecera (Dashboard → Developers → Callbacks),
+// no es una firma HMAC — comparación en tiempo constante igual que el resto de tokens del bot.
+app.post("/webhook/xendit", async (req, res) => {
+  if (!XENDIT_CALLBACK_TOKEN) { console.warn(`[${PROJECT_NAME}] /webhook/xendit recibido pero falta XENDIT_CALLBACK_TOKEN — ignorado`); return res.sendStatus(503); }
+  const token = req.get("x-callback-token") || "";
+  const a = Buffer.from(token), b = Buffer.from(XENDIT_CALLBACK_TOKEN);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) { console.warn(`[${PROJECT_NAME}] /webhook/xendit token inválido`); return res.sendStatus(403); }
+  try {
+    const { status, external_id, amount, id } = req.body || {};
+    if (status !== "PAID") return res.sendStatus(200); // solo nos interesa el pago confirmado
+    if (await alreadyProcessedPayment(`xendit:${id || external_id}`)) return res.sendStatus(200);
+    const m = /^paylink_(\d+)_/.exec(external_id || "");
+    if (!m) { console.warn(`[${PROJECT_NAME}] Xendit PAID sin phone parseable en external_id: ${external_id}`); return res.sendStatus(200); }
+    await markLeadPaid(m[1], "xendit", amount);
+    res.sendStatus(200);
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] /webhook/xendit error:`, e.message);
+    res.sendStatus(500); // 500 → Xendit reintenta; el idempotency check de arriba hace el reintento seguro
+  }
+});
+
+// Stripe verifica con la firma HMAC oficial del SDK sobre el rawBody (mismo req.rawBody que ya
+// captura express.json() para el webhook de Meta) — Dashboard → Webhooks → signing secret.
+app.post("/webhook/stripe", async (req, res) => {
+  if (!stripeClient || !STRIPE_WEBHOOK_SECRET) { console.warn(`[${PROJECT_NAME}] /webhook/stripe recibido pero falta STRIPE_WEBHOOK_SECRET — ignorado`); return res.sendStatus(503); }
+  let event;
+  try {
+    event = stripeClient.webhooks.constructEvent(req.rawBody, req.get("stripe-signature"), STRIPE_WEBHOOK_SECRET);
+  } catch (e) {
+    console.warn(`[${PROJECT_NAME}] /webhook/stripe firma inválida:`, e.message);
+    return res.sendStatus(403);
+  }
+  try {
+    if (event.type !== "checkout.session.completed") return res.sendStatus(200);
+    const session = event.data.object;
+    if (session.payment_status !== "paid") return res.sendStatus(200);
+    if (await alreadyProcessedPayment(`stripe:${event.id}`)) return res.sendStatus(200);
+    const phone = session.client_reference_id || (session.metadata && session.metadata.phone);
+    if (!phone) { console.warn(`[${PROJECT_NAME}] Stripe checkout.session.completed sin phone — sesión ${session.id}`); return res.sendStatus(200); }
+    await markLeadPaid(phone, "stripe", session.amount_total || 0); // IDR es zero-decimal: amount_total ya viene en IDR enteros
+    res.sendStatus(200);
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] /webhook/stripe error:`, e.message);
+    res.sendStatus(500); // 500 → Stripe reintenta; el idempotency check de arriba hace el reintento seguro
+  }
+});
 
 app.post("/webhook", async (req, res) => {
   if (!validSignature(req)) {
@@ -1878,7 +1964,7 @@ app.post("/admin/api/paylink", async (req, res) => {
   let url = null;
   if (provider === "stripe") {
     if (!stripeClient) return res.status(503).json({ error: "Stripe no configurado (falta STRIPE_SECRET_KEY en Railway)" });
-    url = await createStripeCheckoutIDR(amt, desc);
+    url = await createStripeCheckoutIDR(amt, desc, phone);
   } else if (provider === "xendit") {
     if (!XENDIT_SECRET_KEY) return res.status(503).json({ error: "Xendit no configurado (falta XENDIT_SECRET_KEY en Railway)" });
     url = await createXenditInvoice(amt, desc, phone);
