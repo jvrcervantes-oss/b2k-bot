@@ -35,6 +35,12 @@ const {
   STRIPE_SECRET_KEY,
   STRIPE_SUCCESS_URL,
   STRIPE_CANCEL_URL,
+  XENDIT_SECRET_KEY,       // pasarela Xendit (alternativa/complemento a Stripe — QRIS, VA, e-wallets, tarjeta)
+  XENDIT_CALLBACK_TOKEN,   // token de verificación del webhook de Xendit (Dashboard → Callbacks, no es el secret key)
+  STRIPE_WEBHOOK_SECRET,   // firma del webhook de Stripe (Dashboard → Webhooks → signing secret, whsec_...)
+  SUPABASE_URL,            // proyecto Supabase para el inventario de motos (pntvipemiczzfrnhixlb)
+  SUPABASE_SERVICE_KEY,    // service_role key de ese proyecto Supabase
+  SUPABASE_ANON_KEY,       // key "anon": RLS ya da SELECT público en products/product_pricing/serialized_items
   ADMIN_PASSWORD,
   ALERT_TEMPLATE_NAME,
   ALERT_TEMPLATE_LANG,
@@ -59,8 +65,6 @@ const {
   MAIL_COMPANY,            // pie legal del email (nombre + dirección física — obligatorio anti-spam)
   MAIL_UNSUB_SECRET,       // firma los links de baja; si falta, se usa ADMIN_PASSWORD como fallback
   MAIL_LOGO,               // (opcional) URL del logo para la cabecera del email; si no, se usa el nombre en texto
-  SUPABASE_URL,            // inventario de motos (BBM) — proyecto pntvipemiczzfrnhixlb
-  SUPABASE_ANON_KEY,       // key "anon": RLS ya da SELECT público en products/product_pricing/serialized_items
 } = process.env;
 
 // La BD del CRM es Redis (lead:phone + leads_index). El Google Sheet era un espejo
@@ -203,6 +207,52 @@ async function listLeads() {
     followups: await getFollowupCount(l.phone),
     emailUnsub: !!(l.email && unsub.has(String(l.email).toLowerCase().trim())),
   })));
+}
+
+// ─── ANÁLISIS DE ABANDONO (panel: por qué se enfría un lead que no cerró) ──
+// Clasifica el último mensaje del bot antes de que el cliente dejara de escribir.
+// ponytail: heurística de keywords sobre el texto, no NLP — si da falsos positivos
+// frecuentes, subir a un clasificador con Claude (mismo patrón que enrichLeadFromConversation).
+const DROPOFF_COLD_MS = 3 * 24 * 60 * 60 * 1000; // 3 días sin actividad = lead frío
+const DROPOFF_MAX_SCAN = 200; // tope de conversaciones leídas por request; se reporta scanned/total, no se oculta
+
+function classifyDropoff(text) {
+  const t = (text || "").toLowerCase();
+  if (!t) return "no_data";
+  if (/\b(idr|rp\.?\s?\d|precio|price|\d{1,3}\.\d{3}\.\d{3}|per (day|week|month|night|hour))\b/.test(t)) return "price";
+  if (/\b(delivery|entrega|ubicaci[oó]n|location|address|direcci[oó]n|canggu|berawa|pererenan|umalas|seminyak|kuta|sanur|ubud|uluwatu|denpasar|airport|aeropuerto)\b/.test(t)) return "location";
+  if (/\b(insurance|seguro|deposit|dep[oó]sito)\b/.test(t)) return "insurance_deposit";
+  if (/\b(passport|pasaporte|licen[sc]e|licencia|document|documento)\b/.test(t)) return "documents";
+  if (/\b(available|disponib|stock|modelo|model)\b/.test(t)) return "availability";
+  if (/\b(payment|pago|transfer|stripe|card|tarjeta)\b/.test(t)) return "payment";
+  return "other";
+}
+
+// Solo mira leads que no cerraron (status !== "won") y llevan DROPOFF_COLD_MS sin actividad.
+async function computeDropoff() {
+  const leads = await listLeads();
+  const now = Date.now();
+  const cold = leads
+    .filter((l) => !l.archived && l.status !== "won" && now - (l.updatedAt || 0) > DROPOFF_COLD_MS)
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const scan = cold.slice(0, DROPOFF_MAX_SCAN);
+  const buckets = {};
+  const items = [];
+  for (const l of scan) {
+    const conv = await getConversation(l.phone);
+    const lastBot = [...conv].reverse().find((m) => m.role === "assistant");
+    const category = lastBot ? classifyDropoff(lastBot.content) : "no_data";
+    buckets[category] = (buckets[category] || 0) + 1;
+    items.push({
+      phone: l.phone,
+      name: l.name || "",
+      status: l.status || "",
+      category,
+      updatedAt: l.updatedAt,
+      lastMessage: lastBot ? String(lastBot.content).slice(0, 160) : "",
+    });
+  }
+  return { total: cold.length, scanned: scan.length, buckets, items };
 }
 
 // Nivel de aviso ya enviado al owner para ese lead (anti-spam).
@@ -379,14 +429,26 @@ function parseLeadTag(reply) {
   return Object.keys(out).length ? out : null;
 }
 
+// Recorta cada tag a 40 caracteres, quita vacíos/duplicados y capa la lista a 20 —
+// única puerta de normalización, la usan tanto el auto-tag del bot como la edición manual del panel.
+function normalizeTags(arr) {
+  const seen = new Set(), out = [];
+  for (const raw of Array.isArray(arr) ? arr : []) {
+    const v = String(raw).trim().slice(0, 40);
+    if (!v || seen.has(v)) continue;
+    seen.add(v); out.push(v);
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
 // Guarda los campos extraídos en la BD (Redis) + Sheet, sin pisar con vacíos.
 async function captureLeadData(phone, fields) {
   if (!fields || !Object.keys(fields).length) return;
   // Las etiquetas se UNEN con las existentes (no pisan las que puso el estudio a mano).
   if (Array.isArray(fields.tags)) {
     const prev = (await getLead(phone)) || {};
-    const set = new Set([...(Array.isArray(prev.tags) ? prev.tags : []), ...fields.tags].map((s) => String(s).trim()).filter(Boolean));
-    fields = { ...fields, tags: Array.from(set).slice(0, 20) };
+    fields = { ...fields, tags: normalizeTags([...(Array.isArray(prev.tags) ? prev.tags : []), ...fields.tags]) };
     // await OBLIGATORIO: sin él, el SET de logEvent (solo history, leído pre-tags) aterriza
     // DESPUÉS del write de abajo y machaca tags/followup — los tags nunca llegaban a verse.
     if (fields.tags.length) await logEvent(phone, "tag", { to: fields.tags[fields.tags.length - 1] });
@@ -898,7 +960,9 @@ CLOSING — DIRECT IN THE CHAT, THIS IS A RENTAL, NOT A MULTI-DAY TOUR (read car
 - Once you know the bike/model, plan/duration, delivery location and a rough start date, give the exact price and move straight to confirming the booking.
 - Confirm what's included (helmets, free delivery) and tell them the team will follow up shortly to finalize payment and delivery logistics.
 - Set [INTENT:booking] the moment the customer wants to reserve. Do NOT output [RIDERS:N] or [APPT:...] — those are tour-specific (they trigger a per-person tour deposit charge and a video-call scheduling flow) and do not apply to a bike rental.
-- Never stall ("I'll check availability") — bikes get confirmed directly; only escalate for something you genuinely can't answer from your context.
+- Don't stall with vague hedges ("let me check availability, I'll get back to you") — you have a LIVE STOCK block below (when it's present in your context) telling you exactly how many units of each model are free right now. Read it before confirming a specific model.
+- STOCK CHECK: if the model the customer wants shows 0 available in LIVE STOCK for the dates they want, say so plainly, don't confirm the booking, and immediately offer the closest available alternative (same tier, or the next tier up) that DOES have stock. If a model isn't listed in LIVE STOCK at all (no inventory data for it) or there's no LIVE STOCK block in your context, proceed exactly as before — don't invent a stock number, don't tell the customer to "wait for a check" either, just confirm normally.
+- RESEND: if the customer asks to resend a payment link the team already sent them ("can you send it again?", "resend the link"), output [RESEND_LINK] on its own new line. The server re-attaches the exact same link (no new charge). If no link was ever sent, don't output [RESEND_LINK] — say the team will send it shortly.
 
 COMMERCIAL INSTINCT — you're not just taking an order, you're selling. Stay direct (one line, then move
 on), but always look for the real opportunity to get BBM the better outcome:
@@ -940,6 +1004,19 @@ const BASE_INSTRUCTIONS = BOT_VERTICAL === "rental"
 
 function buildSystemPrompt() {
   return `${CONTEXT}\n\n${BASE_INSTRUCTIONS}`;
+}
+
+// Bloque de stock: va APARTE del system cacheado de arriba (mismo patrón que mediaHint en el
+// webhook/simulador) — cambia cada pocos minutos, y si viviera dentro del bloque con
+// cache_control se rompería el prompt caching en cada refresco de inventario.
+async function buildStockHint() {
+  if (BOT_VERTICAL !== "rental") return "";
+  const snap = await getInventorySnapshot();
+  if (!snap || !Object.keys(snap.available).length) return "";
+  const lines = Object.keys(snap.available).map((m) => `${m}: ${snap.available[m]}/${snap.totals[m]}`);
+  return "\n\nLIVE STOCK — units available now / total (refreshed every few minutes; a model NOT listed "
+    + "here has no inventory data yet, follow the normal flow for it — don't claim it's sold out):\n"
+    + lines.join("\n");
 }
 
 // ─── GOOGLE SHEETS ────────────────────────────────────────────────
@@ -1032,6 +1109,65 @@ async function writeLeadToSheet(phone, vals) {
   }
 }
 
+// ─── INVENTARIO DE MOTOS (Supabase: tabla "moto_inventory", columnas model/total_units) ──
+// Vía REST de Supabase (PostgREST) con axios — igual que Xendit, sin añadir el SDK de Supabase
+// para dos queries. Disponibilidad = total en Supabase − leads status=won cuyo rango
+// startDate..endDate cubre hoy (mismo cálculo que "En la calle" del dashboard).
+const INVENTORY_TTL_MS = 5 * 60 * 1000; // 5 min: evita leer Supabase + escanear leads en cada mensaje del bot
+let inventorySnap = null, inventorySnapAt = 0;
+
+// mismo parser dd/mm/aaaa + ISO que dashDate() en el panel — texto libre no parseable no cuenta.
+function parseLeadDate(s) {
+  if (!s) return null;
+  s = String(s).trim();
+  const m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
+  if (m) { let y = +m[3]; if (y < 100) y += 2000; const d = new Date(y, +m[2] - 1, +m[1]); return isNaN(d.getTime()) ? null : d; }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+async function computeInventorySnapshot() {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) return null;
+  const res = await axios.get(`${SUPABASE_URL}/rest/v1/moto_inventory`, {
+    params: { select: "model,total_units" },
+    headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
+    timeout: 10000,
+  });
+  const totals = {};
+  for (const row of res.data || []) {
+    const model = (row.model || "").trim();
+    const n = parseInt(row.total_units, 10);
+    if (model && !isNaN(n)) totals[model] = n;
+  }
+  if (!Object.keys(totals).length) return { totals: {}, available: {} };
+  const leads = await listLeads();
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  const active = {};
+  for (const l of leads) {
+    if (l.archived || l.status !== "won") continue;
+    const model = (l.model || "").trim();
+    if (!model || totals[model] == null) continue;
+    const sd = parseLeadDate(l.startDate), ed = parseLeadDate(l.endDate);
+    if (sd && ed && sd <= today && ed >= today) active[model] = (active[model] || 0) + 1;
+  }
+  const available = {};
+  for (const model of Object.keys(totals)) available[model] = Math.max(0, totals[model] - (active[model] || 0));
+  return { totals, available };
+}
+
+// Cacheado: si Supabase falla (clave mal puesta, tabla no creada, etc.) se queda con la última
+// copia buena en vez de tirar el chequeo de stock — mejor stock desactualizado que romper la venta.
+async function getInventorySnapshot() {
+  if (inventorySnap && Date.now() - inventorySnapAt < INVENTORY_TTL_MS) return inventorySnap;
+  try {
+    inventorySnap = await computeInventorySnapshot();
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] Inventario: error leyendo Supabase — ${e.response ? JSON.stringify(e.response.data) : e.message}`);
+  }
+  inventorySnapAt = Date.now();
+  return inventorySnap;
+}
+
 // ─── STRIPE CHECKOUT SESSION ─────────────────────────────────────
 async function createStripeSession(numRiders) {
   if (!stripeClient) return null;
@@ -1057,6 +1193,58 @@ async function createStripeSession(numRiders) {
     return session.url;
   } catch (e) {
     console.error(`[${PROJECT_NAME}] Stripe session error:`, e.message);
+    return null;
+  }
+}
+
+// ─── PAGOS RENTAL (Stripe genérico + Xendit) — importe dinámico en IDR, no un deposit fijo por persona ──
+// Distinta de createStripeSession (arriba): esa es específica del tour ($1000/rider). Esta la usa
+// el panel para cobrar el importe que se acuerde (deposit o total) en un alquiler de moto.
+async function createStripeCheckoutIDR(amountIDR, description, phone) {
+  if (!stripeClient) return null;
+  try {
+    // IDR es moneda "zero-decimal" en Stripe: unit_amount va en IDR enteros, sin ×100.
+    // client_reference_id = phone: así el webhook sabe a qué lead aplicar el pago.
+    const session = await stripeClient.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [{
+        price_data: { currency: "idr", product_data: { name: description.slice(0, 250) }, unit_amount: Math.round(amountIDR) },
+        quantity: 1,
+      }],
+      mode: "payment",
+      client_reference_id: phone,
+      metadata: { phone },
+      success_url: STRIPE_SUCCESS_URL || "https://balibestmotorcycle.com/?booking=confirmed",
+      cancel_url: STRIPE_CANCEL_URL || "https://balibestmotorcycle.com/",
+    });
+    console.log(`[${PROJECT_NAME}] Stripe (rental) session: ${amountIDR} IDR`);
+    return session.url;
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] Stripe (rental) session error:`, e.message);
+    return null;
+  }
+}
+
+async function createXenditInvoice(amountIDR, description, phone) {
+  if (!XENDIT_SECRET_KEY) return null;
+  try {
+    // external_id con prefijo fijo "paylink_" + phone: el webhook lo parsea para saber qué lead pagó.
+    const res = await axios.post(
+      "https://api.xendit.co/v2/invoices",
+      {
+        external_id: `paylink_${phone}_${Date.now()}`,
+        amount: Math.round(amountIDR),
+        currency: "IDR",
+        description: description.slice(0, 250),
+        success_redirect_url: STRIPE_SUCCESS_URL || "https://balibestmotorcycle.com/?booking=confirmed",
+        failure_redirect_url: STRIPE_CANCEL_URL || "https://balibestmotorcycle.com/",
+      },
+      { auth: { username: XENDIT_SECRET_KEY, password: "" }, timeout: 15000 }
+    );
+    console.log(`[${PROJECT_NAME}] Xendit invoice: ${amountIDR} IDR`);
+    return res.data && res.data.invoice_url;
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] Xendit invoice error:`, e.response ? JSON.stringify(e.response.data) : e.message);
     return null;
   }
 }
@@ -1314,6 +1502,117 @@ async function alreadyProcessed(wamid) {
   return false;
 }
 
+// ─── PAGOS: webhooks de Xendit y Stripe (detectan el pago solos y marcan el CRM) ─────
+// Idempotencia: mismo patrón NX+TTL que alreadyProcessed() de Meta, con su propio prefijo de
+// clave — Xendit/Stripe pueden reintentar la entrega y no debe duplicar el aviso al owner.
+const fallbackSeenPayEvents = new Set();
+async function alreadyProcessedPayment(id) {
+  if (!id) return false;
+  if (redisClient) {
+    const first = await redisClient.set(`paidevt:${id}`, "1", { NX: true, EX: 7 * 86400 });
+    return first === null;
+  }
+  if (fallbackSeenPayEvents.has(id)) return true;
+  fallbackSeenPayEvents.add(id);
+  if (fallbackSeenPayEvents.size > 5000) fallbackSeenPayEvents.clear(); // ponytail: cap burdo, igual que el de Meta
+  return false;
+}
+
+// Marca el lead como pagado: status=won, dealValue si no lo tenía ya, timeline + aviso al owner.
+// Compartida por los dos webhooks para no duplicar la lógica de negocio.
+// receiptUrl (opcional): recibo oficial del propio proveedor (Stripe receipt_url / Xendit invoice_url
+// re-consultado por id) — se manda al cliente en vez de inventar un recibo propio.
+async function markLeadPaid(phone, provider, amountIDR, receiptUrl) {
+  const lead = await getLead(phone);
+  const prevStatus = await getStatus(phone);
+  if (prevStatus !== "won") await setStatus(phone, "won");
+  if (!lead || !(parseInt(lead.dealValue, 10) > 0)) await updateLeadFields(phone, { dealValue: Math.round(amountIDR) });
+  await logEvent(phone, "payment", { provider, amount: Math.round(amountIDR), from: prevStatus || "", to: "won" });
+  console.log(`[${PROJECT_NAME}] Pago confirmado (${provider}): ${phone} — ${amountIDR} IDR → status=won`);
+
+  // Confirmación al propio cliente (no solo al owner) — queda en el chat como un mensaje más del bot.
+  const custMsg = `✅ Payment received — ${Math.round(amountIDR).toLocaleString("id-ID")} IDR. Thank you! Your booking is confirmed, our team will follow up shortly to arrange delivery.`
+    + (receiptUrl ? `\n\nYour receipt: ${receiptUrl}` : "");
+  const rCust = await sendWhatsAppResult(phone, custMsg);
+  if (rCust.ok) {
+    const history = await getConversation(phone);
+    history.push({ role: "assistant", content: custMsg, ts: Date.now(), by: "bot" });
+    await saveConversation(phone, history);
+  } else {
+    console.error(`[${PROJECT_NAME}] No se pudo confirmar el pago al cliente ${phone}: ${rCust.error}`);
+  }
+
+  if (OWNER_PHONE) {
+    await sendWhatsApp(
+      OWNER_PHONE,
+      `💰 ${PROJECT_NAME} — PAGO RECIBIDO (${provider === "xendit" ? "Xendit" : "Stripe"})\n\n*${(lead && lead.name) || phone}*\nTel: +${phone}\nImporte: ${Math.round(amountIDR).toLocaleString("id-ID")} IDR\n\nMarcado como Ganado en el CRM automáticamente.`
+    );
+  }
+}
+
+// Xendit verifica con un token estático en la cabecera (Dashboard → Developers → Callbacks),
+// no es una firma HMAC — comparación en tiempo constante igual que el resto de tokens del bot.
+app.post("/webhook/xendit", async (req, res) => {
+  if (!XENDIT_CALLBACK_TOKEN) { console.warn(`[${PROJECT_NAME}] /webhook/xendit recibido pero falta XENDIT_CALLBACK_TOKEN — ignorado`); return res.sendStatus(503); }
+  const token = req.get("x-callback-token") || "";
+  const a = Buffer.from(token), b = Buffer.from(XENDIT_CALLBACK_TOKEN);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) { console.warn(`[${PROJECT_NAME}] /webhook/xendit token inválido`); return res.sendStatus(403); }
+  try {
+    const { status, external_id, amount, id } = req.body || {};
+    if (status !== "PAID") return res.sendStatus(200); // solo nos interesa el pago confirmado
+    if (await alreadyProcessedPayment(`xendit:${id || external_id}`)) return res.sendStatus(200);
+    const m = /^paylink_(\d+)_/.exec(external_id || "");
+    if (!m) { console.warn(`[${PROJECT_NAME}] Xendit PAID sin phone parseable en external_id: ${external_id}`); return res.sendStatus(200); }
+    // Recibo: se re-consulta ESTA invoice por id (no el "último link" guardado, que podría ser de
+    // otro proveedor si se mandaron los dos) — invoice_url no viaja en el callback, solo en la API.
+    let receiptUrl = null;
+    try {
+      const invRes = await axios.get(`https://api.xendit.co/v2/invoices/${id}`, { auth: { username: XENDIT_SECRET_KEY, password: "" }, timeout: 10000 });
+      receiptUrl = invRes.data && invRes.data.invoice_url;
+    } catch (e) { console.warn(`[${PROJECT_NAME}] No se pudo obtener el invoice_url de Xendit para el recibo:`, e.message); }
+    await markLeadPaid(m[1], "xendit", amount, receiptUrl);
+    res.sendStatus(200);
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] /webhook/xendit error:`, e.message);
+    res.sendStatus(500); // 500 → Xendit reintenta; el idempotency check de arriba hace el reintento seguro
+  }
+});
+
+// Stripe verifica con la firma HMAC oficial del SDK sobre el rawBody (mismo req.rawBody que ya
+// captura express.json() para el webhook de Meta) — Dashboard → Webhooks → signing secret.
+app.post("/webhook/stripe", async (req, res) => {
+  if (!stripeClient || !STRIPE_WEBHOOK_SECRET) { console.warn(`[${PROJECT_NAME}] /webhook/stripe recibido pero falta STRIPE_WEBHOOK_SECRET — ignorado`); return res.sendStatus(503); }
+  let event;
+  try {
+    event = stripeClient.webhooks.constructEvent(req.rawBody, req.get("stripe-signature"), STRIPE_WEBHOOK_SECRET);
+  } catch (e) {
+    console.warn(`[${PROJECT_NAME}] /webhook/stripe firma inválida:`, e.message);
+    return res.sendStatus(403);
+  }
+  try {
+    if (event.type !== "checkout.session.completed") return res.sendStatus(200);
+    const session = event.data.object;
+    if (session.payment_status !== "paid") return res.sendStatus(200);
+    if (await alreadyProcessedPayment(`stripe:${event.id}`)) return res.sendStatus(200);
+    const phone = session.client_reference_id || (session.metadata && session.metadata.phone);
+    if (!phone) { console.warn(`[${PROJECT_NAME}] Stripe checkout.session.completed sin phone — sesión ${session.id}`); return res.sendStatus(200); }
+    // Recibo oficial de Stripe: el webhook llega "plano" (sin expandir), hace falta una consulta
+    // aparte al PaymentIntent → latest_charge.receipt_url (página hospedada por Stripe, no la creamos nosotros).
+    let receiptUrl = null;
+    try {
+      if (session.payment_intent) {
+        const pi = await stripeClient.paymentIntents.retrieve(session.payment_intent, { expand: ["latest_charge"] });
+        receiptUrl = pi.latest_charge && pi.latest_charge.receipt_url;
+      }
+    } catch (e) { console.warn(`[${PROJECT_NAME}] No se pudo obtener el receipt_url de Stripe:`, e.message); }
+    await markLeadPaid(phone, "stripe", session.amount_total || 0, receiptUrl); // IDR es zero-decimal: amount_total ya viene en IDR enteros
+    res.sendStatus(200);
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] /webhook/stripe error:`, e.message);
+    res.sendStatus(500); // 500 → Stripe reintenta; el idempotency check de arriba hace el reintento seguro
+  }
+});
+
 app.post("/webhook", async (req, res) => {
   if (!validSignature(req)) {
     console.warn(`[${PROJECT_NAME}] Webhook POST con firma inválida — descartado`);
@@ -1444,6 +1743,7 @@ app.post("/webhook", async (req, res) => {
         + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.use ? " — when to use: " + m.use : ""}${m.caption ? " [caption sent to customer: \"" + m.caption + "\"]" : ""}`).join("\n")
         + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send a media item when its 'when to use' genuinely matches the moment. Only send labels from this list; never invent one."
       : "";
+    const stockHint = await buildStockHint(); // inventario (rental): mismo patrón que mediaHint, bloque aparte sin cachear
     // Streaming (no create): evita el "Premature close" en respuestas no-stream y mantiene viva la conexión.
     const response = await claudeMessage({
       model: MODEL,
@@ -1451,10 +1751,11 @@ app.post("/webhook", async (req, res) => {
       thinking: { type: "disabled" }, // respuestas cortas y baratas; en Sonnet 5 el thinking va ON por defecto y se comería el max_tokens
       // Prompt caching: el system (~11.5k tok fijos: context.md + BASE_INSTRUCTIONS) es idéntico en cada turno.
       // Con cache_control, la 1ª vez paga 1.25x y el resto de la charla (dentro de 5 min) paga 0.1x → ~-78% del coste de system.
-      // mediaHint va en bloque aparte tras el prefijo cacheado (cambia solo al editar la media library).
+      // mediaHint/stockHint van en bloque aparte tras el prefijo cacheado (cambian solos, sin invalidar la caché).
       system: [
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
+        ...(stockHint ? [{ type: "text", text: stockHint }] : []),
       ],
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // prompt = últimos 20; el resto es historial del panel
     });
@@ -1630,6 +1931,39 @@ app.get("/admin/api/leads", async (req, res) => {
   try { res.json(await listLeads()); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Facturas: deriva de los eventos "paylink" (link generado) y "payment" (pago confirmado) que ya
+// quedan en el timeline de cada lead — no hay almacén aparte, es una vista sobre lo que ya existe.
+app.get("/admin/api/invoices", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try {
+    const leads = await listLeads();
+    const rows = [];
+    for (const l of leads) {
+      if (!Array.isArray(l.history)) continue;
+      for (const e of l.history) {
+        if (e.type !== "paylink" && e.type !== "payment") continue;
+        rows.push({
+          ts: e.ts,
+          phone: l.phone,
+          name: l.name || "",
+          model: l.model || "",
+          provider: e.provider || "",
+          amount: e.amount || 0,
+          kind: e.type, // "paylink" = link generado/enviado · "payment" = pago confirmado por el proveedor
+        });
+      }
+    }
+    rows.sort((a, b) => b.ts - a.ts);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Dashboard: por qué se enfrían los leads que no cerraron (último mensaje del bot antes del silencio).
+app.get("/admin/api/dropoff", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try { res.json({ ok: true, ...(await computeDropoff()) }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Enriquecer un lead: extrae de su conversación los datos que falten en la ficha.
 app.post("/admin/api/enrich", async (req, res) => {
   if (!adminAuth(req, res)) return;
@@ -1694,6 +2028,31 @@ app.get("/admin/api/conv/:phone", async (req, res) => {
   try { res.json(await getConversation(req.params.phone)); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Genera un link de pago (Stripe o Xendit) por el importe que decida el equipo — no lo envía,
+// solo lo crea y lo guarda como "último link" (para [RESEND_LINK]); el panel lo manda con /admin/api/send.
+app.post("/admin/api/paylink", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, provider, amount, description } = req.body || {};
+  if (!phone || !provider || !amount) return res.status(400).json({ error: "phone, provider y amount requeridos" });
+  const amt = parseInt(amount, 10);
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ error: "amount inválido" });
+  const desc = (description || `${PROJECT_NAME || "BBM"} — Rental payment`).toString();
+  let url = null;
+  if (provider === "stripe") {
+    if (!stripeClient) return res.status(503).json({ error: "Stripe no configurado (falta STRIPE_SECRET_KEY en Railway)" });
+    url = await createStripeCheckoutIDR(amt, desc, phone);
+  } else if (provider === "xendit") {
+    if (!XENDIT_SECRET_KEY) return res.status(503).json({ error: "Xendit no configurado (falta XENDIT_SECRET_KEY en Railway)" });
+    url = await createXenditInvoice(amt, desc, phone);
+  } else {
+    return res.status(400).json({ error: "provider debe ser 'stripe' o 'xendit'" });
+  }
+  if (!url) return res.status(502).json({ error: `No se pudo crear el link de pago (${provider})` });
+  await setLastLink(phone, url);
+  await logEvent(phone, "paylink", { provider, amount: amt });
+  res.json({ ok: true, url });
+});
+
 // Responder a mano (toma de control). Envía por WhatsApp y pausa el bot para ese lead.
 app.post("/admin/api/send", async (req, res) => {
   if (!adminAuth(req, res)) return;
@@ -1750,54 +2109,6 @@ app.post("/admin/api/note", async (req, res) => {
 });
 
 // ── CRM: estado de pipeline manual (new/quoted/won/lost/noshow) ──
-// ── Simulador: prueba el bot desde el panel sin WhatsApp ni Meta. Mismo motor/contexto que el
-// webhook real (Claude + BASE_INSTRUCTIONS + context file), pero no envía nada por WhatsApp ni
-// toca el CRM de leads reales — la conversación vive en su propia clave de Redis (sim:<session>).
-app.post("/admin/api/simulate", async (req, res) => {
-  if (!adminAuth(req, res)) return;
-  const { session, text } = req.body || {};
-  if (!text) return res.status(400).json({ error: "text requerido" });
-  const phone = `sim:${session || "default"}`;
-  try {
-    const history = await getConversation(phone);
-    history.push({ role: "user", content: text, ts: Date.now() });
-    const mediaLib = await getMediaLib();
-    const mediaHint = mediaLib.length
-      ? "\n\nMEDIA YOU CAN SEND (real photos/videos that reinforce the pitch — use sparingly, at most 1–2 per conversation, only when it genuinely helps). For each item, 'when to use' tells you the situation to send it in; match it to what the customer is talking about. Available:\n"
-        + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.use ? " — when to use: " + m.use : ""}${m.caption ? " [caption sent to customer: \"" + m.caption + "\"]" : ""}`).join("\n")
-        + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send a media item when its 'when to use' genuinely matches the moment. Only send labels from this list; never invent one."
-      : "";
-    const response = await claudeMessage({
-      model: MODEL,
-      max_tokens: 500,
-      thinking: { type: "disabled" },
-      system: [
-        { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
-        ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
-      ],
-      messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // mismo recorte que el webhook real
-    });
-    const textBlock = response.content.find((b) => b.type === "text");
-    let reply = (textBlock && textBlock.text) || "(sin respuesta — revisa logs)";
-    // Mismo strip que el webhook real (index.js ~1342): el cliente nunca ve estas etiquetas internas.
-    reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").trim();
-    reply = reply.replace(/ (--|—|–) /g, ", "); // misma red de seguridad del guion medio que el webhook real
-    history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
-    await saveConversation(phone, history);
-    res.json({ reply });
-  } catch (e) {
-    console.error(`[${PROJECT_NAME}] simulate error: ${e.message}`);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.post("/admin/api/simulate/reset", async (req, res) => {
-  if (!adminAuth(req, res)) return;
-  const { session } = req.body || {};
-  await saveConversation(`sim:${session || "default"}`, []);
-  res.json({ ok: true });
-});
-
 app.post("/admin/api/status", async (req, res) => {
   if (!adminAuth(req, res)) return;
   const { phone, status } = req.body || {};
@@ -1826,6 +2137,9 @@ app.post("/admin/api/lead", async (req, res) => {
     const n = parseInt(String(fields.dealValue).replace(/\D/g, ""), 10);
     fields.dealValue = isNaN(n) ? 0 : n;
   }
+  // el panel manda la lista final (con el tag añadido o quitado) — normalizar SIN unir con la
+  // anterior, si no leadRemoveTag() nunca conseguiría borrar nada (la unión la devolvería).
+  if (Array.isArray(fields.tags)) fields.tags = normalizeTags(fields.tags);
   await updateLeadFields(phone, fields);
   writeLeadToSheet(phone, fields); // best-effort (solo escribe las llaves con columna mapeada)
   if (fields.owner != null && (fields.owner || "") !== (prev.owner || "")) logEvent(phone, "owner", { to: fields.owner || "" });
