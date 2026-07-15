@@ -938,6 +938,9 @@
       empty_results:'Sin resultados', empty_clients:'Aún no hay clientes', empty_convs:'Aún no hay conversaciones', no_msgs:'Sin mensajes guardados', no_tpl:'Sin plantillas aún',
       flash_saved:'✓ Guardado', flash_err:'✕ Error', imp_ing:'⏳ Importando ', imp_new:'nuevos', imp_upd:'act.', enr_ing:'⏳ Leyendo chats…', enr_done:'actualizados',
       al_status:'No se pudo guardar el estado', al_tags_max:'Máximo 20 etiquetas por lead', al_pkg:'No se pudo guardar el paquete', al_nolead:'No se han encontrado leads en el archivo (¿es el CSV de Meta Lead Ads?).', al_imp:'Error al importar', al_tpl:'No se pudieron guardar las plantillas',
+      ft_loading:'Cargando…', ft_err:'Error al cargar la flota.', ft_total:'Total', ft_available:'Disponibles', ft_rented:'Alquiladas', ft_maint:'Mantenimiento', ft_retired:'Retiradas', ft_none_units:'Sin unidades que coincidan.', ft_none_models:'Sin modelos que coincidan.', ft_models:'Modelos', ft_readonly:'Solo lectura — se edita en el sistema de BBM', ft_source:'Fuente: Supabase', ft_per_day:'/día', ft_per_month:'/mes',
+      ft_th_model:'Modelo', ft_th_code:'Código', ft_th_plate:'Matrícula', ft_th_status:'Estado', ft_th_condition:'Condición', ft_th_daily:'Diario', ft_th_weekly:'Semanal', ft_th_fortnight:'Quincena', ft_th_3wlow:'3 sem (baja)', ft_th_3whigh:'3 sem (alta)', ft_th_monthly:'Mensual', ft_th_biannual:'Semestral', ft_th_yearly:'Anual',
+      hw_waiting:'esperando respuesta', hw_booking:'quiere reservar', hw_escalate:'pide humano', hw_interested:'interesado', hw_overdue:'seguimiento vencido', hw_priority:'Prioridad', csv_filename:'clientes_',
       al_send:'No se pudo enviar: ', al_send2:'\n\nSi han pasado +24h desde el último mensaje del cliente, WhatsApp no permite texto libre (haría falta plantilla).', cfm_cancel:'¿Cancelar esta cita?',
       notify_wait:'🔔 Lead por responder', notify_hot:'🔴 Lead caliente (reserva)',
       view_table:'Tabla', view_kanban:'Kanban',
@@ -984,6 +987,9 @@
       empty_results:'No results', empty_clients:'No clients yet', empty_convs:'No conversations yet', no_msgs:'No saved messages', no_tpl:'No templates yet',
       flash_saved:'✓ Saved', flash_err:'✕ Error', imp_ing:'⏳ Importing ', imp_new:'new', imp_upd:'upd.', enr_ing:'⏳ Reading chats…', enr_done:'updated',
       al_status:"Couldn't save status", al_tags_max:'Maximum 20 tags per lead', al_pkg:"Couldn't save package", al_nolead:'No leads found in the file (is it the Meta Lead Ads CSV?).', al_imp:'Import error', al_tpl:"Couldn't save templates",
+      ft_loading:'Loading…', ft_err:'Error loading fleet.', ft_total:'Total', ft_available:'Available', ft_rented:'Rented', ft_maint:'Maintenance', ft_retired:'Retired', ft_none_units:'No matching units.', ft_none_models:'No matching models.', ft_models:'Models', ft_readonly:'Read-only — edited in the BBM management system', ft_source:'Source: Supabase', ft_per_day:'/day', ft_per_month:'/month',
+      ft_th_model:'Model', ft_th_code:'Code', ft_th_plate:'Plate', ft_th_status:'Status', ft_th_condition:'Condition', ft_th_daily:'Daily', ft_th_weekly:'Weekly', ft_th_fortnight:'Fortnight', ft_th_3wlow:'3wk (low)', ft_th_3whigh:'3wk (high)', ft_th_monthly:'Monthly', ft_th_biannual:'Biannual', ft_th_yearly:'Yearly',
+      hw_waiting:'awaiting reply', hw_booking:'wants to book', hw_escalate:'asks for human', hw_interested:'interested', hw_overdue:'follow-up overdue', hw_priority:'Priority', csv_filename:'clients_',
       al_send:"Couldn't send: ", al_send2:"\n\nIf it's been 24h+ since the customer's last message, WhatsApp blocks free text (a template is required).", cfm_cancel:'Cancel this appointment?',
       notify_wait:'🔔 Lead to reply', notify_hot:'🔴 Hot lead (booking)',
       view_table:'Table', view_kanban:'Kanban',
@@ -1002,7 +1008,7 @@
       tl_empty:'No activity yet', tl_created:'Lead created', tl_imported:'Imported from Meta', tl_status:'Status', tl_owner:'Assigned to', tl_appt:'Appointment booked', tl_note:'Note updated', tl_tag:'Tag added', tl_archived:'Archived', tl_restored:'Restored', tl_enriched:'Data enriched', tl_outreach:'Conversation started (intro)', tl_fu_reminded:'Follow-up reminder sent', tl_newsletter:'Newsletter sent', tl_payment:'Payment received',
       al_save:"Couldn't save", edit_tpl:'✎ Edit templates…', locale:'en-GB' }
   };
-  var LANG = localStorage.getItem('botpanel_lang') || 'es';
+  var LANG = localStorage.getItem('botpanel_lang') || 'en';
   // Banderas SVG (los emoji de bandera no renderizan en Windows/Edge → se verían "GB"/"ES").
   var FLAG={
     gb:'<svg class="flag" viewBox="0 0 60 30" preserveAspectRatio="xMidYMid slice"><rect width="60" height="30" fill="#012169"/><path d="M0 0 60 30M60 0 0 30" stroke="#fff" stroke-width="6"/><path d="M0 0 60 30M60 0 0 30" stroke="#C8102E" stroke-width="4"/><path d="M30 0V30M0 15H60" stroke="#fff" stroke-width="10"/><path d="M30 0V30M0 15H60" stroke="#C8102E" stroke-width="6"/></svg>',
@@ -1849,10 +1855,10 @@
     return Math.round(s);
   }
   function hotWhy(l,s){
-    var r=[]; if(l.waiting) r.push('esperando respuesta');
-    var it=l.intent||''; if(it==='booking') r.push('quiere reservar'); else if(it==='escalate') r.push('pide humano'); else if(it==='interested') r.push('interesado');
-    if(isOverdue(l)) r.push('seguimiento vencido');
-    return 'Prioridad '+s+(r.length?' · '+r.join(' · '):'');
+    var r=[]; if(l.waiting) r.push(t('hw_waiting'));
+    var it=l.intent||''; if(it==='booking') r.push(t('hw_booking')); else if(it==='escalate') r.push(t('hw_escalate')); else if(it==='interested') r.push(t('hw_interested'));
+    if(isOverdue(l)) r.push(t('hw_overdue'));
+    return t('hw_priority')+' '+s+(r.length?' · '+r.join(' · '):'');
   }
   // IDR compacto: 2450000 → "2.45M", 600000 → "600k" (los importes IDR completos no caben en la métrica)
   function money(n){ if(!n) return ''; if(n>=1e9) return (n/1e9).toFixed(2).replace(/\.?0+$/,'')+'B IDR'; if(n>=1e6) return (n/1e6).toFixed(2).replace(/\.?0+$/,'')+'M IDR'; if(n>=1e3) return Math.round(n/1e3)+'k IDR'; return n+' IDR'; }
@@ -1947,14 +1953,14 @@
       sel.className='db-sel st-'+(v||'none');
       var L=leads.filter(function(x){return x.phone===phone;})[0]; if(L)L.status=v;
       if(curLead&&curLead.phone===phone){ curLead.status=v; var es=document.getElementById('edStatus'); if(es)es.value=v; }
-    }).catch(function(){ alert('No se pudo guardar el estado'); });
+    }).catch(function(){ alert(t('al_status')); });
   }
   function dbSetPackage(phone,sel){
     var v=sel.value;
     apiPost('lead',{phone:phone,plan:v}).then(function(r){ if(!r.ok) throw 0;
       var L=leads.filter(function(x){return x.phone===phone;})[0]; if(L)L.plan=v;
       if(curLead&&curLead.phone===phone){ curLead.plan=v; var ep=document.getElementById('edPackage'); if(ep)ep.value=v; }
-    }).catch(function(){ alert('No se pudo guardar el plan'); });
+    }).catch(function(){ alert(t('al_pkg')); });
   }
   function dbSetOwner(phone,sel){
     var v=sel.value;
@@ -2191,8 +2197,8 @@
   }
   var flotaProducts = [];
   function loadFlota(){
-    document.getElementById('flotaTable').innerHTML = '<div class="db-empty">Cargando…</div>';
-    api('inventory').then(function(r){return r.json();}).then(function(P){ flotaProducts = Array.isArray(P) ? P : []; renderFlota(); }).catch(function(){ document.getElementById('flotaTable').innerHTML = '<div class="db-empty">Error al cargar la flota.</div>'; });
+    document.getElementById('flotaTable').innerHTML = '<div class="db-empty">'+t('ft_loading')+'</div>';
+    api('inventory').then(function(r){return r.json();}).then(function(P){ flotaProducts = Array.isArray(P) ? P : []; renderFlota(); }).catch(function(){ document.getElementById('flotaTable').innerHTML = '<div class="db-empty">'+t('ft_err')+'</div>'; });
   }
   var flotaTab = 'unidades';
   // PostgREST devuelve el embedding como objeto o array según la FK — normalizar aquí.
@@ -2215,12 +2221,12 @@
     var counts = { available:0, rented:0, maintenance:0, retired:0 };
     units.forEach(function(r){ if(counts[r.unit.status]!=null) counts[r.unit.status]++; });
     document.getElementById('flotaMetrics').innerHTML =
-      '<div class="metric"><span class="mv">'+units.length+'</span><span class="ml">Total</span></div>' +
-      '<div class="metric"><span class="mv">'+counts.available+'</span><span class="ml">Disponibles</span></div>' +
-      '<div class="metric"><span class="mv">'+counts.rented+'</span><span class="ml">Alquiladas</span></div>' +
-      '<div class="metric"><span class="mv">'+counts.maintenance+'</span><span class="ml">Mantenimiento</span></div>' +
-      '<div class="metric"><span class="mv">'+counts.retired+'</span><span class="ml">Retiradas</span></div>';
-    if(!units.length){ document.getElementById('flotaTable').innerHTML = '<div class="db-empty">Sin unidades que coincidan.</div>'; return; }
+      '<div class="metric"><span class="mv">'+units.length+'</span><span class="ml">'+t('ft_total')+'</span></div>' +
+      '<div class="metric"><span class="mv">'+counts.available+'</span><span class="ml">'+t('ft_available')+'</span></div>' +
+      '<div class="metric"><span class="mv">'+counts.rented+'</span><span class="ml">'+t('ft_rented')+'</span></div>' +
+      '<div class="metric"><span class="mv">'+counts.maintenance+'</span><span class="ml">'+t('ft_maint')+'</span></div>' +
+      '<div class="metric"><span class="mv">'+counts.retired+'</span><span class="ml">'+t('ft_retired')+'</span></div>';
+    if(!units.length){ document.getElementById('flotaTable').innerHTML = '<div class="db-empty">'+t('ft_none_units')+'</div>'; return; }
     var rows = units.map(function(r){
       return '<tr>' +
         '<td class="db-nm">'+esc(r.product.name)+'<div class="db-dim">'+esc(r.product.model||'')+'</div></td>' +
@@ -2228,12 +2234,12 @@
         '<td>'+esc(r.unit.license_plate||'')+'</td>' +
         '<td><span class="db-badge flota-badge '+esc(r.unit.status)+'">'+esc(r.unit.status)+'</span></td>' +
         '<td class="db-dim">'+esc(r.unit.condition||'')+'</td>' +
-        '<td>'+money(r.pricing.daily_rate)+'/día</td>' +
-        '<td class="db-dim">'+money(r.pricing.monthly_rate)+'/mes</td>' +
+        '<td>'+money(r.pricing.daily_rate)+t('ft_per_day')+'</td>' +
+        '<td class="db-dim">'+money(r.pricing.monthly_rate)+t('ft_per_month')+'</td>' +
       '</tr>';
     }).join('');
     document.getElementById('flotaTable').innerHTML =
-      '<table class="db"><thead><tr><th>Modelo</th><th>Código</th><th>Matrícula</th><th>Estado</th><th>Condición</th><th>Diario</th><th>Mensual</th></tr></thead><tbody>'+rows+'</tbody></table>';
+      '<table class="db"><thead><tr><th>'+t('ft_th_model')+'</th><th>'+t('ft_th_code')+'</th><th>'+t('ft_th_plate')+'</th><th>'+t('ft_th_status')+'</th><th>'+t('ft_th_condition')+'</th><th>'+t('ft_th_daily')+'</th><th>'+t('ft_th_monthly')+'</th></tr></thead><tbody>'+rows+'</tbody></table>';
   }
   // Tarifas por modelo — SOLO LECTURA: los precios se editan en el sistema de gestión de BBM, no aquí.
   function renderTarifas(){
@@ -2243,9 +2249,9 @@
     });
     document.getElementById('flotaCount').textContent = prods.length;
     document.getElementById('flotaMetrics').innerHTML =
-      '<div class="metric"><span class="mv">'+prods.length+'</span><span class="ml">Modelos</span></div>' +
-      '<div class="metric"><span class="mv" style="font-size:13px;font-weight:500">Solo lectura — se edita en el sistema de BBM</span><span class="ml">Fuente: Supabase</span></div>';
-    if(!prods.length){ document.getElementById('flotaTable').innerHTML = '<div class="db-empty">Sin modelos que coincidan.</div>'; return; }
+      '<div class="metric"><span class="mv">'+prods.length+'</span><span class="ml">'+t('ft_models')+'</span></div>' +
+      '<div class="metric"><span class="mv" style="font-size:13px;font-weight:500">'+t('ft_readonly')+'</span><span class="ml">'+t('ft_source')+'</span></div>';
+    if(!prods.length){ document.getElementById('flotaTable').innerHTML = '<div class="db-empty">'+t('ft_none_models')+'</div>'; return; }
     var rows = prods.map(function(p){
       var pr = pricingOf(p);
       function c(v){ return v==null ? '<td class="db-dim">—</td>' : '<td>'+money(v)+'</td>'; }
@@ -2255,7 +2261,7 @@
       '</tr>';
     }).join('');
     document.getElementById('flotaTable').innerHTML =
-      '<table class="db"><thead><tr><th>Modelo</th><th>Diario</th><th>Semanal</th><th>Quincena</th><th>3 sem (baja)</th><th>3 sem (alta)</th><th>Mensual</th><th>Semestral</th><th>Anual</th></tr></thead><tbody>'+rows+'</tbody></table>';
+      '<table class="db"><thead><tr><th>'+t('ft_th_model')+'</th><th>'+t('ft_th_daily')+'</th><th>'+t('ft_th_weekly')+'</th><th>'+t('ft_th_fortnight')+'</th><th>'+t('ft_th_3wlow')+'</th><th>'+t('ft_th_3whigh')+'</th><th>'+t('ft_th_monthly')+'</th><th>'+t('ft_th_biannual')+'</th><th>'+t('ft_th_yearly')+'</th></tr></thead><tbody>'+rows+'</tbody></table>';
   }
   document.getElementById('flotaTabs').addEventListener('click', function(e){
     var b = e.target.closest('[data-ftab]'); if(!b) return;
@@ -2281,7 +2287,7 @@
     }).join(',')); });
     var blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
     var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-    a.download='clientes_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+    a.download=t('csv_filename')+new Date().toISOString().slice(0,10)+'.csv'; a.click();
     setTimeout(function(){ URL.revokeObjectURL(a.href); },1000);
   }
 
