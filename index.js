@@ -2000,6 +2000,23 @@ app.post("/admin/api/invoice/delete", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Pega a mano el link de recibo/factura en un evento "payment" que ya existe (pagos confirmados
+// antes de que el webhook empezara a guardar receiptUrl, o cobros fuera del flujo automático).
+app.post("/admin/api/invoice/set-receipt", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, ts, receiptUrl } = req.body || {};
+  if (!phone || !ts || !receiptUrl) return res.status(400).json({ error: "phone, ts y receiptUrl requeridos" });
+  try {
+    const lead = await getLead(phone);
+    const history = Array.isArray(lead && lead.history) ? lead.history : [];
+    const ev = history.find((e) => e.ts === ts && e.type === "payment");
+    if (!ev) return res.status(404).json({ error: "No se encontró ese pago" });
+    ev.receiptUrl = receiptUrl;
+    await updateLeadFields(phone, { history });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Dashboard: por qué se enfrían los leads que no cerraron (último mensaje del bot antes del silencio).
 app.get("/admin/api/dropoff", async (req, res) => {
   if (!adminAuth(req, res)) return;
