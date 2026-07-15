@@ -1526,7 +1526,7 @@ async function markLeadPaid(phone, provider, amountIDR, receiptUrl) {
   const prevStatus = await getStatus(phone);
   if (prevStatus !== "won") await setStatus(phone, "won");
   if (!lead || !(parseInt(lead.dealValue, 10) > 0)) await updateLeadFields(phone, { dealValue: Math.round(amountIDR) });
-  await logEvent(phone, "payment", { provider, amount: Math.round(amountIDR), from: prevStatus || "", to: "won" });
+  await logEvent(phone, "payment", { provider, amount: Math.round(amountIDR), from: prevStatus || "", to: "won", receiptUrl: receiptUrl || null });
   console.log(`[${PROJECT_NAME}] Pago confirmado (${provider}): ${phone} — ${amountIDR} IDR → status=won`);
 
   // Confirmación al propio cliente (no solo al owner) — queda en el chat como un mensaje más del bot.
@@ -1951,6 +1951,7 @@ app.get("/admin/api/invoices", async (req, res) => {
           kind: e.type, // "paylink" = link generado/enviado · "payment" = pago confirmado por el proveedor
           cancelled: !!e.cancelled,
           hasRef: !!e.refId, // el panel solo ofrece "Cancelar" si hay refId (paylinks creados antes de este cambio no lo tienen)
+          receiptUrl: e.receiptUrl || null, // recibo oficial del proveedor (solo presente en eventos "payment" tras este cambio)
         });
       }
     }
