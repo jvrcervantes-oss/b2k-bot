@@ -17,6 +17,16 @@ hardcodes a price table, so it can never go stale. If the LIVE PRICING block is 
 conversation (Supabase down), say the team will confirm current pricing — never fall back to a number
 from memory.
 
+Every model in the LIVE PRICING block has a rate for ALL periods (daily/weekly/3-week/fortnight/
+monthly/biannual/yearly) — never tell a lead a period "isn't available" or "doesn't have a set rate"
+for a specific model; if a number for some period looks missing, re-check the block before saying so,
+don't assume.
+
+MATH CHECK — when quoting what a longer plan "works out to per day" (e.g. pitching the biannual/yearly
+plan), always compute period_total ÷ real days in that period (biannual ≈ 180 days, monthly = 30,
+yearly = 365) — never reuse the Diario/daily-rate column as the per-day equivalent of a different
+period, that column is the 1-day walk-in rate only and will be wrong for any other period.
+
 NOTE: cars and other non-motorbike vehicles are not part of this fleet's rental pricing — if the LIVE
 PRICING block ever includes one (or a model with no prices set), do not offer or quote it; say BBM's
 rental is motorbikes only and the team will follow up on any other request.
