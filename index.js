@@ -1019,6 +1019,32 @@ async function buildStockHint() {
     + lines.join("\n");
 }
 
+// Bloque de precios: mismo patrón/caché que buildStockHint — lee las tarifas reales del panel
+// Fleet/Tarifas (Supabase, la misma fuente que ya usa el equipo) en vez de una tabla fija en este
+// archivo, que se quedaba desactualizada en cuanto cambiaba un precio ahí.
+async function buildPriceHint() {
+  if (BOT_VERTICAL !== "rental") return "";
+  const snap = await getInventorySnapshot();
+  if (!snap || !snap.priceRows || !snap.priceRows.length) return "";
+  const fmt = (n) => (n == null ? "—" : n.toLocaleString("id-ID"));
+  const fmt3w = (lo, hi) => (lo == null && hi == null ? "—" : `${fmt(lo)}–${fmt(hi)}`);
+  const byTier = {};
+  for (const r of snap.priceRows) (byTier[r.tier || "Other"] = byTier[r.tier || "Other"] || []).push(r);
+  const lines = Object.keys(byTier).map((tier) => `${tier}:\n` + byTier[tier].map((r) =>
+    `- ${r.name}: Daily ${fmt(r.daily_rate)} · Weekly ${fmt(r.weekly_rate)} · Fortnight ${fmt(r.fortnight_rate)} · `
+    + `3-week ${fmt3w(r.three_week_low_rate, r.three_week_high_rate)} · Monthly ${fmt(r.monthly_rate)} · `
+    + `Biannual ${fmt(r.biannual_rate)} · Yearly ${fmt(r.yearly_rate)}`
+  ).join("\n")).join("\n");
+  return "\n\nLIVE PRICING (IDR per rental period, refreshed every few minutes straight from the fleet "
+    + "system — this is the current source of truth, ignore any older price list you may recall):\n" + lines
+    + "\n\n\"—\" means that period's rate hasn't been set in the fleet system yet for that model — never "
+    + "invent it, tell the customer the team will confirm and add `tags: pricing_check`."
+    + "\nBefore quoting a Fortnight (14-day) price, compare its per-day rate against 2× the Weekly rate for "
+    + "the SAME model — if 2 back-to-back Weekly periods work out cheaper, suggest that instead of the "
+    + "Fortnight rate; never silently upsell the worse option. Add `tags: pricing_check` when you catch this "
+    + "so the team can review that model's pricing.";
+}
+
 // ─── GOOGLE SHEETS ────────────────────────────────────────────────
 async function getSheetsClient() {
   const credentials = JSON.parse(GOOGLE_SERVICE_ACCOUNT);
@@ -1122,19 +1148,27 @@ async function computeInventorySnapshot() {
   const key = SUPABASE_ANON_KEY || SUPABASE_SERVICE_KEY; // anon basta: RLS da SELECT público
   if (!SUPABASE_URL || !key) return null;
   const res = await axios.get(`${SUPABASE_URL}/rest/v1/products`, {
-    params: { select: "name,serialized_items(status)" },
+    params: {
+      select: "name,model,serialized_items(status),product_pricing(daily_rate,weekly_rate,fortnight_rate,three_week_low_rate,three_week_high_rate,monthly_rate,biannual_rate,yearly_rate)",
+      order: "model.asc,name.asc",
+    },
     headers: { apikey: key, Authorization: `Bearer ${key}` },
     timeout: 10000,
   });
-  const totals = {}, available = {};
+  const totals = {}, available = {}, priceRows = [];
   for (const p of res.data || []) {
     const name = (p.name || "").trim();
+    if (!name) continue;
     const items = (p.serialized_items || []).filter((u) => u.status !== "retired");
-    if (!name || !items.length) continue;
-    totals[name] = (totals[name] || 0) + items.length;
-    available[name] = (available[name] || 0) + items.filter((u) => u.status === "available").length;
+    if (items.length) {
+      totals[name] = (totals[name] || 0) + items.length;
+      available[name] = (available[name] || 0) + items.filter((u) => u.status === "available").length;
+    }
+    const pr = Array.isArray(p.product_pricing) ? p.product_pricing[0] : p.product_pricing;
+    // daily_rate == null → producto sin tarifas cargadas (coches/inactivos) — no se ofrece en el bot.
+    if (pr && pr.daily_rate != null) priceRows.push({ name, tier: p.model || "", ...pr });
   }
-  return { totals, available };
+  return { totals, available, priceRows };
 }
 
 // Cacheado: si Supabase falla (clave mal puesta, tabla no creada, etc.) se queda con la última
@@ -1743,6 +1777,7 @@ app.post("/webhook", async (req, res) => {
         + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send a media item when its 'when to use' genuinely matches the moment. Only send labels from this list; never invent one."
       : "";
     const stockHint = await buildStockHint(); // inventario (rental): mismo patrón que mediaHint, bloque aparte sin cachear
+    const priceHint = await buildPriceHint(); // tarifas (rental): mismo patrón/caché que stockHint
     // Streaming (no create): evita el "Premature close" en respuestas no-stream y mantiene viva la conexión.
     const response = await claudeMessage({
       model: MODEL,
@@ -1750,11 +1785,12 @@ app.post("/webhook", async (req, res) => {
       thinking: { type: "disabled" }, // respuestas cortas y baratas; en Sonnet 5 el thinking va ON por defecto y se comería el max_tokens
       // Prompt caching: el system (~11.5k tok fijos: context.md + BASE_INSTRUCTIONS) es idéntico en cada turno.
       // Con cache_control, la 1ª vez paga 1.25x y el resto de la charla (dentro de 5 min) paga 0.1x → ~-78% del coste de system.
-      // mediaHint/stockHint van en bloque aparte tras el prefijo cacheado (cambian solos, sin invalidar la caché).
+      // mediaHint/stockHint/priceHint van en bloque aparte tras el prefijo cacheado (cambian solos, sin invalidar la caché).
       system: [
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
         ...(stockHint ? [{ type: "text", text: stockHint }] : []),
+        ...(priceHint ? [{ type: "text", text: priceHint }] : []),
       ],
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // prompt = últimos 20; el resto es historial del panel
     });
