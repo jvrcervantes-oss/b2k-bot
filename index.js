@@ -486,6 +486,28 @@ function mirrorOf(deal) {
   if (deal) DEAL_FIELDS.forEach((k) => { if (deal[k] != null) m[k] = deal[k]; });
   return m;
 }
+
+// El status de nivel-lead (new/quoted/won/lost/noshow, followupTick/computeDropoff lo leen) es un
+// campo INDEPENDIENTE de deals[].status — nada lo sincroniza solo. Estas dos funciones puras
+// deciden cuándo re-sincronizarlo, para no dejar un lead marcado won/lost para siempre mientras
+// sus deals dicen otra cosa. Ver test-deal-archive.js.
+
+// Al cerrar un deal (won/lost) desde el panel: si no queda ninguno abierto, el lead sigue a los
+// deals — gana si alguno ganó, pierde si todos perdieron. null = no tocar el status del lead.
+function statusAfterDealClose(deals, prevLeadStatus) {
+  if (deals.some((d) => d.status === "open")) return null; // aún queda algo abierto
+  const newStatus = deals.some((d) => d.status === "won") ? "won" : "lost";
+  if (prevLeadStatus === newStatus) return null;
+  if (["won", "lost", "noshow"].includes(prevLeadStatus)) return null; // no pisar un status terminal ya puesto a mano
+  return newStatus;
+}
+// Al abrir un deal nuevo (captureLeadData): un lead ya cerrado que vuelve a preguntar necesita
+// atención de nuevo — sin esto followupTick/computeDropoff lo ignorarían para siempre.
+// null = no tocar.
+function statusAfterNewDeal(prevLeadStatus) {
+  return ["won", "lost", "noshow"].includes(prevLeadStatus) ? "" : null;
+}
+
 // Solo recorta si hace falta, y solo a costa de deals ya cerrados — un deal abierto nunca se pierde.
 function capDeals(deals) {
   if (deals.length <= DEALS_CAP) return deals;
@@ -515,6 +537,12 @@ async function captureLeadData(phone, fields) {
       const hadOpenOther = deals.some((d) => d.status === "open");
       deals.push({ id: genDealId(), status: "open", createdAt: Date.now(), updatedAt: Date.now(), ...dealFields });
       if (hadOpenOther) await logEvent(phone, "deal_new", { model: dealFields[DEAL_ID_FIELD] || "" });
+      const prevLeadStatus = await getStatus(phone);
+      const resetTo = statusAfterNewDeal(prevLeadStatus);
+      if (resetTo != null) {
+        await setStatus(phone, resetTo);
+        await logEvent(phone, "status", { from: prevLeadStatus, to: resetTo });
+      }
     }
     deals = capDeals(deals);
     mirror = mirrorOf(focusDeal(deals));
@@ -1999,6 +2027,13 @@ app.post("/admin/api/deal", async (req, res) => {
   deals[idx] = { ...deals[idx], status, updatedAt: Date.now() };
   await updateLeadFields(phone, { deals, ...mirrorOf(focusDeal(deals)) });
   await logEvent(phone, "deal_status", { model, from, to: status });
+  const prevLeadStatus = await getStatus(phone);
+  const newLeadStatus = statusAfterDealClose(deals, prevLeadStatus);
+  if (newLeadStatus != null) {
+    await setStatus(phone, newLeadStatus);
+    if (STATUS_SHEET_LABEL[newLeadStatus]) writeLeadToSheet(phone, { status: STATUS_SHEET_LABEL[newLeadStatus] });
+    await logEvent(phone, "status", { from: prevLeadStatus || "", to: newLeadStatus });
+  }
   res.json({ ok: true, deal: deals[idx] });
 });
 
