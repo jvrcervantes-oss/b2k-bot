@@ -6,7 +6,7 @@
 <title>__PROJECT__ · Conversaciones</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.5.0/css/flag-icons.min.css" rel="stylesheet">
 <style>
   :root{
@@ -15,6 +15,8 @@
     --accent:#2563eb; --accent-soft:#e8f0fe;
     --green:#16a34a; --amber:#d97706; --red:#dc2626;
     --bot:#2563eb;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --sh:0 1px 2px rgba(16,24,40,.05),0 2px 6px rgba(16,24,40,.04);
   }
   /* ── MODO OSCURO ── (redefine variables + corrige colores claros fijos) */
   body.dark{
@@ -22,6 +24,7 @@
     --line:#28324a; --line-2:#202a3e; --ink:#e7ebf3; --ink-soft:#9aa6bd;
     --accent:#3b82f6; --accent-soft:#1e2c47;
     --bot:#2563eb;
+    --sh:0 1px 2px rgba(0,0,0,.3),0 2px 6px rgba(0,0,0,.25);
   }
   body.dark #chat{background:#0b111c}
   body.dark .row:hover{background:rgba(255,255,255,.04)}
@@ -56,7 +59,7 @@
   body.dark .wininfo.closed{background:rgba(220,38,38,.14);color:#f87171}
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
-  body{font-family:'Inter',-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;-webkit-font-smoothing:antialiased}
+  body{font-family:'Manrope',-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;-webkit-font-smoothing:antialiased}
   button{font-family:inherit;cursor:pointer}
 
   /* ── LOGIN ── */
@@ -71,23 +74,44 @@
   #login .err{color:var(--red);font-size:12.5px;height:16px;margin-top:2px}
 
   /* ── SHELL ── */
-  #app{display:none;height:100vh;overflow:hidden;grid-template-columns:64px 340px 1fr 300px}
+  #app{display:none;height:100vh;overflow:hidden;grid-template-columns:220px 340px 1fr 300px}
   #app.on{display:grid}
   @media(max-width:1100px){#app.on{grid-template-columns:64px 320px 1fr}#detail{display:none}}
+  /* sidebar colapsado a rail de iconos en pantallas medianas */
+  @media(max-width:1360px) and (min-width:1101px){
+    #app.on{grid-template-columns:64px 340px 1fr 300px}
+    nav{padding:14px 8px;align-items:center}
+    nav .lbl,.brandtx{display:none}
+    .brandrow{padding:2px 0 12px}
+    nav .ic{width:42px;justify-content:center;padding:9px 0;gap:0}
+  }
+  /* sidebar colapsada a mano (botón navToggle, persiste en localStorage) — mismo rail que el breakpoint de arriba */
+  #app.on.navCollapsed{grid-template-columns:64px 340px 1fr 300px}
+  #app.on.navCollapsed nav{padding:14px 8px;align-items:center}
+  #app.on.navCollapsed nav .lbl,#app.on.navCollapsed .brandtx{display:none}
+  #app.on.navCollapsed .brandrow{padding:2px 0 12px}
+  #app.on.navCollapsed nav .ic{width:42px;justify-content:center;padding:9px 0;gap:0}
 
   /* nav rail */
-  nav{background:var(--nav);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:6px}
-  nav .brand{width:38px;height:38px;border-radius:10px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;margin-bottom:10px}
-  nav .ic{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#8893a8;cursor:pointer;transition:transform .15s cubic-bezier(.2,.7,.3,1),background .15s ease,color .15s ease,box-shadow .15s ease}
-  nav .ic:hover{background:rgba(255,255,255,.10);color:#fff;transform:translateY(-1px)}
-  nav .ic:active{transform:translateY(0) scale(.9)}
+  nav{background:var(--nav);display:flex;flex-direction:column;padding:14px 10px;gap:2px}
+  .brandrow{display:flex;align-items:center;gap:10px;padding:2px 6px 14px}
+  nav .brand{width:36px;height:36px;border-radius:10px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;flex-shrink:0}
+  .brandtx{line-height:1.15;min-width:0}
+  .brandtx b{display:block;font-size:13.5px;font-weight:800;letter-spacing:-.01em;color:#fff;white-space:nowrap}
+  .brandtx span{font-size:10.5px;color:rgba(255,255,255,.45);font-weight:600;white-space:nowrap}
+  nav .ic{display:flex;align-items:center;gap:11px;width:100%;padding:9px 10px;border-radius:10px;color:#8893a8;cursor:pointer;font-size:13px;font-weight:700;transition:transform .15s cubic-bezier(.2,.7,.3,1),background .15s ease,color .15s ease,box-shadow .15s ease}
+  nav .ic:hover{background:rgba(255,255,255,.10);color:#fff}
+  nav .ic:active{transform:scale(.97)}
   nav .ic.on{background:rgba(255,255,255,.10);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
   nav .ic.on:hover{background:rgba(255,255,255,.16)}
+  nav .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  nav .ic.grp{margin-top:10px;padding-top:19px;position:relative}
+  nav .ic.grp::before{content:'';position:absolute;top:0;left:10px;right:10px;height:1px;background:rgba(255,255,255,.08)}
   nav .ic:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  nav .ic svg{width:20px;height:20px;transition:transform .15s cubic-bezier(.2,.7,.3,1)}
-  nav .ic:hover svg{transform:scale(1.12)}
+  nav .ic svg{width:19px;height:19px;flex-shrink:0;transition:transform .15s cubic-bezier(.2,.7,.3,1)}
+  nav .ic:hover svg{transform:scale(1.1)}
   /* toggle de idioma: bandera SVG + código */
-  #langToggle{gap:4px;font-size:10.5px;font-weight:700;letter-spacing:.02em}
+  #langToggle{gap:8px;font-size:11px;font-weight:700;letter-spacing:.02em}
   nav .ic svg.flag{width:18px;height:13px;border-radius:2px;flex-shrink:0;box-shadow:0 0 0 1px rgba(0,0,0,.18)}
   nav .ic:hover svg.flag{transform:scale(1.08)}
   nav .spacer{flex:1}
@@ -419,8 +443,8 @@
     #app.on{grid-template-columns:1fr}
     /* la barra respeta el safe-area del móvil (home indicator) + un mínimo de 16px por si no lo reporta */
     nav{position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;flex-direction:row;justify-content:space-around;align-items:center;padding:7px 4px calc(24px + env(safe-area-inset-bottom,0px));gap:0;z-index:60;border-top:1px solid rgba(255,255,255,.10)}
-    nav .brand,nav .spacer{display:none}
-    nav .ic{width:46px;height:40px}
+    .brandrow,nav .spacer,nav .lbl{display:none}
+    nav .ic{width:46px;height:40px;justify-content:center;padding:0;gap:0}
     #dbView,#calView,#mediaView,#nlView,#simView{grid-column:1/-1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
     /* Conversaciones: lista por defecto; al abrir un chat = pantalla completa, sin barra */
     #list{display:flex;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
@@ -528,6 +552,14 @@
   .media-row .mr-del{width:30px;height:30px;flex-shrink:0;border:1px solid var(--line);background:var(--card);color:#dc2626;border-radius:8px;cursor:pointer;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;transition:background .15s ease,border-color .15s ease}
   .media-row .mr-del:hover{background:#fee2e2;border-color:#dc2626}
   body.dark .media-row .mr-del:hover{background:#3b1a1a}
+
+  /* ── Reskin visual 2026 (mismo que BBM: tipografía + superficies, sin tocar la paleta) ── */
+  .count,.stats b,.metric .mv,.row .tm,.db-pg,.m .mtime,.kcol .kc,.db-tab .tc,.wpill{font-family:var(--mono)}
+  #list .head h2,.db-top h2,.sec-top h2,.cal-nav h2,.modal-box h3,#login h1{font-weight:800;letter-spacing:-.02em}
+  .metric,.kcard,.up{box-shadow:var(--sh)}
+  .metric{border-radius:12px;background:var(--card)}
+  .modal-box,#login .box{border-radius:16px}
+  .db-badge,.db-tag,.tag{font-weight:700}
 </style>
 </head>
 <body>
@@ -547,17 +579,21 @@
 <!-- APP -->
 <div id="app">
   <nav>
-    <div class="brand">A</div>
-    <div class="ic on" id="navConv" data-ti="nav_conv" title="Conversaciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="ic" id="navCal" data-ti="nav_cal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="ic" id="navDb" data-ti="nav_db" title="Base de datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="ic" id="navMedia" data-ti="nav_media" title="Fotos y vídeos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="ic" id="navNewsletter" data-ti="nav_nl" title="Newsletter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="ic" id="navSim" data-ti="nav_sim" title="Simulador"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12c0 4.418-4.03 8-9 8-1.06 0-2.076-.163-3.017-.463L3 21l1.35-3.746C3.494 15.85 3 14.482 3 13c0-4.418 4.03-8 9-8s9 3.582 9 8z" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 12h.01M12 12h.01M16 12h.01" stroke-linecap="round"/></svg></div>
+    <div class="brandrow">
+      <div class="brand">A</div>
+      <div class="brandtx"><b data-i18n="brand">CRM BMA</b><span>Bali Moto Adventures</span></div>
+    </div>
+    <div class="ic" id="navToggle" data-ti="nav_toggle" title="Colapsar menú"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="navToggleIcon"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_toggle">Colapsar menú</span></div>
+    <div class="ic on" id="navConv" data-ti="nav_conv" title="Conversaciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_conv">Conversaciones</span></div>
+    <div class="ic" id="navCal" data-ti="nav_cal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_cal">Calendario</span></div>
+    <div class="ic" id="navDb" data-ti="nav_db" title="Base de datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_db">Base de datos</span></div>
+    <div class="ic" id="navMedia" data-ti="nav_media" title="Fotos y vídeos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_media">Fotos y vídeos</span></div>
+    <div class="ic grp" id="navNewsletter" data-ti="nav_nl" title="Newsletter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_nl">Newsletter</span></div>
+    <div class="ic" id="navSim" data-ti="nav_sim" title="Simulador"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12c0 4.418-4.03 8-9 8-1.06 0-2.076-.163-3.017-.463L3 21l1.35-3.746C3.494 15.85 3 14.482 3 13c0-4.418 4.03-8 9-8s9 3.582 9 8z" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 12h.01M12 12h.01M16 12h.01" stroke-linecap="round"/></svg><span class="lbl" data-i18n="nav_sim">Simulador</span></div>
     <div class="spacer"></div>
-    <div class="ic" id="langToggle" data-ti="nav_lang">EN</div>
-    <div class="ic" data-ti="nav_theme" id="themeToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div class="ic" data-ti="nav_logout" id="logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="ic" id="langToggle" data-ti="nav_lang"><span class="lbl">EN</span></div>
+    <div class="ic" data-ti="nav_theme" id="themeToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_theme">Cambiar tema</span></div>
+    <div class="ic" data-ti="nav_logout" id="logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_logout">Salir</span></div>
   </nav>
 
   <!-- list -->
@@ -749,7 +785,7 @@
   // ── i18n (ES / EN) ──────────────────────────────────────────────
   var I18N = {
     es:{ brand:'CRM BMA', login_title:'Panel de conversaciones', login_sub:'CRM BMA · acceso del estudio', ph_pw:'Contraseña', btn_enter:'Entrar', err_pw:'Contraseña incorrecta',
-      nav_conv:'Conversaciones', nav_cal:'Calendario', nav_db:'Base de datos', nav_media:'Fotos y vídeos', nav_theme:'Cambiar tema', nav_logout:'Salir', nav_lang:'English',
+      nav_conv:'Conversaciones', nav_cal:'Calendario', nav_db:'Base de datos', nav_media:'Fotos y vídeos', nav_theme:'Cambiar tema', nav_logout:'Salir', nav_lang:'English', nav_toggle:'Colapsar menú',
       m_media:'Fotos y vídeos del bot', media_help:'El bot envía estos archivos cuando ayudan a vender. Sube el archivo (botón ⬆) o pega una URL pública, ponle una etiqueta corta (ej. "carreteras") y —importante— en "cuándo usarlo" describe la situación en la que el bot debe enviarlo (ej. "cuando pregunten cómo son las carreteras o el estado del asfalto"). Eso es lo que el bot lee para decidir; el pie de foto es lo que ve el cliente.', btn_media_add:'+ Añadir archivo', media_empty:'Aún no hay archivos. Añade el primero 👇', mt_image:'Foto', mt_video:'Vídeo', mr_ph_label:'etiqueta (ej. intro)', mr_ph_url:'sube ⬆ o pega una URL pública', mr_ph_use:'cuándo usarlo (ej. si preguntan por las carreteras)', mr_ph_cap:'pie de foto que ve el cliente (opcional)', al_media_url:'Cada archivo necesita una etiqueta y una URL (sube el archivo o pega una URL).', al_media_saved:'Biblioteca guardada ✓', ti_media_up:'Subir archivo del equipo', al_media_big:'Archivo demasiado grande (máx 16 MB).', al_media_uploaded:'Archivo subido ✓',
       h_conv:'Conversaciones', st_wait:'por responder', st_int:'interesados', st_book:'en reserva', st_today:'hoy',
       ph_search_lead:'Buscar lead…', chip_all:'Todos', chip_wait:'🔔 Por responder', chip_int:'🟡 Interesados', chip_book:'🔴 Reserva',
@@ -791,7 +827,7 @@
       tl_empty:'Sin actividad registrada', tl_created:'Lead creado', tl_imported:'Importado de Meta', tl_status:'Estado', tl_owner:'Asignado a', tl_appt:'Cita agendada', tl_note:'Nota actualizada', tl_tag:'Etiqueta añadida', tl_archived:'Archivado', tl_restored:'Restaurado', tl_enriched:'Datos enriquecidos', tl_outreach:'Conversación iniciada (intro)', tl_fu_reminded:'Recordatorio de seguimiento enviado', tl_newsletter:'Newsletter enviado', tl_deal_archived:'Consulta anterior archivada', tl_deal_new:'Nueva consulta detectada', tl_deal_status:'Estado de la consulta',
       al_save:'No se pudo guardar', edit_tpl:'✎ Editar plantillas…', locale:'es-ES' },
     en:{ brand:'CRM BMA', login_title:'Conversations panel', login_sub:'CRM BMA · studio access', ph_pw:'Password', btn_enter:'Sign in', err_pw:'Wrong password',
-      nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_media:'Photos & videos', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español',
+      nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_media:'Photos & videos', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español', nav_toggle:'Collapse menu',
       m_media:'Bot photos & videos', media_help:'The bot sends these files when they help the sale. Upload a file (⬆ button) or paste a public URL, give it a short label (e.g. "roads") and — importantly — in "when to use" describe the situation the bot should send it in (e.g. "when they ask what the roads or tarmac are like"). That is what the bot reads to decide; the caption is what the customer sees.', btn_media_add:'+ Add file', media_empty:'No files yet. Add the first one 👇', mt_image:'Photo', mt_video:'Video', mr_ph_label:'label (e.g. intro)', mr_ph_url:'upload ⬆ or paste a public URL', mr_ph_use:'when to use it (e.g. if they ask about the roads)', mr_ph_cap:'caption the customer sees (optional)', al_media_url:'Each file needs a label and a URL (upload a file or paste a URL).', al_media_saved:'Library saved ✓', ti_media_up:'Upload file from device', al_media_big:'File too large (max 16 MB).', al_media_uploaded:'File uploaded ✓',
       h_conv:'Conversations', st_wait:'to reply', st_int:'interested', st_book:'booking', st_today:'today',
       ph_search_lead:'Search lead…', chip_all:'All', chip_wait:'🔔 To reply', chip_int:'🟡 Interested', chip_book:'🔴 Booking',
@@ -909,6 +945,22 @@
     applyTheme(theme);
   };
   document.getElementById('langToggle').onclick = function(){ setLang(LANG==='es'?'en':'es'); };
+
+  // ── sidebar colapsable a mano (persistente; solo cambia el icono, la etiqueta la gestiona el i18n normal) ──
+  var navCollapsed = localStorage.getItem('botpanel_navcollapsed') === '1';
+  function applyNavCollapsed(v){
+    document.getElementById('app').classList.toggle('navCollapsed', v);
+    var ic = document.getElementById('navToggleIcon');
+    if(ic) ic.outerHTML = v
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="navToggleIcon"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="navToggleIcon"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+  applyNavCollapsed(navCollapsed);
+  document.getElementById('navToggle').onclick = function(){
+    navCollapsed = !navCollapsed;
+    localStorage.setItem('botpanel_navcollapsed', navCollapsed ? '1' : '0');
+    applyNavCollapsed(navCollapsed);
+  };
 
   // ── helpers ──
   function esc(s){ var d=document.createElement('div'); d.textContent = s==null?'':s; return d.innerHTML; }
