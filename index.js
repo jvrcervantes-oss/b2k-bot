@@ -376,45 +376,91 @@ function parseLeadTag(reply) {
   return Object.keys(out).length ? out : null;
 }
 
-// Identidad del "deal" activo del lead: model (alquiler) o tour (tours). Si el lead ya tenía
-// uno cotizado y llega uno DISTINTO, no es una corrección del mismo deal — es una consulta
-// nueva, y el anterior no debe pisarse sin más (bug real reportado 15-jul: un booking ya
-// cerrado desaparecía de la ficha resumen al abrir el cliente una 2ª consulta).
+// Cada deal (moto/tour cotizado) es un registro propio con id + status ('open'|'won'|'lost')
+// dentro de lead.deals[] — así dos consultas concurrentes con identidad distinta (dos motos,
+// dos tours) conviven sin pisarse (bug real reportado 15-jul: un booking ya cerrado
+// desaparecía de la ficha al preguntar por otra moto). Los campos de nivel-lead (name/email/
+// tags/notes/owner) siguen siendo únicos por lead; solo los de DEAL_FIELDS se reparten entre
+// los deals[] abiertos. Los campos de nivel-lead SIGUEN reflejando un "mirror" del deal
+// enfocado (el abierto más reciente) para no romper tabla/dashboard/Sheets, que leen l.model
+// etc. directamente — mirrorOf()/focusDeal() son la única fuente de ese mirror.
 const DEAL_ID_FIELD = BOT_VERTICAL === "rental" ? "model" : "tour";
-const DEAL_SNAPSHOT_FIELDS = BOT_VERTICAL === "rental"
+const DEAL_FIELDS = BOT_VERTICAL === "rental"
   ? ["model", "plan", "startDate", "endDate", "dealValue", "deliveryLocation", "insuranceTier", "paymentMethod"]
   : ["tour", "package", "riders", "pillions", "travelDate", "dealValue"];
+const DEALS_CAP = 30; // tope del array — al recortar se quitan antes los ya cerrados (won/lost), nunca los abiertos
 
-// Pura (sin I/O) para poder testearla sola — ver test-deal-archive.js.
-function dealToArchive(prev, fields) {
-  const id = fields && fields[DEAL_ID_FIELD];
-  if (!id || !prev || !prev[DEAL_ID_FIELD] || prev[DEAL_ID_FIELD] === id) return null;
-  const snapshot = {};
-  DEAL_SNAPSHOT_FIELDS.forEach((k) => { if (prev[k] != null && prev[k] !== "") snapshot[k] = prev[k]; });
-  return snapshot;
+function genDealId() { return "d_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+// Deal abierto al que pertenece este mensaje: mismo identificador (model/tour), o el único
+// abierto si el mensaje aún no trae identificador (ej. llega el email antes que la moto).
+// -1 → no hay match, toca crear un deal nuevo. Pura (sin I/O) — ver test-deal-archive.js.
+function findOpenDealIndex(deals, dealFields) {
+  const id = dealFields[DEAL_ID_FIELD];
+  if (id) return deals.findIndex((d) => d.status === "open" && d[DEAL_ID_FIELD] === id);
+  const openIdxs = [];
+  deals.forEach((d, i) => { if (d.status === "open") openIdxs.push(i); });
+  return openIdxs.length === 1 ? openIdxs[0] : -1;
+}
+
+// Qué deal reflejar en los campos de nivel-lead: el abierto más reciente, o si no queda
+// ninguno abierto, el último tocado de cualquier estado. Pura.
+function focusDeal(deals) {
+  if (!deals.length) return null;
+  const open = deals.filter((d) => d.status === "open");
+  const pool = open.length ? open : deals;
+  return pool.reduce((a, b) => ((b.updatedAt || 0) > (a.updatedAt || 0) ? b : a));
+}
+function mirrorOf(deal) {
+  const m = {};
+  if (deal) DEAL_FIELDS.forEach((k) => { if (deal[k] != null) m[k] = deal[k]; });
+  return m;
+}
+// Solo recorta si hace falta, y solo a costa de deals ya cerrados — un deal abierto nunca se pierde.
+function capDeals(deals) {
+  if (deals.length <= DEALS_CAP) return deals;
+  const closedSorted = deals.filter((d) => d.status !== "open").sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0));
+  const openCount = deals.length - closedSorted.length;
+  const keepClosed = new Set(closedSorted.slice(-(Math.max(0, DEALS_CAP - openCount))));
+  return deals.filter((d) => d.status === "open" || keepClosed.has(d));
 }
 
 // Guarda los campos extraídos en la BD (Redis) + Sheet, sin pisar con vacíos.
 async function captureLeadData(phone, fields) {
   if (!fields || !Object.keys(fields).length) return;
   const prev = (await getLead(phone)) || {};
-  const archived = dealToArchive(prev, fields);
-  if (archived) {
-    const deals = (Array.isArray(prev.deals) ? prev.deals : []).slice(-19);
-    deals.push({ ...archived, archivedAt: Date.now() });
-    fields = { ...fields, deals };
-    await logEvent(phone, "deal_archived", { model: prev[DEAL_ID_FIELD] });
+  let deals = Array.isArray(prev.deals) ? prev.deals.slice() : [];
+
+  const dealFields = {};
+  DEAL_FIELDS.forEach((k) => { if (fields[k] != null && fields[k] !== "") dealFields[k] = fields[k]; });
+  const leadFields = { ...fields };
+  DEAL_FIELDS.forEach((k) => { delete leadFields[k]; });
+
+  let mirror = {};
+  if (Object.keys(dealFields).length) {
+    const idx = findOpenDealIndex(deals, dealFields);
+    if (idx >= 0) {
+      deals[idx] = { ...deals[idx], ...dealFields, updatedAt: Date.now() };
+    } else {
+      const hadOpenOther = deals.some((d) => d.status === "open");
+      deals.push({ id: genDealId(), status: "open", createdAt: Date.now(), updatedAt: Date.now(), ...dealFields });
+      if (hadOpenOther) await logEvent(phone, "deal_new", { model: dealFields[DEAL_ID_FIELD] || "" });
+    }
+    deals = capDeals(deals);
+    mirror = mirrorOf(focusDeal(deals));
   }
+
+  let out = { ...leadFields, ...mirror };
   // Las etiquetas se UNEN con las existentes (no pisan las que puso el estudio a mano).
-  if (Array.isArray(fields.tags)) {
-    const set = new Set([...(Array.isArray(prev.tags) ? prev.tags : []), ...fields.tags].map((s) => String(s).trim()).filter(Boolean));
-    fields = { ...fields, tags: Array.from(set).slice(0, 20) };
+  if (Array.isArray(out.tags)) {
+    const set = new Set([...(Array.isArray(prev.tags) ? prev.tags : []), ...out.tags].map((s) => String(s).trim()).filter(Boolean));
+    out = { ...out, tags: Array.from(set).slice(0, 20) };
     // await OBLIGATORIO: sin él, el SET de logEvent (solo history, leído pre-tags) aterriza
     // DESPUÉS del write de abajo y machaca tags/followup — los tags nunca llegaban a verse.
-    if (fields.tags.length) await logEvent(phone, "tag", { to: fields.tags[fields.tags.length - 1] });
+    if (out.tags.length) await logEvent(phone, "tag", { to: out.tags[out.tags.length - 1] });
   }
-  await updateLeadFields(phone, { ...fields, updatedAt: Date.now() });
-  writeLeadToSheet(phone, fields); // best-effort (solo escribe las llaves con columna mapeada)
+  await updateLeadFields(phone, { ...out, deals, updatedAt: Date.now() });
+  writeLeadToSheet(phone, out); // best-effort (solo escribe las llaves con columna mapeada)
 }
 
 // Registra un hito CRM en el historial del lead (para el timeline del panel). No bumpea updatedAt.
@@ -1812,6 +1858,24 @@ app.post("/admin/api/status", async (req, res) => {
   if (STATUS_SHEET_LABEL[status]) writeLeadToSheet(phone, { status: STATUS_SHEET_LABEL[status] });
   if ((status || "") !== (prevStatus || "")) logEvent(phone, "status", { from: prevStatus || "", to: status || "" });
   res.json({ ok: true });
+});
+
+// ── CRM: estado de un deal CONCRETO dentro de lead.deals[] (open/won/lost) — soporta deals
+// concurrentes: marcar "Ganado"/"Perdido" en uno no toca los demás del mismo lead. ──
+app.post("/admin/api/deal", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, dealId, status } = req.body || {};
+  if (!phone || !dealId || !["open", "won", "lost"].includes(status)) return res.status(400).json({ error: "phone, dealId y status (open/won/lost) requeridos" });
+  const lead = await getLead(phone);
+  const deals = Array.isArray(lead && lead.deals) ? lead.deals.slice() : [];
+  const idx = deals.findIndex((d) => d.id === dealId);
+  if (idx < 0) return res.status(404).json({ error: "deal no encontrado" });
+  const from = deals[idx].status || "";
+  const model = deals[idx][DEAL_ID_FIELD] || "";
+  deals[idx] = { ...deals[idx], status, updatedAt: Date.now() };
+  await updateLeadFields(phone, { deals, ...mirrorOf(focusDeal(deals)) });
+  await logEvent(phone, "deal_status", { model, from, to: status });
+  res.json({ ok: true, deal: deals[idx] });
 });
 
 // ── CRM: campos editables de la ficha (name/country/email/tour/travelDate/owner/tags/seguimiento) ──
