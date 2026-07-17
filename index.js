@@ -1116,6 +1116,48 @@ async function buildPriceHint() {
     + "so the team can review that model's pricing.";
 }
 
+// ─── DELIVERY: zonas con tarifa plana (Supabase BBM: delivery_area_presets) ──────
+// Mismo patrón/caché que buildPriceHint — lee las zonas reales que el equipo gestiona en su panel
+// de delivery en vez de una tabla fija en el contexto. Deliberadamente NO se expone
+// delivery_km_rates (la fórmula por km): el bot no tiene geocoding, así que darle los parámetros
+// solo invitaría a que se inventara una distancia y calculara un número con confianza falsa —
+// fuera de estas zonas sigue escalando al equipo, igual que hacía antes.
+async function computeDeliverySnapshot() {
+  const key = SUPABASE_ANON_KEY || SUPABASE_SERVICE_KEY; // anon basta: RLS da SELECT a anon (migración 015)
+  if (!SUPABASE_URL || !key) return null;
+  const res = await axios.get(`${SUPABASE_URL}/rest/v1/delivery_area_presets`, {
+    params: { select: "area_name,fee", active: "eq.true", order: "sort_order.asc" },
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+    timeout: 10000,
+  });
+  return res.data || [];
+}
+let deliverySnap = null, deliverySnapAt = 0;
+async function getDeliverySnapshot() {
+  if (deliverySnap && Date.now() - deliverySnapAt < INVENTORY_TTL_MS) return deliverySnap;
+  try {
+    deliverySnap = await computeDeliverySnapshot();
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] Delivery: error leyendo Supabase — ${e.response ? JSON.stringify(e.response.data) : e.message}`);
+  }
+  deliverySnapAt = Date.now();
+  return deliverySnap;
+}
+async function buildDeliveryHint() {
+  if (BOT_VERTICAL !== "rental") return "";
+  const zones = await getDeliverySnapshot();
+  if (!zones || !zones.length) return "";
+  const lines = zones.map((z) => `- ${z.area_name}: ${Number(z.fee).toLocaleString("id-ID")} IDR (flat, any rental length)`).join("\n");
+  return "\n\nLIVE DELIVERY (IDR, refreshed every few minutes straight from the fleet system — this is the "
+    + "current source of truth, ignore any older delivery table you may recall). Each zone below has ONE "
+    + "flat fee that already covers delivery AND pickup together — never split it into two legs, never "
+    + "double it, never say \"each way\". The fee does NOT depend on the rental plan/length — a zone costs "
+    + "the same for a daily rental and for a 6-month one; never say delivery is \"free\" for a long plan, "
+    + "that rule no longer applies:\n" + lines
+    + "\n\nFor any address NOT in this list: do not estimate kilometres or a price yourself — say the team "
+    + "will confirm the exact delivery cost for that address, and add `tags: pricing_check`.";
+}
+
 // ─── GOOGLE SHEETS ────────────────────────────────────────────────
 async function getSheetsClient() {
   const credentials = JSON.parse(GOOGLE_SERVICE_ACCOUNT);
@@ -1867,6 +1909,7 @@ app.post("/webhook", async (req, res) => {
       : "";
     const stockHint = await buildStockHint(); // inventario (rental): mismo patrón que mediaHint, bloque aparte sin cachear
     const priceHint = await buildPriceHint(); // tarifas (rental): mismo patrón/caché que stockHint
+    const deliveryHint = await buildDeliveryHint(); // zonas de delivery (rental): mismo patrón/caché que priceHint
     // Streaming (no create): evita el "Premature close" en respuestas no-stream y mantiene viva la conexión.
     const response = await claudeMessage({
       model: MODEL,
@@ -1874,12 +1917,13 @@ app.post("/webhook", async (req, res) => {
       thinking: { type: "disabled" }, // respuestas cortas y baratas; en Sonnet 5 el thinking va ON por defecto y se comería el max_tokens
       // Prompt caching: el system (~11.5k tok fijos: context.md + BASE_INSTRUCTIONS) es idéntico en cada turno.
       // Con cache_control, la 1ª vez paga 1.25x y el resto de la charla (dentro de 5 min) paga 0.1x → ~-78% del coste de system.
-      // mediaHint/stockHint/priceHint van en bloque aparte tras el prefijo cacheado (cambian solos, sin invalidar la caché).
+      // mediaHint/stockHint/priceHint/deliveryHint van en bloque aparte tras el prefijo cacheado (cambian solos, sin invalidar la caché).
       system: [
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
         ...(stockHint ? [{ type: "text", text: stockHint }] : []),
         ...(priceHint ? [{ type: "text", text: priceHint }] : []),
+        ...(deliveryHint ? [{ type: "text", text: deliveryHint }] : []),
       ],
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // prompt = últimos 20; el resto es historial del panel
     });
