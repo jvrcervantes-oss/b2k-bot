@@ -1328,8 +1328,8 @@
       var sub=(d.startDate?esc(d.startDate):'')+(d.endDate?' → '+esc(d.endDate):'')+(d.dealValue?' · '+money(d.dealValue):'');
       var actions=st==='open'
         ? '<div style="display:flex;gap:6px;margin-top:4px">'
-          + '<button class="qbtn win" style="padding:4px 8px;font-size:11px" onclick="dealAction(\''+esc(d.id)+'\',\'won\')">✅ '+t('deal_won')+'</button>'
-          + '<button class="qbtn" style="padding:4px 8px;font-size:11px" onclick="dealAction(\''+esc(d.id)+'\',\'lost\')">❌ '+t('deal_lost')+'</button>'
+          + '<button class="qbtn" style="padding:4px 8px;font-size:11px;background:#16a34a" onclick="dealAction(\''+esc(d.id)+'\',\'won\')">✅ '+t('deal_won')+'</button>'
+          + '<button class="qbtn" style="padding:4px 8px;font-size:11px;background:#dc2626" onclick="dealAction(\''+esc(d.id)+'\',\'lost\')">❌ '+t('deal_lost')+'</button>'
           + '</div>' : '';
       return '<div class="tli"><span class="ic2">'+(DEAL_BADGE[st]||'🗂️')+'</span><div><div>'+head+'</div><div class="tlt">'+sub+'</div>'+actions+'</div></div>';
     }).join('');
