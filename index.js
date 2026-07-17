@@ -112,9 +112,16 @@ const fallbackEscQueue = [];
 let redisClient = null;
 
 try {
-  redisClient = createClient({ url: REDIS_URL });
+  if (!REDIS_URL) throw new Error("REDIS_URL no configurado");
+  redisClient = createClient({ url: REDIS_URL, socket: { reconnectStrategy: false } });
   redisClient.on("error", (e) => console.error(`[${PROJECT_NAME}] Redis error:`, e.message));
-  await redisClient.connect();
+  // node-redis reintenta la conexión inicial con su propio backoff antes de rechazar la
+  // promesa — sin este timeout, un Redis inalcanzable cuelga el arranque entero (nunca cae
+  // a RAM ni levanta el servidor) en vez de degradar con gracia como se pretendía.
+  await Promise.race([
+    redisClient.connect(),
+    new Promise((_, rej) => setTimeout(() => rej(new Error("timeout conectando a Redis")), 5000)),
+  ]);
   console.log(`[${PROJECT_NAME}] Redis conectado`);
 } catch (e) {
   console.warn(`[${PROJECT_NAME}] Redis no disponible, usando memoria RAM:`, e.message);
