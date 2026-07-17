@@ -203,6 +203,76 @@ async function listLeads() {
   })));
 }
 
+// ─── OPERADORES B2B (pestaña "Operadores" del panel) ────────────────
+// BD separada de los leads de chat B2C: claves op:<id> + índice ops_index propio
+// (mismo Redis, namespace propio — nunca se mezclan ni se listan juntos). Sin chat,
+// sin WhatsApp: son contactos cargados a mano o por CSV para la newsletter B2B.
+const fallbackOps = {};
+function newOpId() {
+  return crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
+async function getOperator(id) {
+  if (redisClient) { const d = await redisClient.get(`op:${id}`); return d ? JSON.parse(d) : null; }
+  return fallbackOps[id] || null;
+}
+async function saveOperator(op) {
+  op.updatedAt = Date.now();
+  if (redisClient) {
+    await redisClient.set(`op:${op.id}`, JSON.stringify(op));
+    await redisClient.zAdd("ops_index", { score: op.updatedAt, value: op.id });
+  } else {
+    fallbackOps[op.id] = op;
+  }
+  return op;
+}
+async function deleteOperator(id) {
+  if (redisClient) { await redisClient.del(`op:${id}`); await redisClient.zRem("ops_index", id); }
+  else delete fallbackOps[id];
+}
+async function listOperators() {
+  let list;
+  if (redisClient) {
+    const ids = await redisClient.zRange("ops_index", 0, -1, { REV: true });
+    if (!ids.length) return [];
+    const raws = await Promise.all(ids.map((id) => redisClient.get(`op:${id}`)));
+    list = raws.filter(Boolean).map((r) => JSON.parse(r));
+  } else {
+    list = Object.values(fallbackOps).sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+  const unsub = await getUnsubSet();
+  return list.map((o) => ({ ...o, emailUnsub: !!(o.email && unsub.has(String(o.email).toLowerCase().trim())) }));
+}
+// Upsert de una fila de CSV genérico (alias ES/EN de columnas). Si el email ya existe,
+// solo rellena campos vacíos (no pisa ediciones manuales); si no, crea un operador nuevo.
+async function importOperatorRow(row) {
+  const email = String(row.email || "").trim().toLowerCase();
+  const company = String(row.company || row.empresa || "").trim();
+  if (!company && !email) return "skipped";
+  const all = await listOperators();
+  const match = email ? all.find((o) => String(o.email || "").toLowerCase() === email) : null;
+  const fields = {
+    company: company || undefined,
+    contact: String(row.contact || row.contacto || row.name || "").trim() || undefined,
+    email: email || undefined,
+    phone: String(row.phone || row.telefono || row.whatsapp || "").trim() || undefined,
+    country: String(row.country || row.pais || "").trim() || undefined,
+    notes: String(row.notes || row.notas || "").trim() || undefined,
+  };
+  if (match) {
+    const merged = { ...match };
+    let changed = false;
+    for (const k of Object.keys(fields)) if (fields[k] && !merged[k]) { merged[k] = fields[k]; changed = true; }
+    if (changed) await saveOperator(merged);
+    return "updated";
+  }
+  await saveOperator({
+    id: newOpId(), company: fields.company || "", contact: fields.contact || "", email: fields.email || "",
+    phone: fields.phone || "", country: fields.country || "", notes: fields.notes || "",
+    tags: [], status: "new", source: "csv", archived: false, createdAt: Date.now(),
+  });
+  return "created";
+}
+
 // Nivel de aviso ya enviado al owner para ese lead (anti-spam).
 // Orden: exploring < interested < booking
 const NOTIFY_RANK = { interested: 1, booking: 2 };
@@ -1733,6 +1803,56 @@ app.post("/admin/api/import", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Operadores B2B — pestaña separada, BD separada (op:*/ops_index, nunca lead:*) ──
+app.get("/admin/api/operators", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try { res.json(await listOperators()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/admin/api/operator", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const body = req.body || {};
+  try {
+    let op = body.id ? await getOperator(body.id) : null;
+    if (!op) op = { id: body.id || newOpId(), createdAt: Date.now(), tags: [], status: "new", archived: false };
+    ["company", "contact", "email", "phone", "country", "notes", "status"].forEach((k) => { if (body[k] != null) op[k] = body[k]; });
+    if (Array.isArray(body.tags)) op.tags = body.tags;
+    await saveOperator(op);
+    res.json({ ok: true, operator: op });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/admin/api/operator/delete", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { id } = req.body || {};
+  if (!id) return res.status(400).json({ error: "id requerido" });
+  try { await deleteOperator(id); res.json({ ok: true }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/admin/api/operator/archive", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { id, archived } = req.body || {};
+  if (!id) return res.status(400).json({ error: "id requerido" });
+  try {
+    const op = await getOperator(id);
+    if (!op) return res.status(404).json({ error: "no encontrado" });
+    op.archived = archived !== false;
+    await saveOperator(op);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Import CSV genérico de operadores (no el formato Meta): company/contact/email/phone/country/notes, alias ES.
+app.post("/admin/api/import-operators", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const rows = req.body && req.body.rows;
+  if (!Array.isArray(rows)) return res.status(400).json({ error: "rows (array) requerido" });
+  let created = 0, updated = 0, skipped = 0;
+  try {
+    for (const r of rows) {
+      const out = await importOperatorRow(r);
+      if (out === "created") created++; else if (out === "updated") updated++; else skipped++;
+    }
+    res.json({ ok: true, created, updated, skipped, total: rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Estado del almacén: si la "base de datos" persiste (Redis) o es volátil (RAM), y cuántos leads hay.
 app.get("/admin/api/health", async (req, res) => {
   if (!adminAuth(req, res)) return;
@@ -2179,28 +2299,32 @@ app.get("/unsubscribe", async (req, res) => {
 
 // Resuelve destinatarios (email válido, no baja, no archivado, sin duplicar) y envía la campaña.
 // Reutilizado por el envío inmediato y por el programado (tick). Devuelve {sent, failed, total}.
-async function runCampaign({ subject, body, templateId, phones, host }) {
+// dataset "leads" (default) = leads de chat B2C, identificados por phone, logEvent en su timeline.
+// dataset "operators" = BD B2B separada, identificados por id, sin timeline (no hay conversación).
+async function runCampaign({ subject, body, templateId, phones, ids, dataset, host }) {
   const buildFor = (email, name) => templateId
     ? { to: email, name, templateId, params: { unsub: unsubUrl(host, email), name: name || "", email } }
     : { to: email, subject, html: renderEmailHtml(mdToHtml(body), unsubUrl(host, email)) };
-  const onlyPhones = Array.isArray(phones) ? new Set(phones) : null;
+  const isOperators = dataset === "operators";
+  const onlyIds = Array.isArray(ids) ? new Set(ids) : (Array.isArray(phones) ? new Set(phones) : null);
   const unsub = await getUnsubSet();
-  const leads = await listLeads();
+  const source = isOperators ? await listOperators() : await listLeads();
   const seen = new Set();
   const recipients = [];
-  for (const l of leads) {
+  for (const l of source) {
     if (l.archived) continue;
-    if (onlyPhones && !onlyPhones.has(l.phone)) continue;
+    const key = isOperators ? l.id : l.phone;
+    if (onlyIds && !onlyIds.has(key)) continue;
     const email = String(l.email || "").toLowerCase().trim();
     if (!EMAIL_RE.test(email) || unsub.has(email) || seen.has(email)) continue;
     seen.add(email);
-    recipients.push({ phone: l.phone, email, name: l.name || "" });
+    recipients.push({ key, email, name: (isOperators ? (l.contact || l.company) : l.name) || "" });
   }
   const label = templateId ? `template#${templateId}` : subject;
   let sent = 0, failed = 0;
   for (const r of recipients) {
     const out = await sendEmail(buildFor(r.email, r.name));
-    if (out.ok) { sent++; await logEvent(r.phone, "newsletter", { subject: label }); }
+    if (out.ok) { sent++; if (!isOperators) await logEvent(r.key, "newsletter", { subject: label }); }
     else { failed++; console.warn(`[${PROJECT_NAME}] newsletter fallo a ${r.email}: ${out.error}`); }
     await new Promise((s) => setTimeout(s, 120)); // pausa corta: evita el rate-limit de Brevo
   }
@@ -2231,6 +2355,8 @@ app.post("/admin/api/newsletter", async (req, res) => {
   const testTo = String((req.body && req.body.testTo) || "").trim().toLowerCase();
   const templateId = parseInt((req.body && req.body.templateId), 10) || null; // usar plantilla de Brevo
   const phones = Array.isArray(req.body && req.body.phones) ? req.body.phones : null;
+  const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids : null;
+  const dataset = (req.body && req.body.dataset) === "operators" ? "operators" : "leads";
   const when = String((req.body && req.body.when) || "").trim();
   if (!templateId && (!subject || !body)) return res.status(400).json({ error: "elige una plantilla de Brevo, o escribe asunto y cuerpo" });
   const host = req.get("host");
@@ -2253,14 +2379,14 @@ app.post("/admin/api/newsletter", async (req, res) => {
     if (ts < Date.now() - 60000) return res.status(400).json({ error: "esa fecha ya pasó" });
     const list = await getScheduled();
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    list.push({ id, when: ts, subject, body, templateId, phones, host, createdAt: Date.now() });
+    list.push({ id, when: ts, subject, body, templateId, phones, ids, dataset, host, createdAt: Date.now() });
     await setScheduled(list);
     console.log(`[${PROJECT_NAME}] Newsletter programado ${id} para ${new Date(ts).toISOString()}`);
     return res.json({ ok: true, scheduled: true, id, when: ts });
   }
 
   // Envío INMEDIATO.
-  const out = await runCampaign({ subject, body, templateId, phones, host });
+  const out = await runCampaign({ subject, body, templateId, phones, ids, dataset, host });
   res.json({ ok: true, ...out });
 });
 
@@ -2272,7 +2398,8 @@ app.get("/admin/api/newsletter/scheduled", async (req, res) => {
     res.json(list.slice().sort((a, b) => a.when - b.when).map((c) => ({
       id: c.id, when: c.when,
       subject: c.templateId ? `Plantilla Brevo #${c.templateId}` : c.subject,
-      scope: c.phones ? c.phones.length : null, // nº seleccionados, o null = todos
+      scope: (c.ids || c.phones) ? (c.ids || c.phones).length : null, // nº seleccionados, o null = todos
+      dataset: c.dataset === "operators" ? "operators" : "leads",
     })));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

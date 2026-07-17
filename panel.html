@@ -234,6 +234,24 @@
   #dbView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
   #app.dbmode #list,#app.dbmode #chat,#app.dbmode #detail{display:none}
   #app.dbmode #dbView{display:flex}
+  /* ── Operadores B2B: BD separada (no son leads de chat), mismo patrón visual que dbView ── */
+  #opsView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
+  #app.opsmode #list,#app.opsmode #chat,#app.opsmode #detail{display:none}
+  #app.opsmode #opsView{display:flex}
+  .ops-chips{display:flex;gap:6px;padding:0 24px 14px;flex-wrap:wrap}
+  .ops-chip{padding:6px 13px;border-radius:100px;border:1px solid var(--line);background:var(--card);color:var(--ink-soft);font-size:12.5px;font-weight:700;cursor:pointer}
+  .ops-chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  body.dark .ops-chip.on{background:var(--accent);border-color:var(--accent)}
+  .ops-scroll{flex:1;overflow-y:auto;padding:0 24px 30px}
+  .ops-scroll table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--sh)}
+  .ops-scroll thead th{text-align:left;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft);padding:11px 14px;border-bottom:1px solid var(--line);background:var(--bg);white-space:nowrap}
+  .ops-scroll tbody td{padding:11px 14px;border-bottom:1px solid var(--line-2);font-size:13px;vertical-align:middle}
+  .ops-scroll tbody tr:last-child td{border-bottom:0}
+  .ops-scroll tbody tr:hover{background:var(--bg)}
+  .ops-company{font-weight:700}
+  select.ops-st{border:1px solid var(--line);border-radius:7px;padding:4px 8px;font-size:12px;font-weight:700;background:var(--card);color:var(--ink)}
+  .ops-st-new{color:var(--accent)} .ops-st-contacted{color:var(--amber)} .ops-st-negotiating{color:#7c3aed} .ops-st-partner{color:var(--green)} .ops-st-inactive{color:var(--ink-soft)}
+  .ops-empty{padding:60px 20px;text-align:center;color:var(--ink-soft)}
   /* secciones a pantalla completa (media, newsletter) — mismo patrón que dbView */
   #mediaView,#nlView,#simView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
   #app.mediamode #list,#app.mediamode #chat,#app.mediamode #detail{display:none}
@@ -587,6 +605,7 @@
     <div class="ic on" id="navConv" data-ti="nav_conv" title="Conversaciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_conv">Conversaciones</span></div>
     <div class="ic" id="navCal" data-ti="nav_cal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_cal">Calendario</span></div>
     <div class="ic" id="navDb" data-ti="nav_db" title="Base de datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_db">Base de datos</span></div>
+    <div class="ic" id="navOps" data-ti="nav_ops" title="Operadores"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21V8l9-5 9 5v13" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 21v-6h6v6M9 12h.01M15 12h.01M9 9h.01M15 9h.01" stroke-linecap="round"/></svg><span class="lbl" data-i18n="nav_ops">Operadores</span></div>
     <div class="ic" id="navMedia" data-ti="nav_media" title="Fotos y vídeos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_media">Fotos y vídeos</span></div>
     <div class="ic grp" id="navNewsletter" data-ti="nav_nl" title="Newsletter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_nl">Newsletter</span></div>
     <div class="ic" id="navSim" data-ti="nav_sim" title="Simulador"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12c0 4.418-4.03 8-9 8-1.06 0-2.076-.163-3.017-.463L3 21l1.35-3.746C3.494 15.85 3 14.482 3 13c0-4.418 4.03-8 9-8s9 3.582 9 8z" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 12h.01M12 12h.01M16 12h.01" stroke-linecap="round"/></svg><span class="lbl" data-i18n="nav_sim">Simulador</span></div>
@@ -682,6 +701,38 @@
     <div class="db-foot" id="dbFoot"></div>
   </div>
 
+  <!-- sección: Operadores B2B — BD separada de los leads de chat, sin conversación -->
+  <div id="opsView">
+    <div class="db-top">
+      <h2><span data-i18n="h_ops">Operadores</span> <span class="count" id="opsCount">0</span></h2>
+      <div class="db-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg><input id="opsQ" data-ph="ph_search_op" placeholder="Buscar empresa, contacto, email…"></div>
+      <input type="file" id="opsFile" accept=".csv,text/csv" style="display:none">
+      <button class="db-ghost" id="opsImport" data-i18n="btn_import_ops">⬆ Importar CSV</button>
+      <button class="db-csv" id="opsExport" data-i18n="btn_csv">⬇ Exportar CSV</button>
+      <button class="db-csv" id="opsNew" data-i18n="btn_new_op">+ Operador</button>
+    </div>
+    <div class="ops-chips" id="opsChips">
+      <button class="ops-chip on" data-s="all" data-i18n="ops_all">Todos</button>
+      <button class="ops-chip" data-s="new" data-i18n="ops_new">Nuevo</button>
+      <button class="ops-chip" data-s="contacted" data-i18n="ops_contacted">Contactado</button>
+      <button class="ops-chip" data-s="negotiating" data-i18n="ops_negotiating">Negociando</button>
+      <button class="ops-chip" data-s="partner" data-i18n="ops_partner">Partner</button>
+      <button class="ops-chip" data-s="inactive" data-i18n="ops_inactive">Inactivo</button>
+    </div>
+    <div class="ops-scroll">
+      <table>
+        <thead><tr>
+          <th style="width:26px"><input type="checkbox" id="opsSelAll"></th>
+          <th data-i18n="ops_th_company">Empresa</th><th data-i18n="ops_th_contact">Contacto</th><th data-i18n="ops_th_email">Email</th>
+          <th data-i18n="ops_th_phone">Teléfono</th><th data-i18n="ops_th_country">País</th><th data-i18n="ops_th_tags">Etiquetas</th>
+          <th data-i18n="e_status">Estado</th><th data-i18n="ops_th_updated">Actualizado</th><th></th>
+        </tr></thead>
+        <tbody id="opsRows"></tbody>
+      </table>
+      <div class="ops-empty" id="opsEmpty" style="display:none" data-i18n="ops_empty">Aún no hay operadores. Importa un CSV o añade el primero con "+ Operador".</div>
+    </div>
+  </div>
+
   <!-- sección: fotos y vídeos del bot -->
   <div id="mediaView">
     <div class="sec-top"><h2 data-i18n="m_media">Fotos y vídeos del bot</h2></div>
@@ -699,6 +750,8 @@
     <div class="sec-top"><h2 data-i18n="nl_title">Newsletter por email</h2></div>
     <div class="sec-body">
       <p class="media-help" data-i18n="nl_help">Envía un email a los leads que dieron su correo. Incluye siempre un enlace de baja automático. Prueba primero contigo.</p>
+      <label data-i18n="nl_dataset">Base de datos</label>
+      <select id="nlDataset"><option value="leads" data-i18n="nl_ds_leads">Leads (chat)</option><option value="operators" data-i18n="nl_ds_ops">Operadores (B2B)</option></select>
       <label data-i18n="nl_scope">Destinatarios</label>
       <select id="nlScope"><option value="all" data-i18n="nl_scope_all">Todos con email</option><option value="selected" data-i18n="nl_scope_sel">Seleccionados en la Base de datos</option></select>
       <div id="nlCount" class="nl-count"></div>
@@ -767,6 +820,38 @@
   </div>
 </div>
 
+<!-- modal ficha de operador (alta/edición) -->
+<div id="opModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <h3 id="opModalTitle" data-i18n="m_new_op">Nuevo operador</h3>
+    <input type="hidden" id="opId">
+    <label data-i18n="op_company">Empresa *</label>
+    <input id="opCompany">
+    <label data-i18n="op_contact">Persona de contacto</label>
+    <input id="opContact">
+    <label data-i18n="e_email">Email</label>
+    <input id="opEmail" type="email">
+    <label data-i18n="op_phone">Teléfono</label>
+    <input id="opPhone">
+    <label data-i18n="op_country">País</label>
+    <input id="opCountry">
+    <label data-i18n="op_tags">Etiquetas (separadas por coma)</label>
+    <input id="opTags">
+    <label data-i18n="e_status">Estado</label>
+    <select id="opStatus">
+      <option value="new" data-i18n="ops_new">Nuevo</option>
+      <option value="contacted" data-i18n="ops_contacted">Contactado</option>
+      <option value="negotiating" data-i18n="ops_negotiating">Negociando</option>
+      <option value="partner" data-i18n="ops_partner">Partner</option>
+      <option value="inactive" data-i18n="ops_inactive">Inactivo</option>
+    </select>
+    <label data-i18n="op_notes">Notas</label>
+    <textarea id="opNotes" rows="3"></textarea>
+    <div class="modal-err" id="opErr"></div>
+    <div class="modal-actions"><button id="opDelete" class="btn-ghost" data-i18n="btn_delete_op" style="display:none;margin-right:auto;color:#dc2626">Borrar</button><button id="opCancel" class="btn-ghost" data-i18n="btn_cancel">Cancelar</button><button id="opSave" class="btn-primary" data-i18n="btn_save">Guardar</button></div>
+  </div>
+</div>
+
 <!-- modal vista rápida de cita (solo lectura) -->
 <div id="apptViewModal" class="modal" style="display:none">
   <div class="modal-box">
@@ -792,6 +877,12 @@
       pick_lead:'Selecciona un lead', nochat:'Elige una conversación de la izquierda', ph_reply:'Escribe para tomar el control…', t_canned:'Respuestas rápidas', t_attach:'Enviar foto/vídeo', t_send:'Enviar', by_bot:'Enviado por el bot', by_human:'Enviado a mano', detail_empty:'Selecciona un lead para ver su ficha',
       cal_new:'+ Nueva cita', cal_upcoming:'Próximas citas', cal_none:'Sin citas próximas', dow:['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'],
       h_db:'Base de datos', ph_search_client:'Buscar cliente…', btn_import:'⬆ Importar Meta', ti_import:'Sube el CSV de leads que descargas de Meta Lead Ads', btn_enrich:'🔄 Actualizar desde chats', ti_enrich:'Lee las conversaciones y rellena los datos que falten', btn_csv:'⬇ Exportar CSV',
+      nav_ops:'Operadores', h_ops:'Operadores', ph_search_op:'Buscar empresa, contacto, email…', btn_import_ops:'⬆ Importar CSV', btn_new_op:'+ Operador',
+      ops_all:'Todos', ops_new:'Nuevo', ops_contacted:'Contactado', ops_negotiating:'Negociando', ops_partner:'Partner', ops_inactive:'Inactivo',
+      ops_th_company:'Empresa', ops_th_contact:'Contacto', ops_th_email:'Email', ops_th_phone:'Teléfono', ops_th_country:'País', ops_th_tags:'Etiquetas', ops_th_updated:'Actualizado',
+      ops_empty:'Aún no hay operadores. Importa un CSV o añade el primero con "+ Operador".',
+      m_new_op:'Nuevo operador', m_edit_op:'Editar operador', op_company:'Empresa *', op_contact:'Persona de contacto', op_phone:'Teléfono', op_country:'País', op_tags:'Etiquetas (separadas por coma)', op_notes:'Notas', btn_delete_op:'Borrar', cfm_op_delete:'¿Borrar este operador?', al_op_company:'La empresa es obligatoria',
+      nl_dataset:'Base de datos', nl_ds_leads:'Leads (chat)', nl_ds_ops:'Operadores (B2B)',
       m_canned:'Respuestas rápidas', m_canned_help:'Una por línea · formato', m_canned_fmt:'Título | texto', btn_cancel:'Cancelar', btn_save:'Guardar',
       m_appt:'Nueva cita', m_appt_edit:'Editar cita', l_lead:'Lead', ph_lead:'Nombre o teléfono (opcional)', l_datetime:'Fecha y hora', l_title:'Título', ph_call:'Llamada con…', btn_save_appt:'Guardar cita',
       l_closer:'Closer asignado', l_notes_appt:'Notas de la cita', ph_notes_appt:'Contexto de lo hablado, para el closer…', btn_delete_appt:'Eliminar cita', btn_close:'Cerrar', btn_edit_appt:'Editar cita', av_nolead:'Sin lead', av_noone:'Sin asignar', av_nonotes:'Sin notas',
@@ -821,7 +912,7 @@
       act_outreach:'💬 Iniciar conversación', act_reoutreach:'💬 Reenviar intro', bulk_outreach:'💬 Iniciar conv.',
       outreach_ing:'⏳ Enviando…', outreach_ok:'Intro enviada', outreach_err:'No se pudo iniciar la conversación. ¿Está configurada la plantilla de intro (INTRO_TEMPLATE_NAME) en Railway?',
       q_assign:'Asignar', q_call:'Agendar llamada', call_title:'Llamada con', al_appt_date:'Pon fecha y hora', pre_bot:'Bot: ', pre_you:'Tú: ', act_call:'📞 Agendar llamada', cal_today:'Hoy',
-      nav_nl:'Newsletter', nl_title:'Newsletter por email', nl_help:'Envía un email a los leads que dieron su correo. Incluye siempre un enlace de baja automático. Prueba primero contigo.', nl_scope:'Destinatarios', nl_scope_all:'Todos con email', nl_scope_sel:'Seleccionados en la Base de datos', nl_count:'{n} destinatarios con email · {u} dados de baja se excluyen', nl_subject:'Asunto', nl_ph_subject:'Asunto del email', nl_body:'Mensaje', nl_ph_body:'Escribe el email. Deja una línea en blanco entre párrafos.', nl_test:'Enviar prueba', nl_ph_test:'tu@email.com', nl_send:'Enviar', nl_send_n:'Enviar a {n}', nl_sending:'⏳ Enviando…', nl_sent:'✓ Enviados {s} · {f} fallidos', nl_test_ok:'✓ Prueba enviada', nl_no_recip:'No hay destinatarios con email en esta selección.', nl_need:'Escribe asunto y mensaje.', nl_test_need:'Pon un email de prueba válido.', cfm_nl:'¿Enviar el newsletter a {n} personas? No se puede deshacer.', nl_fmt:'Formato: **negrita** · *cursiva* · ## Título · - lista · [texto](enlace) · [[Botón|enlace]] · ![imagen](url). El botón "Enviar prueba" te muestra cómo queda.', nl_mode:'Contenido del email', nl_mode_compose:'Escribirlo aquí', nl_mode_brevo:'Usar una plantilla de Brevo', nl_template:'Plantilla de Brevo', nl_template_hint:'Solo aparecen las plantillas transaccionales activas de Brevo. Personaliza con {{params.name}}; añade {{params.unsub}} en el pie para la baja.', nl_no_templates:'No hay plantillas transaccionales en Brevo (créala en Brevo → Transactional → Templates)', nl_pick_template:'Elige una plantilla de Brevo.', nl_when:'Programar para (opcional)', nl_when_hint:'Déjalo vacío para enviar ahora. Con fecha, se envía solo a esa hora (los destinatarios se recalculan al disparar).', nl_schedule:'Programar', nl_schedule_n:'Programar · {n} dest.', nl_scheduled_ok:'✓ Programado', cfm_nl_sched:'¿Programar el envío a {n} personas?', nl_sched_title:'Programados', nl_sched_sel:'sel.', nl_sched_all:'todos',
+      nav_nl:'Newsletter', nl_title:'Newsletter por email', nl_help:'Envía un email a los leads que dieron su correo. Incluye siempre un enlace de baja automático. Prueba primero contigo.', nl_scope:'Destinatarios', nl_scope_all:'Todos con email', nl_scope_sel:'Seleccionados en la vista actual', nl_count:'{n} destinatarios con email · {u} dados de baja se excluyen', nl_subject:'Asunto', nl_ph_subject:'Asunto del email', nl_body:'Mensaje', nl_ph_body:'Escribe el email. Deja una línea en blanco entre párrafos.', nl_test:'Enviar prueba', nl_ph_test:'tu@email.com', nl_send:'Enviar', nl_send_n:'Enviar a {n}', nl_sending:'⏳ Enviando…', nl_sent:'✓ Enviados {s} · {f} fallidos', nl_test_ok:'✓ Prueba enviada', nl_no_recip:'No hay destinatarios con email en esta selección.', nl_need:'Escribe asunto y mensaje.', nl_test_need:'Pon un email de prueba válido.', cfm_nl:'¿Enviar el newsletter a {n} personas? No se puede deshacer.', nl_fmt:'Formato: **negrita** · *cursiva* · ## Título · - lista · [texto](enlace) · [[Botón|enlace]] · ![imagen](url). El botón "Enviar prueba" te muestra cómo queda.', nl_mode:'Contenido del email', nl_mode_compose:'Escribirlo aquí', nl_mode_brevo:'Usar una plantilla de Brevo', nl_template:'Plantilla de Brevo', nl_template_hint:'Solo aparecen las plantillas transaccionales activas de Brevo. Personaliza con {{params.name}}; añade {{params.unsub}} en el pie para la baja.', nl_no_templates:'No hay plantillas transaccionales en Brevo (créala en Brevo → Transactional → Templates)', nl_pick_template:'Elige una plantilla de Brevo.', nl_when:'Programar para (opcional)', nl_when_hint:'Déjalo vacío para enviar ahora. Con fecha, se envía solo a esa hora (los destinatarios se recalculan al disparar).', nl_schedule:'Programar', nl_schedule_n:'Programar · {n} dest.', nl_scheduled_ok:'✓ Programado', cfm_nl_sched:'¿Programar el envío a {n} personas?', nl_sched_title:'Programados', nl_sched_sel:'sel.', nl_sched_all:'todos',
       nav_sim:'Simulador', sim_title:'Simulador', sim_reset:'↺ Reiniciar', sim_ph:'Escribe un mensaje de prueba…', sim_help:'Escribe como si fueras un cliente. Habla con el mismo motor y el mismo contexto que usa el bot real — no se manda nada por WhatsApp ni se crea ningún lead.',
       e_owner:'Propietario', e_followup:'Próximo seguimiento', e_tags:'Etiquetas', ph_tag:'Añadir etiqueta…', f_activity:'Actividad', f_prevdeals:'Consultas y reservas', deal_won:'Ganado', deal_lost:'Perdido',
       tl_empty:'Sin actividad registrada', tl_created:'Lead creado', tl_imported:'Importado de Meta', tl_status:'Estado', tl_owner:'Asignado a', tl_appt:'Cita agendada', tl_note:'Nota actualizada', tl_tag:'Etiqueta añadida', tl_archived:'Archivado', tl_restored:'Restaurado', tl_enriched:'Datos enriquecidos', tl_outreach:'Conversación iniciada (intro)', tl_fu_reminded:'Recordatorio de seguimiento enviado', tl_newsletter:'Newsletter enviado', tl_deal_archived:'Consulta anterior archivada', tl_deal_new:'Nueva consulta detectada', tl_deal_status:'Estado de la consulta',
@@ -834,6 +925,12 @@
       pick_lead:'Select a lead', nochat:'Pick a conversation on the left', ph_reply:'Type to take over…', t_canned:'Quick replies', t_attach:'Send photo/video', t_send:'Send', by_bot:'Sent by the bot', by_human:'Sent manually', detail_empty:'Select a lead to see their card',
       cal_new:'+ New appointment', cal_upcoming:'Upcoming', cal_none:'No upcoming appointments', dow:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
       h_db:'Database', ph_search_client:'Search client…', btn_import:'⬆ Import Meta', ti_import:'Upload the leads CSV you download from Meta Lead Ads', btn_enrich:'🔄 Update from chats', ti_enrich:'Reads conversations and fills in missing data', btn_csv:'⬇ Export CSV',
+      nav_ops:'Operators', h_ops:'Operators', ph_search_op:'Search company, contact, email…', btn_import_ops:'⬆ Import CSV', btn_new_op:'+ Operator',
+      ops_all:'All', ops_new:'New', ops_contacted:'Contacted', ops_negotiating:'Negotiating', ops_partner:'Partner', ops_inactive:'Inactive',
+      ops_th_company:'Company', ops_th_contact:'Contact', ops_th_email:'Email', ops_th_phone:'Phone', ops_th_country:'Country', ops_th_tags:'Tags', ops_th_updated:'Updated',
+      ops_empty:'No operators yet. Import a CSV or add the first one with "+ Operator".',
+      m_new_op:'New operator', m_edit_op:'Edit operator', op_company:'Company *', op_contact:'Contact person', op_phone:'Phone', op_country:'Country', op_tags:'Tags (comma-separated)', op_notes:'Notes', btn_delete_op:'Delete', cfm_op_delete:'Delete this operator?', al_op_company:'Company is required',
+      nl_dataset:'Database', nl_ds_leads:'Leads (chat)', nl_ds_ops:'Operators (B2B)',
       m_canned:'Quick replies', m_canned_help:'One per line · format', m_canned_fmt:'Title | text', btn_cancel:'Cancel', btn_save:'Save',
       m_appt:'New appointment', m_appt_edit:'Edit appointment', l_lead:'Lead', ph_lead:'Name or phone (optional)', l_datetime:'Date & time', l_title:'Title', ph_call:'Call with…', btn_save_appt:'Save appointment',
       l_closer:'Assigned closer', l_notes_appt:'Appointment notes', ph_notes_appt:'What was discussed, for the closer…', btn_delete_appt:'Delete appointment', btn_close:'Close', btn_edit_appt:'Edit appointment', av_nolead:'No lead', av_noone:'Unassigned', av_nonotes:'No notes',
@@ -863,7 +960,7 @@
       act_outreach:'💬 Start conversation', act_reoutreach:'💬 Resend intro', bulk_outreach:'💬 Start conv.',
       outreach_ing:'⏳ Sending…', outreach_ok:'Intro sent', outreach_err:'Could not start the conversation. Is the intro template (INTRO_TEMPLATE_NAME) configured in Railway?',
       q_assign:'Assign', q_call:'Schedule call', call_title:'Call with', al_appt_date:'Set date and time', pre_bot:'Bot: ', pre_you:'You: ', act_call:'📞 Schedule call', cal_today:'Today',
-      nav_nl:'Newsletter', nl_title:'Email newsletter', nl_help:'Email the leads who gave you their address. Every email includes an automatic unsubscribe link. Test it on yourself first.', nl_scope:'Recipients', nl_scope_all:'Everyone with an email', nl_scope_sel:'Selected in the Database', nl_count:'{n} recipients with email · {u} unsubscribed excluded', nl_subject:'Subject', nl_ph_subject:'Email subject', nl_body:'Message', nl_ph_body:'Write the email. Leave a blank line between paragraphs.', nl_test:'Send test', nl_ph_test:'you@email.com', nl_send:'Send', nl_send_n:'Send to {n}', nl_sending:'⏳ Sending…', nl_sent:'✓ Sent {s} · {f} failed', nl_test_ok:'✓ Test sent', nl_no_recip:'No recipients with an email in this selection.', nl_need:'Write a subject and message.', nl_test_need:'Enter a valid test email.', cfm_nl:'Send the newsletter to {n} people? This cannot be undone.', nl_fmt:'Formatting: **bold** · *italic* · ## Heading · - list · [text](link) · [[Button|link]] · ![image](url). The "Send test" button shows you how it looks.', nl_mode:'Email content', nl_mode_compose:'Write it here', nl_mode_brevo:'Use a Brevo template', nl_template:'Brevo template', nl_template_hint:'Only Brevo active transactional templates show up. Personalize with {{params.name}}; add {{params.unsub}} in the footer for opt-out.', nl_no_templates:'No transactional templates in Brevo (create one in Brevo → Transactional → Templates)', nl_pick_template:'Pick a Brevo template.', nl_when:'Schedule for (optional)', nl_when_hint:'Leave empty to send now. With a date, it sends by itself at that time (recipients are recomputed when it fires).', nl_schedule:'Schedule', nl_schedule_n:'Schedule · {n} recip.', nl_scheduled_ok:'✓ Scheduled', cfm_nl_sched:'Schedule the send to {n} people?', nl_sched_title:'Scheduled', nl_sched_sel:'sel.', nl_sched_all:'everyone',
+      nav_nl:'Newsletter', nl_title:'Email newsletter', nl_help:'Email the leads who gave you their address. Every email includes an automatic unsubscribe link. Test it on yourself first.', nl_scope:'Recipients', nl_scope_all:'Everyone with an email', nl_scope_sel:'Selected in the current view', nl_count:'{n} recipients with email · {u} unsubscribed excluded', nl_subject:'Subject', nl_ph_subject:'Email subject', nl_body:'Message', nl_ph_body:'Write the email. Leave a blank line between paragraphs.', nl_test:'Send test', nl_ph_test:'you@email.com', nl_send:'Send', nl_send_n:'Send to {n}', nl_sending:'⏳ Sending…', nl_sent:'✓ Sent {s} · {f} failed', nl_test_ok:'✓ Test sent', nl_no_recip:'No recipients with an email in this selection.', nl_need:'Write a subject and message.', nl_test_need:'Enter a valid test email.', cfm_nl:'Send the newsletter to {n} people? This cannot be undone.', nl_fmt:'Formatting: **bold** · *italic* · ## Heading · - list · [text](link) · [[Button|link]] · ![image](url). The "Send test" button shows you how it looks.', nl_mode:'Email content', nl_mode_compose:'Write it here', nl_mode_brevo:'Use a Brevo template', nl_template:'Brevo template', nl_template_hint:'Only Brevo active transactional templates show up. Personalize with {{params.name}}; add {{params.unsub}} in the footer for opt-out.', nl_no_templates:'No transactional templates in Brevo (create one in Brevo → Transactional → Templates)', nl_pick_template:'Pick a Brevo template.', nl_when:'Schedule for (optional)', nl_when_hint:'Leave empty to send now. With a date, it sends by itself at that time (recipients are recomputed when it fires).', nl_schedule:'Schedule', nl_schedule_n:'Schedule · {n} recip.', nl_scheduled_ok:'✓ Scheduled', cfm_nl_sched:'Schedule the send to {n} people?', nl_sched_title:'Scheduled', nl_sched_sel:'sel.', nl_sched_all:'everyone',
       nav_sim:'Simulator', sim_title:'Simulator', sim_reset:'↺ Reset', sim_ph:'Type a test message…', sim_help:'Type as if you were a customer. It talks to the same engine and context as the real bot — nothing is sent over WhatsApp and no lead is created.',
       e_owner:'Owner', e_followup:'Next follow-up', e_tags:'Tags', ph_tag:'Add tag…', f_activity:'Activity', f_prevdeals:'Inquiries & bookings', deal_won:'Won', deal_lost:'Lost',
       tl_empty:'No activity yet', tl_created:'Lead created', tl_imported:'Imported from Meta', tl_status:'Status', tl_owner:'Assigned to', tl_appt:'Appointment booked', tl_note:'Note updated', tl_tag:'Tag added', tl_archived:'Archived', tl_restored:'Restored', tl_enriched:'Data enriched', tl_outreach:'Conversation started (intro)', tl_fu_reminded:'Follow-up reminder sent', tl_newsletter:'Newsletter sent', tl_deal_archived:'Previous inquiry archived', tl_deal_new:'New inquiry detected', tl_deal_status:'Inquiry status',
@@ -1995,22 +2092,157 @@
     rd.readAsArrayBuffer(file);
   }
 
+  // ── Operadores B2B — BD separada de los leads de chat (op:*/ops_index en el servidor) ──
+  var ops = [], opsFilter = 'all', opsSelected = {};
+  var OPS_ST_LABEL = { new:'ops_new', contacted:'ops_contacted', negotiating:'ops_negotiating', partner:'ops_partner', inactive:'ops_inactive' };
+  function loadOperators(){ return api('operators').then(function(r){return r.json();}).then(function(L){ ops=L; renderOps(); }); }
+  function opsFiltered(){
+    var q=(document.getElementById('opsQ').value||'').toLowerCase().trim();
+    return ops.filter(function(o){
+      if(o.archived) return false;
+      if(opsFilter!=='all' && (o.status||'new')!==opsFilter) return false;
+      if(!q) return true;
+      return [o.company,o.contact,o.email,o.country].join(' ').toLowerCase().indexOf(q)>=0;
+    });
+  }
+  function opsFmtDate(ts){ if(!ts) return ''; return new Date(ts).toLocaleDateString(t('locale'),{day:'2-digit',month:'short'}); }
+  function renderOps(){
+    var list=opsFiltered();
+    document.getElementById('opsCount').textContent=list.length;
+    document.getElementById('opsEmpty').style.display=list.length?'none':'block';
+    var tb=document.getElementById('opsRows');
+    tb.innerHTML=list.map(function(o){
+      var tags=(Array.isArray(o.tags)?o.tags:[]).map(function(x){return '<span class="db-tag">'+esc(x)+'</span>';}).join(' ');
+      var stOpts=Object.keys(OPS_ST_LABEL).map(function(k){return '<option value="'+k+'"'+((o.status||'new')===k?' selected':'')+'>'+t(OPS_ST_LABEL[k])+'</option>';}).join('');
+      return '<tr>'
+        + '<td class="chk" onclick="event.stopPropagation()"><input type="checkbox" '+(opsSelected[o.id]?'checked':'')+' onchange="opsToggleSel(\''+o.id+'\',this)"></td>'
+        + '<td class="ops-company">'+esc(o.company||'—')+'</td>'
+        + '<td>'+esc(o.contact||'')+'</td>'
+        + '<td>'+esc(o.email||'')+(o.emailUnsub?' <span class="db-tag">baja</span>':'')+'</td>'
+        + '<td>'+esc(o.phone||'')+'</td>'
+        + '<td>'+esc(o.country||'')+'</td>'
+        + '<td>'+(tags||'—')+'</td>'
+        + '<td><select class="ops-st ops-st-'+(o.status||'new')+'" onclick="event.stopPropagation()" onchange="opsSetStatus(\''+o.id+'\',this.value)">'+stOpts+'</select></td>'
+        + '<td>'+opsFmtDate(o.updatedAt)+'</td>'
+        + '<td class="chk" onclick="event.stopPropagation()"><button class="db-ghost" onclick="opsOpenModal(\''+o.id+'\')" title="✎">✎</button></td>'
+        + '</tr>';
+    }).join('');
+  }
+  window.opsToggleSel=function(id,el){ if(el.checked) opsSelected[id]=true; else delete opsSelected[id]; };
+  window.opsSetStatus=function(id,status){ apiPost('operator',{id:id,status:status}).then(loadOperators); };
+  document.getElementById('opsSelAll').onchange=function(e){
+    var on=e.target.checked; opsFiltered().forEach(function(o){ if(on) opsSelected[o.id]=true; else delete opsSelected[o.id]; }); renderOps();
+  };
+  document.getElementById('opsQ').addEventListener('input', renderOps);
+  document.getElementById('opsChips').addEventListener('click', function(e){
+    var b=e.target.closest('.ops-chip'); if(!b) return;
+    document.querySelectorAll('#opsChips .ops-chip').forEach(function(x){x.classList.remove('on');}); b.classList.add('on');
+    opsFilter=b.getAttribute('data-s'); renderOps();
+  });
+  // ── modal ficha de operador ──
+  window.opsOpenModal=function(id){
+    var o = id ? ops.find(function(x){return x.id===id;}) : null;
+    document.getElementById('opModalTitle').textContent = t(o?'m_edit_op':'m_new_op');
+    document.getElementById('opId').value = o?o.id:'';
+    document.getElementById('opCompany').value = o?(o.company||''):'';
+    document.getElementById('opContact').value = o?(o.contact||''):'';
+    document.getElementById('opEmail').value = o?(o.email||''):'';
+    document.getElementById('opPhone').value = o?(o.phone||''):'';
+    document.getElementById('opCountry').value = o?(o.country||''):'';
+    document.getElementById('opTags').value = o&&Array.isArray(o.tags)?o.tags.join(', '):'';
+    document.getElementById('opStatus').value = o?(o.status||'new'):'new';
+    document.getElementById('opNotes').value = o?(o.notes||''):'';
+    document.getElementById('opErr').textContent='';
+    document.getElementById('opDelete').style.display = o?'':'none';
+    document.getElementById('opModal').style.display='flex';
+  };
+  document.getElementById('opsNew').onclick=function(){ opsOpenModal(null); };
+  document.getElementById('opCancel').onclick=function(){ document.getElementById('opModal').style.display='none'; };
+  document.getElementById('opDelete').onclick=function(){
+    var id=document.getElementById('opId').value;
+    if(!id || !confirm(t('cfm_op_delete'))) return;
+    apiPost('operator/delete',{id:id}).then(function(){ document.getElementById('opModal').style.display='none'; delete opsSelected[id]; loadOperators(); });
+  };
+  document.getElementById('opSave').onclick=function(){
+    var company=document.getElementById('opCompany').value.trim();
+    var err=document.getElementById('opErr');
+    if(!company){ err.textContent=t('al_op_company'); return; }
+    var tags=document.getElementById('opTags').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
+    apiPost('operator', {
+      id: document.getElementById('opId').value || undefined,
+      company: company,
+      contact: document.getElementById('opContact').value.trim(),
+      email: document.getElementById('opEmail').value.trim(),
+      phone: document.getElementById('opPhone').value.trim(),
+      country: document.getElementById('opCountry').value.trim(),
+      tags: tags,
+      status: document.getElementById('opStatus').value,
+      notes: document.getElementById('opNotes').value.trim(),
+    }).then(function(){ document.getElementById('opModal').style.display='none'; loadOperators(); });
+  };
+  // ── CSV genérico (no el de Meta): company/contact/email/phone/country/notes, alias ES ──
+  function opsParseCsv(text){
+    var rows=[], row=[], field='', inQ=false;
+    for(var i=0;i<text.length;i++){
+      var c=text[i];
+      if(inQ){ if(c==='"'){ if(text[i+1]==='"'){field+='"'; i++;} else inQ=false; } else field+=c; }
+      else { if(c==='"') inQ=true; else if(c===','||c===';'){row.push(field);field='';} else if(c==='\n'){row.push(field);rows.push(row);row=[];field='';} else if(c==='\r'){} else field+=c; }
+    }
+    if(field.length||row.length){row.push(field);rows.push(row);}
+    if(!rows.length) return [];
+    var headers=rows[0].map(function(h){return h.trim().toLowerCase();});
+    return rows.slice(1).filter(function(r){return r.some(function(v){return v&&v.trim();});}).map(function(r){
+      var obj={}; headers.forEach(function(h,idx){obj[h]=r[idx]||'';}); return obj;
+    });
+  }
+  document.getElementById('opsImport').onclick=function(){ document.getElementById('opsFile').click(); };
+  document.getElementById('opsFile').onchange=function(e){
+    var file=e.target.files[0]; if(!file) return;
+    var reader=new FileReader();
+    reader.onload=function(){
+      var rows=opsParseCsv(String(reader.result));
+      if(!rows.length){ alert('CSV vacío o formato no reconocido'); return; }
+      apiPost('import-operators',{rows:rows}).then(function(r){return r.json();}).then(function(res){
+        alert('✓ '+res.created+' / '+res.updated+' / '+res.skipped);
+        loadOperators();
+      });
+    };
+    reader.readAsText(file);
+    e.target.value='';
+  };
+  document.getElementById('opsExport').onclick=function(){
+    var cols=['company','contact','email','phone','country','tags','status','notes'];
+    var lines=[cols.join(',')];
+    opsFiltered().forEach(function(o){
+      lines.push(cols.map(function(c){
+        var v = c==='tags' ? (Array.isArray(o.tags)?o.tags.join('|'):'') : (o[c]||'');
+        v=String(v).replace(/"/g,'""'); return /[",\n]/.test(v)?'"'+v+'"':v;
+      }).join(','));
+    });
+    var blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+    var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='operadores.csv'; a.click();
+  };
+
   // ── Newsletter por email ──
   var NL_EMAIL=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   // Destinatarios según el alcance elegido (espejo de la lógica del servidor): email válido,
   // no archivados, no dados de baja, sin emails duplicados.
   function nlRecipients(){
-    var scope=document.getElementById('nlScope').value, phones=[], seen={}, unsub=0;
-    leads.forEach(function(l){
+    var dataset=document.getElementById('nlDataset').value;
+    var isOps=dataset==='operators';
+    var scope=document.getElementById('nlScope').value, ids=[], seen={}, unsub=0;
+    var source=isOps?ops:leads, selMap=isOps?opsSelected:dbSelected;
+    source.forEach(function(l){
       if(l.archived) return;
-      if(scope==='selected' && !dbSelected[l.phone]) return;
+      var key=isOps?l.id:l.phone;
+      if(scope==='selected' && !selMap[key]) return;
       var e=(l.email||'').toLowerCase().trim();
       if(!NL_EMAIL.test(e)) return;
       if(l.emailUnsub){ unsub++; return; }
       if(seen[e]) return; seen[e]=1;
-      phones.push(l.phone);
+      ids.push(key);
     });
-    return {phones:phones, count:phones.length, unsub:unsub};
+    return {ids:ids, dataset:dataset, count:ids.length, unsub:unsub};
   }
   function nlUpdateCount(){
     var r=nlRecipients();
@@ -2027,7 +2259,8 @@
       if(!Array.isArray(list)||!list.length){ box.innerHTML=''; return; }
       box.innerHTML='<div class="nl-sched-h">'+t('nl_sched_title')+'</div>'+list.map(function(c){
         var scope=c.scope==null?t('nl_sched_all'):(c.scope+' '+t('nl_sched_sel'));
-        return '<div class="nl-sched-row"><div class="nl-sched-info"><b>'+esc(c.subject||'')+'</b><span>'+nlFmtWhen(c.when)+' · '+scope+'</span></div><button title="✕" onclick="nlCancelSched(\''+c.id+'\')">✕</button></div>';
+        var ds=c.dataset==='operators'?t('nl_ds_ops'):t('nl_ds_leads');
+        return '<div class="nl-sched-row"><div class="nl-sched-info"><b>'+esc(c.subject||'')+'</b><span>'+nlFmtWhen(c.when)+' · '+ds+' · '+scope+'</span></div><button title="✕" onclick="nlCancelSched(\''+c.id+'\')">✕</button></div>';
       }).join('');
     }).catch(function(){ box.innerHTML=''; });
   }
@@ -2069,13 +2302,14 @@
       .then(function(j){ btn.disabled=false; btn.textContent=orig; return j; }, function(e){ btn.disabled=false; btn.textContent=orig; });
   }
 
-  function clearModes(a){ a.classList.remove('calmode','dbmode','mediamode','nlmode','simmode'); }
-  function setNav(id){ ['navConv','navCal','navDb','navMedia','navNewsletter','navSim'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
+  function clearModes(a){ a.classList.remove('calmode','dbmode','opsmode','mediamode','nlmode','simmode'); }
+  function setNav(id){ ['navConv','navCal','navDb','navOps','navMedia','navNewsletter','navSim'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
 
   function setUrl(p){ try{ history.replaceState(null,'',p); }catch(e){} }
   document.getElementById('navConv').onclick=function(){ clearModes(document.getElementById('app')); setNav('navConv'); setUrl('/admin'); };
   document.getElementById('navCal').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('calmode'); setNav('navCal'); setUrl('/admin'); buildLeadsDL(); loadAppts(renderCal); };
   document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dbmode'); setNav('navDb'); setUrl('/admin/db'); dbPage=1; loadHealth(); loadAppts(renderDb); };
+  document.getElementById('navOps').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('opsmode'); setNav('navOps'); setUrl('/admin'); loadOperators(); };
   document.getElementById('navMedia').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('mediamode'); setNav('navMedia'); setUrl('/admin'); openMedia(); };
   document.getElementById('navNewsletter').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('nlmode'); setNav('navNewsletter'); setUrl('/admin'); openNewsletter(); };
   document.getElementById('navSim').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('simmode'); setNav('navSim'); setUrl('/admin'); };
@@ -2112,6 +2346,9 @@
     });
   };
   document.getElementById('nlScope').onchange=function(){ nlUpdateCount(); };
+  document.getElementById('nlDataset').onchange=function(){
+    if(this.value==='operators' && !ops.length) loadOperators().then(nlUpdateCount); else nlUpdateCount();
+  };
   document.getElementById('nlMode').onchange=function(){ nlApplyMode(); };
   document.getElementById('nlWhen').onchange=function(){ nlUpdateCount(); };
   document.getElementById('nlTestBtn').onclick=function(){
@@ -2131,7 +2368,8 @@
     if(!r.count){ err.style.color=''; err.textContent=t('nl_no_recip'); return; }
     var whenVal=document.getElementById('nlWhen').value;
     if(!confirm(t(whenVal?'cfm_nl_sched':'cfm_nl').replace('{n}',r.count))) return;
-    if(document.getElementById('nlScope').value==='selected') c.phones=r.phones;
+    c.dataset=r.dataset;
+    if(document.getElementById('nlScope').value==='selected') c.ids=r.ids;
     // datetime-local = hora local del navegador → a ISO absoluto (UTC) para que el servidor no la malinterprete.
     if(whenVal) c.when=new Date(whenVal).toISOString();
     nlPost(c, this).then(function(j){ if(!j) return;
