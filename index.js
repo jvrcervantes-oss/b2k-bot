@@ -1410,6 +1410,10 @@ app.post("/webhook", async (req, res) => {
       const loc = message.location;
       const where = [loc.name, loc.address].filter(Boolean).join(", ") || `${loc.latitude},${loc.longitude}`;
       text = `(I'm sharing my location: ${where})`;
+    } else if (message.type === "reaction") {
+      // Un emoji de reacción a un mensaje no es un adjunto ilegible ni información nueva del
+      // lead — antes caía en el fallback de "no puedo abrir esto", una respuesta sin sentido.
+      return;
     } else if (!isOwner(from)) {
       // ── Nota de voz → transcripción (Whisper) y entra al flujo normal como texto ──
       if (message.type === "audio" || message.type === "voice") {
