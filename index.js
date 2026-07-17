@@ -442,12 +442,37 @@ function normalizeTags(arr) {
   return out;
 }
 
+// Identidad del "deal" activo del lead: model (alquiler) o tour (tours). Si el lead ya tenía
+// uno cotizado y llega uno DISTINTO, no es una corrección del mismo deal — es una consulta
+// nueva, y el anterior no debe pisarse sin más (bug real reportado 15-jul: un booking ya
+// cerrado desaparecía de la ficha resumen al abrir el cliente una 2ª consulta).
+const DEAL_ID_FIELD = BOT_VERTICAL === "rental" ? "model" : "tour";
+const DEAL_SNAPSHOT_FIELDS = BOT_VERTICAL === "rental"
+  ? ["model", "plan", "startDate", "endDate", "dealValue", "deliveryLocation", "insuranceTier", "paymentMethod"]
+  : ["tour", "package", "riders", "pillions", "travelDate", "dealValue"];
+
+// Pura (sin I/O) para poder testearla sola — ver test-deal-archive.js.
+function dealToArchive(prev, fields) {
+  const id = fields && fields[DEAL_ID_FIELD];
+  if (!id || !prev || !prev[DEAL_ID_FIELD] || prev[DEAL_ID_FIELD] === id) return null;
+  const snapshot = {};
+  DEAL_SNAPSHOT_FIELDS.forEach((k) => { if (prev[k] != null && prev[k] !== "") snapshot[k] = prev[k]; });
+  return snapshot;
+}
+
 // Guarda los campos extraídos en la BD (Redis) + Sheet, sin pisar con vacíos.
 async function captureLeadData(phone, fields) {
   if (!fields || !Object.keys(fields).length) return;
+  const prev = (await getLead(phone)) || {};
+  const archived = dealToArchive(prev, fields);
+  if (archived) {
+    const deals = (Array.isArray(prev.deals) ? prev.deals : []).slice(-19);
+    deals.push({ ...archived, archivedAt: Date.now() });
+    fields = { ...fields, deals };
+    await logEvent(phone, "deal_archived", { model: prev[DEAL_ID_FIELD] });
+  }
   // Las etiquetas se UNEN con las existentes (no pisan las que puso el estudio a mano).
   if (Array.isArray(fields.tags)) {
-    const prev = (await getLead(phone)) || {};
     fields = { ...fields, tags: normalizeTags([...(Array.isArray(prev.tags) ? prev.tags : []), ...fields.tags]) };
     // await OBLIGATORIO: sin él, el SET de logEvent (solo history, leído pre-tags) aterriza
     // DESPUÉS del write de abajo y machaca tags/followup — los tags nunca llegaban a verse.
