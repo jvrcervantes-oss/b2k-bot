@@ -107,9 +107,12 @@ let redisClient = null;
 
 try {
   if (!REDIS_URL) throw new Error("REDIS_URL no configurado");
-  redisClient = createClient({ url: REDIS_URL, socket: { reconnectStrategy: false } });
+  // reconnectStrategy acotado (máx. 10 intentos, hasta 3s entre ellos): tras una caída
+  // transitoria YA conectado, sigue reconectando solo — un reconnectStrategy:false a secas
+  // mataría esa resiliencia entera, no solo el cuelgue del arranque.
+  redisClient = createClient({ url: REDIS_URL, socket: { reconnectStrategy: (retries) => (retries > 10 ? false : Math.min(retries * 200, 3000)) } });
   redisClient.on("error", (e) => console.error(`[${PROJECT_NAME}] Redis error:`, e.message));
-  // node-redis reintenta la conexión inicial con su propio backoff antes de rechazar la
+  // node-redis reintenta la conexión inicial con el mismo backoff antes de rechazar la
   // promesa — sin este timeout, un Redis inalcanzable cuelga el arranque entero (nunca cae
   // a RAM ni levanta el servidor) en vez de degradar con gracia como se pretendía.
   await Promise.race([
@@ -119,6 +122,7 @@ try {
   console.log(`[${PROJECT_NAME}] Redis conectado`);
 } catch (e) {
   console.warn(`[${PROJECT_NAME}] Redis no disponible, usando memoria RAM:`, e.message);
+  try { redisClient?.destroy(); } catch (_) { /* best-effort: para los reintentos de fondo si el connect() perdió la carrera contra el timeout */ }
   redisClient = null;
 }
 
