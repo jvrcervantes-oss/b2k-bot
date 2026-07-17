@@ -32,6 +32,16 @@ function capDeals(deals, cap) {
   const keepClosed = new Set(closedSorted.slice(-(Math.max(0, cap - openCount))));
   return deals.filter((d) => d.status === "open" || keepClosed.has(d));
 }
+function statusAfterDealClose(deals, prevLeadStatus) {
+  if (deals.some((d) => d.status === "open")) return null;
+  const newStatus = deals.some((d) => d.status === "won") ? "won" : "lost";
+  if (prevLeadStatus === newStatus) return null;
+  if (["won", "lost", "noshow"].includes(prevLeadStatus)) return null;
+  return newStatus;
+}
+function statusAfterNewDeal(prevLeadStatus) {
+  return ["won", "lost", "noshow"].includes(prevLeadStatus) ? "" : null;
+}
 
 // Caso real del bug (Diann, 15-jul-2026): CBX200 abierto, luego pregunta por un Yamaha Gear distinto.
 // El fix real: los DOS quedan abiertos y visibles, ninguno se pisa ni se pierde.
@@ -65,5 +75,26 @@ const capped = capDeals(many, 3);
 assert.ok(capped.some((d) => d.id === "d1"), "el deal abierto sobrevive al recorte");
 assert.strictEqual(capped.filter((d) => d.status === "open").length, 1);
 assert.ok(capped.length <= 3 + 1); // el abierto no cuenta contra el cupo de cerrados
+
+// statusAfterDealClose(): el bug real que encontró la auditoría del 17-jul — el status de
+// nivel-lead (won/lost/noshow, lo lee followupTick/computeDropoff) no se sincronizaba solo con
+// deals[] cuando se cerraba un deal desde el panel nuevo.
+const oneOpenOneWon = [{ status: "won" }, { status: "open" }];
+assert.strictEqual(statusAfterDealClose(oneOpenOneWon, ""), null, "todavía queda un deal abierto → no tocar el status del lead");
+
+const bothWon = [{ status: "won" }, { status: "won" }];
+assert.strictEqual(statusAfterDealClose(bothWon, ""), "won", "sin deals abiertos y alguno ganó → status=won");
+
+const bothLost = [{ status: "lost" }, { status: "lost" }];
+assert.strictEqual(statusAfterDealClose(bothLost, ""), "lost", "sin deals abiertos y ninguno ganó → status=lost");
+
+assert.strictEqual(statusAfterDealClose(bothWon, "won"), null, "ya estaba en won → no reescribir (evita logs de status redundantes)");
+assert.strictEqual(statusAfterDealClose(bothLost, "noshow"), null, "no pisar un status terminal ya puesto a mano (noshow) aunque los deals digan lost");
+
+// statusAfterNewDeal(): un lead ya cerrado que abre un deal nuevo necesita atención de nuevo.
+assert.strictEqual(statusAfterNewDeal("won"), "", "lead ganado con una consulta nueva → reabrir (status vacío)");
+assert.strictEqual(statusAfterNewDeal("lost"), "", "lead perdido con una consulta nueva → reabrir");
+assert.strictEqual(statusAfterNewDeal("quoted"), null, "lead ya en curso (no terminal) → no tocar");
+assert.strictEqual(statusAfterNewDeal(""), null, "lead nuevo sin status → no tocar (ya está vacío)");
 
 console.log("OK — test-deal-archive.js");
