@@ -787,8 +787,8 @@
       q_assign:'Asignar', q_call:'Agendar llamada', call_title:'Llamada con', al_appt_date:'Pon fecha y hora', pre_bot:'Bot: ', pre_you:'Tú: ', act_call:'📞 Agendar llamada', cal_today:'Hoy',
       nav_nl:'Newsletter', nl_title:'Newsletter por email', nl_help:'Envía un email a los leads que dieron su correo. Incluye siempre un enlace de baja automático. Prueba primero contigo.', nl_scope:'Destinatarios', nl_scope_all:'Todos con email', nl_scope_sel:'Seleccionados en la Base de datos', nl_count:'{n} destinatarios con email · {u} dados de baja se excluyen', nl_subject:'Asunto', nl_ph_subject:'Asunto del email', nl_body:'Mensaje', nl_ph_body:'Escribe el email. Deja una línea en blanco entre párrafos.', nl_test:'Enviar prueba', nl_ph_test:'tu@email.com', nl_send:'Enviar', nl_send_n:'Enviar a {n}', nl_sending:'⏳ Enviando…', nl_sent:'✓ Enviados {s} · {f} fallidos', nl_test_ok:'✓ Prueba enviada', nl_no_recip:'No hay destinatarios con email en esta selección.', nl_need:'Escribe asunto y mensaje.', nl_test_need:'Pon un email de prueba válido.', cfm_nl:'¿Enviar el newsletter a {n} personas? No se puede deshacer.', nl_fmt:'Formato: **negrita** · *cursiva* · ## Título · - lista · [texto](enlace) · [[Botón|enlace]] · ![imagen](url). El botón "Enviar prueba" te muestra cómo queda.', nl_mode:'Contenido del email', nl_mode_compose:'Escribirlo aquí', nl_mode_brevo:'Usar una plantilla de Brevo', nl_template:'Plantilla de Brevo', nl_template_hint:'Solo aparecen las plantillas transaccionales activas de Brevo. Personaliza con {{params.name}}; añade {{params.unsub}} en el pie para la baja.', nl_no_templates:'No hay plantillas transaccionales en Brevo (créala en Brevo → Transactional → Templates)', nl_pick_template:'Elige una plantilla de Brevo.', nl_when:'Programar para (opcional)', nl_when_hint:'Déjalo vacío para enviar ahora. Con fecha, se envía solo a esa hora (los destinatarios se recalculan al disparar).', nl_schedule:'Programar', nl_schedule_n:'Programar · {n} dest.', nl_scheduled_ok:'✓ Programado', cfm_nl_sched:'¿Programar el envío a {n} personas?', nl_sched_title:'Programados', nl_sched_sel:'sel.', nl_sched_all:'todos',
       nav_sim:'Simulador', sim_title:'Simulador', sim_reset:'↺ Reiniciar', sim_ph:'Escribe un mensaje de prueba…', sim_help:'Escribe como si fueras un cliente. Habla con el mismo motor y el mismo contexto que usa el bot real — no se manda nada por WhatsApp ni se crea ningún lead.',
-      e_owner:'Propietario', e_followup:'Próximo seguimiento', e_tags:'Etiquetas', ph_tag:'Añadir etiqueta…', f_activity:'Actividad',
-      tl_empty:'Sin actividad registrada', tl_created:'Lead creado', tl_imported:'Importado de Meta', tl_status:'Estado', tl_owner:'Asignado a', tl_appt:'Cita agendada', tl_note:'Nota actualizada', tl_tag:'Etiqueta añadida', tl_archived:'Archivado', tl_restored:'Restaurado', tl_enriched:'Datos enriquecidos', tl_outreach:'Conversación iniciada (intro)', tl_fu_reminded:'Recordatorio de seguimiento enviado', tl_newsletter:'Newsletter enviado',
+      e_owner:'Propietario', e_followup:'Próximo seguimiento', e_tags:'Etiquetas', ph_tag:'Añadir etiqueta…', f_activity:'Actividad', f_prevdeals:'Consultas anteriores',
+      tl_empty:'Sin actividad registrada', tl_created:'Lead creado', tl_imported:'Importado de Meta', tl_status:'Estado', tl_owner:'Asignado a', tl_appt:'Cita agendada', tl_note:'Nota actualizada', tl_tag:'Etiqueta añadida', tl_archived:'Archivado', tl_restored:'Restaurado', tl_enriched:'Datos enriquecidos', tl_outreach:'Conversación iniciada (intro)', tl_fu_reminded:'Recordatorio de seguimiento enviado', tl_newsletter:'Newsletter enviado', tl_deal_archived:'Consulta anterior archivada',
       al_save:'No se pudo guardar', edit_tpl:'✎ Editar plantillas…', locale:'es-ES' },
     en:{ brand:'CRM BMA', login_title:'Conversations panel', login_sub:'CRM BMA · studio access', ph_pw:'Password', btn_enter:'Sign in', err_pw:'Wrong password',
       nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_media:'Photos & videos', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español',
@@ -829,8 +829,8 @@
       q_assign:'Assign', q_call:'Schedule call', call_title:'Call with', al_appt_date:'Set date and time', pre_bot:'Bot: ', pre_you:'You: ', act_call:'📞 Schedule call', cal_today:'Today',
       nav_nl:'Newsletter', nl_title:'Email newsletter', nl_help:'Email the leads who gave you their address. Every email includes an automatic unsubscribe link. Test it on yourself first.', nl_scope:'Recipients', nl_scope_all:'Everyone with an email', nl_scope_sel:'Selected in the Database', nl_count:'{n} recipients with email · {u} unsubscribed excluded', nl_subject:'Subject', nl_ph_subject:'Email subject', nl_body:'Message', nl_ph_body:'Write the email. Leave a blank line between paragraphs.', nl_test:'Send test', nl_ph_test:'you@email.com', nl_send:'Send', nl_send_n:'Send to {n}', nl_sending:'⏳ Sending…', nl_sent:'✓ Sent {s} · {f} failed', nl_test_ok:'✓ Test sent', nl_no_recip:'No recipients with an email in this selection.', nl_need:'Write a subject and message.', nl_test_need:'Enter a valid test email.', cfm_nl:'Send the newsletter to {n} people? This cannot be undone.', nl_fmt:'Formatting: **bold** · *italic* · ## Heading · - list · [text](link) · [[Button|link]] · ![image](url). The "Send test" button shows you how it looks.', nl_mode:'Email content', nl_mode_compose:'Write it here', nl_mode_brevo:'Use a Brevo template', nl_template:'Brevo template', nl_template_hint:'Only Brevo active transactional templates show up. Personalize with {{params.name}}; add {{params.unsub}} in the footer for opt-out.', nl_no_templates:'No transactional templates in Brevo (create one in Brevo → Transactional → Templates)', nl_pick_template:'Pick a Brevo template.', nl_when:'Schedule for (optional)', nl_when_hint:'Leave empty to send now. With a date, it sends by itself at that time (recipients are recomputed when it fires).', nl_schedule:'Schedule', nl_schedule_n:'Schedule · {n} recip.', nl_scheduled_ok:'✓ Scheduled', cfm_nl_sched:'Schedule the send to {n} people?', nl_sched_title:'Scheduled', nl_sched_sel:'sel.', nl_sched_all:'everyone',
       nav_sim:'Simulator', sim_title:'Simulator', sim_reset:'↺ Reset', sim_ph:'Type a test message…', sim_help:'Type as if you were a customer. It talks to the same engine and context as the real bot — nothing is sent over WhatsApp and no lead is created.',
-      e_owner:'Owner', e_followup:'Next follow-up', e_tags:'Tags', ph_tag:'Add tag…', f_activity:'Activity',
-      tl_empty:'No activity yet', tl_created:'Lead created', tl_imported:'Imported from Meta', tl_status:'Status', tl_owner:'Assigned to', tl_appt:'Appointment booked', tl_note:'Note updated', tl_tag:'Tag added', tl_archived:'Archived', tl_restored:'Restored', tl_enriched:'Data enriched', tl_outreach:'Conversation started (intro)', tl_fu_reminded:'Follow-up reminder sent', tl_newsletter:'Newsletter sent',
+      e_owner:'Owner', e_followup:'Next follow-up', e_tags:'Tags', ph_tag:'Add tag…', f_activity:'Activity', f_prevdeals:'Previous inquiries',
+      tl_empty:'No activity yet', tl_created:'Lead created', tl_imported:'Imported from Meta', tl_status:'Status', tl_owner:'Assigned to', tl_appt:'Appointment booked', tl_note:'Note updated', tl_tag:'Tag added', tl_archived:'Archived', tl_restored:'Restored', tl_enriched:'Data enriched', tl_outreach:'Conversation started (intro)', tl_fu_reminded:'Follow-up reminder sent', tl_newsletter:'Newsletter sent', tl_deal_archived:'Previous inquiry archived',
       al_save:"Couldn't save", edit_tpl:'✎ Edit templates…', locale:'en-GB' }
   };
   var LANG = localStorage.getItem('botpanel_lang') || 'es';
@@ -1051,6 +1051,7 @@
       + '</div>'
       // ── actividad (timeline) arriba ──
       + '<div class="edit"><label>'+t('f_activity')+'</label>'+tlHTML(l)+'</div>'
+      + (Array.isArray(l.deals) && l.deals.length ? '<div class="edit"><label>'+t('f_prevdeals')+'</label>'+prevDealsHTML(l)+'</div>' : '')
       // ── formulario editable ──
       + '<div class="edit"><label>'+t('e_status')+'</label><select id="edStatus" onchange="saveStatus()">'
         + '<option value=""'+(st===''?' selected':'')+'>'+t('s_blank')+'</option>'
@@ -1080,7 +1081,7 @@
     var tg=Array.isArray(l.tags)?l.tags:[];
     return tg.length ? tg.map(function(x){ return '<span class="tag" style="'+tagColor(x)+'">'+esc(x)+' <b style="cursor:pointer" onclick="leadRemoveTag(\''+esc(x).replace(/'/g,'')+'\')">×</b></span>'; }).join('') : '<span class="db-dim" style="font-size:12px">—</span>';
   }
-  var TL_ICON={created:'✨',imported:'⬆️',status:'🔁',owner:'👤',appt:'📞',note:'📝',tag:'🏷️',archived:'📦',restored:'♻️',enriched:'🔍',outreach:'💬',fu_reminded:'📅',newsletter:'📧'};
+  var TL_ICON={created:'✨',imported:'⬆️',status:'🔁',owner:'👤',appt:'📞',note:'📝',tag:'🏷️',archived:'📦',restored:'♻️',enriched:'🔍',outreach:'💬',fu_reminded:'📅',newsletter:'📧',deal_archived:'🗂️'};
   function tlHTML(l){
     var h=Array.isArray(l.history)?l.history.slice().reverse():[];
     if(!h.length) return '<div class="db-dim" style="font-size:12px;padding:6px 0">'+t('tl_empty')+'</div>';
@@ -1090,8 +1091,17 @@
       else if(e.type==='owner') txt=t('tl_owner')+': '+(e.to||'—');
       else if(e.type==='appt') txt=t('tl_appt')+': '+esc(e.title||'');
       else if(e.type==='tag') txt=t('tl_tag')+': '+esc(e.to||'');
+      else if(e.type==='deal_archived') txt=t('tl_deal_archived')+': '+esc(e.model||'');
       return '<div class="tli"><span class="ic2">'+(TL_ICON[e.type]||'•')+'</span><div><div>'+txt+'</div><div class="tlt">'+fmtWhen(new Date(e.ts).toISOString())+'</div></div></div>';
     }).join('')+'</div>';
+  }
+  // Deals que dejaron de ser el activo del lead (modelo/tour distinto pedido después) — ver dealToArchive() en index.js.
+  function prevDealsHTML(l){
+    return l.deals.slice().reverse().map(function(d){
+      var head=esc(d.tour||d.model||'—')+(d.package||d.plan?' — '+esc(d.package||d.plan):'');
+      var sub=(d.travelDate?esc(d.travelDate):'')+(d.dealValue?' · '+money(d.dealValue):'');
+      return '<div class="tli"><span class="ic2">🗂️</span><div><div>'+head+'</div><div class="tlt">'+sub+'</div></div></div>';
+    }).join('');
   }
   function leadAddTag(){
     if(!curLead) return; var inp=document.getElementById('edTagNew'), v=(inp.value||'').trim(); if(!v) return;
