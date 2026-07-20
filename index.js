@@ -627,11 +627,11 @@ async function enrichSweep(limit = 20) {
 // ─── RESPUESTAS RÁPIDAS (canned replies, compartidas por proyecto) ──
 let fallbackCanned = null;
 const DEFAULT_CANNED = BOT_VERTICAL === "rental" ? [
-  { title: "Saludo", text: "Hey! Thanks for reaching out 🙌 Which bike are you after, and for how long?" },
+  { title: "Saludo", text: "Hey! Thanks for reaching out! Which bike are you after, and for how long?" },
   { title: "Pedir datos", text: "To give you an exact quote: which model, how many days, and where should we deliver it?" },
   { title: "Confirmar entrega", text: "We deliver straight to your hotel or villa. What's the address?" },
 ] : [
-  { title: "Saludo", text: "Hey! Thanks for reaching out 🙌 How can I help you plan your ride?" },
+  { title: "Saludo", text: "Hey! Thanks for reaching out! How can I help you plan your ride?" },
   { title: "Pedir datos", text: "To give you an exact quote — which tour, how many riders, and roughly when were you thinking of traveling?" },
   { title: "Proponer videollamada", text: "Want to hop on a quick video call with the team? It's free, about 30 minutes, zero pressure — they'll walk you through everything." },
 ];
@@ -797,7 +797,7 @@ async function reminderTick() {
       const lastIn = await getInbound(a.phone);
       const within24h = lastIn && (now - lastIn) < 24 * 3600000;
       if (within24h) {
-        await sendWhatsApp(a.phone, `Hey! Quick reminder about our call: ${a.title}. Talk soon 🙌`);
+        await sendWhatsApp(a.phone, `Hey! Quick reminder about our call: ${a.title}. Talk soon.`);
         await setReminded(a.id);
       } else if (REMINDER_TEMPLATE_NAME) {
         await sendWhatsAppTemplate(a.phone, REMINDER_TEMPLATE_NAME, REMINDER_TEMPLATE_LANG, [a.title]);
@@ -917,6 +917,14 @@ PERSONA — how to sound human, not like a bot (critical — this is what the br
 - React to what they actually said before moving the conversation forward.
 - NEVER use a dash (—, –, or --) in the middle of a sentence — nobody texting on WhatsApp writes that way. Use a comma, a period, or just start a new sentence instead.
 - NEVER show your own hesitation, self-correction, or math out loud (e.g. "wait, let me get that right", "actually, let me recalculate", "hmm, that's not right"). Work it out silently and send only the final, correct answer. If you catch a mistake mid-thought, just don't send that draft — never let the customer see you second-guess yourself.
+
+ANTI-ROBOT TELLS — the specific habits that give you away as AI (these matter more than any of the above; fix them):
+- DON'T OPEN EVERY MESSAGE WITH A REACTION WORD. "Ha," "Ah," "Nice," "Perfect," "Solid," "Love it," "Good call," "Right," are fine ONCE in a while, but the moment you reuse them they're an instant tell. Most messages should just start with the substance. Vary genuinely, or don't react at all. Nobody texts "Ha," at the top of message after message.
+- NEVER REPEAT INFORMATION you already gave. If you listed what's included once, don't paste that list again two messages later. Say "same as before" or just move on. A repeated stock phrase reads as a bot.
+- NO MENU QUESTIONS. Never offer multiple-choice like "A, B or C?" or "riding solo, with mates, or a bit of both?". Ask a real open question or none at all. A menu makes them answer in one word and you've learned nothing.
+- ONE-WORD REPLIES ARE A WARNING LIGHT. When their answers go short ("Solo", "October", "This"), STOP asking and GIVE something: a price, a useful fact they didn't ask for, or the next step. Stacking more questions onto one-word answers is running a form, not having a conversation.
+- DON'T TELL THEM HOW YOU KNOW THINGS about them ("I can tell from your number you're in Australia"). Just let it colour the reply naturally. And never turn their nationality or city into a repeated stamp.
+- NOT EVERY MESSAGE NEEDS A CLOSING QUESTION. Sometimes just answer and stop. A real chat breathes; forcing an offer or question onto the end of every single message is a tell.
 `;
 
 // GATHERING + CLOSING difieren por vertical del negocio (tour multi-día vs. alquiler directo).
