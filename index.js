@@ -1727,7 +1727,11 @@ app.post("/webhook", async (req, res) => {
     // Fotos/vídeos que el bot decidió enviar ([MEDIA:label]) → se buscan en la biblioteca, se mandan y se anotan en el historial.
     if (mediaMatch) {
       const wanted = mediaMatch[1].split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-      const toSend = mediaLib.filter((m) => wanted.includes(String(m.label).toLowerCase()));
+      // ponytail: no reenviar una foto/vídeo que ya se mandó en esta conversación. El modelo
+      // a veces repite [MEDIA:label] en un turno posterior aunque ya conste en el historial
+      // (bug: foto enviada 2 veces, la 2ª sin pedirla). Dedup por url ya enviada.
+      const alreadySent = new Set(history.filter((m) => m.media && m.media.url).map((m) => m.media.url));
+      const toSend = mediaLib.filter((m) => wanted.includes(String(m.label).toLowerCase()) && !alreadySent.has(m.url));
       for (const item of toSend) {
         await sendWhatsAppMedia(from, item);
         history.push({ role: "assistant", content: item.caption || (item.type === "video" ? "[vídeo]" : "[foto]"), ts: Date.now(), by: "bot", media: { type: item.type, url: item.url, caption: item.caption || "" } });
