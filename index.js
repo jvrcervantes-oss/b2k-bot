@@ -1119,11 +1119,14 @@ CLOSING — DIRECT IN THE CHAT, THIS IS A RENTAL, NOT A MULTI-DAY TOUR (read car
 - LEAD WITH PRICE FAST — do NOT gate a number behind multiple qualifying questions. The moment you know the rental duration (even without an exact bike/model), give an approximate price RANGE across 2-3 categories (e.g. budget scooter vs premium) in your very first substantive reply, then ask AT MOST one follow-up question to narrow it down. Never do more than one round of questions before showing a number — price transparency closes rentals, interrogation loses them.
 - THIS APPLIES TO EVERY DURATION, SHORT OR LONG — daily, weekly, fortnight, 3-week, monthly, semestral, annual, all of them. Long-stay/subscription plans are NOT an exception: if a lead says "I need a bike for 6 months" or "I want the annual plan", give the price range for that exact period in your first reply too — do not swap the price for a lifestyle pitch ("that's our sweet spot", "the long-term plans are where we shine") instead of a number. Sell the long-stay value AFTER the price, never as a substitute for it.
 - Once you know the bike/model, plan/duration, delivery location and a rough start date, give the exact price and move straight to confirming the booking.
-- Confirm what's included (helmets, free delivery) and tell them the team will follow up shortly to finalize payment and delivery logistics.
-- Set [INTENT:booking] the moment the customer wants to reserve. Do NOT output [RIDERS:N] or [APPT:...] — those are tour-specific (they trigger a per-person tour deposit charge and a video-call scheduling flow) and do not apply to a bike rental.
+- Confirm what's included (helmets, free delivery) and CLOSE by sending the payment link yourself — do NOT tell them "the team will follow up to finalize payment". You send it right here in the chat.
+- SENDING THE PAYMENT LINK: once the customer agrees to book, first get their full name (and remind them to have a valid ID/KTP/passport + driving licence ready). Then, on a NEW LINE at the very end of your message, output [PAY:AMOUNT] where AMOUNT is the FULL total the customer pays now in IDR digits only — that is the rental total (bike + any delivery/pickup fee) PLUS the refundable deposit, everything online. Example: bike 600000 + pickup 100000 + deposit 1000000 → [PAY:1700000]. Use ONLY the exact numbers you already quoted them; never invent a figure.
+- When you output [PAY:AMOUNT], NEVER type a link, a URL, or the word "https" yourself — you do NOT have the real link. The server creates it and appends it automatically below your message. Just tell them you're sending the payment link now and stop. Any URL you write is FAKE and breaks the payment.
+- Set [INTENT:booking] on the same message you send [PAY:...]. Do NOT output [RIDERS:N] or [APPT:...] — those are tour-specific (per-person tour deposit + video-call scheduling) and do not apply to a bike rental.
+- Only output [PAY:AMOUNT] when the customer has actually agreed to book and you know the total. Still just exploring or comparing prices → no [PAY], keep helping. One [PAY] per booking; if they already got a link and ask to resend it, use [RESEND_LINK] (below), not a new [PAY].
 - Don't stall with vague hedges ("let me check availability, I'll get back to you") — you have a LIVE STOCK block below (when it's present in your context) telling you exactly how many units of each model are free right now. Read it before confirming a specific model.
 - STOCK CHECK: if the model the customer wants shows 0 available in LIVE STOCK for the dates they want, say so plainly, don't confirm the booking, and immediately offer the closest available alternative (same tier, or the next tier up) that DOES have stock. If a model isn't listed in LIVE STOCK at all (no inventory data for it) or there's no LIVE STOCK block in your context, proceed exactly as before — don't invent a stock number, don't tell the customer to "wait for a check" either, just confirm normally.
-- RESEND: if the customer asks to resend a payment link the team already sent them ("can you send it again?", "resend the link"), output [RESEND_LINK] on its own new line. The server re-attaches the exact same link (no new charge). If no link was ever sent, don't output [RESEND_LINK] — say the team will send it shortly.
+- RESEND: if the customer asks to resend a payment link they already got ("can you send it again?", "resend the link"), output [RESEND_LINK] on its own new line. The server re-attaches the exact same link (no new charge). If no link was ever sent, don't output [RESEND_LINK] — send a fresh [PAY:AMOUNT] as above.
 
 COMMERCIAL INSTINCT — you're not just taking an order, you're selling. Stay direct (one line, then move
 on), but always look for the real opportunity to get BBM the better outcome:
@@ -1499,6 +1502,22 @@ async function cancelPaymentLink(provider, refId) {
   }
 }
 
+// El bot cierra el alquiler en el chat: crea el link de pago por el importe que cotizó.
+// Elige pasarela por el cliente — nº indonesio (+62) → Xendit (QRIS/VA/e-wallet, lo local);
+// extranjero → Stripe (tarjeta). Cae a la otra si la preferida no está configurada.
+async function createRentalPayLink(amountIDR, phone) {
+  const desc = `${PROJECT_NAME || "BBM"} — Rental payment`;
+  const local = normalizePhone(phone).startsWith("62");
+  const order = local ? ["xendit", "stripe"] : ["stripe", "xendit"];
+  for (const p of order) {
+    const created = p === "xendit"
+      ? await createXenditInvoice(amountIDR, desc, phone)   // devuelve null si falta XENDIT_SECRET_KEY
+      : await createStripeCheckoutIDR(amountIDR, desc, phone); // devuelve null si falta stripeClient
+    if (created) return { ...created, provider: p };
+  }
+  return null;
+}
+
 // ─── WHATSAPP ─────────────────────────────────────────────────────
 async function sendWhatsAppResult(to, message) {
   const toClean = normalizePhone(to);
@@ -1565,7 +1584,7 @@ async function sendHumanized(to, text, messageId) {
 function cleanReply(reply) {
   return reply
     .replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "")
-    .replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").trim()
+    .replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").replace(/\[PAY:[^\]]*\]/gi, "").trim()
     .replace(/[ \t]*(—|–|--)[ \t]*$/gm, ".").replace(/[ \t]*(—|–|--)[ \t]*/g, ", ")
     .replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1")  // **URL** → URL
     .replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
@@ -2089,6 +2108,10 @@ app.post("/webhook", async (req, res) => {
     const apptMatch = reply.match(/\[APPT:([^\]|]+)\|([^\]]+)\]/);
     const mediaMatch = reply.match(/\[MEDIA:([^\]]+)\]/i);
     const resendMatch = /\[RESEND_LINK\]/i.test(reply); // el cliente pide reenviar el link que ya recibió
+    // [PAY:importe] — el bot cierra el alquiler cobrando el total que cotizó (alquiler + depósito).
+    // El modelo aporta la cifra (no hay un campo único que sume alquiler+depósito); se valida en rango.
+    const payMatch = reply.match(/\[PAY:\s*([\d.,]+)\s*\]/i);
+    const payAmount = payMatch ? parseInt(payMatch[1].replace(/[.,]/g, ""), 10) : null;
     let leadFields = parseLeadTag(reply); // datos confirmados en la charla → ficha/BD
     reply = cleanReply(reply); // etiquetas internas + guion + markdown de WhatsApp (helper compartido)
 
@@ -2112,6 +2135,18 @@ app.post("/webhook", async (req, res) => {
       else console.error(`[${PROJECT_NAME}] booking detectado pero no se pudo crear la sesión Stripe`);
     } else if (numRiders && intent === "booking" && !stripeClient) {
       console.error(`[${PROJECT_NAME}] booking detectado pero stripeClient es null — falta STRIPE_SECRET_KEY en el entorno`);
+    } else if (payMatch && BOT_VERTICAL === "rental") {
+      // Alquiler: el bot cierra en el chat mandando el link de pago por el total cotizado.
+      // ponytail: valida el importe en rango sano (10k–100M IDR) para que una cifra alucinada
+      // no genere un cobro absurdo; fuera de rango no se cobra y se avisa en el log.
+      if (payAmount && payAmount >= 10000 && payAmount <= 100000000) {
+        const link = await createRentalPayLink(payAmount, from);
+        if (link) {
+          reply = reply + "\n\n" + link.url;
+          await setLastLink(from, link.url);
+          await logEvent(from, "paylink", { provider: link.provider, amount: payAmount, refId: link.id });
+        } else console.error(`[${PROJECT_NAME}] [PAY] sin pasarela configurada (falta STRIPE_SECRET_KEY y XENDIT_SECRET_KEY) — no se envió link a ${from}`);
+      } else console.warn(`[${PROJECT_NAME}] [PAY] importe inválido o fuera de rango (${payMatch[1]}) — no se cobra a ${from}`);
     } else if (resendMatch) {
       // El cliente pidió reenviar el link que YA recibió → mismo link, sin crear un cobro nuevo.
       const last = await getLastLink(from);
@@ -2126,7 +2161,11 @@ app.post("/webhook", async (req, res) => {
     // Fotos/vídeos que el bot decidió enviar ([MEDIA:label]) → se buscan en la biblioteca, se mandan y se anotan en el historial.
     if (mediaMatch) {
       const wanted = mediaMatch[1].split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-      const toSend = mediaLib.filter((m) => wanted.includes(String(m.label).toLowerCase()));
+      // ponytail: no reenviar una foto/vídeo que ya se mandó en esta conversación. El modelo
+      // a veces repite [MEDIA:label] en un turno posterior aunque ya conste en el historial
+      // (bug: foto enviada 2 veces, la 2ª sin pedirla). Dedup por url ya enviada.
+      const alreadySent = new Set(history.filter((m) => m.media && m.media.url).map((m) => m.media.url));
+      const toSend = mediaLib.filter((m) => wanted.includes(String(m.label).toLowerCase()) && !alreadySent.has(m.url));
       for (const item of toSend) {
         await sendWhatsAppMedia(from, item);
         history.push({ role: "assistant", content: item.caption || (item.type === "video" ? "[vídeo]" : "[foto]"), ts: Date.now(), by: "bot", media: { type: item.type, url: item.url, caption: item.caption || "" } });
