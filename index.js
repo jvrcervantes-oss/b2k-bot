@@ -1364,6 +1364,19 @@ async function sendHumanized(to, text, messageId) {
   }
 }
 
+// Limpia la respuesta del modelo para el cliente: quita las etiquetas internas ([INTENT], [LEAD]…),
+// arregla el guion medio (pilla "palabra—palabra" y guion final; NO toca "self-guided"/"3-6") y
+// convierte el markdown que WhatsApp no entiende. Webhook y simulador comparten esto — antes estaba
+// duplicado en dos sitios y un fix en uno se olvidaba en el otro.
+function cleanReply(reply) {
+  return reply
+    .replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "")
+    .replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").trim()
+    .replace(/[ \t]*(—|–|--)[ \t]*$/gm, ".").replace(/[ \t]*(—|–|--)[ \t]*/g, ", ")
+    .replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1")  // **URL** → URL
+    .replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
+}
+
 // ─── TRANSCRIPCIÓN DE NOTAS DE VOZ (Whisper) ─────────────────────
 // Se activa añadiendo OPENAI_API_KEY en Railway; sin ella devuelve null y el webhook
 // cae al fallback de "escríbemelo en texto". Flujo: media id de Meta → URL firmada →
@@ -1748,14 +1761,7 @@ app.post("/webhook", async (req, res) => {
     const mediaMatch = reply.match(/\[MEDIA:([^\]]+)\]/i);
     const resendMatch = /\[RESEND_LINK\]/i.test(reply); // el cliente pide reenviar el link que ya recibió
     let leadFields = parseLeadTag(reply); // datos confirmados en la charla → ficha/BD
-    reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").trim();
-    // Red de seguridad: aunque PERSONA prohíbe el guión medio en mitad de frase, el modelo a veces lo
-    // escribe igual — lo sustituimos en vez de confiar solo en la instrucción. Pilla también
-    // "palabra—palabra" sin espacios y el guion al final de línea. NO toca "self-guided" ni "3-6" (guion simple).
-    reply = reply.replace(/[ \t]*(—|–|--)[ \t]*$/gm, ".").replace(/[ \t]*(—|–|--)[ \t]*/g, ", ");
-    // Strip markdown that WhatsApp sends literally (breaks URLs)
-    reply = reply.replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1"); // **URL** → URL
-    reply = reply.replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
+    reply = cleanReply(reply); // etiquetas internas + guion + markdown de WhatsApp (helper compartido)
 
     // ── Stripe checkout session dinámica ──────────────────────────
     // SIEMPRE quitar cualquier link de pago que el modelo haya alucinado.
@@ -2088,9 +2094,7 @@ app.post("/admin/api/simulate", async (req, res) => {
     });
     const textBlock = response.content.find((b) => b.type === "text");
     let reply = (textBlock && textBlock.text) || "(sin respuesta — revisa logs)";
-    // Mismo strip que el webhook real (index.js ~1342): el cliente nunca ve estas etiquetas internas.
-    reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").trim();
-    reply = reply.replace(/[ \t]*(—|–|--)[ \t]*$/gm, ".").replace(/[ \t]*(—|–|--)[ \t]*/g, ", "); // misma red del guion que el webhook real
+    reply = cleanReply(reply); // mismo limpiado que el webhook real (helper compartido)
     history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
     await saveConversation(phone, history);
     res.json({ reply });
