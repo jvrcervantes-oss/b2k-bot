@@ -461,10 +461,61 @@ function normalizeTags(arr) {
 // los deals[] abiertos. Los campos de nivel-lead SIGUEN reflejando un "mirror" del deal
 // enfocado (el abierto más reciente) para no romper tabla/dashboard/Sheets, que leen l.model
 // etc. directamente — mirrorOf()/focusDeal() son la única fuente de ese mirror.
-const DEAL_ID_FIELD = BOT_VERTICAL === "rental" ? "model" : "tour";
-const DEAL_FIELDS = BOT_VERTICAL === "rental"
-  ? ["model", "plan", "startDate", "endDate", "dealValue", "deliveryLocation", "insuranceTier", "paymentMethod"]
-  : ["tour", "package", "riders", "pillions", "travelDate", "dealValue"];
+// ─── PLAYBOOK: la config que define el "cómo" de cada tipo de bot (vertical) ──────
+// Antes esto era un `BOT_VERTICAL === "rental" ? … : …` repartido por 9 sitios del motor.
+// Ahora vive en UN objeto por vertical. Un bot nuevo del MISMO tipo no toca motor; un tipo
+// NUEVO = añadir una entrada aquí (+ su bloque gathering/close abajo, según closeStyle).
+// closeStyle: "appointment" (cierra reservando videollamada, emite [APPT]) | "direct" (cierra
+// en el chat, alquiler) | "reservation" (futuro: mesa/cita puntual).
+const BUILTIN_PLAYBOOKS = {
+  tour: {
+    closeStyle: "appointment",
+    dealIdField: "tour",
+    dealFields: ["tour", "package", "riders", "pillions", "travelDate", "dealValue"],
+    keyFields: ["email", "country", "tour", "package", "riders", "pillions", "travelDate"],
+    enrichTextFields: ["name", "email", "country", "tour", "package", "travelDate"],
+    enrichNumberFields: ["riders", "pillions"],
+    enrichSystem:
+      'You extract CRM fields from a WhatsApp sales chat for a motorcycle tour company. ' +
+      'Return ONLY a compact JSON object — no prose, no code fences. Keys: ' +
+      'name, email, country, tour ("Bali to Komodo" or "7 Islands"), ' +
+      'package ("Roundtrip" | "Extreme" | "Deluxe"), riders (integer), pillions (integer), ' +
+      'travelDate (free text like "late 2027"). Use null for anything not clearly stated by the customer. Never guess.',
+    canned: [
+      { title: "Saludo", text: "Hey! Thanks for reaching out! How can I help you plan your ride?" },
+      { title: "Pedir datos", text: "To give you an exact quote — which tour, how many riders, and roughly when were you thinking of traveling?" },
+      { title: "Proponer videollamada", text: "Want to hop on a quick video call with the team? It's free, about 30 minutes, zero pressure — they'll walk you through everything." },
+    ],
+    helpWith: "your trip",
+  },
+  rental: {
+    closeStyle: "direct",
+    dealIdField: "model",
+    dealFields: ["model", "plan", "startDate", "endDate", "dealValue", "deliveryLocation", "insuranceTier", "paymentMethod"],
+    keyFields: ["email", "country", "model", "plan", "startDate", "endDate", "deliveryLocation"],
+    enrichTextFields: ["name", "email", "country", "model", "plan", "startDate", "endDate", "deliveryLocation"],
+    enrichNumberFields: [],
+    enrichSystem:
+      'You extract CRM fields from a WhatsApp sales chat for a motorbike rental company. ' +
+      'Return ONLY a compact JSON object — no prose, no code fences. Keys: ' +
+      'name, email, country, model (vehicle model the customer wants), ' +
+      'plan (rental period: daily/weekly/fortnight/monthly/semestral/annual), ' +
+      'startDate (free text like "next Monday" or a date), endDate (return/end date of the rental, free text or a date), deliveryLocation (free text). ' +
+      'Use null for anything not clearly stated by the customer. Never guess.',
+    canned: [
+      { title: "Saludo", text: "Hey! Thanks for reaching out! Which bike are you after, and for how long?" },
+      { title: "Pedir datos", text: "To give you an exact quote: which model, how many days, and where should we deliver it?" },
+      { title: "Confirmar entrega", text: "We deliver straight to your hotel or villa. What's the address?" },
+    ],
+    helpWith: "your rental",
+  },
+};
+// Selección retrocompatible por BOT_VERTICAL. Futuro: si hay PLAYBOOK_FILE (JSON en el repo,
+// como context-<proyecto>.md) cargar de ahí un vertical a medida sin tocar este registry.
+const PLAYBOOK = BUILTIN_PLAYBOOKS[BOT_VERTICAL === "rental" ? "rental" : "tour"];
+
+const DEAL_ID_FIELD = PLAYBOOK.dealIdField;
+const DEAL_FIELDS = PLAYBOOK.dealFields;
 const DEALS_CAP = 30; // tope del array — al recortar se quitan antes los ya cerrados (won/lost), nunca los abiertos
 
 function genDealId() { return "d_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -579,9 +630,7 @@ async function logEvent(phone, type, meta) {
 // ─── ENRIQUECIMIENTO: rellena la ficha leyendo la conversación con el LLM ──────
 // Para leads antiguos (p.ej. Keith) cuyos datos están en el chat pero no en la ficha.
 const EXTRACT_MODEL = process.env.EXTRACT_MODEL || MODEL;
-const KEY_FIELDS = BOT_VERTICAL === "rental"
-  ? ["email", "country", "model", "plan", "startDate", "endDate", "deliveryLocation"]
-  : ["email", "country", "tour", "package", "riders", "pillions", "travelDate"];
+const KEY_FIELDS = PLAYBOOK.keyFields;
 function leadMissingKeyFields(l) {
   if (!l) return true;
   return KEY_FIELDS.some((k) => l[k] == null || l[k] === "");
@@ -604,18 +653,7 @@ async function enrichLeadFromConversation(phone, { force = false } = {}) {
       model: EXTRACT_MODEL,
       max_tokens: 300,
       thinking: { type: "disabled" }, // extractor JSON: sin thinking (en Sonnet 5 iría ON por defecto y rompería el parseo/max_tokens)
-      system: BOT_VERTICAL === "rental"
-        ? 'You extract CRM fields from a WhatsApp sales chat for a motorbike rental company. ' +
-          'Return ONLY a compact JSON object — no prose, no code fences. Keys: ' +
-          'name, email, country, model (vehicle model the customer wants), ' +
-          'plan (rental period: daily/weekly/fortnight/monthly/semestral/annual), ' +
-          'startDate (free text like "next Monday" or a date), endDate (return/end date of the rental, free text or a date), deliveryLocation (free text). ' +
-          'Use null for anything not clearly stated by the customer. Never guess.'
-        : 'You extract CRM fields from a WhatsApp sales chat for a motorcycle tour company. ' +
-          'Return ONLY a compact JSON object — no prose, no code fences. Keys: ' +
-          'name, email, country, tour ("Bali to Komodo" or "7 Islands"), ' +
-          'package ("Roundtrip" | "Extreme" | "Deluxe"), riders (integer), pillions (integer), ' +
-          'travelDate (free text like "late 2027"). Use null for anything not clearly stated by the customer. Never guess.',
+      system: PLAYBOOK.enrichSystem,
       messages: [{ role: "user", content: transcript }],
     });
     let txt = ((r.content[0] && r.content[0].text) || "").trim();
@@ -627,13 +665,11 @@ async function enrichLeadFromConversation(phone, { force = false } = {}) {
   }
   // Solo rellenar campos VACÍOS: nunca pisar lo que ya hay (p.ej. ediciones manuales).
   const fields = {};
-  const textFields = BOT_VERTICAL === "rental"
-    ? ["name", "email", "country", "model", "plan", "startDate", "endDate", "deliveryLocation"]
-    : ["name", "email", "country", "tour", "package", "travelDate"];
+  const textFields = PLAYBOOK.enrichTextFields;
   textFields.forEach((k) => {
     if (data[k] && (lead[k] == null || lead[k] === "")) fields[k] = String(data[k]).slice(0, 120);
   });
-  (BOT_VERTICAL === "rental" ? [] : ["riders", "pillions"]).forEach((k) => {
+  PLAYBOOK.enrichNumberFields.forEach((k) => {
     const n = parseInt(data[k], 10);
     if (data[k] != null && !isNaN(n) && (lead[k] == null || lead[k] === "")) fields[k] = n;
   });
@@ -689,15 +725,7 @@ async function enrichSweep(limit = 20) {
 
 // ─── RESPUESTAS RÁPIDAS (canned replies, compartidas por proyecto) ──
 let fallbackCanned = null;
-const DEFAULT_CANNED = BOT_VERTICAL === "rental" ? [
-  { title: "Saludo", text: "Hey! Thanks for reaching out! Which bike are you after, and for how long?" },
-  { title: "Pedir datos", text: "To give you an exact quote: which model, how many days, and where should we deliver it?" },
-  { title: "Confirmar entrega", text: "We deliver straight to your hotel or villa. What's the address?" },
-] : [
-  { title: "Saludo", text: "Hey! Thanks for reaching out! How can I help you plan your ride?" },
-  { title: "Pedir datos", text: "To give you an exact quote — which tour, how many riders, and roughly when were you thinking of traveling?" },
-  { title: "Proponer videollamada", text: "Want to hop on a quick video call with the team? It's free, about 30 minutes, zero pressure — they'll walk you through everything." },
-];
+const DEFAULT_CANNED = PLAYBOOK.canned;
 async function getCanned() {
   if (redisClient) { const v = await redisClient.get("canned"); return v ? JSON.parse(v) : DEFAULT_CANNED; }
   return fallbackCanned || DEFAULT_CANNED;
@@ -1115,7 +1143,7 @@ LEAD DATA TAGGING — fill the CRM as you learn things (do this consistently):
 All tags are stripped before sending. NEVER mention them to the customer.
 `;
 
-const BASE_INSTRUCTIONS = BOT_VERTICAL === "rental"
+const BASE_INSTRUCTIONS = PLAYBOOK.closeStyle === "direct"
   ? BASE_INSTRUCTIONS_HEAD + RENTAL_GATHERING + BASE_INSTRUCTIONS_MIDDLE + RENTAL_CLOSE_AND_TAGGING
   : BASE_INSTRUCTIONS_HEAD + TOUR_GATHERING + BASE_INSTRUCTIONS_MIDDLE + TOUR_CLOSE_AND_TAGGING;
 
@@ -1609,7 +1637,7 @@ async function sendIntro(phone) {
   await updateLeadFields(phone, { outreached: true, outreachedAt: Date.now() });
   try {
     const history = await getConversation(phone);
-    const helpWith = BOT_VERTICAL === "rental" ? "your rental" : "your trip";
+    const helpWith = PLAYBOOK.helpWith;
     history.push({ role: "assistant", content: `Hey ${firstName}! 👋 Saw you filled out our Instagram form — I'm ${PERSONA_NAME} from ${PROJECT_NAME}, here to help with ${helpWith}. What would you like to know?`, ts: Date.now(), by: "bot" });
     await saveConversation(phone, history);
   } catch (e) { /* best-effort */ }
