@@ -39,8 +39,7 @@ const {
   XENDIT_CALLBACK_TOKEN,   // token de verificación del webhook de Xendit (Dashboard → Callbacks, no es el secret key)
   STRIPE_WEBHOOK_SECRET,   // firma del webhook de Stripe (Dashboard → Webhooks → signing secret, whsec_...)
   SUPABASE_URL,            // proyecto Supabase para el inventario de motos (pntvipemiczzfrnhixlb)
-  SUPABASE_SERVICE_KEY,    // service_role key — fallback de lectura si falta la anon, Y necesaria para escribir en
-                           // `offers` (POST /admin/api/offers): anon solo tiene SELECT ahí, a propósito.
+  SUPABASE_SERVICE_KEY,    // service_role key (opcional — solo fallback si falta la anon; hoy nada escribe en Supabase con esta key)
   SUPABASE_ANON_KEY,       // key "anon": RLS ya da SELECT público en products/product_pricing/serialized_items
   ADMIN_PASSWORD,
   ALERT_TEMPLATE_NAME,
@@ -2502,11 +2501,13 @@ app.get("/admin/api/offers", async (req, res) => {
   } catch (e) { res.status(502).json({ error: e.response?.data?.message || e.message }); }
 });
 
-// Crea/actualiza la oferta de un modelo. anon NO tiene permiso de escritura en `offers` (a propósito,
-// mismo criterio que el resto de Supabase: "hoy nada escribe" salvo aquí) — hace falta la service key.
+// Crea/actualiza la oferta de un modelo. A diferencia de products/product_pricing (que sincroniza
+// el sistema externo de BBM y por eso anon ahí es solo lectura), `offers` es nuestra y no guarda
+// nada sensible — anon tiene INSERT/UPDATE con RLS scoped a esta tabla sola, sin necesidad de meter
+// una service_role key (que saltaría el RLS de TODO — clientes, pagos, flota — en Railway).
 app.post("/admin/api/offers", async (req, res) => {
   if (!adminAuth(req, res)) return;
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) return res.status(503).json({ error: "escritura no configurada (falta SUPABASE_SERVICE_KEY en Railway)" });
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return res.status(503).json({ error: "ofertas no configuradas (falta SUPABASE_URL/SUPABASE_ANON_KEY)" });
   const { product_id, discount_pct, active } = req.body || {};
   if (!product_id || discount_pct == null || active == null) return res.status(400).json({ error: "product_id, discount_pct y active requeridos" });
   if (discount_pct <= 0 || discount_pct > 90) return res.status(400).json({ error: "discount_pct debe estar entre 1 y 90" });
@@ -2516,7 +2517,7 @@ app.post("/admin/api/offers", async (req, res) => {
       { product_id, discount_pct, active, updated_at: new Date().toISOString() },
       {
         headers: {
-          apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
           Prefer: "resolution=merge-duplicates", "Content-Type": "application/json",
         },
         params: { on_conflict: "product_id" },
