@@ -1120,7 +1120,13 @@ CLOSING — DIRECT IN THE CHAT, THIS IS A RENTAL, NOT A MULTI-DAY TOUR (read car
 - THIS APPLIES TO EVERY DURATION, SHORT OR LONG — daily, weekly, fortnight, 3-week, monthly, semestral, annual, all of them. Long-stay/subscription plans are NOT an exception: if a lead says "I need a bike for 6 months" or "I want the annual plan", give the price range for that exact period in your first reply too — do not swap the price for a lifestyle pitch ("that's our sweet spot", "the long-term plans are where we shine") instead of a number. Sell the long-stay value AFTER the price, never as a substitute for it.
 - Once you know the bike/model, plan/duration, delivery location and a rough start date, give the exact price and move straight to confirming the booking.
 - Confirm what's included (helmets, free delivery) and CLOSE by sending the payment link yourself — do NOT tell them "the team will follow up to finalize payment". You send it right here in the chat.
-- SENDING THE PAYMENT LINK: once the customer agrees to book, first get their full name (and remind them to have a valid ID/KTP/passport + driving licence ready). Then, on a NEW LINE at the very end of your message, output [PAY:AMOUNT] where AMOUNT is the FULL total the customer pays now in IDR digits only — that is the rental total (bike + any delivery/pickup fee) PLUS the refundable deposit, everything online. Example: bike 600000 + pickup 100000 + deposit 1000000 → [PAY:1700000]. Use ONLY the exact numbers you already quoted them; never invent a figure.
+- DEPOSIT VS INSURANCE — if the project's context offers both and the customer hasn't picked one yet, ask once, plainly, before totalling. What happens next depends on which they pick:
+  - INSURANCE: always goes straight into the online total below, no extra step, no cash option — it's non-refundable so there's nothing to hand back in person.
+  - DEPOSIT (refundable): before folding it into the online total, offer to collect it in CASH instead — paid in cash at handover, refunded in cash when the bike comes back, so it never touches the payment link or the gateway fee. Ask once, plainly (e.g. "want to pay the deposit in cash at pickup instead — same refund, just handed back to you directly?").
+    - If they accept cash: the online total is bike + delivery/pickup ONLY — leave the deposit out of [PAY:AMOUNT] entirely. Add \`tags=cash_deposit\` to your [LEAD] tag so the team knows to collect and refund that amount in person, not through the link.
+    - If they decline (or don't want the hassle of cash): the deposit goes into the online total exactly like insurance would — bike + delivery + deposit, all through the payment link, no cash tag.
+- ONLINE PAYMENT FEE — Xendit and Stripe both charge a real processing fee, and it's passed to the customer, not absorbed by the business: 3% on Xendit (local Indonesian numbers, +62), 4% on Stripe (everyone else — same rule the server itself uses to pick the gateway, so your fee always matches the real one). State it plainly before closing, e.g. "that's 1,800,000 IDR, and since you're paying online there's a 4% card processing fee on top, so 1,872,000 total." This fee applies to whatever actually goes through the payment link (bike + delivery + insurance, or + deposit if not paid in cash) — never to a deposit being collected in cash.
+- SENDING THE PAYMENT LINK: once the customer agrees to book, first get their full name (and remind them to have a valid ID/KTP/passport + driving licence ready). Then, on a NEW LINE at the very end of your message, output [PAY:AMOUNT] where AMOUNT is the PRE-FEE total in IDR digits only — bike + delivery/pickup + (insurance, or deposit ONLY if the customer didn't choose cash for it) — the same breakdown you quoted BEFORE adding the online payment fee above. The server adds the exact 3%/4% gateway fee automatically when it creates the real charge — never include the fee yourself in this number. Example: bike 600000 + pickup 100000 + deposit 1000000 (paid online, not cash) → [PAY:1700000]. Use ONLY the exact numbers you already quoted them; never invent a figure.
 - When you output [PAY:AMOUNT], NEVER type a link, a URL, or the word "https" yourself — you do NOT have the real link. The server creates it and appends it automatically below your message. Just tell them you're sending the payment link now and stop. Any URL you write is FAKE and breaks the payment.
 - Set [INTENT:booking] on the same message you send [PAY:...]. Do NOT output [RIDERS:N] or [APPT:...] — those are tour-specific (per-person tour deposit + video-call scheduling) and do not apply to a bike rental.
 - Only output [PAY:AMOUNT] when the customer has actually agreed to book and you know the total. Still just exploring or comparing prices → no [PAY], keep helping. One [PAY] per booking; if they already got a link and ask to resend it, use [RESEND_LINK] (below), not a new [PAY].
@@ -1258,6 +1264,44 @@ async function buildDeliveryHint() {
     + "that rule no longer applies:\n" + lines
     + "\n\nFor any address NOT in this list: do not estimate kilometres or a price yourself — say the team "
     + "will confirm the exact delivery cost for that address, and add `tags: pricing_check`.";
+}
+
+// ─── OFERTAS: descuentos activos por modelo (Supabase BBM: offers) ──────
+// Mismo patrón/caché que buildDeliveryHint. Tabla PROPIA (no products/product_pricing, que sincroniza
+// el sistema real de BBM) para que un refresco externo de la flota nunca se lleve por delante un
+// descuento nuestro. El equipo la gestiona desde el panel (tab Flota → columna Oferta).
+async function computeOffersSnapshot() {
+  const key = SUPABASE_ANON_KEY || SUPABASE_SERVICE_KEY; // anon basta: RLS da SELECT a anon
+  if (!SUPABASE_URL || !key) return null;
+  const res = await axios.get(`${SUPABASE_URL}/rest/v1/offers`, {
+    params: { select: "discount_pct,products(name)", active: "eq.true" },
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+    timeout: 10000,
+  });
+  return res.data || [];
+}
+let offersSnap = null, offersSnapAt = 0;
+async function getOffersSnapshot() {
+  if (offersSnap && Date.now() - offersSnapAt < INVENTORY_TTL_MS) return offersSnap;
+  try {
+    offersSnap = await computeOffersSnapshot();
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] Ofertas: error leyendo Supabase — ${e.response ? JSON.stringify(e.response.data) : e.message}`);
+  }
+  offersSnapAt = Date.now();
+  return offersSnap;
+}
+async function buildOfferHint() {
+  if (BOT_VERTICAL !== "rental") return "";
+  const offers = await getOffersSnapshot();
+  if (!offers || !offers.length) return "";
+  const lines = offers.filter((o) => o.products && o.products.name).map((o) => `- ${o.products.name}: ${o.discount_pct}% off, all rental periods`).join("\n");
+  if (!lines) return "";
+  return "\n\nACTIVE OFFERS (refreshed every few minutes, team-managed from the panel — mention proactively, "
+    + "even for a model DIFFERENT from the one the customer originally asked about, it's a cross-sell "
+    + "opportunity, not just an answer to a direct question. One line is enough, e.g. \"by the way, the Adv "
+    + "is 15% off right now if you want to compare.\" Bring it up once when relevant, then drop it if the "
+    + "customer isn't interested — don't repeat it every message):\n" + lines;
 }
 
 // ─── GOOGLE SHEETS ────────────────────────────────────────────────
@@ -1502,6 +1546,14 @@ async function cancelPaymentLink(provider, refId) {
   }
 }
 
+// Recargo de pasarela (owner, 20-jul-2026): el coste real de procesar el pago se traslada al
+// cliente, no lo absorbe el negocio — 3% en Xendit, 4% en Stripe. Se aplica aquí, al importe
+// PRE-FEE que manda el bot en [PAY:AMOUNT] (bike+delivery+insurance, o +deposit si va online),
+// para que el cargo real siempre lleve el recargo de la pasarela que de verdad lo procesó
+// (incluida la de fallback si la preferida no está configurada) sin depender de que el modelo
+// haga bien la multiplicación.
+const GATEWAY_FEE_PCT = { xendit: 0.03, stripe: 0.04 };
+
 // El bot cierra el alquiler en el chat: crea el link de pago por el importe que cotizó.
 // Elige pasarela por el cliente — nº indonesio (+62) → Xendit (QRIS/VA/e-wallet, lo local);
 // extranjero → Stripe (tarjeta). Cae a la otra si la preferida no está configurada.
@@ -1510,10 +1562,11 @@ async function createRentalPayLink(amountIDR, phone) {
   const local = normalizePhone(phone).startsWith("62");
   const order = local ? ["xendit", "stripe"] : ["stripe", "xendit"];
   for (const p of order) {
+    const finalAmount = Math.round(amountIDR * (1 + GATEWAY_FEE_PCT[p]));
     const created = p === "xendit"
-      ? await createXenditInvoice(amountIDR, desc, phone)   // devuelve null si falta XENDIT_SECRET_KEY
-      : await createStripeCheckoutIDR(amountIDR, desc, phone); // devuelve null si falta stripeClient
-    if (created) return { ...created, provider: p };
+      ? await createXenditInvoice(finalAmount, desc, phone)   // devuelve null si falta XENDIT_SECRET_KEY
+      : await createStripeCheckoutIDR(finalAmount, desc, phone); // devuelve null si falta stripeClient
+    if (created) return { ...created, provider: p, amount: finalAmount };
   }
   return null;
 }
@@ -2077,6 +2130,7 @@ app.post("/webhook", async (req, res) => {
     const stockHint = await buildStockHint(); // inventario (rental): mismo patrón que mediaHint, bloque aparte sin cachear
     const priceHint = await buildPriceHint(); // tarifas (rental): mismo patrón/caché que stockHint
     const deliveryHint = await buildDeliveryHint(); // zonas de delivery (rental): mismo patrón/caché que priceHint
+    const offerHint = await buildOfferHint(); // ofertas activas (rental): mismo patrón/caché que deliveryHint
     // Streaming (no create): evita el "Premature close" en respuestas no-stream y mantiene viva la conexión.
     const response = await claudeMessage({
       model: MODEL,
@@ -2084,13 +2138,14 @@ app.post("/webhook", async (req, res) => {
       thinking: { type: "disabled" }, // respuestas cortas y baratas; en Sonnet 5 el thinking va ON por defecto y se comería el max_tokens
       // Prompt caching: el system (~11.5k tok fijos: context.md + BASE_INSTRUCTIONS) es idéntico en cada turno.
       // Con cache_control, la 1ª vez paga 1.25x y el resto de la charla (dentro de 5 min) paga 0.1x → ~-78% del coste de system.
-      // mediaHint/stockHint/priceHint/deliveryHint van en bloque aparte tras el prefijo cacheado (cambian solos, sin invalidar la caché).
+      // mediaHint/stockHint/priceHint/deliveryHint/offerHint van en bloque aparte tras el prefijo cacheado (cambian solos, sin invalidar la caché).
       system: [
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
         ...(stockHint ? [{ type: "text", text: stockHint }] : []),
         ...(priceHint ? [{ type: "text", text: priceHint }] : []),
         ...(deliveryHint ? [{ type: "text", text: deliveryHint }] : []),
+        ...(offerHint ? [{ type: "text", text: offerHint }] : []),
       ],
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // prompt = últimos 20; el resto es historial del panel
     });
@@ -2144,7 +2199,7 @@ app.post("/webhook", async (req, res) => {
         if (link) {
           reply = reply + "\n\n" + link.url;
           await setLastLink(from, link.url);
-          await logEvent(from, "paylink", { provider: link.provider, amount: payAmount, refId: link.id });
+          await logEvent(from, "paylink", { provider: link.provider, amount: link.amount, preFeeAmount: payAmount, refId: link.id });
         } else console.error(`[${PROJECT_NAME}] [PAY] sin pasarela configurada (falta STRIPE_SECRET_KEY y XENDIT_SECRET_KEY) — no se envió link a ${from}`);
       } else console.warn(`[${PROJECT_NAME}] [PAY] importe inválido o fuera de rango (${payMatch[1]}) — no se cobra a ${from}`);
     } else if (resendMatch) {
@@ -2429,6 +2484,44 @@ app.get("/admin/api/inventory", async (req, res) => {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
     });
     res.json(r.data);
+  } catch (e) { res.status(502).json({ error: e.response?.data?.message || e.message }); }
+});
+
+// Ofertas por modelo: lista todos los productos con su descuento actual (si tiene). Lectura con
+// anon key (RLS ya da SELECT público en products/offers), igual que /admin/api/inventory.
+app.get("/admin/api/offers", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return res.status(503).json({ error: "ofertas no configuradas (falta SUPABASE_URL/SUPABASE_ANON_KEY)" });
+  try {
+    const r = await axios.get(`${SUPABASE_URL}/rest/v1/products`, {
+      params: { select: "id,name,offers(discount_pct,active)", order: "name.asc" },
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    });
+    res.json(r.data);
+  } catch (e) { res.status(502).json({ error: e.response?.data?.message || e.message }); }
+});
+
+// Crea/actualiza la oferta de un modelo. anon NO tiene permiso de escritura en `offers` (a propósito,
+// mismo criterio que el resto de Supabase: "hoy nada escribe" salvo aquí) — hace falta la service key.
+app.post("/admin/api/offers", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) return res.status(503).json({ error: "escritura no configurada (falta SUPABASE_SERVICE_KEY en Railway)" });
+  const { product_id, discount_pct, active } = req.body || {};
+  if (!product_id || discount_pct == null || active == null) return res.status(400).json({ error: "product_id, discount_pct y active requeridos" });
+  if (discount_pct <= 0 || discount_pct > 90) return res.status(400).json({ error: "discount_pct debe estar entre 1 y 90" });
+  try {
+    await axios.post(
+      `${SUPABASE_URL}/rest/v1/offers`,
+      { product_id, discount_pct, active, updated_at: new Date().toISOString() },
+      {
+        headers: {
+          apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          Prefer: "resolution=merge-duplicates", "Content-Type": "application/json",
+        },
+        params: { on_conflict: "product_id" },
+      }
+    );
+    res.json({ ok: true });
   } catch (e) { res.status(502).json({ error: e.response?.data?.message || e.message }); }
 });
 

@@ -953,7 +953,8 @@
       flash_saved:'✓ Guardado', flash_err:'✕ Error', imp_ing:'⏳ Importando ', imp_new:'nuevos', imp_upd:'act.', enr_ing:'⏳ Leyendo chats…', enr_done:'actualizados',
       al_status:'No se pudo guardar el estado', al_tags_max:'Máximo 20 etiquetas por lead', al_pkg:'No se pudo guardar el paquete', al_nolead:'No se han encontrado leads en el archivo (¿es el CSV de Meta Lead Ads?).', al_imp:'Error al importar', al_tpl:'No se pudieron guardar las plantillas',
       ft_loading:'Cargando…', ft_err:'Error al cargar la flota.', ft_total:'Total', ft_available:'Disponibles', ft_rented:'Alquiladas', ft_maint:'Mantenimiento', ft_retired:'Retiradas', ft_none_units:'Sin unidades que coincidan.', ft_none_models:'Sin modelos que coincidan.', ft_models:'Modelos', ft_readonly:'Solo lectura — se edita en el sistema de BBM', ft_source:'Fuente: Supabase', ft_per_day:'/día', ft_per_month:'/mes',
-      ft_th_model:'Modelo', ft_th_code:'Código', ft_th_plate:'Matrícula', ft_th_status:'Estado', ft_th_condition:'Condición', ft_th_daily:'Diario', ft_th_weekly:'Semanal', ft_th_fortnight:'Quincena', ft_th_3wlow:'3 sem (baja)', ft_th_3whigh:'3 sem (alta)', ft_th_monthly:'Mensual', ft_th_biannual:'Semestral', ft_th_yearly:'Anual',
+      ft_th_model:'Modelo', ft_th_code:'Código', ft_th_plate:'Matrícula', ft_th_status:'Estado', ft_th_condition:'Condición', ft_th_daily:'Diario', ft_th_weekly:'Semanal', ft_th_fortnight:'Quincena', ft_th_3wlow:'3 sem (baja)', ft_th_3whigh:'3 sem (alta)', ft_th_monthly:'Mensual', ft_th_biannual:'Semestral', ft_th_yearly:'Anual', ft_th_offer:'Oferta',
+      ft_offer_active:'Activa', ft_offer_save:'Guardar', ft_offer_saved:'Guardado ✓', ft_offer_bad_pct:'El descuento debe ser un % entre 1 y 90.', ft_offer_err:'No se pudo guardar la oferta (¿falta SUPABASE_SERVICE_KEY en Railway?).',
       hw_waiting:'esperando respuesta', hw_booking:'quiere reservar', hw_escalate:'pide humano', hw_interested:'interesado', hw_overdue:'seguimiento vencido', hw_priority:'Prioridad', csv_filename:'clientes_',
       al_send:'No se pudo enviar: ', al_send2:'\n\nSi han pasado +24h desde el último mensaje del cliente, WhatsApp no permite texto libre (haría falta plantilla).', cfm_cancel:'¿Cancelar esta cita?',
       notify_wait:'🔔 Lead por responder', notify_hot:'🔴 Lead caliente (reserva)',
@@ -1002,7 +1003,8 @@
       flash_saved:'✓ Saved', flash_err:'✕ Error', imp_ing:'⏳ Importing ', imp_new:'new', imp_upd:'upd.', enr_ing:'⏳ Reading chats…', enr_done:'updated',
       al_status:"Couldn't save status", al_tags_max:'Maximum 20 tags per lead', al_pkg:"Couldn't save package", al_nolead:'No leads found in the file (is it the Meta Lead Ads CSV?).', al_imp:'Import error', al_tpl:"Couldn't save templates",
       ft_loading:'Loading…', ft_err:'Error loading fleet.', ft_total:'Total', ft_available:'Available', ft_rented:'Rented', ft_maint:'Maintenance', ft_retired:'Retired', ft_none_units:'No matching units.', ft_none_models:'No matching models.', ft_models:'Models', ft_readonly:'Read-only — edited in the BBM management system', ft_source:'Source: Supabase', ft_per_day:'/day', ft_per_month:'/month',
-      ft_th_model:'Model', ft_th_code:'Code', ft_th_plate:'Plate', ft_th_status:'Status', ft_th_condition:'Condition', ft_th_daily:'Daily', ft_th_weekly:'Weekly', ft_th_fortnight:'Fortnight', ft_th_3wlow:'3wk (low)', ft_th_3whigh:'3wk (high)', ft_th_monthly:'Monthly', ft_th_biannual:'Biannual', ft_th_yearly:'Yearly',
+      ft_th_model:'Model', ft_th_code:'Code', ft_th_plate:'Plate', ft_th_status:'Status', ft_th_condition:'Condition', ft_th_daily:'Daily', ft_th_weekly:'Weekly', ft_th_fortnight:'Fortnight', ft_th_3wlow:'3wk (low)', ft_th_3whigh:'3wk (high)', ft_th_monthly:'Monthly', ft_th_biannual:'Biannual', ft_th_yearly:'Yearly', ft_th_offer:'Offer',
+      ft_offer_active:'Active', ft_offer_save:'Save', ft_offer_saved:'Saved ✓', ft_offer_bad_pct:'Discount must be a % between 1 and 90.', ft_offer_err:'Could not save the offer (missing SUPABASE_SERVICE_KEY in Railway?).',
       hw_waiting:'awaiting reply', hw_booking:'wants to book', hw_escalate:'asks for human', hw_interested:'interested', hw_overdue:'follow-up overdue', hw_priority:'Priority', csv_filename:'clients_',
       al_send:"Couldn't send: ", al_send2:"\n\nIf it's been 24h+ since the customer's last message, WhatsApp blocks free text (a template is required).", cfm_cancel:'Cancel this appointment?',
       notify_wait:'🔔 Lead to reply', notify_hot:'🔴 Hot lead (booking)',
@@ -2238,9 +2240,18 @@
     }).catch(function(){});
   }
   var flotaProducts = [];
+  var flotaOffers = {}; // product_id -> {discount_pct, active}, tabla propia `offers` (no sincronizada con BBM)
   function loadFlota(){
     document.getElementById('flotaTable').innerHTML = '<div class="db-empty">'+t('ft_loading')+'</div>';
     api('inventory').then(function(r){return r.json();}).then(function(P){ flotaProducts = Array.isArray(P) ? P : []; renderFlota(); }).catch(function(){ document.getElementById('flotaTable').innerHTML = '<div class="db-empty">'+t('ft_err')+'</div>'; });
+    api('offers').then(function(r){return r.json();}).then(function(P){
+      flotaOffers = {};
+      (Array.isArray(P) ? P : []).forEach(function(p){
+        var o = Array.isArray(p.offers) ? p.offers[0] : p.offers;
+        if(o) flotaOffers[p.id] = o;
+      });
+      if(flotaTab === 'tarifas') renderTarifas();
+    }).catch(function(){ /* ofertas es un extra — si falla, Tarifas sigue funcionando sin esa columna */ });
   }
   var flotaTab = 'unidades';
   // PostgREST devuelve el embedding como objeto o array según la FK — normalizar aquí.
@@ -2296,15 +2307,34 @@
     if(!prods.length){ document.getElementById('flotaTable').innerHTML = '<div class="db-empty">'+t('ft_none_models')+'</div>'; return; }
     var rows = prods.map(function(p){
       var pr = pricingOf(p);
+      var off = flotaOffers[p.id] || {};
       function c(v){ return v==null ? '<td class="db-dim">—</td>' : '<td>'+money(v)+'</td>'; }
-      return '<tr>' +
+      return '<tr data-offer-row="'+p.id+'">' +
         '<td class="db-nm">'+esc(p.name)+'<div class="db-dim">'+esc(p.model||'')+'</div></td>' +
         c(pr.daily_rate)+c(pr.weekly_rate)+c(pr.fortnight_rate)+c(pr.three_week_low_rate)+c(pr.three_week_high_rate)+c(pr.monthly_rate)+c(pr.biannual_rate)+c(pr.yearly_rate) +
+        '<td>'+
+          '<input type="number" min="1" max="90" step="1" class="offer-pct" style="width:52px" value="'+(off.discount_pct!=null?off.discount_pct:'')+'">% '+
+          '<label style="white-space:nowrap"><input type="checkbox" class="offer-active"'+(off.active?' checked':'')+'> '+t('ft_offer_active')+'</label> '+
+          '<button type="button" class="offer-save" data-pid="'+p.id+'">'+t('ft_offer_save')+'</button>'+
+        '</td>' +
       '</tr>';
     }).join('');
     document.getElementById('flotaTable').innerHTML =
-      '<table class="db"><thead><tr><th>'+t('ft_th_model')+'</th><th>'+t('ft_th_daily')+'</th><th>'+t('ft_th_weekly')+'</th><th>'+t('ft_th_fortnight')+'</th><th>'+t('ft_th_3wlow')+'</th><th>'+t('ft_th_3whigh')+'</th><th>'+t('ft_th_monthly')+'</th><th>'+t('ft_th_biannual')+'</th><th>'+t('ft_th_yearly')+'</th></tr></thead><tbody>'+rows+'</tbody></table>';
+      '<table class="db"><thead><tr><th>'+t('ft_th_model')+'</th><th>'+t('ft_th_daily')+'</th><th>'+t('ft_th_weekly')+'</th><th>'+t('ft_th_fortnight')+'</th><th>'+t('ft_th_3wlow')+'</th><th>'+t('ft_th_3whigh')+'</th><th>'+t('ft_th_monthly')+'</th><th>'+t('ft_th_biannual')+'</th><th>'+t('ft_th_yearly')+'</th><th>'+t('ft_th_offer')+'</th></tr></thead><tbody>'+rows+'</tbody></table>';
   }
+  // Ofertas: tabla propia `offers`, sin relación con la sincronización de precios/flota de BBM.
+  document.getElementById('flotaTable').addEventListener('click', function(e){
+    var btn = e.target.closest('.offer-save'); if(!btn) return;
+    var row = btn.closest('tr');
+    var pct = parseFloat(row.querySelector('.offer-pct').value);
+    var active = row.querySelector('.offer-active').checked;
+    if(!pct || pct <= 0 || pct > 90){ alert(t('ft_offer_bad_pct')); return; }
+    btn.disabled = true;
+    apiPost('offers', { product_id: parseInt(btn.getAttribute('data-pid'), 10), discount_pct: pct, active: active })
+      .then(function(r){ if(!r.ok) throw new Error(); return r.json(); })
+      .then(function(){ flotaOffers[btn.getAttribute('data-pid')] = { discount_pct: pct, active: active }; btn.textContent = t('ft_offer_saved'); setTimeout(function(){ btn.textContent = t('ft_offer_save'); btn.disabled = false; }, 1500); })
+      .catch(function(){ alert(t('ft_offer_err')); btn.disabled = false; });
+  });
   document.getElementById('flotaTabs').addEventListener('click', function(e){
     var b = e.target.closest('[data-ftab]'); if(!b) return;
     flotaTab = b.getAttribute('data-ftab');
