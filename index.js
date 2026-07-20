@@ -261,12 +261,16 @@ async function importOperatorRow(row) {
   if (!company && !email) return "skipped";
   const all = await listOperators();
   const match = email ? all.find((o) => String(o.email || "").toLowerCase() === email) : null;
+  // normaliza a un valor permitido (case-insensitive); vacío si no encaja
+  const pick = (v, allowed) => { const s = String(v || "").trim(); return allowed.find((a) => a.toLowerCase() === s.toLowerCase()) || undefined; };
   const fields = {
     company: company || undefined,
     contact: String(row.contact || row.contacto || row.name || "").trim() || undefined,
     email: email || undefined,
     phone: String(row.phone || row.telefono || row.whatsapp || "").trim() || undefined,
     country: String(row.country || row.pais || "").trim() || undefined,
+    potential: pick(row.potential || row.potencial, ["Extra", "High", "Low"]),
+    temp: pick(row.temp || row.temperatura, ["Hot", "Cold"]),
     notes: String(row.notes || row.notas || "").trim() || undefined,
   };
   if (match) {
@@ -279,6 +283,7 @@ async function importOperatorRow(row) {
   await saveOperator({
     id: newOpId(), company: fields.company || "", contact: fields.contact || "", email: fields.email || "",
     phone: fields.phone || "", country: fields.country || "", notes: fields.notes || "",
+    potential: fields.potential || "", temp: fields.temp || "",
     tags: [], status: "new", source: "csv", archived: false, createdAt: Date.now(),
   });
   return "created";
@@ -1953,8 +1958,8 @@ app.post("/admin/api/operator", async (req, res) => {
   const body = req.body || {};
   try {
     let op = body.id ? await getOperator(body.id) : null;
-    if (!op) op = { id: body.id || newOpId(), createdAt: Date.now(), tags: [], status: "new", archived: false };
-    ["company", "contact", "email", "phone", "country", "notes", "status"].forEach((k) => { if (body[k] != null) op[k] = body[k]; });
+    if (!op) op = { id: body.id || newOpId(), createdAt: Date.now(), tags: [], status: "new", potential: "", temp: "", archived: false };
+    ["company", "contact", "email", "phone", "country", "notes", "status", "potential", "temp"].forEach((k) => { if (body[k] != null) op[k] = body[k]; });
     if (Array.isArray(body.tags)) op.tags = body.tags;
     await saveOperator(op);
     res.json({ ok: true, operator: op });

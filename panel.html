@@ -251,6 +251,10 @@
   .ops-company{font-weight:700}
   select.ops-st{border:1px solid var(--line);border-radius:7px;padding:4px 8px;font-size:12px;font-weight:700;background:var(--card);color:var(--ink)}
   .ops-st-new{color:var(--accent)} .ops-st-contacted{color:var(--amber)} .ops-st-negotiating{color:#7c3aed} .ops-st-partner{color:var(--green)} .ops-st-inactive{color:var(--ink-soft)}
+  select.ops-fsel{border:1px solid var(--line);border-radius:100px;padding:6px 11px;font-size:12.5px;font-weight:700;background:var(--card);color:var(--ink-soft);cursor:pointer}
+  .op-pot,.op-temp{display:inline-block;padding:2px 9px;border-radius:100px;font-size:11px;font-weight:800;letter-spacing:.02em}
+  .op-pot-Extra{background:#7c3aed;color:#fff} .op-pot-High{background:rgba(22,163,74,.15);color:var(--green)} .op-pot-Low{background:var(--line);color:var(--ink-soft)}
+  .op-temp-Hot{background:rgba(220,38,38,.14);color:var(--red)} .op-temp-Cold{background:rgba(37,99,235,.13);color:var(--accent)}
   .ops-empty{padding:60px 20px;text-align:center;color:var(--ink-soft)}
   /* secciones a pantalla completa (media, newsletter) — mismo patrón que dbView */
   #mediaView,#nlView,#simView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
@@ -718,13 +722,15 @@
       <button class="ops-chip" data-s="negotiating" data-i18n="ops_negotiating">Negociando</button>
       <button class="ops-chip" data-s="partner" data-i18n="ops_partner">Partner</button>
       <button class="ops-chip" data-s="inactive" data-i18n="ops_inactive">Inactivo</button>
+      <select id="opsPotF" class="ops-fsel" style="margin-left:auto"><option value="" data-i18n="ops_pot_all">◇ Potential</option><option value="Extra">Extra</option><option value="High">High</option><option value="Low">Low</option></select>
+      <select id="opsTempF" class="ops-fsel"><option value="" data-i18n="ops_temp_all">🌡 Temp</option><option value="Hot">Hot</option><option value="Cold">Cold</option></select>
     </div>
     <div class="ops-scroll">
       <table>
         <thead><tr>
           <th style="width:26px"><input type="checkbox" id="opsSelAll"></th>
           <th data-i18n="ops_th_company">Empresa</th><th data-i18n="ops_th_contact">Contacto</th><th data-i18n="ops_th_email">Email</th>
-          <th data-i18n="ops_th_phone">Teléfono</th><th data-i18n="ops_th_country">País</th><th data-i18n="ops_th_tags">Etiquetas</th>
+          <th data-i18n="ops_th_phone">Teléfono</th><th data-i18n="ops_th_country">País</th><th data-i18n="ops_th_pot">Potential</th><th data-i18n="ops_th_temp">Temp</th><th data-i18n="ops_th_tags">Etiquetas</th>
           <th data-i18n="e_status">Estado</th><th data-i18n="ops_th_updated">Actualizado</th><th></th>
         </tr></thead>
         <tbody id="opsRows"></tbody>
@@ -835,6 +841,10 @@
     <input id="opPhone">
     <label data-i18n="op_country">País</label>
     <input id="opCountry">
+    <label data-i18n="op_potential">Potential</label>
+    <select id="opPotential"><option value="">—</option><option value="Extra">Extra</option><option value="High">High</option><option value="Low">Low</option></select>
+    <label data-i18n="op_temp">Temperatura</label>
+    <select id="opTemp"><option value="">—</option><option value="Hot">Hot</option><option value="Cold">Cold</option></select>
     <label data-i18n="op_tags">Etiquetas (separadas por coma)</label>
     <input id="opTags">
     <label data-i18n="e_status">Estado</label>
@@ -879,7 +889,8 @@
       h_db:'Base de datos', ph_search_client:'Buscar cliente…', btn_import:'⬆ Importar Meta', ti_import:'Sube el CSV de leads que descargas de Meta Lead Ads', btn_enrich:'🔄 Actualizar desde chats', ti_enrich:'Lee las conversaciones y rellena los datos que falten', btn_csv:'⬇ Exportar CSV',
       nav_ops:'Operadores', h_ops:'Operadores', ph_search_op:'Buscar empresa, contacto, email…', btn_import_ops:'⬆ Importar CSV', btn_new_op:'+ Operador',
       ops_all:'Todos', ops_new:'Nuevo', ops_contacted:'Contactado', ops_negotiating:'Negociando', ops_partner:'Partner', ops_inactive:'Inactivo',
-      ops_th_company:'Empresa', ops_th_contact:'Contacto', ops_th_email:'Email', ops_th_phone:'Teléfono', ops_th_country:'País', ops_th_tags:'Etiquetas', ops_th_updated:'Actualizado',
+      ops_th_company:'Empresa', ops_th_contact:'Contacto', ops_th_email:'Email', ops_th_phone:'Teléfono', ops_th_country:'País', ops_th_pot:'Potential', ops_th_temp:'Temp', ops_th_tags:'Etiquetas', ops_th_updated:'Actualizado',
+      ops_pot_all:'◇ Potential', ops_temp_all:'🌡 Temp', op_potential:'Potential', op_temp:'Temperatura',
       ops_empty:'Aún no hay operadores. Importa un CSV o añade el primero con "+ Operador".',
       m_new_op:'Nuevo operador', m_edit_op:'Editar operador', op_company:'Empresa *', op_contact:'Persona de contacto', op_phone:'Teléfono', op_country:'País', op_tags:'Etiquetas (separadas por coma)', op_notes:'Notas', btn_delete_op:'Borrar', cfm_op_delete:'¿Borrar este operador?', al_op_company:'La empresa es obligatoria',
       nl_dataset:'Base de datos', nl_ds_leads:'Leads (chat)', nl_ds_ops:'Operadores (B2B)',
@@ -927,7 +938,8 @@
       h_db:'Database', ph_search_client:'Search client…', btn_import:'⬆ Import Meta', ti_import:'Upload the leads CSV you download from Meta Lead Ads', btn_enrich:'🔄 Update from chats', ti_enrich:'Reads conversations and fills in missing data', btn_csv:'⬇ Export CSV',
       nav_ops:'Operators', h_ops:'Operators', ph_search_op:'Search company, contact, email…', btn_import_ops:'⬆ Import CSV', btn_new_op:'+ Operator',
       ops_all:'All', ops_new:'New', ops_contacted:'Contacted', ops_negotiating:'Negotiating', ops_partner:'Partner', ops_inactive:'Inactive',
-      ops_th_company:'Company', ops_th_contact:'Contact', ops_th_email:'Email', ops_th_phone:'Phone', ops_th_country:'Country', ops_th_tags:'Tags', ops_th_updated:'Updated',
+      ops_th_company:'Company', ops_th_contact:'Contact', ops_th_email:'Email', ops_th_phone:'Phone', ops_th_country:'Country', ops_th_pot:'Potential', ops_th_temp:'Temp', ops_th_tags:'Tags', ops_th_updated:'Updated',
+      ops_pot_all:'◇ Potential', ops_temp_all:'🌡 Temp', op_potential:'Potential', op_temp:'Temperature',
       ops_empty:'No operators yet. Import a CSV or add the first one with "+ Operator".',
       m_new_op:'New operator', m_edit_op:'Edit operator', op_company:'Company *', op_contact:'Contact person', op_phone:'Phone', op_country:'Country', op_tags:'Tags (comma-separated)', op_notes:'Notes', btn_delete_op:'Delete', cfm_op_delete:'Delete this operator?', al_op_company:'Company is required',
       nl_dataset:'Database', nl_ds_leads:'Leads (chat)', nl_ds_ops:'Operators (B2B)',
@@ -2101,6 +2113,9 @@
     return ops.filter(function(o){
       if(o.archived) return false;
       if(opsFilter!=='all' && (o.status||'new')!==opsFilter) return false;
+      var pf=document.getElementById('opsPotF').value, tf=document.getElementById('opsTempF').value;
+      if(pf && (o.potential||'')!==pf) return false;
+      if(tf && (o.temp||'')!==tf) return false;
       if(!q) return true;
       return [o.company,o.contact,o.email,o.country].join(' ').toLowerCase().indexOf(q)>=0;
     });
@@ -2121,6 +2136,8 @@
         + '<td>'+esc(o.email||'')+(o.emailUnsub?' <span class="db-tag">baja</span>':'')+'</td>'
         + '<td>'+esc(o.phone||'')+'</td>'
         + '<td>'+esc(o.country||'')+'</td>'
+        + '<td>'+(o.potential?'<span class="op-pot op-pot-'+esc(o.potential)+'">'+esc(o.potential)+'</span>':'')+'</td>'
+        + '<td>'+(o.temp?'<span class="op-temp op-temp-'+esc(o.temp)+'">'+esc(o.temp)+'</span>':'')+'</td>'
         + '<td>'+(tags||'—')+'</td>'
         + '<td><select class="ops-st ops-st-'+(o.status||'new')+'" onclick="event.stopPropagation()" onchange="opsSetStatus(\''+o.id+'\',this.value)">'+stOpts+'</select></td>'
         + '<td>'+opsFmtDate(o.updatedAt)+'</td>'
@@ -2134,6 +2151,8 @@
     var on=e.target.checked; opsFiltered().forEach(function(o){ if(on) opsSelected[o.id]=true; else delete opsSelected[o.id]; }); renderOps();
   };
   document.getElementById('opsQ').addEventListener('input', renderOps);
+  document.getElementById('opsPotF').addEventListener('change', renderOps);
+  document.getElementById('opsTempF').addEventListener('change', renderOps);
   document.getElementById('opsChips').addEventListener('click', function(e){
     var b=e.target.closest('.ops-chip'); if(!b) return;
     document.querySelectorAll('#opsChips .ops-chip').forEach(function(x){x.classList.remove('on');}); b.classList.add('on');
@@ -2149,6 +2168,8 @@
     document.getElementById('opEmail').value = o?(o.email||''):'';
     document.getElementById('opPhone').value = o?(o.phone||''):'';
     document.getElementById('opCountry').value = o?(o.country||''):'';
+    document.getElementById('opPotential').value = o?(o.potential||''):'';
+    document.getElementById('opTemp').value = o?(o.temp||''):'';
     document.getElementById('opTags').value = o&&Array.isArray(o.tags)?o.tags.join(', '):'';
     document.getElementById('opStatus').value = o?(o.status||'new'):'new';
     document.getElementById('opNotes').value = o?(o.notes||''):'';
@@ -2175,6 +2196,8 @@
       email: document.getElementById('opEmail').value.trim(),
       phone: document.getElementById('opPhone').value.trim(),
       country: document.getElementById('opCountry').value.trim(),
+      potential: document.getElementById('opPotential').value,
+      temp: document.getElementById('opTemp').value,
       tags: tags,
       status: document.getElementById('opStatus').value,
       notes: document.getElementById('opNotes').value.trim(),
@@ -2211,7 +2234,7 @@
     e.target.value='';
   };
   document.getElementById('opsExport').onclick=function(){
-    var cols=['company','contact','email','phone','country','tags','status','notes'];
+    var cols=['company','contact','email','phone','country','potential','temp','tags','status','notes'];
     var lines=[cols.join(',')];
     opsFiltered().forEach(function(o){
       lines.push(cols.map(function(c){
