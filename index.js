@@ -690,11 +690,11 @@ async function enrichSweep(limit = 20) {
 // ─── RESPUESTAS RÁPIDAS (canned replies, compartidas por proyecto) ──
 let fallbackCanned = null;
 const DEFAULT_CANNED = BOT_VERTICAL === "rental" ? [
-  { title: "Saludo", text: "Hey! Thanks for reaching out 🙌 Which bike are you after, and for how long?" },
+  { title: "Saludo", text: "Hey! Thanks for reaching out! Which bike are you after, and for how long?" },
   { title: "Pedir datos", text: "To give you an exact quote: which model, how many days, and where should we deliver it?" },
   { title: "Confirmar entrega", text: "We deliver straight to your hotel or villa. What's the address?" },
 ] : [
-  { title: "Saludo", text: "Hey! Thanks for reaching out 🙌 How can I help you plan your ride?" },
+  { title: "Saludo", text: "Hey! Thanks for reaching out! How can I help you plan your ride?" },
   { title: "Pedir datos", text: "To give you an exact quote — which tour, how many riders, and roughly when were you thinking of traveling?" },
   { title: "Proponer videollamada", text: "Want to hop on a quick video call with the team? It's free, about 30 minutes, zero pressure — they'll walk you through everything." },
 ];
@@ -860,7 +860,7 @@ async function reminderTick() {
       const lastIn = await getInbound(a.phone);
       const within24h = lastIn && (now - lastIn) < 24 * 3600000;
       if (within24h) {
-        await sendWhatsApp(a.phone, `Hey! Quick reminder about our call: ${a.title}. Talk soon 🙌`);
+        await sendWhatsApp(a.phone, `Hey! Quick reminder about our call: ${a.title}. Talk soon.`);
         await setReminded(a.id);
       } else if (REMINDER_TEMPLATE_NAME) {
         await sendWhatsAppTemplate(a.phone, REMINDER_TEMPLATE_NAME, REMINDER_TEMPLATE_LANG, [a.title]);
@@ -980,6 +980,14 @@ PERSONA — how to sound human, not like a bot (critical — this is what the br
 - React to what they actually said before moving the conversation forward.
 - NEVER use a dash (—, –, or --) in the middle of a sentence — nobody texting on WhatsApp writes that way. Use a comma, a period, or just start a new sentence instead.
 - NEVER show your own hesitation, self-correction, or math out loud (e.g. "wait, let me get that right", "actually, let me recalculate", "hmm, that's not right"). Work it out silently and send only the final, correct answer. If you catch a mistake mid-thought, just don't send that draft — never let the customer see you second-guess yourself.
+
+ANTI-ROBOT TELLS — the specific habits that give you away as AI (these matter more than any of the above; fix them):
+- DON'T OPEN EVERY MESSAGE WITH A REACTION WORD. "Ha," "Ah," "Nice," "Perfect," "Solid," "Love it," "Good call," "Right," are fine ONCE in a while, but the moment you reuse them they're an instant tell. Most messages should just start with the substance. Vary genuinely, or don't react at all. Nobody texts "Ha," at the top of message after message.
+- NEVER REPEAT INFORMATION you already gave. If you listed what's included once, don't paste that list again two messages later. Say "same as before" or just move on. A repeated stock phrase reads as a bot.
+- NO MENU QUESTIONS. Never offer multiple-choice like "A, B or C?" or "riding solo, with mates, or a bit of both?". Ask a real open question or none at all. A menu makes them answer in one word and you've learned nothing.
+- ONE-WORD REPLIES ARE A WARNING LIGHT. When their answers go short ("Solo", "October", "This"), STOP asking and GIVE something: a price, a useful fact they didn't ask for, or the next step. Stacking more questions onto one-word answers is running a form, not having a conversation.
+- DON'T TELL THEM HOW YOU KNOW THINGS about them ("I can tell from your number you're in Australia"). Just let it colour the reply naturally. And never turn their nationality or city into a repeated stamp.
+- NOT EVERY MESSAGE NEEDS A CLOSING QUESTION. Sometimes just answer and stop. A real chat breathes; forcing an offer or question onto the end of every single message is a tell.
 `;
 
 // GATHERING + CLOSING difieren por vertical del negocio (tour multi-día vs. alquiler directo).
@@ -1024,7 +1032,7 @@ CLOSING — YOUR #1 GOAL IS TO BOOK A FREE 30-MINUTE VIDEO CALL (read carefully 
 
 SCHEDULING THE CALL — THIS IS YOUR MAIN CONVERSION PATH (appointments):
 - Agree on a specific date and time, and ALWAYS ask their city/timezone (riders are international — AU, US, UK). Propose a slot or ask what suits them.
-- Once you know their city/country, do the timezone math FOR them: state the difference in plain words and offer a concrete slot in THEIR local time (e.g. "you're ~12h behind Bali — does 8:30 AM your time tomorrow work? That's 8:30 PM here"). Never make the customer calculate the offset.
+- Work entirely in THE CUSTOMER'S OWN timezone: propose or confirm a concrete slot in their local time (e.g. "does 8:30 AM your time tomorrow work?") and stop there. Do NOT compute or announce the Bali-equivalent ("that's X o'clock here"). The offset math is error-prone (a real chat quoted the wrong Bali time, backwards) and the customer doesn't need it; the system converts the slot for the team automatically from the timezone label you put in the APPT tag.
 - Confirm the exact day + hour in the CUSTOMER'S own timezone, and put that timezone label in the APPT title (e.g. "EST", "AEST", "GMT"). If a video-call tool is mentioned, tell them you'll send the meeting link at that time.
 - Only once you BOTH agree on a concrete date AND time, confirm it naturally in your message AND add at the very end, on a NEW line:
   [APPT:YYYY-MM-DDTHH:MM|Short title incl. timezone]
@@ -1843,6 +1851,10 @@ app.post("/webhook", async (req, res) => {
       const loc = message.location;
       const where = [loc.name, loc.address].filter(Boolean).join(", ") || `${loc.latitude},${loc.longitude}`;
       text = `(I'm sharing my location: ${where})`;
+    } else if (message.type === "reaction") {
+      // Un emoji de reacción a un mensaje no es un adjunto ilegible ni información nueva del
+      // lead — antes caía en el fallback de "no puedo abrir esto", una respuesta sin sentido.
+      return;
     } else if (!isOwner(from)) {
       // ── Nota de voz → transcripción (Whisper) y entra al flujo normal como texto ──
       if (message.type === "audio" || message.type === "voice") {
@@ -2376,6 +2388,54 @@ app.post("/admin/api/note", async (req, res) => {
 });
 
 // ── CRM: estado de pipeline manual (new/quoted/won/lost/noshow) ──
+// ── Simulador: prueba el bot desde el panel sin WhatsApp ni Meta. Mismo motor/contexto que el
+// webhook real (Claude + BASE_INSTRUCTIONS + context file), pero no envía nada por WhatsApp ni
+// toca el CRM de leads reales — la conversación vive en su propia clave de Redis (sim:<session>).
+app.post("/admin/api/simulate", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { session, text } = req.body || {};
+  if (!text) return res.status(400).json({ error: "text requerido" });
+  const phone = `sim:${session || "default"}`;
+  try {
+    const history = await getConversation(phone);
+    history.push({ role: "user", content: text, ts: Date.now() });
+    const mediaLib = await getMediaLib();
+    const mediaHint = mediaLib.length
+      ? "\n\nMEDIA YOU CAN SEND (real photos/videos that reinforce the pitch — use sparingly, at most 1–2 per conversation, only when it genuinely helps). For each item, 'when to use' tells you the situation to send it in; match it to what the customer is talking about. Available:\n"
+        + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.use ? " — when to use: " + m.use : ""}${m.caption ? " [caption sent to customer: \"" + m.caption + "\"]" : ""}`).join("\n")
+        + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send a media item when its 'when to use' genuinely matches the moment. Only send labels from this list; never invent one."
+      : "";
+    const response = await claudeMessage({
+      model: MODEL,
+      max_tokens: 500,
+      thinking: { type: "disabled" },
+      system: [
+        { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
+        ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
+      ],
+      messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // mismo recorte que el webhook real
+    });
+    const textBlock = response.content.find((b) => b.type === "text");
+    let reply = (textBlock && textBlock.text) || "(sin respuesta — revisa logs)";
+    // Mismo strip que el webhook real (index.js ~1342): el cliente nunca ve estas etiquetas internas.
+    reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").trim();
+    reply = reply.replace(/ (--|—|–) /g, ", "); // misma red de seguridad del guion medio que el webhook real
+    history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
+    await saveConversation(phone, history);
+    res.json({ reply });
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] simulate error: ${e.message}`);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/admin/api/simulate/reset", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { session } = req.body || {};
+  await saveConversation(`sim:${session || "default"}`, []);
+  res.json({ ok: true });
+});
+
 app.post("/admin/api/status", async (req, res) => {
   if (!adminAuth(req, res)) return;
   const { phone, status } = req.body || {};
