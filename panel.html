@@ -565,6 +565,8 @@
   .nl-testrow{display:flex;gap:8px;align-items:center;margin-top:12px}
   .nl-testrow input{flex:1}
   .nl-testrow button{flex-shrink:0;width:auto}
+  .nl-hist-see{flex-shrink:0;border:1px solid var(--line);background:var(--card);color:var(--ink-soft);font-size:11.5px;font-weight:700;cursor:pointer;padding:5px 10px;border-radius:100px}
+  .nl-hist-recip{display:none;padding:0 2px 10px;margin-top:-3px;line-height:1.9;word-break:break-all}
   .media-row .mr-urlrow{display:flex;gap:8px;align-items:center;margin-bottom:7px}
   .media-row .mr-urlrow .mr-url{margin-bottom:0}
   .media-row .mr-up{width:38px;height:36px;flex-shrink:0;border:1px solid var(--line);background:var(--card);color:var(--accent);border-radius:8px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .15s ease,border-color .15s ease}
@@ -782,6 +784,7 @@
       <div class="modal-err" id="nlErr"></div>
       <div class="sec-actions"><button id="nlSend" class="btn-primary" data-i18n="nl_send">Enviar</button></div>
       <div id="nlSchedList" class="nl-sched"></div>
+      <div id="nlHistList" class="nl-sched"></div>
     </div>
   </div>
 
@@ -908,7 +911,8 @@
       ago_now:'ahora', ago_yest:'ayer', of:'de', more:'más',
       store_redis:'🟢 Redis · persistente', store_ram:'🟠 RAM · NO persiste — configura Redis',
       empty_results:'Sin resultados', empty_clients:'Aún no hay clientes', empty_convs:'Aún no hay conversaciones', no_msgs:'Sin mensajes guardados', no_tpl:'Sin plantillas aún',
-      flash_saved:'✓ Guardado', flash_err:'✕ Error', imp_ing:'⏳ Importando ', imp_new:'nuevos', imp_upd:'act.', enr_ing:'⏳ Leyendo chats…', enr_done:'actualizados',
+      flash_saved:'✓ Guardado', flash_err:'✕ Error', imp_ing:'⏳ Importando ', imp_new:'nuevos', imp_upd:'act.', imp_exist:'ya existían', imp_chat:'del chat, no duplicados', enr_ing:'⏳ Leyendo chats…', enr_done:'actualizados',
+      nl_hist_title:'Enviados', nl_hist_recip:'destinatarios',
       al_status:'No se pudo guardar el estado', al_pkg:'No se pudo guardar el paquete', al_nolead:'No se han encontrado leads en el archivo (¿es el CSV de Meta Lead Ads?).', al_imp:'Error al importar', al_tpl:'No se pudieron guardar las plantillas',
       al_send:'No se pudo enviar: ', al_send2:'\n\nSi han pasado +24h desde el último mensaje del cliente, WhatsApp no permite texto libre (haría falta plantilla).', cfm_cancel:'¿Cancelar esta cita?',
       notify_wait:'🔔 Lead por responder', notify_hot:'🔴 Lead caliente (reserva)',
@@ -957,7 +961,8 @@
       ago_now:'now', ago_yest:'yesterday', of:'of', more:'more',
       store_redis:'🟢 Redis · persistent', store_ram:'🟠 RAM · NOT persistent — set up Redis',
       empty_results:'No results', empty_clients:'No clients yet', empty_convs:'No conversations yet', no_msgs:'No saved messages', no_tpl:'No templates yet',
-      flash_saved:'✓ Saved', flash_err:'✕ Error', imp_ing:'⏳ Importing ', imp_new:'new', imp_upd:'upd.', enr_ing:'⏳ Reading chats…', enr_done:'updated',
+      flash_saved:'✓ Saved', flash_err:'✕ Error', imp_ing:'⏳ Importing ', imp_new:'new', imp_upd:'upd.', imp_exist:'already existed', imp_chat:'from chat, not duplicated', enr_ing:'⏳ Reading chats…', enr_done:'updated',
+      nl_hist_title:'Sent', nl_hist_recip:'recipients',
       al_status:"Couldn't save status", al_pkg:"Couldn't save package", al_nolead:'No leads found in the file (is it the Meta Lead Ads CSV?).', al_imp:'Import error', al_tpl:"Couldn't save templates",
       al_send:"Couldn't send: ", al_send2:"\n\nIf it's been 24h+ since the customer's last message, WhatsApp blocks free text (a template is required).", cfm_cancel:'Cancel this appointment?',
       notify_wait:'🔔 Lead to reply', notify_hot:'🔴 Hot lead (booking)',
@@ -2097,7 +2102,7 @@
       var b=document.getElementById('dbImport'), orig=b.textContent; b.disabled=true; b.textContent=t('imp_ing')+rows.length+'…';
       apiPost('import',{rows:rows}).then(function(r){return r.json();}).then(function(j){
         return api('leads').then(function(r){return r.json();}).then(function(L){ leads=L; dbPage=1; renderDb();
-          b.textContent='✓ '+j.created+' '+t('imp_new')+' · '+j.updated+' '+t('imp_upd'); setTimeout(function(){ b.textContent=orig; b.disabled=false; },3500);
+          b.textContent='✓ '+j.created+' '+t('imp_new')+' · '+(j.updated||0)+' '+t('imp_exist')+(j.existingChat?' ('+j.existingChat+' '+t('imp_chat')+')':''); setTimeout(function(){ b.textContent=orig; b.disabled=false; },4500);
         });
       }).catch(function(){ b.textContent=t('err_short'); setTimeout(function(){ b.textContent=orig; b.disabled=false; },3000); });
     };
@@ -2289,6 +2294,30 @@
   }
   function nlCancelSched(id){ apiPost('newsletter/cancel',{id:id}).then(function(r){return r.json();}).then(function(){ nlLoadScheduled(); }).catch(function(){}); }
   window.nlCancelSched=nlCancelSched;
+  // Historial de envíos: cuándo, a qué base y cuántos. Al desplegar, pide los destinatarios (a quién).
+  function nlLoadHistory(){
+    var box=document.getElementById('nlHistList');
+    api('newsletter/history').then(function(r){return r.json();}).then(function(list){
+      if(!Array.isArray(list)||!list.length){ box.innerHTML=''; return; }
+      box.innerHTML='<div class="nl-sched-h">'+t('nl_hist_title')+'</div>'+list.map(function(c){
+        var ds=c.dataset==='operators'?t('nl_ds_ops'):t('nl_ds_leads');
+        var stat=t('nl_sent').replace('{s}',c.sent||0).replace('{f}',c.failed||0);
+        return '<div class="nl-sched-row"><div class="nl-sched-info"><b>'+esc(c.subject||'—')+'</b>'
+          + '<span>'+nlFmtWhen(c.at)+' · '+ds+' · '+stat+'</span></div>'
+          + '<button class="nl-hist-see" title="'+t('nl_hist_recip')+'" onclick="nlShowRecipients(\''+c.id+'\',this)">'+t('nl_hist_recip')+'</button></div>'
+          + '<div class="nl-hist-recip" id="nlrec-'+c.id+'"></div>';
+      }).join('');
+    }).catch(function(){ box.innerHTML=''; });
+  }
+  window.nlShowRecipients=function(id,btn){
+    var box=document.getElementById('nlrec-'+id);
+    if(box.style.display==='block'){ box.style.display='none'; return; }
+    box.style.display='block'; box.textContent='…';
+    api('newsletter/history?id='+encodeURIComponent(id)).then(function(r){return r.json();}).then(function(j){
+      var rs=(j&&j.recipients)||[];
+      box.innerHTML = rs.length ? rs.map(function(e){return '<span class="db-tag">'+esc(e)+'</span>';}).join(' ') : '—';
+    }).catch(function(){ box.textContent='—'; });
+  };
   // Modo de contenido: escribir aquí (compose) vs plantilla de Brevo (brevo).
   var nlTemplatesLoaded=false;
   function nlApplyMode(){
@@ -2317,7 +2346,7 @@
     var subject=document.getElementById('nlSubject').value.trim(), body=document.getElementById('nlBody').value.trim();
     return (subject&&body) ? {subject:subject,body:body} : null;
   }
-  function openNewsletter(){ document.getElementById('nlErr').textContent=''; nlApplyMode(); nlUpdateCount(); nlLoadScheduled(); }
+  function openNewsletter(){ document.getElementById('nlErr').textContent=''; nlApplyMode(); nlUpdateCount(); nlLoadScheduled(); nlLoadHistory(); }
   function nlPost(payload, btn){ var orig=btn.textContent, err=document.getElementById('nlErr'); err.style.color=''; btn.disabled=true; btn.textContent=t('nl_sending');
     return apiPost('newsletter',payload).then(function(res){ return res.json().then(function(j){ return {ok:res.ok,j:j}; }); })
       .then(function(o){ if(!o.ok) throw ((o.j&&o.j.error)||'error'); return o.j; })
@@ -2397,7 +2426,7 @@
     if(whenVal) c.when=new Date(whenVal).toISOString();
     nlPost(c, this).then(function(j){ if(!j) return;
       if(j.scheduled){ err.style.color='var(--accent)'; err.textContent=t('nl_scheduled_ok'); document.getElementById('nlWhen').value=''; nlUpdateCount(); nlLoadScheduled(); }
-      else { err.style.color='var(--accent)'; err.textContent=t('nl_sent').replace('{s}',j.sent||0).replace('{f}',j.failed||0); }
+      else { err.style.color='var(--accent)'; err.textContent=t('nl_sent').replace('{s}',j.sent||0).replace('{f}',j.failed||0); nlLoadHistory(); }
     });
   };
   document.getElementById('mediaAdd').onclick=function(){ readMediaFromDOM(); mediaItems.push({id:'',label:'',type:'image',url:'',caption:''}); renderMediaRows(); };

@@ -711,9 +711,21 @@ async function enrichLeadFromConversation(phone, { force = false } = {}) {
 // Crea/actualiza el lead en la BD a partir de una fila ya parseada en el cliente.
 // No pisa datos existentes (merge solo-vacíos): si el lead ya chateó, manda el chat.
 async function importMetaLead(row) {
-  const phone = String((row && row.whatsapp) || "").replace(/\D/g, "");
-  if (!phone) return "skip";
-  const prev = await getLead(phone);
+  const raw = String((row && row.whatsapp) || "").replace(/\D/g, "");
+  if (!raw) return "skip";
+  let phone = raw, prev = await getLead(raw);
+  // Fallback anti-duplicado: el nº del formulario puede venir en formato nacional (0812…) y el
+  // del chat en internacional (62812…), y el match exacto fallaría. Si NO hay match exacto pero
+  // exactamente UN lead existente comparte los últimos 8 dígitos, es la misma persona → se fusiona
+  // sobre ese lead, no se crea otro. La guarda de unicidad evita fusiones erróneas.
+  // ponytail: scan O(n) por fila; el import es puntual y n≈cientos → no compensa un índice extra.
+  if (!prev) {
+    const tail = raw.slice(-8);
+    if (tail.length === 8) {
+      const cand = (await listLeads()).filter((l) => String(l.phone || "").endsWith(tail));
+      if (cand.length === 1) { prev = cand[0]; phone = cand[0].phone; }
+    }
+  }
   const fields = {};
   if (row.name && !(prev && prev.name)) fields.name = String(row.name).slice(0, 120);
   if (row.email && !(prev && prev.email)) fields.email = String(row.email).toLowerCase().slice(0, 160);
@@ -726,11 +738,14 @@ async function importMetaLead(row) {
     fields.updatedAt = isNaN(t) ? Date.now() : t; // ordena por fecha de envío del formulario
     fields.createdAt = fields.updatedAt;
     fields.history = [{ ts: fields.createdAt, type: "imported" }];
+    await updateLeadFields(phone, fields);
+    writeLeadToSheet(phone, fields); // best-effort
+    return "created";
   }
-  if (!Object.keys(fields).length) return "updated"; // ya estaba todo
-  await updateLeadFields(phone, fields);
-  writeLeadToSheet(phone, fields); // best-effort
-  return prev ? "updated" : "created";
+  // Ya existía → NUNCA se duplica. Distinguir si entró por el chat (para el informe del panel).
+  const viaChat = (prev.source || "") !== "meta-form";
+  if (Object.keys(fields).length) { await updateLeadFields(phone, fields); writeLeadToSheet(phone, fields); }
+  return viaChat ? "existing_chat" : "existing_import";
 }
 
 // Barrido: enriquece leads incompletos (cap para no disparar costes de LLM).
@@ -1938,13 +1953,17 @@ app.post("/admin/api/import", async (req, res) => {
   if (!adminAuth(req, res)) return;
   const rows = req.body && req.body.rows;
   if (!Array.isArray(rows)) return res.status(400).json({ error: "rows (array) requerido" });
-  let created = 0, updated = 0, skipped = 0;
+  let created = 0, existingChat = 0, existingImport = 0, skipped = 0;
   try {
     for (const r of rows) {
       const out = await importMetaLead(r);
-      if (out === "created") created++; else if (out === "updated") updated++; else skipped++;
+      if (out === "created") created++;
+      else if (out === "existing_chat") existingChat++;
+      else if (out === "existing_import") existingImport++;
+      else skipped++;
     }
-    res.json({ ok: true, created, updated, skipped, total: rows.length });
+    // `updated` se mantiene por compatibilidad = todos los que ya existían (no duplicados).
+    res.json({ ok: true, created, existingChat, existingImport, updated: existingChat + existingImport, skipped, total: rows.length });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2478,7 +2497,25 @@ async function runCampaign({ subject, body, templateId, phones, ids, dataset, ho
     else { failed++; console.warn(`[${PROJECT_NAME}] newsletter fallo a ${r.email}: ${out.error}`); }
     await new Promise((s) => setTimeout(s, 120)); // pausa corta: evita el rate-limit de Brevo
   }
+  await logCampaign({ dataset, subject: label, templateId: templateId || null, total: recipients.length, sent, failed, recipients: recipients.map((r) => r.email) });
   return { sent, failed, total: recipients.length };
+}
+
+// ─── HISTORIAL DE ENVÍOS (Redis: lista nl_campaigns, cap 200; fallback en memoria) ──────
+// Registra cada campaña realmente enviada (inmediata o programada) para poder consultar
+// después cuándo se mandó, a qué base (leads/operadores) y a quién (lista de emails).
+let fallbackCampaigns = [];
+async function logCampaign(entry) {
+  const rec = Object.assign({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), at: Date.now() }, entry);
+  try {
+    if (redisClient) { await redisClient.lPush("nl_campaigns", JSON.stringify(rec)); await redisClient.lTrim("nl_campaigns", 0, 199); }
+    else { fallbackCampaigns.unshift(rec); if (fallbackCampaigns.length > 200) fallbackCampaigns.length = 200; }
+  } catch (e) { /* best-effort: el historial nunca debe tumbar un envío */ }
+  return rec;
+}
+async function getCampaigns() {
+  if (redisClient) { const a = await redisClient.lRange("nl_campaigns", 0, 199); return a.map((x) => JSON.parse(x)); }
+  return fallbackCampaigns;
 }
 
 // Campañas programadas (Redis: array JSON en nl_scheduled; fallback en memoria).
@@ -2538,6 +2575,21 @@ app.post("/admin/api/newsletter", async (req, res) => {
   // Envío INMEDIATO.
   const out = await runCampaign({ subject, body, templateId, phones, ids, dataset, host });
   res.json({ ok: true, ...out });
+});
+
+// Historial de envíos. Sin ?id → resumen ligero (sin la lista de emails). Con ?id= → los
+// destinatarios de esa campaña concreta (para responder "a quién se lo mandé").
+app.get("/admin/api/newsletter/history", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try {
+    const list = await getCampaigns();
+    const id = String(req.query.id || "");
+    if (id) {
+      const c = list.find((x) => x.id === id);
+      return res.json({ recipients: (c && c.recipients) || [] });
+    }
+    res.json(list.map((c) => ({ id: c.id, at: c.at, dataset: c.dataset, subject: c.subject, total: c.total, sent: c.sent, failed: c.failed })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Lista las campañas programadas (resumen, sin el cuerpo completo).
