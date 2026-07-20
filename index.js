@@ -1082,8 +1082,15 @@ const BASE_INSTRUCTIONS = PLAYBOOK.closeStyle === "direct"
   ? BASE_INSTRUCTIONS_HEAD + RENTAL_GATHERING + BASE_INSTRUCTIONS_MIDDLE + RENTAL_CLOSE_AND_TAGGING
   : BASE_INSTRUCTIONS_HEAD + TOUR_GATHERING + BASE_INSTRUCTIONS_MIDDLE + TOUR_CLOSE_AND_TAGGING;
 
+// Profundidad de persona opcional por config (PERSONA_BIO en Railway): trasfondo humano del
+// que el bot puede tirar de forma natural, sin que cada proyecto lo escriba a mano en su contexto.
+// No inventar hechos verificables (eso ya lo prohíben las HONESTY GUARDRAILS); es color, no biografía falsa.
+const PERSONA_BIO = (process.env.PERSONA_BIO || "").trim();
+const PERSONA_BLOCK = PERSONA_BIO
+  ? `\n\nWHO YOU ARE (${PERSONA_NAME}) — draw on this naturally, never recite it or invent beyond it:\n${PERSONA_BIO}`
+  : "";
 function buildSystemPrompt() {
-  return `${CONTEXT}\n\n${BASE_INSTRUCTIONS}`;
+  return `${CONTEXT}${PERSONA_BLOCK}\n\n${BASE_INSTRUCTIONS}`;
 }
 
 // ─── GOOGLE SHEETS ────────────────────────────────────────────────
@@ -1235,6 +1242,33 @@ async function sendWhatsAppResult(to, message) {
 async function sendWhatsApp(to, message) {
   const r = await sendWhatsAppResult(to, message);
   if (!r.ok) console.error(`[${PROJECT_NAME}] Error enviando WhatsApp a ${normalizePhone(to)}:`, r.error);
+}
+
+// ─── ENVÍO HUMANIZADO: 1-3 burbujas con pausa de tecleo, no un párrafo de golpe ─────
+// Un bot que suelta 4 líneas en 0 segundos es el tell nº1. Partimos SOLO por párrafos
+// deliberados del modelo (líneas en blanco): la mayoría de respuestas son 1-2 líneas y
+// van en una sola burbuja, sin cambio. El webhook ya devolvió 200 antes de procesar, así
+// que las pausas no provocan reintentos de Meta. Desactivable con HUMANIZE_CHUNKS=off.
+const HUMANIZE_CHUNKS = process.env.HUMANIZE_CHUNKS !== "off";
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function splitBubbles(text, maxBubbles = 3) {
+  const paras = text.split(/\n\n+/).map((s) => s.trim()).filter(Boolean);
+  if (paras.length <= 1) return [text];               // 1-2 líneas → una burbuja, sin tocar
+  if (paras.length <= maxBubbles) return paras;
+  const head = paras.slice(0, maxBubbles - 1);
+  head.push(paras.slice(maxBubbles - 1).join("\n\n")); // el resto, junto, en la última
+  return head;
+}
+async function sendHumanized(to, text, messageId) {
+  if (!HUMANIZE_CHUNKS || !text) { await sendWhatsApp(to, text); return; }
+  const chunks = splitBubbles(text);
+  for (let i = 0; i < chunks.length; i++) {
+    if (i > 0) {
+      if (messageId) markRead(messageId, true);                    // "escribiendo…" antes de la siguiente
+      await sleep(Math.min(600 + chunks[i].length * 22, 3500));    // pausa ~velocidad de tecleo, tope 3.5s
+    }
+    await sendWhatsApp(to, chunks[i]);
+  }
 }
 
 // ─── TRANSCRIPCIÓN DE NOTAS DE VOZ (Whisper) ─────────────────────
@@ -1623,8 +1657,9 @@ app.post("/webhook", async (req, res) => {
     let leadFields = parseLeadTag(reply); // datos confirmados en la charla → ficha/BD
     reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").trim();
     // Red de seguridad: aunque PERSONA prohíbe el guión medio en mitad de frase, el modelo a veces lo
-    // escribe igual — lo sustituimos por coma en vez de confiar solo en la instrucción (no toca "3-6 días").
-    reply = reply.replace(/ (--|—|–) /g, ", ");
+    // escribe igual — lo sustituimos en vez de confiar solo en la instrucción. Pilla también
+    // "palabra—palabra" sin espacios y el guion al final de línea. NO toca "self-guided" ni "3-6" (guion simple).
+    reply = reply.replace(/[ \t]*(—|–|--)[ \t]*$/gm, ".").replace(/[ \t]*(—|–|--)[ \t]*/g, ", ");
     // Strip markdown that WhatsApp sends literally (breaks URLs)
     reply = reply.replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1"); // **URL** → URL
     reply = reply.replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
@@ -1659,7 +1694,7 @@ app.post("/webhook", async (req, res) => {
     history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
     await saveConversation(from, history);
 
-    await sendWhatsApp(from, reply);
+    await sendHumanized(from, reply, message.id);
     // Fotos/vídeos que el bot decidió enviar ([MEDIA:label]) → se buscan en la biblioteca, se mandan y se anotan en el historial.
     if (mediaMatch) {
       const wanted = mediaMatch[1].split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -1912,7 +1947,7 @@ app.post("/admin/api/simulate", async (req, res) => {
     let reply = (textBlock && textBlock.text) || "(sin respuesta — revisa logs)";
     // Mismo strip que el webhook real (index.js ~1342): el cliente nunca ve estas etiquetas internas.
     reply = reply.replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "").replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").trim();
-    reply = reply.replace(/ (--|—|–) /g, ", "); // misma red de seguridad del guion medio que el webhook real
+    reply = reply.replace(/[ \t]*(—|–|--)[ \t]*$/gm, ".").replace(/[ \t]*(—|–|--)[ \t]*/g, ", "); // misma red del guion que el webhook real
     history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
     await saveConversation(phone, history);
     res.json({ reply });
