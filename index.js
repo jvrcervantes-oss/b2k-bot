@@ -39,7 +39,8 @@ const {
   XENDIT_CALLBACK_TOKEN,   // token de verificación del webhook de Xendit (Dashboard → Callbacks, no es el secret key)
   STRIPE_WEBHOOK_SECRET,   // firma del webhook de Stripe (Dashboard → Webhooks → signing secret, whsec_...)
   SUPABASE_URL,            // proyecto Supabase para el inventario de motos (pntvipemiczzfrnhixlb)
-  SUPABASE_SERVICE_KEY,    // service_role key (opcional — solo fallback si falta la anon; hoy nada escribe en Supabase)
+  SUPABASE_SERVICE_KEY,    // service_role key — fallback de lectura si falta la anon, Y necesaria para escribir en
+                           // `offers` (POST /admin/api/offers): anon solo tiene SELECT ahí, a propósito.
   SUPABASE_ANON_KEY,       // key "anon": RLS ya da SELECT público en products/product_pricing/serialized_items
   ADMIN_PASSWORD,
   ALERT_TEMPLATE_NAME,
