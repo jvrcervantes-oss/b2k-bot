@@ -487,6 +487,7 @@ const BUILTIN_PLAYBOOKS = {
       { title: "Proponer videollamada", text: "Want to hop on a quick video call with the team? It's free, about 30 minutes, zero pressure — they'll walk you through everything." },
     ],
     helpWith: "your trip",
+    deposit: { currency: "usd", amountMinor: 100000, label: "Booking Deposit", unit: "rider" },
   },
   rental: {
     closeStyle: "direct",
@@ -508,11 +509,26 @@ const BUILTIN_PLAYBOOKS = {
       { title: "Confirmar entrega", text: "We deliver straight to your hotel or villa. What's the address?" },
     ],
     helpWith: "your rental",
+    deposit: null, // el alquiler cobra importe dinámico en IDR (createStripeCheckoutIDR, rama balibest), no un depósito fijo por persona
   },
 };
-// Selección retrocompatible por BOT_VERTICAL. Futuro: si hay PLAYBOOK_FILE (JSON en el repo,
-// como context-<proyecto>.md) cargar de ahí un vertical a medida sin tocar este registry.
-const PLAYBOOK = BUILTIN_PLAYBOOKS[BOT_VERTICAL === "rental" ? "rental" : "tour"];
+// Si hay PLAYBOOK_FILE (JSON en el repo, como context-<proyecto>.md) se carga de ahí un vertical
+// A MEDIDA sin tocar este registry — así un bot nuevo de otro tipo es config, no código. Si no,
+// se usa el built-in por BOT_VERTICAL (retrocompatible: B2K/BBM no definen PLAYBOOK_FILE).
+function loadPlaybook() {
+  const file = (process.env.PLAYBOOK_FILE || "").trim();
+  if (file) {
+    try {
+      const pb = JSON.parse(fs.readFileSync(file, "utf8"));
+      console.log(`[${PROJECT_NAME}] Playbook cargado de ${file} (vertical a medida)`);
+      return { ...BUILTIN_PLAYBOOKS.tour, ...pb }; // base tour por si el JSON omite algún campo
+    } catch (e) {
+      console.error(`[${PROJECT_NAME}] PLAYBOOK_FILE=${file} ilegible (${e.message}) — uso el built-in por BOT_VERTICAL`);
+    }
+  }
+  return BUILTIN_PLAYBOOKS[BOT_VERTICAL === "rental" ? "rental" : "tour"];
+}
+const PLAYBOOK = loadPlaybook();
 
 const DEAL_ID_FIELD = PLAYBOOK.dealIdField;
 const DEAL_FIELDS = PLAYBOOK.dealFields;
@@ -1143,9 +1159,11 @@ LEAD DATA TAGGING — fill the CRM as you learn things (do this consistently):
 All tags are stripped before sending. NEVER mention them to the customer.
 `;
 
-const BASE_INSTRUCTIONS = PLAYBOOK.closeStyle === "direct"
-  ? BASE_INSTRUCTIONS_HEAD + RENTAL_GATHERING + BASE_INSTRUCTIONS_MIDDLE + RENTAL_CLOSE_AND_TAGGING
-  : BASE_INSTRUCTIONS_HEAD + TOUR_GATHERING + BASE_INSTRUCTIONS_MIDDLE + TOUR_CLOSE_AND_TAGGING;
+// gathering/close: si el playbook los trae como texto (vertical a medida vía PLAYBOOK_FILE) se usan
+// tal cual; si no, se eligen los bloques built-in por closeStyle. tour/rental no los traen → idéntico.
+const _gathering = PLAYBOOK.gathering || (PLAYBOOK.closeStyle === "direct" ? RENTAL_GATHERING : TOUR_GATHERING);
+const _close = PLAYBOOK.close || (PLAYBOOK.closeStyle === "direct" ? RENTAL_CLOSE_AND_TAGGING : TOUR_CLOSE_AND_TAGGING);
+const BASE_INSTRUCTIONS = BASE_INSTRUCTIONS_HEAD + _gathering + BASE_INSTRUCTIONS_MIDDLE + _close;
 
 // Profundidad de persona opcional por config (PERSONA_BIO en Railway): trasfondo humano del
 // que el bot puede tirar de forma natural, sin que cada proyecto lo escriba a mano en su contexto.
@@ -1379,27 +1397,32 @@ async function getInventorySnapshot() {
 }
 
 // ─── STRIPE CHECKOUT SESSION ─────────────────────────────────────
-async function createStripeSession(numRiders) {
+async function createStripeSession(numUnits) {
   if (!stripeClient) return null;
+  const dep = PLAYBOOK.deposit; // importe/moneda/etiqueta del depósito, por playbook (antes: $1000 USD hardcodeado)
+  if (!dep) { console.error(`[${PROJECT_NAME}] createStripeSession: el playbook (${PLAYBOOK.closeStyle}) no define deposit`); return null; }
+  const major = dep.amountMinor / 100;
+  const unit = dep.unit || "unit";
+  const cur = String(dep.currency || "usd").toUpperCase();
   try {
     const session = await stripeClient.checkout.sessions.create({
       payment_method_types: ["card"],
       line_items: [{
         price_data: {
-          currency: "usd",
+          currency: dep.currency,
           product_data: {
-            name: `${PROJECT_NAME || "Tour"} — Booking Deposit`,
-            description: `$1,000 deposit × ${numRiders} rider${numRiders > 1 ? "s" : ""}`,
+            name: `${PROJECT_NAME || "Booking"} — ${dep.label || "Deposit"}`,
+            description: `${major.toLocaleString()} ${cur} deposit × ${numUnits} ${unit}${numUnits > 1 ? "s" : ""}`,
           },
-          unit_amount: 100000, // $1,000 in cents
+          unit_amount: dep.amountMinor,
         },
-        quantity: numRiders,
+        quantity: numUnits,
       }],
       mode: "payment",
       success_url: STRIPE_SUCCESS_URL || "https://balimotoadventures.com/?booking=confirmed",
       cancel_url: STRIPE_CANCEL_URL || "https://balimotoadventures.com/",
     });
-    console.log(`[${PROJECT_NAME}] Stripe session: ${numRiders} riders → $${numRiders * 1000}`);
+    console.log(`[${PROJECT_NAME}] Stripe session: ${numUnits} ${unit}s → ${(major * numUnits).toLocaleString()} ${cur}`);
     return session.url;
   } catch (e) {
     console.error(`[${PROJECT_NAME}] Stripe session error:`, e.message);
