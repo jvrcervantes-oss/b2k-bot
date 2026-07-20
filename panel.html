@@ -567,6 +567,10 @@
   .nl-testrow button{flex-shrink:0;width:auto}
   .nl-hist-see{flex-shrink:0;border:1px solid var(--line);background:var(--card);color:var(--ink-soft);font-size:11.5px;font-weight:700;cursor:pointer;padding:5px 10px;border-radius:100px}
   .nl-hist-recip{display:none;padding:0 2px 10px;margin-top:-3px;line-height:1.9;word-break:break-all}
+  .subs-list{max-height:260px;overflow-y:auto;margin-top:12px}
+  .subs-row{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:7px 2px;font-size:13px}
+  .subs-row button{flex-shrink:0;border:0;background:none;color:var(--ink-soft);font-size:15px;cursor:pointer;padding:2px 6px;border-radius:6px}
+  .subs-row button:hover{background:rgba(0,0,0,.06);color:#dc2626}
   .media-row .mr-urlrow{display:flex;gap:8px;align-items:center;margin-bottom:7px}
   .media-row .mr-urlrow .mr-url{margin-bottom:0}
   .media-row .mr-up{width:38px;height:36px;flex-shrink:0;border:1px solid var(--line);background:var(--card);color:var(--accent);border-radius:8px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .15s ease,border-color .15s ease}
@@ -759,7 +763,8 @@
     <div class="sec-body">
       <p class="media-help" data-i18n="nl_help">Envía un email a los leads que dieron su correo. Incluye siempre un enlace de baja automático. Prueba primero contigo.</p>
       <label data-i18n="nl_dataset">Base de datos</label>
-      <select id="nlDataset"><option value="leads" data-i18n="nl_ds_leads">Leads (chat)</option><option value="operators" data-i18n="nl_ds_ops">Operadores (B2B)</option></select>
+      <select id="nlDataset"><option value="leads" data-i18n="nl_ds_leads">Leads (chat)</option><option value="operators" data-i18n="nl_ds_ops">Operadores (B2B)</option><option value="subscribers" data-i18n="nl_ds_subs">Suscriptores (web)</option></select>
+      <button id="nlSubsManage" class="btn-ghost" style="display:none;width:auto;margin-top:8px" data-i18n="nl_subs_manage">Gestionar suscriptores</button>
       <label data-i18n="nl_scope">Destinatarios</label>
       <select id="nlScope"><option value="all" data-i18n="nl_scope_all">Todos con email</option><option value="selected" data-i18n="nl_scope_sel">Seleccionados en la Base de datos</option></select>
       <div id="nlCount" class="nl-count"></div>
@@ -865,6 +870,24 @@
   </div>
 </div>
 
+<!-- modal gestión de suscriptores (B2C solo-email de la web) -->
+<div id="subsModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <h3><span data-i18n="subs_title">Suscriptores</span> <span class="count" id="subsCount">0</span></h3>
+    <div class="nl-fmt" data-i18n="subs_help">Contactos que dejaron su email en la web para recibir información. Solo se usan para newsletter.</div>
+    <label data-i18n="subs_add">Añadir emails (uno por línea o separados por coma)</label>
+    <textarea id="subsInput" rows="4" placeholder="ana@example.com&#10;juan@example.com"></textarea>
+    <div class="nl-testrow">
+      <input type="file" id="subsFile" accept=".csv,text/csv" style="display:none">
+      <button id="subsFromCsv" class="btn-ghost" data-i18n="subs_csv">⬆ Desde CSV</button>
+      <button id="subsAdd" class="btn-primary" data-i18n="subs_add_btn">Añadir</button>
+    </div>
+    <div class="modal-err" id="subsErr"></div>
+    <div id="subsList" class="subs-list"></div>
+    <div class="modal-actions"><button id="subsClose" class="btn-ghost" data-i18n="btn_close">Cerrar</button></div>
+  </div>
+</div>
+
 <!-- modal vista rápida de cita (solo lectura) -->
 <div id="apptViewModal" class="modal" style="display:none">
   <div class="modal-box">
@@ -896,7 +919,8 @@
       ops_pot_all:'◇ Potential', ops_temp_all:'🌡 Temp', op_potential:'Potential', op_temp:'Temperatura',
       ops_empty:'Aún no hay operadores. Importa un CSV o añade el primero con "+ Operador".',
       m_new_op:'Nuevo operador', m_edit_op:'Editar operador', op_company:'Empresa *', op_contact:'Persona de contacto', op_phone:'Teléfono', op_country:'País', op_tags:'Etiquetas (separadas por coma)', op_notes:'Notas', btn_delete_op:'Borrar', cfm_op_delete:'¿Borrar este operador?', al_op_company:'La empresa es obligatoria',
-      nl_dataset:'Base de datos', nl_ds_leads:'Leads (chat)', nl_ds_ops:'Operadores (B2B)',
+      nl_dataset:'Base de datos', nl_ds_leads:'Leads (chat)', nl_ds_ops:'Operadores (B2B)', nl_ds_subs:'Suscriptores (web)', nl_subs_manage:'Gestionar suscriptores',
+      subs_title:'Suscriptores', subs_help:'Contactos que dejaron su email en la web para recibir información. Solo se usan para newsletter.', subs_add:'Añadir emails (uno por línea o separados por coma)', subs_csv:'⬆ Desde CSV', subs_add_btn:'Añadir', subs_empty:'Aún no hay suscriptores. Pega emails arriba o súbelos por CSV.', subs_cfm_del:'¿Quitar a {e} de la lista de suscriptores?', subs_none:'No hay emails válidos que añadir.', subs_added:'✓ {a} añadidos · {e} ya estaban · {i} inválidos',
       m_canned:'Respuestas rápidas', m_canned_help:'Una por línea · formato', m_canned_fmt:'Título | texto', btn_cancel:'Cancelar', btn_save:'Guardar',
       m_appt:'Nueva cita', m_appt_edit:'Editar cita', l_lead:'Lead', ph_lead:'Nombre o teléfono (opcional)', l_datetime:'Fecha y hora', l_title:'Título', ph_call:'Llamada con…', btn_save_appt:'Guardar cita',
       l_closer:'Closer asignado', l_notes_appt:'Notas de la cita', ph_notes_appt:'Contexto de lo hablado, para el closer…', btn_delete_appt:'Eliminar cita', btn_close:'Cerrar', btn_edit_appt:'Editar cita', av_nolead:'Sin lead', av_noone:'Sin asignar', av_nonotes:'Sin notas',
@@ -946,7 +970,8 @@
       ops_pot_all:'◇ Potential', ops_temp_all:'🌡 Temp', op_potential:'Potential', op_temp:'Temperature',
       ops_empty:'No operators yet. Import a CSV or add the first one with "+ Operator".',
       m_new_op:'New operator', m_edit_op:'Edit operator', op_company:'Company *', op_contact:'Contact person', op_phone:'Phone', op_country:'Country', op_tags:'Tags (comma-separated)', op_notes:'Notes', btn_delete_op:'Delete', cfm_op_delete:'Delete this operator?', al_op_company:'Company is required',
-      nl_dataset:'Database', nl_ds_leads:'Leads (chat)', nl_ds_ops:'Operators (B2B)',
+      nl_dataset:'Database', nl_ds_leads:'Leads (chat)', nl_ds_ops:'Operators (B2B)', nl_ds_subs:'Subscribers (web)', nl_subs_manage:'Manage subscribers',
+      subs_title:'Subscribers', subs_help:'Contacts who left their email on the website to receive information. Used only for newsletters.', subs_add:'Add emails (one per line or comma-separated)', subs_csv:'⬆ From CSV', subs_add_btn:'Add', subs_empty:'No subscribers yet. Paste emails above or upload a CSV.', subs_cfm_del:'Remove {e} from the subscribers list?', subs_none:'No valid emails to add.', subs_added:'✓ {a} added · {e} already there · {i} invalid',
       m_canned:'Quick replies', m_canned_help:'One per line · format', m_canned_fmt:'Title | text', btn_cancel:'Cancel', btn_save:'Save',
       m_appt:'New appointment', m_appt_edit:'Edit appointment', l_lead:'Lead', ph_lead:'Name or phone (optional)', l_datetime:'Date & time', l_title:'Title', ph_call:'Call with…', btn_save_appt:'Save appointment',
       l_closer:'Assigned closer', l_notes_appt:'Appointment notes', ph_notes_appt:'What was discussed, for the closer…', btn_delete_appt:'Delete appointment', btn_close:'Close', btn_edit_appt:'Edit appointment', av_nolead:'No lead', av_noone:'Unassigned', av_nonotes:'No notes',
@@ -2255,14 +2280,18 @@
   var NL_EMAIL=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   // Destinatarios según el alcance elegido (espejo de la lógica del servidor): email válido,
   // no archivados, no dados de baja, sin emails duplicados.
+  var subs=[];
+  function loadSubscribers(){ return api('subscribers').then(function(r){return r.json();}).then(function(L){ subs=Array.isArray(L)?L:[]; }); }
   function nlRecipients(){
     var dataset=document.getElementById('nlDataset').value;
-    var isOps=dataset==='operators';
     var scope=document.getElementById('nlScope').value, ids=[], seen={}, unsub=0;
-    var source=isOps?ops:leads, selMap=isOps?opsSelected:dbSelected;
+    var source, selMap, keyOf;
+    if(dataset==='operators'){ source=ops; selMap=opsSelected; keyOf=function(l){return l.id;}; }
+    else if(dataset==='subscribers'){ source=subs; selMap={}; keyOf=function(l){return l.email;}; scope='all'; } // sin selección por-item
+    else { source=leads; selMap=dbSelected; keyOf=function(l){return l.phone;}; }
     source.forEach(function(l){
       if(l.archived) return;
-      var key=isOps?l.id:l.phone;
+      var key=keyOf(l);
       if(scope==='selected' && !selMap[key]) return;
       var e=(l.email||'').toLowerCase().trim();
       if(!NL_EMAIL.test(e)) return;
@@ -2346,7 +2375,11 @@
     var subject=document.getElementById('nlSubject').value.trim(), body=document.getElementById('nlBody').value.trim();
     return (subject&&body) ? {subject:subject,body:body} : null;
   }
-  function openNewsletter(){ document.getElementById('nlErr').textContent=''; nlApplyMode(); nlUpdateCount(); nlLoadScheduled(); nlLoadHistory(); }
+  function openNewsletter(){ document.getElementById('nlErr').textContent=''; nlApplyMode();
+    var isSubs=document.getElementById('nlDataset').value==='subscribers';
+    document.getElementById('nlSubsManage').style.display=isSubs?'':'none';
+    if(isSubs) loadSubscribers().then(nlUpdateCount); else nlUpdateCount();
+    nlLoadScheduled(); nlLoadHistory(); }
   function nlPost(payload, btn){ var orig=btn.textContent, err=document.getElementById('nlErr'); err.style.color=''; btn.disabled=true; btn.textContent=t('nl_sending');
     return apiPost('newsletter',payload).then(function(res){ return res.json().then(function(j){ return {ok:res.ok,j:j}; }); })
       .then(function(o){ if(!o.ok) throw ((o.j&&o.j.error)||'error'); return o.j; })
@@ -2397,9 +2430,43 @@
       applyStaticI18n();
     });
   };
+  // ── Gestión de suscriptores B2C (modal): añadir por pega/CSV, listar, quitar ──
+  function subsRender(){
+    document.getElementById('subsCount').textContent=subs.length;
+    var box=document.getElementById('subsList');
+    box.innerHTML = subs.length ? subs.map(function(s){
+      return '<div class="subs-row"><span>'+esc(s.email)+(s.emailUnsub?' <span class="db-tag">baja</span>':'')+'</span>'
+        +'<button title="✕" onclick="subsRemove(\''+encodeURIComponent(s.email)+'\')">✕</button></div>';
+    }).join('') : '<div class="nl-fmt">'+t('subs_empty')+'</div>';
+  }
+  function subsOpen(){ document.getElementById('subsErr').textContent=''; document.getElementById('subsInput').value='';
+    loadSubscribers().then(function(){ subsRender(); document.getElementById('subsModal').style.display='flex'; }); }
+  window.subsRemove=function(enc){ var email=decodeURIComponent(enc);
+    if(!confirm(t('subs_cfm_del').replace('{e}',email))) return;
+    apiPost('subscribers/remove',{email:email}).then(function(){ loadSubscribers().then(function(){ subsRender(); nlUpdateCount(); }); }); };
+  function subsParseEmails(text){ return (text||'').split(/[\s,;]+/).map(function(x){return x.trim().toLowerCase();}).filter(function(x){return NL_EMAIL.test(x);}); }
+  function subsAddEmails(emails){
+    var err=document.getElementById('subsErr');
+    if(!emails.length){ err.style.color=''; err.textContent=t('subs_none'); return; }
+    apiPost('subscribers/add',{emails:emails,source:'manual'}).then(function(r){return r.json();}).then(function(j){
+      err.style.color='var(--accent)'; err.textContent=t('subs_added').replace('{a}',j.added||0).replace('{e}',j.exists||0).replace('{i}',j.invalid||0);
+      document.getElementById('subsInput').value=''; loadSubscribers().then(function(){ subsRender(); nlUpdateCount(); });
+    }).catch(function(){ err.style.color=''; err.textContent=t('al_save'); });
+  }
+  document.getElementById('nlSubsManage').onclick=subsOpen;
+  document.getElementById('subsClose').onclick=function(){ document.getElementById('subsModal').style.display='none'; };
+  document.getElementById('subsAdd').onclick=function(){ subsAddEmails(subsParseEmails(document.getElementById('subsInput').value)); };
+  document.getElementById('subsFromCsv').onclick=function(){ document.getElementById('subsFile').click(); };
+  document.getElementById('subsFile').onchange=function(e){ var f=e.target.files[0]; if(!f) return;
+    var rd=new FileReader(); rd.onload=function(){ subsAddEmails(subsParseEmails(String(rd.result))); }; rd.readAsText(f); e.target.value=''; };
   document.getElementById('nlScope').onchange=function(){ nlUpdateCount(); };
   document.getElementById('nlDataset').onchange=function(){
-    if(this.value==='operators' && !ops.length) loadOperators().then(nlUpdateCount); else nlUpdateCount();
+    var isSubs=this.value==='subscribers';
+    document.getElementById('nlSubsManage').style.display=isSubs?'':'none';
+    var sc=document.getElementById('nlScope'); sc.disabled=isSubs; if(isSubs) sc.value='all'; // suscriptores = siempre todos
+    if(isSubs) loadSubscribers().then(nlUpdateCount);
+    else if(this.value==='operators' && !ops.length) loadOperators().then(nlUpdateCount);
+    else nlUpdateCount();
   };
   document.getElementById('nlMode').onchange=function(){ nlApplyMode(); };
   document.getElementById('nlWhen').onchange=function(){ nlUpdateCount(); };

@@ -20,6 +20,7 @@ const {
   WHATSAPP_PHONE_ID,
   WHATSAPP_VERIFY_TOKEN,
   META_APP_SECRET,         // App Secret de la app de Meta — activa la verificación X-Hub-Signature-256 de los POST del webhook
+  SUBSCRIBE_TOKEN,         // token propio (NO la admin key) para el alta pública de suscriptores desde subscribe.php
   ANTHROPIC_API_KEY,
   GOOGLE_SERVICE_ACCOUNT,
   SHEET_ID,
@@ -253,6 +254,45 @@ async function listOperators() {
   const unsub = await getUnsubSet();
   return list.map((o) => ({ ...o, emailUnsub: !!(o.email && unsub.has(String(o.email).toLowerCase().trim())) }));
 }
+
+// ─── SUSCRIPTORES B2C — solo email, para newsletter (web "déjanos tu correo") ───────────
+// BD separada: sub:<email> + subs_index. Sin chat ni pipeline. La baja (unsub) es global por
+// email, así que comparten el mismo sistema de baja que leads/operadores. El email ES la clave
+// (dedupe natural). EMAIL_RE se define más abajo pero solo se usa en runtime → ok.
+let fallbackSubs = {};
+async function getSubscriber(email) {
+  const e = String(email || "").toLowerCase().trim();
+  if (redisClient) { const d = await redisClient.get(`sub:${e}`); return d ? JSON.parse(d) : null; }
+  return fallbackSubs[e] || null;
+}
+async function addSubscriber({ email, source, tour }) {
+  const e = String(email || "").toLowerCase().trim();
+  if (!EMAIL_RE.test(e)) return "invalid";
+  if (await getSubscriber(e)) return "exists";
+  const rec = { email: e, source: source || "", tour: tour || "", addedAt: Date.now(), archived: false };
+  if (redisClient) { await redisClient.set(`sub:${e}`, JSON.stringify(rec)); await redisClient.zAdd("subs_index", { score: rec.addedAt, value: e }); }
+  else fallbackSubs[e] = rec;
+  return "added";
+}
+async function removeSubscriber(email) {
+  const e = String(email || "").toLowerCase().trim();
+  if (redisClient) { await redisClient.del(`sub:${e}`); await redisClient.zRem("subs_index", e); }
+  else delete fallbackSubs[e];
+}
+async function listSubscribers() {
+  let list;
+  if (redisClient) {
+    const emails = await redisClient.zRange("subs_index", 0, -1, { REV: true });
+    if (!emails.length) return [];
+    const raws = await Promise.all(emails.map((e) => redisClient.get(`sub:${e}`)));
+    list = raws.filter(Boolean).map((r) => JSON.parse(r));
+  } else {
+    list = Object.values(fallbackSubs).sort((a, b) => b.addedAt - a.addedAt);
+  }
+  const unsub = await getUnsubSet();
+  return list.map((s) => ({ ...s, emailUnsub: unsub.has(String(s.email).toLowerCase().trim()) }));
+}
+
 // Upsert de una fila de CSV genérico (alias ES/EN de columnas). Si el email ya existe,
 // solo rellena campos vacíos (no pisa ediciones manuales); si no, crea un operador nuevo.
 async function importOperatorRow(row) {
@@ -2017,6 +2057,43 @@ app.post("/admin/api/import-operators", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Suscriptores B2C (solo email) — audiencia de newsletter de la web ──────────────────
+app.get("/admin/api/subscribers", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try { res.json(await listSubscribers()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Alta en lote desde el panel: { emails:[...] } (pega o CSV). Valida y deduplica.
+app.post("/admin/api/subscribers/add", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const b = req.body || {};
+  const emails = Array.isArray(b.emails) ? b.emails : (b.email ? [b.email] : []);
+  let added = 0, exists = 0, invalid = 0;
+  try {
+    for (const em of emails) {
+      const r = await addSubscriber({ email: em, source: b.source || "manual" });
+      if (r === "added") added++; else if (r === "invalid") invalid++; else exists++;
+    }
+    res.json({ ok: true, added, exists, invalid, total: emails.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/admin/api/subscribers/remove", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const email = String((req.body && req.body.email) || "");
+  if (!email) return res.status(400).json({ error: "email requerido" });
+  try { await removeSubscriber(email); res.json({ ok: true }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Alta PÚBLICA desde la web (subscribe.php). Token propio SUBSCRIBE_TOKEN — NO la admin key:
+// solo puede añadir un email, ningún otro acceso al CRM. Sin token configurado → deshabilitado.
+app.post("/api/subscribe", async (req, res) => {
+  if (!SUBSCRIBE_TOKEN) return res.status(503).json({ error: "subscribe no configurado" });
+  const token = req.get("x-subscribe-token") || (req.body && req.body.token);
+  if (token !== SUBSCRIBE_TOKEN) return res.status(403).json({ error: "forbidden" });
+  try {
+    const r = await addSubscriber({ email: (req.body && req.body.email) || "", source: (req.body && req.body.source) || "web", tour: (req.body && req.body.tour) || "" });
+    res.json({ ok: r !== "invalid", result: r });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Estado del almacén: si la "base de datos" persiste (Redis) o es volátil (RAM), y cuántos leads hay.
 app.get("/admin/api/health", async (req, res) => {
   if (!adminAuth(req, res)) return;
@@ -2475,25 +2552,27 @@ async function runCampaign({ subject, body, templateId, phones, ids, dataset, ho
     ? { to: email, name, templateId, params: { unsub: unsubUrl(host, email), name: name || "", email } }
     : { to: email, subject, html: renderEmailHtml(mdToHtml(body), unsubUrl(host, email)) };
   const isOperators = dataset === "operators";
+  const isSubs = dataset === "subscribers";
   const onlyIds = Array.isArray(ids) ? new Set(ids) : (Array.isArray(phones) ? new Set(phones) : null);
   const unsub = await getUnsubSet();
-  const source = isOperators ? await listOperators() : await listLeads();
+  const source = isSubs ? await listSubscribers() : (isOperators ? await listOperators() : await listLeads());
   const seen = new Set();
   const recipients = [];
   for (const l of source) {
     if (l.archived) continue;
-    const key = isOperators ? l.id : l.phone;
+    const key = isSubs ? l.email : (isOperators ? l.id : l.phone);
     if (onlyIds && !onlyIds.has(key)) continue;
     const email = String(l.email || "").toLowerCase().trim();
     if (!EMAIL_RE.test(email) || unsub.has(email) || seen.has(email)) continue;
     seen.add(email);
-    recipients.push({ key, email, name: (isOperators ? (l.contact || l.company) : l.name) || "" });
+    recipients.push({ key, email, name: isSubs ? "" : ((isOperators ? (l.contact || l.company) : l.name) || "") });
   }
   const label = templateId ? `template#${templateId}` : subject;
   let sent = 0, failed = 0;
   for (const r of recipients) {
     const out = await sendEmail(buildFor(r.email, r.name));
-    if (out.ok) { sent++; if (!isOperators) await logEvent(r.key, "newsletter", { subject: label }); }
+    // logEvent solo aplica a leads (tienen timeline por phone); operadores/suscriptores no.
+    if (out.ok) { sent++; if (!isOperators && !isSubs) await logEvent(r.key, "newsletter", { subject: label }); }
     else { failed++; console.warn(`[${PROJECT_NAME}] newsletter fallo a ${r.email}: ${out.error}`); }
     await new Promise((s) => setTimeout(s, 120)); // pausa corta: evita el rate-limit de Brevo
   }
@@ -2543,7 +2622,8 @@ app.post("/admin/api/newsletter", async (req, res) => {
   const templateId = parseInt((req.body && req.body.templateId), 10) || null; // usar plantilla de Brevo
   const phones = Array.isArray(req.body && req.body.phones) ? req.body.phones : null;
   const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids : null;
-  const dataset = (req.body && req.body.dataset) === "operators" ? "operators" : "leads";
+  const dsIn = req.body && req.body.dataset;
+  const dataset = dsIn === "operators" ? "operators" : dsIn === "subscribers" ? "subscribers" : "leads";
   const when = String((req.body && req.body.when) || "").trim();
   if (!templateId && (!subject || !body)) return res.status(400).json({ error: "elige una plantilla de Brevo, o escribe asunto y cuerpo" });
   const host = req.get("host");
@@ -2601,7 +2681,7 @@ app.get("/admin/api/newsletter/scheduled", async (req, res) => {
       id: c.id, when: c.when,
       subject: c.templateId ? `Plantilla Brevo #${c.templateId}` : c.subject,
       scope: (c.ids || c.phones) ? (c.ids || c.phones).length : null, // nº seleccionados, o null = todos
-      dataset: c.dataset === "operators" ? "operators" : "leads",
+      dataset: c.dataset === "operators" ? "operators" : c.dataset === "subscribers" ? "subscribers" : "leads",
     })));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
