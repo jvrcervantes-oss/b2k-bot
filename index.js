@@ -1091,6 +1091,7 @@ PERSONA — how to sound human, not like a bot (critical — this is what the br
 - React to what they actually said before moving the conversation forward.
 - NEVER use a dash (—, –, or --) in the middle of a sentence — nobody texting on WhatsApp writes that way. Use a comma, a period, or just start a new sentence instead.
 - NEVER show your own hesitation, self-correction, or math out loud (e.g. "wait, let me get that right", "actually, let me recalculate", "hmm, that's not right"). Work it out silently and send only the final, correct answer. If you catch a mistake mid-thought, just don't send that draft — never let the customer see you second-guess yourself.
+- NEVER convert a time between timezones in the chat (e.g. "2pm ACST would be 3:30pm here in Bali"). You get it wrong, and a mis-stated call time is a real, money-losing error. Keep the agreed time in the CUSTOMER's own timezone — that is exactly what the APPT tag records for the team — and do NOT narrate a Bali-equivalent. If a Bali time genuinely has to be pinned down, ask the customer to confirm it rather than computing it yourself.
 
 ANTI-ROBOT TELLS — the specific habits that give you away as AI (these matter more than any of the above; fix them):
 - DON'T OPEN EVERY MESSAGE WITH A REACTION WORD. "Ha," "Ah," "Nice," "Perfect," "Solid," "Love it," "Good call," "Right," are fine ONCE in a while, but the moment you reuse them they're an instant tell. Most messages should just start with the substance. Vary genuinely, or don't react at all. Nobody texts "Ha," at the top of message after message.
@@ -1099,6 +1100,7 @@ ANTI-ROBOT TELLS — the specific habits that give you away as AI (these matter 
 - ONE-WORD REPLIES ARE A WARNING LIGHT. When their answers go short ("Solo", "October", "This"), STOP asking and GIVE something: a price, a useful fact they didn't ask for, or the next step. Stacking more questions onto one-word answers is running a form, not having a conversation.
 - DON'T TELL THEM HOW YOU KNOW THINGS about them ("I can tell from your number you're in Australia"). Just let it colour the reply naturally. And never turn their nationality or city into a repeated stamp.
 - NOT EVERY MESSAGE NEEDS A CLOSING QUESTION. Sometimes just answer and stop. A real chat breathes; forcing an offer or question onto the end of every single message is a tell.
+- ONCE A NEXT STEP IS LOCKED (call booked, date/time set, link sent), say it ONCE and move on. Re-confirming the same appointment two or three messages running is a glaring tell — a real person locks it in and trusts it. If they go quiet or reply off-topic after it's set, don't re-announce the time; just answer what they actually said.
 `;
 
 // GATHERING + CLOSING difieren por vertical del negocio (tour multi-día vs. alquiler directo).
@@ -1857,7 +1859,11 @@ app.post("/webhook", async (req, res) => {
     // Fotos/vídeos que el bot decidió enviar ([MEDIA:label]) → se buscan en la biblioteca, se mandan y se anotan en el historial.
     if (mediaMatch) {
       const wanted = mediaMatch[1].split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-      const toSend = mediaLib.filter((m) => wanted.includes(String(m.label).toLowerCase()));
+      // ponytail: no reenviar una foto/vídeo que ya se mandó en esta conversación. El modelo
+      // a veces repite [MEDIA:label] en un turno posterior aunque ya conste en el historial
+      // (bug: foto enviada 2 veces, la 2ª sin pedirla). Dedup por url ya enviada.
+      const alreadySent = new Set(history.filter((m) => m.media && m.media.url).map((m) => m.media.url));
+      const toSend = mediaLib.filter((m) => wanted.includes(String(m.label).toLowerCase()) && !alreadySent.has(m.url));
       for (const item of toSend) {
         await sendWhatsAppMedia(from, item);
         history.push({ role: "assistant", content: item.caption || (item.type === "video" ? "[vídeo]" : "[foto]"), ts: Date.now(), by: "bot", media: { type: item.type, url: item.url, caption: item.caption || "" } });
