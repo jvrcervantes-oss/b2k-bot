@@ -41,6 +41,8 @@ const {
   SUPABASE_URL,            // proyecto Supabase para el inventario de motos (pntvipemiczzfrnhixlb)
   SUPABASE_SERVICE_KEY,    // service_role key (opcional — solo fallback si falta la anon; hoy nada escribe en Supabase con esta key)
   SUPABASE_ANON_KEY,       // key "anon": RLS ya da SELECT público en products/product_pricing/serialized_items
+  BBM_API_URL,             // base del ERP del cliente (https://bbm-erp.vercel.app) — pushInquiryToERP
+  BBM_API_KEY,             // key bbmk_ (read+inquiry) del ERP — el bot registra leads como Inquiry (Phase 1)
   ADMIN_PASSWORD,
   ALERT_TEMPLATE_NAME,
   ALERT_TEMPLATE_LANG,
@@ -631,6 +633,57 @@ async function captureLeadData(phone, fields) {
   }
   await updateLeadFields(phone, { ...out, deals, updatedAt: Date.now() });
   writeLeadToSheet(phone, out); // best-effort (solo escribe las llaves con columna mapeada)
+  pushInquiryToERP(phone).catch(() => {}); // best-effort, no bloquea la respuesta al cliente
+}
+
+// ── ERP inquiry push (BBM, Phase 1) ───────────────────────────────────────────
+// El cliente decidió NO automatizar bookings (Phase 3 en pausa, quiere intervención
+// humana ahí) pero SÍ que el bot registre cada lead como Inquiry en su ERP vía
+// POST /api/chat/v1/inquiry. Xendit lo sigue generando el bot como hasta ahora.
+// Env-gated (BBM_API_URL+BBM_API_KEY) → solo dispara en el servicio BBM; el resto de
+// bots ni se enteran. Una inquiry por deal (marker NX inqsent:), best-effort: si falla
+// se loguea y se reintenta al próximo mensaje, el lead nunca se pierde (vive en Redis).
+// ponytail: get-then-set del marker, no atómico; captureLeadData corre 1 vez por turno
+// (serial) → ventana de doble-post mínima, y un duplicado raro lo dedup su ERP por teléfono.
+function isoDay(s) {
+  const m = typeof s === "string" && s.match(/^\d{4}-\d{2}-\d{2}/);
+  return m ? m[0] : null;
+}
+async function pushInquiryToERP(phone) {
+  if (!BBM_API_URL || !BBM_API_KEY) return; // feature off si no está configurada
+  try {
+    const lead = (await getLead(phone)) || {};
+    const name = (lead.name || "").trim();
+    if (!name) return; // su API exige customer_name; sin nombre aún, esperamos al siguiente turno
+    const deal = focusDeal(Array.isArray(lead.deals) ? lead.deals : []);
+    if (!deal || deal.status !== "open") return;
+    // umbral: no crear inquiries de un simple "hola" — hace falta señal real de alquiler
+    if (!deal.model && !deal.dealValue && !deal.startDate) return;
+
+    const key = `inqsent:${phone}:${deal.id}`;
+    if (redisClient && (await redisClient.get(key))) return; // ya enviada esta deal
+
+    const body = { customer_name: name, customer_phone: phone, conversation_ref: `wa:${phone}` };
+    if (lead.email) body.customer_email = lead.email;
+    if (deal.model) body.product_hint = deal.model;
+    const price = parseInt(String(deal.dealValue ?? "").replace(/\D/g, ""), 10);
+    if (price > 0) body.quoted_price = price;
+    const start = isoDay(deal.startDate), end = isoDay(deal.endDate);
+    if (start && end && end > start) { body.start_at = start; body.end_at = end; } // omitir si no cuadran → evita 400 invalid_dates
+    const bits = [deal.plan && `Plan: ${deal.plan}`, deal.deliveryLocation && `Delivery: ${deal.deliveryLocation}`].filter(Boolean);
+    body.notes = `WhatsApp bot lead.${bits.length ? " " + bits.join(". ") + "." : ""}`;
+
+    const res = await axios.post(`${BBM_API_URL.replace(/\/+$/, "")}/api/chat/v1/inquiry`, body, {
+      headers: { Authorization: `Bearer ${BBM_API_KEY}` }, timeout: 12000,
+    });
+    const inquiryId = res.data && res.data.inquiry_id;
+    if (redisClient) await redisClient.set(key, String(inquiryId || "1"), { EX: 60 * 60 * 24 * 30 });
+    await logEvent(phone, "inquiry", { id: inquiryId || "", deal: deal.id });
+    console.log(`[${PROJECT_NAME}] inquiry #${inquiryId} creada en ERP (${phone}, deal ${deal.id})`);
+  } catch (e) {
+    const st = e.response && e.response.status;
+    console.error(`[${PROJECT_NAME}] pushInquiryToERP fallo${st ? " HTTP " + st : ""}: ${e.message} — lead sigue en Redis, reintento al próximo mensaje`);
+  }
 }
 
 // Registra un hito CRM en el historial del lead (para el timeline del panel). No bumpea updatedAt.
