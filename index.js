@@ -2003,6 +2003,28 @@ app.post("/webhook", async (req, res) => {
   try {
     const entry = req.body.entry?.[0];
     const change = entry?.changes?.[0];
+
+    // ── Estados de entrega de Meta (sent/delivered/read/FAILED) ──────────────
+    // Meta los manda por ESTE MISMO webhook, sin `messages`. Antes caían en el
+    // `return` de abajo y se perdían: por eso un "Plantilla enviada" (que solo
+    // significa "la API aceptó la petición") podía no entregarse nunca sin dejar
+    // rastro. Registramos SOLO los fallos, con el código de error de Meta, y los
+    // surtimos al panel si el destinatario ya es un lead conocido.
+    const statuses = change?.value?.statuses;
+    if (Array.isArray(statuses) && statuses.length) {
+      for (const st of statuses) {
+        if (st.status !== "failed") continue;                 // delivered/read/sent = ruido
+        const err = (st.errors && st.errors[0]) || {};
+        const detail = err.error_data?.details || err.message || err.title || "";
+        console.error(`[${PROJECT_NAME}] ENTREGA FALLIDA a ${st.recipient_id} — code ${err.code ?? "?"}: ${detail} (wamid ${st.id})`);
+        // Panel: solo si ya es lead conocido (no crear ficha para el owner ni desconocidos)
+        if (!isOwner(st.recipient_id) && (await getLead(st.recipient_id))) {
+          await logEvent(st.recipient_id, "delivery_failed", { code: err.code, detail: String(detail).slice(0, 200) });
+        }
+      }
+      return; // un webhook de estado no trae mensaje que procesar
+    }
+
     const message = change?.value?.messages?.[0];
     if (!message) return;
     if (await alreadyProcessed(message.id)) {
