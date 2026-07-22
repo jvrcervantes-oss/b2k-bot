@@ -3248,6 +3248,9 @@ app.listen(PORT, async () => {
   console.log(`[${PROJECT_NAME}] CRM (BD): ${redisClient ? "Redis (persistente)" : "RAM (volátil — configura REDIS_URL)"}`);
   console.log(`[${PROJECT_NAME}] Firma webhook: ${META_APP_SECRET ? "🟢 X-Hub-Signature-256 activa" : "⚠️  SIN verificar — añade META_APP_SECRET en Railway"}`);
   console.log(`[${PROJECT_NAME}] Email (Brevo): ${MAIL_READY ? "🟢 listo" : `⚠️  NO configurado → BREVO_API_KEY=${BREVO_API_KEY ? "ok" : "FALTA"}, MAIL_FROM=${MAIL_FROM ? "ok" : "FALTA"}`}`);
+  // Sin esta línea no había forma de saber si el push de Inquiries estaba vivo: la feature es
+  // env-gated y falla en silencio (best-effort), así que "apagada" y "funcionando" se veían igual.
+  console.log(`[${PROJECT_NAME}] ERP del cliente (Inquiries): ${BBM_API_URL && BBM_API_KEY ? `🟢 ${BBM_API_URL}` : `⚠️  desactivado → BBM_API_URL=${BBM_API_URL ? "ok" : "FALTA"}, BBM_API_KEY=${BBM_API_KEY ? "ok" : "FALTA"}`}`);
   if (!MAIL_READY) {
     // Lista los NOMBRES de claves relacionadas que el proceso SÍ ve (sin valores) → delata un typo de nombre.
     const seen = Object.keys(process.env).filter((k) => /mail|brevo|from|smtp|sender/i.test(k));
