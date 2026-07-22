@@ -1370,7 +1370,18 @@ async function buildSystemBlocks(mediaLib) {
     : "";
   // Prompt caching: solo el 1er bloque lleva cache_control (system fijo, ~11.5k tok). Los demás
   // cambian cada pocos minutos y van detrás, así que refrescarlos no invalida la caché.
-  const live = [mediaHint, await buildStockHint(), await buildPriceHint(), await buildDeliveryHint(), await buildOfferHint()];
+  const priceHint = await buildPriceHint();
+  // Si Supabase no responde, buildPriceHint() devuelve "" y el bot se queda SIN tarifas. Comprobado
+  // en simulación: en ese estado no escala, se inventa una cifra (cotizó 1.050.000 IDR/semana por una
+  // moto de 600.000). Un precio alucinado se convierte en una promesa al cliente, así que el hueco
+  // se declara en voz alta en vez de dejarlo en silencio.
+  const noPrices = BOT_VERTICAL === "rental" && !priceHint
+    ? "\n\n⚠️ PRICING DATA IS UNAVAILABLE RIGHT NOW (the live rate feed is down). You do NOT know any "
+      + "price. Do NOT state, estimate, guess or 'roughly' quote any amount, and do NOT compute one from "
+      + "a daily rate. Tell the customer you're confirming the exact rate with the team, keep the "
+      + "conversation going on everything else (model, dates, delivery), and add `tags: pricing_check`."
+    : "";
+  const live = [mediaHint, await buildStockHint(), priceHint, noPrices, await buildDeliveryHint(), await buildOfferHint()];
   return [
     { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
     { type: "text", text: dateHint() },
