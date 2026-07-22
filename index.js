@@ -2018,9 +2018,23 @@ async function markLeadPaid(phone, provider, amountIDR, receiptUrl) {
   }
 
   if (OWNER_PHONE) {
+    // El cliente (Dion, 22-jul) decidió crear las reservas A MANO en su ERP: el bot cobra pero no
+    // hace booking. Este aviso es, por tanto, el traspaso al equipo — así que lleva TODO lo que
+    // necesitan para teclear la reserva sin ir a buscarlo al panel: moto, fechas, entrega y seguro.
+    const d = (BOT_VERTICAL === "rental" && lead && Array.isArray(lead.deals)) ? focusDeal(lead.deals) : null;
+    const detalle = d ? [
+      d.model && `Moto: ${d.model}`,
+      d.plan && `Plan: ${d.plan}`,
+      (d.startDate || d.endDate) && `Fechas: ${d.startDate || "?"} → ${d.endDate || "?"}`,
+      d.deliveryLocation && `Entrega: ${d.deliveryLocation}`,
+      d.insuranceTier && `Seguro: ${d.insuranceTier}`,
+    ].filter(Boolean).join("\n") : "";
     await sendWhatsApp(
       OWNER_PHONE,
-      `💰 ${PROJECT_NAME} — PAGO RECIBIDO (${provider === "xendit" ? "Xendit" : "Stripe"})\n\n*${(lead && lead.name) || phone}*\nTel: +${phone}\nImporte: ${Math.round(amountIDR).toLocaleString("id-ID")} IDR\n\nMarcado como Ganado en el CRM automáticamente.`
+      `💰 ${PROJECT_NAME} — PAGO RECIBIDO (${provider === "xendit" ? "Xendit" : "Stripe"})\n\n*${(lead && lead.name) || phone}*\nTel: +${phone}\nImporte: ${Math.round(amountIDR).toLocaleString("id-ID")} IDR`
+      + (detalle ? `\n\n${detalle}` : "")
+      + `\n\nMarcado como Ganado en el CRM automáticamente.`
+      + (BOT_VERTICAL === "rental" ? `\n⚠️ Falta crear la reserva en el ERP (el bot no la crea).` : "")
     );
   }
 }
