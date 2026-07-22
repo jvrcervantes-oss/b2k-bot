@@ -1493,6 +1493,15 @@ async function getMediaLib() {
   if (redisClient) { const r = await redisClient.get("media_lib"); return r ? JSON.parse(r) : []; }
   return fallbackMediaLib;
 }
+// Bloque de instrucciones de media para el prompt. Vive aquí y no duplicado en cada llamada
+// (webhook + simulador): una regla añadida en una copia y no en la otra es deriva garantizada.
+function buildMediaHint(mediaLib) {
+  if (!mediaLib.length) return "";
+  return "\n\nMEDIA YOU CAN SEND (real photos/videos that reinforce the pitch — use sparingly, at most 1–2 per conversation, only when it genuinely helps). For each item, 'when to use' tells you the situation to send it in; match it to what the customer is talking about. Available:\n"
+    + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.use ? " — when to use: " + m.use : ""}${m.caption ? " [caption sent to customer: \"" + m.caption + "\"]" : ""}`).join("\n")
+    + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send a media item when its 'when to use' genuinely matches the moment. Only send labels from this list; never invent one."
+    + "\nIF THE CUSTOMER SAYS IT DIDN'T ARRIVE: resend it ONCE. If they say it still hasn't landed, STOP resending — do NOT say you'll look into it or check on your end (nobody is watching that, and the conversation dies there). Give them the website link so they get the content another way, and keep the conversation moving to the next step.";
+}
 async function setMediaLib(list) {
   const arr = Array.isArray(list) ? list.slice(0, 50) : [];
   if (redisClient) await redisClient.set("media_lib", JSON.stringify(arr));
@@ -1822,11 +1831,7 @@ app.post("/webhook", async (req, res) => {
 
     // Media disponible (gestionada desde el panel): se inyecta para que el bot solo ofrezca lo que existe.
     const mediaLib = await getMediaLib();
-    const mediaHint = mediaLib.length
-      ? "\n\nMEDIA YOU CAN SEND (real photos/videos that reinforce the pitch — use sparingly, at most 1–2 per conversation, only when it genuinely helps). For each item, 'when to use' tells you the situation to send it in; match it to what the customer is talking about. Available:\n"
-        + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.use ? " — when to use: " + m.use : ""}${m.caption ? " [caption sent to customer: \"" + m.caption + "\"]" : ""}`).join("\n")
-        + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send a media item when its 'when to use' genuinely matches the moment. Only send labels from this list; never invent one."
-      : "";
+    const mediaHint = buildMediaHint(mediaLib);
     // Streaming (no create): evita el "Premature close" en respuestas no-stream y mantiene viva la conexión.
     const response = await claudeMessage({
       model: MODEL,
@@ -2218,11 +2223,7 @@ app.post("/admin/api/simulate", async (req, res) => {
     const history = await getConversation(phone);
     history.push({ role: "user", content: text, ts: Date.now() });
     const mediaLib = await getMediaLib();
-    const mediaHint = mediaLib.length
-      ? "\n\nMEDIA YOU CAN SEND (real photos/videos that reinforce the pitch — use sparingly, at most 1–2 per conversation, only when it genuinely helps). For each item, 'when to use' tells you the situation to send it in; match it to what the customer is talking about. Available:\n"
-        + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.use ? " — when to use: " + m.use : ""}${m.caption ? " [caption sent to customer: \"" + m.caption + "\"]" : ""}`).join("\n")
-        + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send a media item when its 'when to use' genuinely matches the moment. Only send labels from this list; never invent one."
-      : "";
+    const mediaHint = buildMediaHint(mediaLib);
     const response = await claudeMessage({
       model: MODEL,
       max_tokens: 500,
