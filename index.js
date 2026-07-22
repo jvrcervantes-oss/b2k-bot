@@ -722,7 +722,7 @@ async function enrichLeadFromConversation(phone, { force = false } = {}) {
       model: EXTRACT_MODEL,
       max_tokens: 300,
       thinking: { type: "disabled" }, // extractor JSON: sin thinking (en Sonnet 5 iría ON por defecto y rompería el parseo/max_tokens)
-      system: PLAYBOOK.enrichSystem,
+      system: PLAYBOOK.enrichSystem + `\n${dateHint()}`, // sin esto guardaba fechas del año anterior en la ficha
       messages: [{ role: "user", content: transcript }],
     });
     let txt = ((r.content[0] && r.content[0].text) || "").trim();
@@ -1356,6 +1356,16 @@ async function buildOfferHint() {
     + "is 15% off right now if you want to compare.\" Bring it up once when relevant, then drop it if the "
     + "customer isn't interested — don't repeat it every message):\n" + lines;
 }
+// El modelo NO sabe qué día es: sin esto materializa "mañana"/"next Monday" con el año de su
+// corte de entrenamiento. Visto en producción (BBM, chat real del cliente 14-jul-2026): el bot
+// llegó a preguntar "what's today's exact date?" y el CRM guardó startDate 2025-07-15 — fechas
+// que además viajan al ERP del cliente en pushInquiryToERP y al calendario en [APPT].
+// Va en bloque APARTE del system cacheado (cambia a diario; dentro del prefijo rompería la caché).
+const DATE_TZ = CALENDAR_TZ || "Asia/Makassar"; // negocio en Bali (WITA); Railway corre en UTC
+const todayBiz = () => new Date().toLocaleDateString("en-CA", { timeZone: DATE_TZ }); // YYYY-MM-DD
+const dateHint = () => `TODAY IS ${todayBiz()} (${DATE_TZ}). Resolve every relative date the customer `
+  + `gives you ("tomorrow", "next Monday", "the 15th") against THIS date, and never write a date in a `
+  + `different year. Never ask the customer what today's date is — you know it.`;
 
 // ─── GOOGLE SHEETS ────────────────────────────────────────────────
 async function getSheetsClient() {
@@ -2216,6 +2226,7 @@ app.post("/webhook", async (req, res) => {
       // mediaHint/stockHint/priceHint/deliveryHint/offerHint van en bloque aparte tras el prefijo cacheado (cambian solos, sin invalidar la caché).
       system: [
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
+        { type: "text", text: dateHint() },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
         ...(stockHint ? [{ type: "text", text: stockHint }] : []),
         ...(priceHint ? [{ type: "text", text: priceHint }] : []),
@@ -2712,6 +2723,7 @@ app.post("/admin/api/simulate", async (req, res) => {
       thinking: { type: "disabled" },
       system: [
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
+        { type: "text", text: dateHint() },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
       ],
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // mismo recorte que el webhook real
