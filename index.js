@@ -2482,6 +2482,59 @@ app.get("/admin/api/invoices", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── RESERVAS: cola de traspaso al ERP del cliente ────────────────────────────────────────────
+// El cliente (22-jul-2026) decidió crear las reservas A MANO en su sistema: el bot cotiza y cobra,
+// pero no hace booking. Esto NO es un sistema de reservas — no asigna matrícula ni retiene ninguna
+// moto, eso solo lo hace su ERP. Es la lista de trabajo que antes no existía: qué alquileres
+// cerrados quedan por teclear allí, para que ninguno se pierda entre conversaciones.
+// Se deriva de deals ganados (no hay almacén nuevo); lo único que se guarda es la marca erpCreated.
+app.get("/admin/api/bookings", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  if (BOT_VERTICAL !== "rental") return res.json([]); // solo alquiler: un tour no se teclea en ese ERP
+  try {
+    const leads = await listLeads();
+    const rows = [];
+    for (const l of leads) {
+      if (l.archived) continue;
+      for (const d of (Array.isArray(l.deals) ? l.deals : [])) {
+        if (d.status !== "won") continue;
+        // Pago confirmado por la pasarela, si lo hubo (un deal se puede marcar Ganado a mano).
+        const pay = (Array.isArray(l.history) ? l.history : []).filter((e) => e.type === "payment").sort((a, b) => b.ts - a.ts)[0];
+        rows.push({
+          dealId: d.id, phone: l.phone, name: l.name || "", email: l.email || "", country: l.country || "",
+          model: d.model || "", plan: d.plan || "", startDate: d.startDate || "", endDate: d.endDate || "",
+          deliveryLocation: d.deliveryLocation || "", insuranceTier: d.insuranceTier || "",
+          amount: parseInt(d.dealValue, 10) || (pay && pay.amount) || 0,
+          paidAt: pay ? pay.ts : null, provider: pay ? pay.provider || "" : "",
+          erpCreated: !!d.erpCreated, erpCreatedAt: d.erpCreatedAt || null,
+          ts: d.updatedAt || d.createdAt || 0,
+        });
+      }
+    }
+    // Pendientes de teclear primero (es una cola de trabajo, no un archivo histórico).
+    rows.sort((a, b) => (a.erpCreated === b.erpCreated ? b.ts - a.ts : (a.erpCreated ? 1 : -1)));
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Marca/desmarca una reserva como ya creada en el ERP del cliente.
+app.post("/admin/api/booking/erp", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, dealId, done } = req.body || {};
+  if (!phone || !dealId) return res.status(400).json({ error: "phone y dealId requeridos" });
+  try {
+    const lead = await getLead(phone);
+    const deals = Array.isArray(lead && lead.deals) ? lead.deals.slice() : [];
+    const idx = deals.findIndex((d) => d.id === dealId);
+    if (idx < 0) return res.status(404).json({ error: "reserva no encontrada" });
+    const erpCreated = done !== false;
+    deals[idx] = { ...deals[idx], erpCreated, erpCreatedAt: erpCreated ? Date.now() : null };
+    await updateLeadFields(phone, { deals }); // no toca updatedAt: marcar no es actividad del lead
+    await logEvent(phone, "erp_booking", { deal: dealId, done: erpCreated });
+    res.json({ ok: true, erpCreated });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Anula en el proveedor (Stripe/Xendit) un link de pago que aún no se ha pagado. Identifica el
 // evento por phone+ts (no hay id propio: los eventos viven dentro del history del lead).
 app.post("/admin/api/invoice/cancel", async (req, res) => {

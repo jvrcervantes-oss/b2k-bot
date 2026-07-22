@@ -255,7 +255,11 @@
   #app.dashmode #list,#app.dashmode #chat,#app.dashmode #detail{display:none}
   #app.dashmode #dashView{display:flex}
   /* secciones a pantalla completa (media, newsletter, facturas) — mismo patrón que dbView */
-  #mediaView,#nlView,#invView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
+  #mediaView,#nlView,#invView,#resView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
+  #app.resmode #list,#app.resmode #chat,#app.resmode #detail{display:none}
+  #app.resmode #resView{display:flex}
+  .res-meta{color:var(--ink-soft);font-size:11.5px;line-height:1.5;margin-top:3px}
+  .res-done{opacity:.55}
   #app.mediamode #list,#app.mediamode #chat,#app.mediamode #detail{display:none}
   #app.mediamode #mediaView{display:flex}
   #app.invmode #list,#app.invmode #chat,#app.invmode #detail{display:none}
@@ -466,7 +470,7 @@
     nav{position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;flex-direction:row;justify-content:space-around;align-items:center;padding:7px 4px calc(24px + env(safe-area-inset-bottom,0px));gap:0;z-index:60;border-top:1px solid var(--line);border-right:0;box-shadow:0 -4px 16px rgba(16,24,40,.06)}
     .brandrow,nav .spacer,nav .lbl{display:none}
     nav .ic{width:46px;height:40px;justify-content:center;padding:0;gap:0}
-    #dbView,#calView,#mediaView,#nlView,#dashView,#invView,#flotaView{grid-column:1/-1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+    #dbView,#calView,#mediaView,#nlView,#dashView,#invView,#resView,#flotaView{grid-column:1/-1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
     /* Conversaciones: lista por defecto; al abrir un chat = pantalla completa, sin barra */
     #list{display:flex;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
     #chat{display:none}
@@ -659,6 +663,7 @@
     <div class="ic" id="navMedia" data-ti="nav_media" title="Fotos y vídeos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_media">Fotos y vídeos</span></div>
     <div class="ic" id="navCal" data-ti="nav_cal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_cal">Calendario</span></div>
     <div class="ic" id="navDb" data-ti="nav_db" title="Base de datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_db">Base de datos</span></div>
+    <div class="ic grp" id="navRes" data-ti="nav_res" title="Reservas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18" stroke-linecap="round"/><path d="M9 16l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_res">Reservas</span></div>
     <div class="ic grp" id="navInv" data-ti="nav_inv" title="Facturas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 3h10a1 1 0 0 1 1 1v16l-3-2-2 2-2-2-2 2-2-2-3 2V4a1 1 0 0 1 1-1z"/><path d="M9 8h6M9 12h6M9 16h3" stroke-linecap="round"/></svg><span class="lbl" data-i18n="nav_inv">Facturas</span></div>
     <div class="ic" id="navFlota" data-ti="nav_flota" title="Flota de motos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="M6 17l4-9h4l3 5h2M10 8H8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_flota">Flota</span></div>
     <div class="ic grp" id="navNewsletter" data-ti="nav_nl" title="Newsletter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_nl">Newsletter</span></div>
@@ -764,6 +769,12 @@
   <div id="invView">
     <div class="sec-top"><h2 data-i18n="nav_inv">Facturas</h2></div>
     <div class="dash-scroll"><div class="dash-inner" id="invBody"></div></div>
+  </div>
+
+  <!-- reservas: cola de traspaso al ERP del cliente (no retiene motos, ver /admin/api/bookings) -->
+  <div id="resView">
+    <div class="sec-top"><h2 data-i18n="nav_res">Reservas</h2></div>
+    <div class="dash-scroll"><div class="dash-inner"><p class="media-help" data-i18n="res_help">Alquileres cerrados que hay que crear en el ERP. Aquí no se reserva ninguna moto: el sistema del cliente manda.</p><div id="resBody"></div></div></div>
   </div>
 
   <!-- flota de motos (Supabase): catálogo + tarifas + unidades físicas -->
@@ -874,6 +885,38 @@
   function loadDropoff(cb){ api('dropoff').then(function(r){return r.json();}).then(function(D){ dropoff = D; if(cb) cb(); }).catch(function(){}); }
   var invoices = null;
   function loadInvoices(cb){ api('invoices').then(function(r){return r.json();}).then(function(D){ invoices = D; if(cb) cb(); }).catch(function(){}); }
+  // ── Reservas: cola de traspaso al ERP del cliente (su equipo las teclea a mano) ──
+  var bookings = null;
+  function loadBookings(cb){ api('bookings').then(function(r){return r.json();}).then(function(D){ bookings = D; if(cb) cb(); }).catch(function(){}); }
+  function renderBookings(){
+    var el=document.getElementById('resBody'); if(!el) return;
+    if(!bookings || !bookings.length){ el.innerHTML='<div class="dash-empty">'+t('res_empty')+'</div>'; return; }
+    var pend=bookings.filter(function(r){return !r.erpCreated;}).length;
+    var rows=bookings.map(function(r){
+      var meta=[ r.model, r.plan,
+        (r.startDate||r.endDate) ? ((r.startDate||'?')+' → '+(r.endDate||'?')) : '',
+        r.deliveryLocation, r.insuranceTier ].filter(Boolean).map(esc).join(' · ');
+      var when=r.paidAt ? new Date(r.paidAt).toLocaleDateString(t('locale'),{day:'numeric',month:'short'}) : '';
+      var btn=r.erpCreated
+        ? '<button class="inv-act" onclick="resToggle(\''+r.phone+'\',\''+r.dealId+'\',false,this)">'+t('res_undo')+'</button>'
+        : '<button class="inv-act" onclick="resToggle(\''+r.phone+'\',\''+r.dealId+'\',true,this)">'+t('res_mark')+'</button>';
+      return '<div class="dlrow'+(r.erpCreated?' res-done':'')+'" onclick="dashOpenLead(\''+r.phone+'\')">'
+        + '<div class="dlic">'+(r.erpCreated?'✅':'📋')+'</div>'
+        + '<div class="dlmain"><div class="dlt">'+esc(r.name||('+'+r.phone))+(when?' <span class="dls" style="font-weight:400">· '+when+'</span>':'')+'</div>'
+        + '<div class="res-meta">'+(meta||t('res_nodata'))+'</div></div>'
+        + '<div class="dlw">'+(money(r.amount)||'')+'</div>'
+        + '<div class="inv-acts" onclick="event.stopPropagation()">'+btn+'</div></div>';
+    }).join('');
+    el.innerHTML='<div class="dash-card">'+rows+'</div>';
+    var n=document.getElementById('navRes'); if(n) n.classList.toggle('has-pending', pend>0);
+  }
+  function resToggle(phone, dealId, done, btn){
+    btn.disabled=true;
+    apiPost('booking/erp',{phone:phone,dealId:dealId,done:done}).then(function(r){
+      if(!r.ok) throw 0;
+      loadBookings(renderBookings);
+    }).catch(function(){ btn.disabled=false; alert(t('res_err')); });
+  }
   function renderInvoices(){
     var el=document.getElementById('invBody'); if(!el) return;
     if(!invoices || !invoices.length){ el.innerHTML='<div class="dash-empty">'+t('inv_empty')+'</div>'; return; }
@@ -924,7 +967,7 @@
   // ── i18n (ES / EN) ──────────────────────────────────────────────
   var I18N = {
     es:{ brand:'CRM BBM', login_title:'Panel de conversaciones', login_sub:'CRM BBM · acceso del equipo', ph_pw:'Contraseña', btn_enter:'Entrar', err_pw:'Contraseña incorrecta',
-      nav_conv:'Conversaciones', nav_cal:'Calendario', nav_db:'Base de datos', nav_inv:'Facturas', nav_flota:'Flota', nav_media:'Fotos y vídeos', nav_theme:'Cambiar tema', nav_logout:'Salir', nav_lang:'English', nav_toggle:'Colapsar menú', inv_empty:'Aún no hay links de pago ni pagos registrados.', inv_paid:'Pagado', inv_sent:'Enviado', inv_cancelled:'Cancelado', inv_cancel:'Cancelar', inv_view:'Ver factura', inv_add_receipt:'Pegar recibo', inv_add_receipt_prompt:'Pega la URL del recibo/factura del proveedor:', inv_add_receipt_err:'No se pudo guardar el recibo', inv_cancel_err:'No se pudo anular el link (puede que ya esté pagado o expirado)', cfm_inv_cancel:'¿Anular este link de pago en el proveedor? El cliente ya no podrá pagarlo.', cfm_inv_delete:'¿Quitar esta factura del panel? Esto NO revierte ningún cobro ya realizado, solo la quita de esta vista.',
+      nav_conv:'Conversaciones', nav_cal:'Calendario', nav_db:'Base de datos', nav_inv:'Facturas', nav_res:'Reservas', nav_flota:'Flota', nav_media:'Fotos y vídeos', nav_theme:'Cambiar tema', nav_logout:'Salir', nav_lang:'English', nav_toggle:'Colapsar menú', inv_empty:'Aún no hay links de pago ni pagos registrados.', res_help:'Alquileres cerrados que hay que crear en el ERP del cliente. Aquí no se reserva ninguna moto: su sistema manda.', res_empty:'Todavía no hay alquileres cerrados.', res_mark:'Creada en el ERP', res_undo:'Deshacer', res_nodata:'Sin datos del alquiler', res_err:'No se pudo actualizar la reserva', inv_paid:'Pagado', inv_sent:'Enviado', inv_cancelled:'Cancelado', inv_cancel:'Cancelar', inv_view:'Ver factura', inv_add_receipt:'Pegar recibo', inv_add_receipt_prompt:'Pega la URL del recibo/factura del proveedor:', inv_add_receipt_err:'No se pudo guardar el recibo', inv_cancel_err:'No se pudo anular el link (puede que ya esté pagado o expirado)', cfm_inv_cancel:'¿Anular este link de pago en el proveedor? El cliente ya no podrá pagarlo.', cfm_inv_delete:'¿Quitar esta factura del panel? Esto NO revierte ningún cobro ya realizado, solo la quita de esta vista.',
       nav_dash:'Dashboard', da_kpi_won:'Motos alquiladas', da_week:'esta semana', da_kpi_rev:'Ingresos', da_rev_sub:'de alquileres ganados', da_kpi_pipe:'Pipeline abierto', da_act:'leads activos', da_kpi_conv:'Conversión', da_decided:'decididos', da_bystatus:'Leads por estado', da_leg_won:'ganados', da_leg_lost:'perdidos / no-show', da_next:'Próximas citas', da_viewcal:'Ver calendario →', da_viewdb:'Ver base de datos →', da_top:'Motos alquiladas', da_none:'Sin datos todavía', da_nocitas:'No hay citas próximas', da_s_new:'Nuevos', da_s_quoted:'Cotizados', da_s_won:'Ganados', da_s_lost:'Perdidos', da_s_noshow:'No-show',
       da_kpi_out:'En la calle', da_out_sub:'con devolución pendiente', da_ev_del_title:'Entregas', da_ev_ret_title:'Devoluciones', da_ev_del:'Entrega', da_ev_ret:'Devolución', da_noev:'Nada programado con fecha. Rellena "Fecha inicio" y "Fecha devolución" en la ficha del lead (o deja que el bot las capture).', e_return:'Fecha devolución', c_return:'Devolución', ph_date:'p. ej. 2026-07-20',
       da_dropoff:'Por qué no cierran', da_dropoff_list:'Leads fríos recientes', da_dropoff_empty:'Sin leads fríos que analizar (ningún lead lleva 24+ horas sin novedad).', da_dropoff_scanned:'Analizados {n} de {t} leads fríos',
@@ -974,7 +1017,7 @@
       tl_empty:'Sin actividad registrada', tl_created:'Lead creado', tl_imported:'Importado de Meta', tl_status:'Estado', tl_owner:'Asignado a', tl_appt:'Cita agendada', tl_note:'Nota actualizada', tl_tag:'Etiqueta añadida', tl_archived:'Archivado', tl_restored:'Restaurado', tl_enriched:'Datos enriquecidos', tl_outreach:'Conversación iniciada (intro)', tl_fu_reminded:'Recordatorio de seguimiento enviado', tl_newsletter:'Newsletter enviado', tl_payment:'Pago recibido', tl_deal_archived:'Consulta anterior archivada', tl_deal_new:'Nueva consulta detectada', tl_deal_status:'Estado de la consulta',
       al_save:'No se pudo guardar', edit_tpl:'✎ Editar plantillas…', locale:'es-ES' },
     en:{ brand:'CRM BBM', login_title:'Conversations panel', login_sub:'CRM BBM · team access', ph_pw:'Password', btn_enter:'Sign in', err_pw:'Wrong password',
-      nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_inv:'Invoices', nav_flota:'Fleet', nav_media:'Photos & videos', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español', nav_toggle:'Collapse menu', inv_empty:'No payment links or payments recorded yet.', inv_paid:'Paid', inv_sent:'Sent', inv_cancelled:'Cancelled', inv_cancel:'Cancel', inv_view:'View invoice', inv_add_receipt:'Paste receipt', inv_add_receipt_prompt:'Paste the provider\'s receipt/invoice URL:', inv_add_receipt_err:'Could not save the receipt', inv_cancel_err:'Could not void the link (it may already be paid or expired)', cfm_inv_cancel:'Void this payment link at the provider? The customer will no longer be able to pay it.', cfm_inv_delete:'Remove this invoice from the panel? This does NOT reverse any payment already made, it only removes it from this view.',
+      nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_inv:'Invoices', nav_res:'Bookings', nav_flota:'Fleet', nav_media:'Photos & videos', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español', nav_toggle:'Collapse menu', inv_empty:'No payment links or payments recorded yet.', res_help:'Closed rentals that still need creating in the client ERP. Nothing is reserved here: their system is the source of truth.', res_empty:'No closed rentals yet.', res_mark:'Created in ERP', res_undo:'Undo', res_nodata:'No rental details', res_err:'Could not update the booking', inv_paid:'Paid', inv_sent:'Sent', inv_cancelled:'Cancelled', inv_cancel:'Cancel', inv_view:'View invoice', inv_add_receipt:'Paste receipt', inv_add_receipt_prompt:'Paste the provider\'s receipt/invoice URL:', inv_add_receipt_err:'Could not save the receipt', inv_cancel_err:'Could not void the link (it may already be paid or expired)', cfm_inv_cancel:'Void this payment link at the provider? The customer will no longer be able to pay it.', cfm_inv_delete:'Remove this invoice from the panel? This does NOT reverse any payment already made, it only removes it from this view.',
       nav_dash:'Dashboard', da_kpi_won:'Bikes rented', da_week:'this week', da_kpi_rev:'Revenue', da_rev_sub:'from won rentals', da_kpi_pipe:'Open pipeline', da_act:'active leads', da_kpi_conv:'Conversion', da_decided:'decided', da_bystatus:'Leads by status', da_leg_won:'won', da_leg_lost:'lost / no-show', da_next:'Upcoming appointments', da_viewcal:'View calendar →', da_viewdb:'View database →', da_top:'Bikes rented', da_none:'No data yet', da_nocitas:'No upcoming appointments', da_s_new:'New', da_s_quoted:'Quoted', da_s_won:'Won', da_s_lost:'Lost', da_s_noshow:'No-show',
       da_kpi_out:'Out now', da_out_sub:'awaiting return', da_ev_del_title:'Deliveries', da_ev_ret_title:'Returns', da_ev_del:'Delivery', da_ev_ret:'Return', da_noev:'Nothing scheduled with a date. Fill "Start date" and "Return date" on the lead (or let the bot capture them).', e_return:'Return date', c_return:'Return', ph_date:'e.g. 2026-07-20',
       da_dropoff:'Why deals don\'t close', da_dropoff_list:'Recently cold leads', da_dropoff_empty:'No cold leads to analyze (no lead has been quiet for 24+ hours).', da_dropoff_scanned:'Analyzed {n} of {t} cold leads',
@@ -2475,8 +2518,8 @@
       .then(function(j){ btn.disabled=false; btn.textContent=orig; return j; }, function(e){ btn.disabled=false; btn.textContent=orig; });
   }
 
-  function clearModes(a){ a.classList.remove('calmode','dbmode','mediamode','nlmode','dashmode','invmode','flotamode'); }
-  function setNav(id){ ['navConv','navCal','navDb','navInv','navFlota','navMedia','navNewsletter'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
+  function clearModes(a){ a.classList.remove('calmode','dbmode','mediamode','nlmode','dashmode','invmode','resmode','flotamode'); }
+  function setNav(id){ ['navConv','navCal','navDb','navInv','navRes','navFlota','navMedia','navNewsletter'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
 
   function setUrl(p){ try{ history.replaceState(null,'',p); }catch(e){} }
   document.getElementById('navConv').onclick=function(){ clearModes(document.getElementById('app')); setNav('navConv'); setUrl('/admin'); };
@@ -2484,6 +2527,7 @@
   document.getElementById('navCal').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('calmode'); setNav('navCal'); setUrl('/admin'); buildLeadsDL(); loadAppts(renderCal); };
   document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dbmode'); setNav('navDb'); setUrl('/admin/db'); dbPage=1; loadHealth(); loadAppts(renderDb); };
   document.getElementById('navInv').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('invmode'); setNav('navInv'); setUrl('/admin'); renderInvoices(); loadInvoices(renderInvoices); };
+  document.getElementById('navRes').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('resmode'); setNav('navRes'); setUrl('/admin'); renderBookings(); loadBookings(renderBookings); };
   document.getElementById('navFlota').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('flotamode'); setNav('navFlota'); setUrl('/admin'); loadFlota(); };
   document.getElementById('navMedia').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('mediamode'); setNav('navMedia'); setUrl('/admin'); openMedia(); };
   document.getElementById('navNewsletter').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('nlmode'); setNav('navNewsletter'); setUrl('/admin'); openNewsletter(); };
