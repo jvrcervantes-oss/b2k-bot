@@ -1179,7 +1179,8 @@ CLOSING — DIRECT IN THE CHAT, THIS IS A RENTAL, NOT A MULTI-DAY TOUR (read car
   - INSURANCE: always goes straight into the online total below, no extra step, no cash option — it's non-refundable so there's nothing to hand back in person.
   - DEPOSIT (refundable): NEVER goes through the payment link — no exceptions, don't offer it online. The refundable security deposit is always collected in CASH at handover and handed straight back in cash when the bike is returned in the same condition, so it never touches the link or the gateway fee. State it plainly (e.g. "the deposit is IDR X, in cash at pickup — you get it straight back when you return the bike in the same shape"). Leave the deposit OUT of [PAY:AMOUNT] entirely, and add \`tags=cash_deposit\` to your [LEAD] tag so the team knows to collect and refund it in person.
 - ONLINE PAYMENT FEE — Xendit and Stripe both charge a real processing fee, and it's passed to the customer, not absorbed by the business: 3% on Xendit (local Indonesian numbers, +62), 4% on Stripe (everyone else — same rule the server itself uses to pick the gateway, so your fee always matches the real one). State it plainly before closing, e.g. "that's 1,800,000 IDR, and since you're paying online there's a 4% card processing fee on top, so 1,872,000 total." This fee applies to whatever actually goes through the payment link (bike + delivery + insurance) — never to the security deposit, which is always collected in cash.
-- SENDING THE PAYMENT LINK: once the customer agrees to book, first get their full name (and remind them to have a valid ID/KTP/passport + driving licence ready). Then, on a NEW LINE at the very end of your message, output [PAY:AMOUNT] where AMOUNT is the PRE-FEE total in IDR digits only — bike + delivery/pickup + insurance (NEVER the deposit — that's always cash at pickup) — the same breakdown you quoted BEFORE adding the online payment fee above. The server adds the exact 3%/4% gateway fee automatically when it creates the real charge — never include the fee yourself in this number. Example: bike 600000 + pickup 100000 → [PAY:700000] (the 1,000,000 deposit is separate, cash at pickup, NOT in this number). Use ONLY the exact numbers you already quoted them; never invent a figure.
+- DOCUMENTS: once they've agreed to book, ASK THEM TO SEND the photos right there in the chat — a photo of their passport/KTP and of their driving licence (international or Indonesian). Don't settle for "have them ready at pickup": the team reviews the booking the next morning and needs them already on file. You CAN receive photos and PDFs — they're saved to the customer's record automatically — so just ask, confirm you got them, and carry on. Never claim you can read, verify or approve a document: the team checks it before handover. If they'd rather show them in person, that's fine, don't push more than once — flag \`tags=docs_pending\` so the team knows to ask at handover.
+- SENDING THE PAYMENT LINK: once the customer agrees to book, first get their full name (and ask for the ID + licence photos as above). Then, on a NEW LINE at the very end of your message, output [PAY:AMOUNT] where AMOUNT is the PRE-FEE total in IDR digits only — bike + delivery/pickup + insurance (NEVER the deposit — that's always cash at pickup) — the same breakdown you quoted BEFORE adding the online payment fee above. The server adds the exact 3%/4% gateway fee automatically when it creates the real charge — never include the fee yourself in this number. Example: bike 600000 + pickup 100000 → [PAY:700000] (the 1,000,000 deposit is separate, cash at pickup, NOT in this number). Use ONLY the exact numbers you already quoted them; never invent a figure.
 - When you output [PAY:AMOUNT], NEVER type a link, a URL, or the word "https" yourself — you do NOT have the real link. The server creates it and appends it automatically below your message. Just tell them you're sending the payment link now and stop. Any URL you write is FAKE and breaks the payment.
 - Set [INTENT:booking] on the same message you send [PAY:...]. Do NOT output [RIDERS:N] or [APPT:...] — those are tour-specific (per-person tour deposit + video-call scheduling) and do not apply to a bike rental.
 - Only output [PAY:AMOUNT] when the customer has actually agreed to book and you know the total. Still just exploring or comparing prices → no [PAY], keep helping. One [PAY] per booking; if they already got a link and ask to resend it, use [RESEND_LINK] (below), not a new [PAY].
@@ -1738,15 +1739,50 @@ function cleanReply(reply) {
 // Se activa añadiendo OPENAI_API_KEY en Railway; sin ella devuelve null y el webhook
 // cae al fallback de "escríbemelo en texto". Flujo: media id de Meta → URL firmada →
 // descarga del audio → Whisper → texto.
+// Descarga un adjunto entrante de la API de Meta (2 pasos: metadata → binario firmado).
+// La usan la transcripción de voz y el archivo de documentos del cliente.
+async function downloadWhatsAppMedia(mediaId, maxBytes = 25 * 1024 * 1024) {
+  const meta = await axios.get(`https://graph.facebook.com/v21.0/${mediaId}`,
+    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, timeout: 15000 });
+  const bin = await axios.get(meta.data.url,
+    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, responseType: "arraybuffer", timeout: 30000, maxContentLength: maxBytes });
+  return { data: bin.data, mime: meta.data.mime_type || "" };
+}
+
+// ── DOCUMENTOS DEL CLIENTE (pasaporte, carnet) ───────────────────────────────────────────────
+// El bot los PIDE para cerrar el alquiler, así que tirarlos dejaba al equipo sin poder completar
+// la reserva al día siguiente. Se guardan aparte de la media saliente A PROPÓSITO: /media/:id es
+// público y cacheable (Meta descarga de ahí lo que enviamos) — un pasaporte ahí quedaría publicado.
+// Estos solo salen por /admin/api/doc/:id, con clave de admin y sin caché.
+const DOC_MIMES = ["image/jpeg", "image/png", "image/webp", "application/pdf"]; // nada de HTML/SVG: se sirven al navegador
+const DOC_TTL_DAYS = 60; // dato personal: caduca solo, no se guarda indefinidamente
+async function saveInboundDoc(phone, mediaId) {
+  try {
+    const { data, mime } = await downloadWhatsAppMedia(mediaId, 8 * 1024 * 1024);
+    const clean = String(mime).split(";")[0].trim().toLowerCase();
+    if (!DOC_MIMES.includes(clean)) { console.warn(`[${PROJECT_NAME}] documento de ${phone} descartado: tipo ${clean || "?"} no permitido`); return null; }
+    const id = crypto.randomBytes(16).toString("hex"); // id opaco: no se deduce de nada del lead
+    const payload = JSON.stringify({ mime: clean, data: Buffer.from(data).toString("base64"), phone, ts: Date.now() });
+    if (redisClient) await redisClient.setEx(`doc:${id}`, DOC_TTL_DAYS * 24 * 3600, payload);
+    else fallbackBlobs[`doc:${id}`] = payload;
+    const lead = (await getLead(phone)) || {};
+    const docs = (Array.isArray(lead.docs) ? lead.docs : []).slice(-19); // tope 20 por lead
+    docs.push({ id, mime: clean, ts: Date.now() });
+    await updateLeadFields(phone, { docs });
+    console.log(`[${PROJECT_NAME}] documento recibido de ${phone} (${clean}, ${Math.round(data.length / 1024)} KB) → ${docs.length} en la ficha`);
+    return id;
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] saveInboundDoc ${phone}: ${e.response?.status || ""} ${e.message}`); // sin volcar el binario
+    return null;
+  }
+}
+
 async function transcribeAudio(mediaId) {
   if (!OPENAI_API_KEY || !mediaId) return null;
   try {
-    const meta = await axios.get(`https://graph.facebook.com/v21.0/${mediaId}`,
-      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, timeout: 15000 });
-    const bin = await axios.get(meta.data.url,
-      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, responseType: "arraybuffer", timeout: 30000, maxContentLength: 25 * 1024 * 1024 });
+    const { data, mime } = await downloadWhatsAppMedia(mediaId);
     const fd = new FormData(); // global en Node 18+
-    fd.append("file", new Blob([bin.data], { type: meta.data.mime_type || "audio/ogg" }), "voice.ogg");
+    fd.append("file", new Blob([data], { type: mime || "audio/ogg" }), "voice.ogg");
     fd.append("model", "whisper-1");
     const r = await axios.post("https://api.openai.com/v1/audio/transcriptions", fd,
       { headers: { Authorization: `Bearer ${OPENAI_API_KEY}` }, timeout: 60000 });
@@ -2190,15 +2226,26 @@ app.post("/webhook", async (req, res) => {
       await resetFollowup(from);
       const prev = await getLead(from);
       if (await isPaused(from)) {
+        // Archivar TAMBIÉN en pausa: que el owner haya tomado la conversación a mano no puede
+        // significar que el pasaporte del cliente se pierda.
+        if (message.type === "image" || message.type === "document") await saveInboundDoc(from, (message[message.type] || {}).id);
         await saveConversation(from, history);
         await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "interested", label, "client");
         await setWaiting(from, true);
         return;
       }
       markRead(message.id); // best-effort
-      const ask = (message.type === "audio" || message.type === "voice")
-        ? "Sorry! I can't listen to voice notes on this end yet. Could you type it out for me? 🙏"
-        : "I can't open attachments on this end yet. Could you type out the details for me? 🙏";
+      // Foto o PDF → se archiva en la ficha (ID/carnet que el propio bot pide para cerrar). Antes
+      // se contestaba "no puedo abrir adjuntos" y se perdía: el equipo amanecía sin documentos y
+      // el cliente creyendo que su pasaporte no había llegado.
+      const docId = (message.type === "image" || message.type === "document")
+        ? await saveInboundDoc(from, (message[message.type] || {}).id)
+        : null;
+      const ask = docId
+        ? "Got it, saved 👍 Our team will check it before handover. Anything else you need from me?"
+        : (message.type === "audio" || message.type === "voice")
+          ? "Sorry! I can't listen to voice notes on this end yet. Could you type it out for me? 🙏"
+          : "I can't open attachments on this end yet. Could you type out the details for me? 🙏";
       await sendWhatsApp(from, ask);
       history.push({ role: "assistant", content: ask, ts: Date.now(), by: "bot" });
       await saveConversation(from, history);
@@ -2501,6 +2548,23 @@ app.get("/admin/api/invoices", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Documentos del cliente (ID/carnet). NUNCA por /media/:id, que es público: aquí exige clave de
+// admin, prohíbe caché y fuerza el tipo declarado (nosniff) para que un adjunto no se ejecute.
+app.get("/admin/api/doc/:id", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try {
+    const raw = redisClient ? await redisClient.get(`doc:${req.params.id}`) : fallbackBlobs[`doc:${req.params.id}`];
+    if (!raw) return res.status(404).send("not found"); // caducado a los 60 días o inexistente
+    const blob = JSON.parse(raw);
+    if (!DOC_MIMES.includes(blob.mime)) return res.status(415).send("tipo no permitido");
+    res.set("Content-Type", blob.mime);
+    res.set("Cache-Control", "no-store, private");
+    res.set("X-Content-Type-Options", "nosniff");
+    res.set("Content-Disposition", "inline"); // sin nombre de archivo: no filtra el teléfono
+    res.send(Buffer.from(blob.data, "base64"));
+  } catch (e) { res.status(500).send("error"); }
+});
+
 // ── RESERVAS: cola de traspaso al ERP del cliente ────────────────────────────────────────────
 // El cliente (22-jul-2026) decidió crear las reservas A MANO en su sistema: el bot cotiza y cobra,
 // pero no hace booking. Esto NO es un sistema de reservas — no asigna matrícula ni retiene ninguna
@@ -2535,6 +2599,7 @@ app.get("/admin/api/bookings", async (req, res) => {
           amount: parseInt(d.dealValue, 10) || (pay && pay.amount) || 0,
           paidAt: pay ? pay.ts : null, provider: pay ? pay.provider || "" : "",
           erpCreated: !!d.erpCreated, erpCreatedAt: d.erpCreatedAt || null,
+          docs: (Array.isArray(l.docs) ? l.docs : []).map((x) => ({ id: x.id, mime: x.mime })), // ID/carnet para el handover
           ts: d.updatedAt || d.createdAt || 0,
         });
       }

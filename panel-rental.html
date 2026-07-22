@@ -897,6 +897,11 @@
         (r.startDate||r.endDate) ? ((r.startDate||'?')+' → '+(r.endDate||'?')) : '',
         r.deliveryLocation, r.insuranceTier ].filter(Boolean).map(esc).join(' · ');
       var when=r.paidAt ? new Date(r.paidAt).toLocaleDateString(t('locale'),{day:'numeric',month:'short'}) : '';
+      // ID/carnet que mandó el cliente por WhatsApp: el equipo los necesita para la entrega.
+      // El endpoint pide clave de admin, así que va en la URL (mismo patrón que /admin?key=).
+      var docs=(r.docs||[]).map(function(d,j){
+        return '<a class="inv-act" href="/admin/api/doc/'+encodeURIComponent(d.id)+'?key='+encodeURIComponent(KEY)+'" target="_blank" rel="noopener noreferrer">📎 '+(j+1)+'</a>';
+      }).join('');
       var btn=r.erpCreated
         ? '<button class="inv-act" onclick="resToggle(\''+r.phone+'\',\''+r.dealId+'\',false,this)">'+t('res_undo')+'</button>'
         : '<button class="inv-act" onclick="resToggle(\''+r.phone+'\',\''+r.dealId+'\',true,this)">'+t('res_mark')+'</button>';
@@ -905,7 +910,7 @@
         + '<div class="dlmain"><div class="dlt">'+esc(r.name||('+'+r.phone))+(when?' <span class="dls" style="font-weight:400">· '+when+'</span>':'')+'</div>'
         + '<div class="res-meta">'+(meta||t('res_nodata'))+'</div></div>'
         + '<div class="dlw">'+(money(r.amount)||'')+'</div>'
-        + '<div class="inv-acts" onclick="event.stopPropagation()">'+btn+'</div></div>';
+        + '<div class="inv-acts" onclick="event.stopPropagation()">'+docs+btn+'</div></div>';
     }).join('');
     el.innerHTML='<div class="dash-card">'+rows+'</div>';
     var n=document.getElementById('navRes'); if(n) n.classList.toggle('has-pending', pend>0);
