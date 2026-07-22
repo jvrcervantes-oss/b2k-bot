@@ -2496,8 +2496,17 @@ app.get("/admin/api/bookings", async (req, res) => {
     const rows = [];
     for (const l of leads) {
       if (l.archived) continue;
-      for (const d of (Array.isArray(l.deals) ? l.deals : [])) {
-        if (d.status !== "won") continue;
+      const deals = Array.isArray(l.deals) ? l.deals : [];
+      // Un lead creado/editado a mano en el panel (o importado de Meta) NO tiene deals[]: sus datos
+      // viven en los campos espejo del propio lead y el cierre se marca con status=won. Sin este
+      // fallback esas reservas no saldrían nunca en la cola y el equipo se las comería sin verlas.
+      const wonDeals = deals.filter((d) => d.status === "won");
+      const fromLead = !wonDeals.length && l.status === "won"
+        ? [{ id: "", model: l.model, plan: l.plan, startDate: l.startDate, endDate: l.endDate,
+             deliveryLocation: l.deliveryLocation, insuranceTier: l.insuranceTier, dealValue: l.dealValue,
+             erpCreated: l.erpCreated, erpCreatedAt: l.erpCreatedAt, updatedAt: l.updatedAt }]
+        : [];
+      for (const d of wonDeals.concat(fromLead)) {
         // Pago confirmado por la pasarela, si lo hubo (un deal se puede marcar Ganado a mano).
         const pay = (Array.isArray(l.history) ? l.history : []).filter((e) => e.type === "payment").sort((a, b) => b.ts - a.ts)[0];
         rows.push({
@@ -2521,16 +2530,22 @@ app.get("/admin/api/bookings", async (req, res) => {
 app.post("/admin/api/booking/erp", async (req, res) => {
   if (!adminAuth(req, res)) return;
   const { phone, dealId, done } = req.body || {};
-  if (!phone || !dealId) return res.status(400).json({ error: "phone y dealId requeridos" });
+  if (!phone) return res.status(400).json({ error: "phone requerido" });
   try {
     const lead = await getLead(phone);
-    const deals = Array.isArray(lead && lead.deals) ? lead.deals.slice() : [];
-    const idx = deals.findIndex((d) => d.id === dealId);
-    if (idx < 0) return res.status(404).json({ error: "reserva no encontrada" });
+    if (!lead) return res.status(404).json({ error: "lead no encontrado" });
     const erpCreated = done !== false;
-    deals[idx] = { ...deals[idx], erpCreated, erpCreatedAt: erpCreated ? Date.now() : null };
-    await updateLeadFields(phone, { deals }); // no toca updatedAt: marcar no es actividad del lead
-    await logEvent(phone, "erp_booking", { deal: dealId, done: erpCreated });
+    if (dealId) {
+      const deals = Array.isArray(lead.deals) ? lead.deals.slice() : [];
+      const idx = deals.findIndex((d) => d.id === dealId);
+      if (idx < 0) return res.status(404).json({ error: "reserva no encontrada" });
+      deals[idx] = { ...deals[idx], erpCreated, erpCreatedAt: erpCreated ? Date.now() : null };
+      await updateLeadFields(phone, { deals }); // no toca updatedAt: marcar no es actividad del lead
+    } else {
+      // Reserva sin deal (lead gestionado a mano): la marca vive en el propio lead.
+      await updateLeadFields(phone, { erpCreated, erpCreatedAt: erpCreated ? Date.now() : null });
+    }
+    await logEvent(phone, "erp_booking", { deal: dealId || "", done: erpCreated });
     res.json({ ok: true, erpCreated });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
