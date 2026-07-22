@@ -1363,6 +1363,13 @@ async function getMediaLib() {
   if (redisClient) { const r = await redisClient.get("media_lib"); return r ? JSON.parse(r) : []; }
   return fallbackMediaLib;
 }
+// ¿El cliente está diciendo que la foto/vídeo no le llegó? Desbloquea el dedup de media: un
+// reenvío pedido a propósito no es el doble-envío espontáneo que ese guardrail existe para frenar.
+// Self-check: test-media-resend.js
+function customerAskedAgain(text) {
+  return /\b(?:did\s?n[o']?t|have\s?n[o']?t|has\s?n[o']?t|not)\b[^.]{0,25}\b(?:receiv|arriv|come|came|show|get|got)|still\s+(?:nothing|no|not)|no\s+video|send\s+(?:it|them|again)|again\s*\?/i.test(text || "");
+}
+
 // Bloque de instrucciones de media para el prompt. Vive aquí y no duplicado en cada llamada
 // (webhook + simulador): una regla añadida en una copia y no en la otra es deriva garantizada.
 function buildMediaHint(mediaLib) {
@@ -1370,6 +1377,7 @@ function buildMediaHint(mediaLib) {
   return "\n\nMEDIA YOU CAN SEND (real photos/videos that reinforce the pitch — use sparingly, at most 1–2 per conversation, only when it genuinely helps). For each item, 'when to use' tells you the situation to send it in; match it to what the customer is talking about. Available:\n"
     + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.use ? " — when to use: " + m.use : ""}${m.caption ? " [caption sent to customer: \"" + m.caption + "\"]" : ""}`).join("\n")
     + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send a media item when its 'when to use' genuinely matches the moment. Only send labels from this list; never invent one."
+    + "\nTHE TAG IS THE ONLY THING THAT SENDS ANYTHING. The caption travels attached to the file automatically — do NOT type the caption, the label, or a list of clip titles into your message, and do NOT announce them line by line. Writing \"Here's the clips:\" followed by their titles sends NOTHING: the customer gets a message naming videos that never arrive (this happened to a real customer three times). If you say you're sending something, the tag must be there."
     + "\nIF THE CUSTOMER SAYS IT DIDN'T ARRIVE: resend it ONCE. If they say it still hasn't landed, STOP resending — do NOT say you'll look into it or check on your end (nobody is watching that, and the conversation dies there). Give them the website link so they get the content another way, and keep the conversation moving to the next step.";
 }
 async function setMediaLib(list) {
@@ -1771,14 +1779,25 @@ app.post("/webhook", async (req, res) => {
       // ponytail: no reenviar una foto/vídeo que ya se mandó en esta conversación. El modelo
       // a veces repite [MEDIA:label] en un turno posterior aunque ya conste en el historial
       // (bug: foto enviada 2 veces, la 2ª sin pedirla). Dedup por url ya enviada.
-      const alreadySent = new Set(history.filter((m) => m.media && m.media.url).map((m) => m.media.url));
+      // PERO: si el cliente dice que NO le ha llegado, el reenvío es justo lo que toca. Ese dedup
+      // se comía la petición explícita y el bot contestaba "sending it again now" sin mandar nada
+      // (chat real: el cliente lo pidió 3 veces). El cliente pidiéndolo gana al guardrail.
+      const alreadySent = customerAskedAgain(text) ? new Set() : new Set(history.filter((m) => m.media && m.media.url).map((m) => m.media.url));
       const toSend = mediaLib.filter((m) => wanted.includes(String(m.label).toLowerCase()) && !alreadySent.has(m.url));
       for (const item of toSend) {
         await sendWhatsAppMedia(from, item);
         history.push({ role: "assistant", content: item.caption || (item.type === "video" ? "[vídeo]" : "[foto]"), ts: Date.now(), by: "bot", media: { type: item.type, url: item.url, caption: item.caption || "" } });
       }
       if (toSend.length) await saveConversation(from, history);
-      if (wanted.length && !toSend.length) console.warn(`[${PROJECT_NAME}] [MEDIA] pedido sin match en biblioteca: ${wanted.join(", ")}`);
+      if (wanted.length && !toSend.length) {
+        // Distinguir las dos causas: el bot dice "aquí van los vídeos" igual, así que un fallo mudo
+        // aquí se lee como entrega correcta. La etiqueta equivocada (caption en vez de label) y el
+        // dedup son fallos distintos y se arreglan distinto.
+        const known = new Set(mediaLib.map((m) => String(m.label).toLowerCase()));
+        const unknown = wanted.filter((w) => !known.has(w));
+        console.warn(`[${PROJECT_NAME}] [MEDIA] pedido "${wanted.join(", ")}" NO enviado — `
+          + (unknown.length ? `label inexistente en la biblioteca: ${unknown.join(", ")}` : "ya se había enviado en esta conversación (dedup)"));
+      }
     }
     await setWaiting(from, false); // el bot ya respondió → no queda pendiente
     await saveLead(from, profileName, text, intent);
