@@ -8,6 +8,14 @@
 // salía nada — pasó con un lead real tres veces seguidas.
 import assert from "node:assert";
 
+function mediaToSend({ wanted, mediaLib, history, askedAgain, narrated }) {
+  const skipDedup = askedAgain || narrated;
+  const alreadySent = skipDedup
+    ? new Set()
+    : new Set(history.filter((m) => m.media && m.media.url).map((m) => m.media.url));
+  return mediaLib.filter((m) => wanted.includes(String(m.label).toLowerCase()) && !alreadySent.has(m.url));
+}
+
 function rescueNarratedMedia(reply, mediaLib) {
   const rescued = [];
   for (const item of mediaLib) {
@@ -82,4 +90,38 @@ const r3 = rescueNarratedMedia(NORMAL, LIB);
 assert.deepStrictEqual(r3.rescued, [], "sin titulos no rescata nada");
 assert.strictEqual(r3.reply, NORMAL, "sin rescate el texto queda intacto");
 
-console.log(`OK — ${DEBE_REENVIAR.length} frases de "no me ha llegado", ${NO_DEBE_REENVIAR.length} de conversación normal, y 4 casos de rescate de media narrada`);
+// ── mediaToSend: cómo interactúan el dedup, la petición del cliente y el rescate ──
+const WANTED = ["b2k-route-example-1", "b2k-route-example-2"];
+const YA_ENVIADO = [ // el historial ya tiene esas dos URLs (envio manual desde el panel, p.ej.)
+  { role: "assistant", by: "human", media: { url: "u1" } },
+  { role: "assistant", by: "human", media: { url: "u2" } },
+];
+const labels = (arr) => arr.map((m) => m.label);
+
+// Caso normal: el modelo repite la etiqueta sin que nadie lo pida -> el dedup protege.
+assert.deepStrictEqual(
+  labels(mediaToSend({ wanted: WANTED, mediaLib: LIB, history: YA_ENVIADO, askedAgain: false, narrated: false })),
+  [], "sin peticion ni rescate, el dedup debe frenar el reenvio");
+
+// El cliente dice que no le ha llegado -> manda igual.
+assert.deepStrictEqual(
+  labels(mediaToSend({ wanted: WANTED, mediaLib: LIB, history: YA_ENVIADO, askedAgain: true, narrated: false })),
+  ["B2K-route-example-1", "B2K-route-example-2"], "si el cliente lo pide otra vez, el dedup no manda");
+
+// EL FALLO REAL (22-jul): salto el rescate y el dedup lo anulo -> el texto prometia videos que
+// no salieron. Si el rescate disparo, nos hemos comprometido en el texto: hay que enviar.
+assert.deepStrictEqual(
+  labels(mediaToSend({ wanted: WANTED, mediaLib: LIB, history: YA_ENVIADO, askedAgain: false, narrated: true })),
+  ["B2K-route-example-1", "B2K-route-example-2"], "si salto el rescate, el dedup NO puede callar el envio");
+
+// Historial limpio: se manda sin mas.
+assert.deepStrictEqual(
+  labels(mediaToSend({ wanted: WANTED, mediaLib: LIB, history: [], askedAgain: false, narrated: false })),
+  ["B2K-route-example-1", "B2K-route-example-2"], "sin envios previos se manda normal");
+
+// Un label que no existe no inventa nada.
+assert.deepStrictEqual(
+  labels(mediaToSend({ wanted: ["no-existe"], mediaLib: LIB, history: [], askedAgain: false, narrated: false })),
+  [], "un label inexistente no debe resolver a ningun item");
+
+console.log(`OK — ${DEBE_REENVIAR.length} frases de "no me ha llegado", ${NO_DEBE_REENVIAR.length} de conversación normal, 4 casos de rescate y 5 de interacción dedup/rescate`);

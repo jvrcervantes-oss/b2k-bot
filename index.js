@@ -1370,6 +1370,24 @@ function customerAskedAgain(text) {
   return /\b(?:did\s?n[o']?t|have\s?n[o']?t|has\s?n[o']?t|not)\b[^.]{0,25}\b(?:receiv|arriv|come|came|show|get|got)|still\s+(?:nothing|no|not)|no\s+video|send\s+(?:it|them|again)|again\s*\?/i.test(text || "");
 }
 
+// Qué items de la biblioteca se mandan de verdad. El dedup por URL evita el doble envío
+// espontáneo (el modelo repite [MEDIA:label] en un turno posterior sin que nadie lo pida), pero
+// tiene DOS excepciones y las dos vienen de fallos reales en producción:
+//  · askedAgain — el cliente dice que no le llegó. Pedirlo otra vez gana al guardrail.
+//  · narrated  — saltó el rescate, o sea que el TEXTO ya prometió los vídeos. Callarlos aquí
+//    reproduce exactamente el bug que el rescate existe para matar: mensaje que promete y no
+//    entrega. Si nos hemos comprometido en el texto, se manda. (Pasó de verdad: el rescate
+//    disparó y el dedup lo anuló acto seguido, porque el historial tenía esas URLs de un envío
+//    manual de prueba hecho horas antes desde el panel.)
+// Self-check: test-media-resend.js
+function mediaToSend({ wanted, mediaLib, history, askedAgain, narrated }) {
+  const skipDedup = askedAgain || narrated;
+  const alreadySent = skipDedup
+    ? new Set()
+    : new Set(history.filter((m) => m.media && m.media.url).map((m) => m.media.url));
+  return mediaLib.filter((m) => wanted.includes(String(m.label).toLowerCase()) && !alreadySent.has(m.url));
+}
+
 // Títulos de la biblioteca escritos como texto suelto = intención de enviar ese item sin haber
 // emitido la etiqueta. Devuelve el reply sin esas líneas + los items a mandar de verdad.
 // Solo cuenta si el título ocupa la línea entera: dentro de una frase sería un falso positivo.
@@ -1808,14 +1826,7 @@ app.post("/webhook", async (req, res) => {
       const wanted = mediaMatch
         ? mediaMatch[1].split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
         : rescued.map((r) => String(r.label).toLowerCase());
-      // ponytail: no reenviar una foto/vídeo que ya se mandó en esta conversación. El modelo
-      // a veces repite [MEDIA:label] en un turno posterior aunque ya conste en el historial
-      // (bug: foto enviada 2 veces, la 2ª sin pedirla). Dedup por url ya enviada.
-      // PERO: si el cliente dice que NO le ha llegado, el reenvío es justo lo que toca. Ese dedup
-      // se comía la petición explícita y el bot contestaba "sending it again now" sin mandar nada
-      // (chat real: el cliente lo pidió 3 veces). El cliente pidiéndolo gana al guardrail.
-      const alreadySent = customerAskedAgain(text) ? new Set() : new Set(history.filter((m) => m.media && m.media.url).map((m) => m.media.url));
-      const toSend = mediaLib.filter((m) => wanted.includes(String(m.label).toLowerCase()) && !alreadySent.has(m.url));
+      const toSend = mediaToSend({ wanted, mediaLib, history, askedAgain: customerAskedAgain(text), narrated: rescued.length > 0 });
       for (const item of toSend) {
         await sendWhatsAppMedia(from, item);
         history.push({ role: "assistant", content: item.caption || (item.type === "video" ? "[vídeo]" : "[foto]"), ts: Date.now(), by: "bot", media: { type: item.type, url: item.url, caption: item.caption || "" } });
