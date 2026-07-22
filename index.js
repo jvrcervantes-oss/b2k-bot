@@ -1356,6 +1356,27 @@ async function buildOfferHint() {
     + "is 15% off right now if you want to compare.\" Bring it up once when relevant, then drop it if the "
     + "customer isn't interested — don't repeat it every message):\n" + lines;
 }
+
+// Bloques del `system`: prefijo cacheado + fecha + datos en vivo. Lo usan el webhook real Y el
+// simulador del panel. Existe para que no vuelvan a divergir: el simulador armaba su propia lista
+// y se había quedado solo con mediaHint (sin stock, precios, delivery ni ofertas), así que toda la
+// QA hecha ahí daba falsos negativos — el bot llegaba a responder "I need the LIVE PRICING block
+// to confirm the weekly rate" porque, en el simulador, era verdad que no lo tenía.
+async function buildSystemBlocks(mediaLib) {
+  const mediaHint = mediaLib.length
+    ? "\n\nMEDIA YOU CAN SEND (real photos/videos that reinforce the pitch — use sparingly, at most 1–2 per conversation, only when it genuinely helps). For each item, 'when to use' tells you the situation to send it in; match it to what the customer is talking about. Available:\n"
+      + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.use ? " — when to use: " + m.use : ""}${m.caption ? " [caption sent to customer: \"" + m.caption + "\"]" : ""}`).join("\n")
+      + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send a media item when its 'when to use' genuinely matches the moment. Only send labels from this list; never invent one."
+    : "";
+  // Prompt caching: solo el 1er bloque lleva cache_control (system fijo, ~11.5k tok). Los demás
+  // cambian cada pocos minutos y van detrás, así que refrescarlos no invalida la caché.
+  const live = [mediaHint, await buildStockHint(), await buildPriceHint(), await buildDeliveryHint(), await buildOfferHint()];
+  return [
+    { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
+    { type: "text", text: dateHint() },
+    ...live.filter(Boolean).map((text) => ({ type: "text", text })),
+  ];
+}
 // El modelo NO sabe qué día es: sin esto materializa "mañana"/"next Monday" con el año de su
 // corte de entrenamiento. Visto en producción (BBM, chat real del cliente 14-jul-2026): el bot
 // llegó a preguntar "what's today's exact date?" y el CRM guardó startDate 2025-07-15 — fechas
@@ -2207,32 +2228,12 @@ app.post("/webhook", async (req, res) => {
 
     // Media disponible (gestionada desde el panel): se inyecta para que el bot solo ofrezca lo que existe.
     const mediaLib = await getMediaLib();
-    const mediaHint = mediaLib.length
-      ? "\n\nMEDIA YOU CAN SEND (real photos/videos that reinforce the pitch — use sparingly, at most 1–2 per conversation, only when it genuinely helps). For each item, 'when to use' tells you the situation to send it in; match it to what the customer is talking about. Available:\n"
-        + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.use ? " — when to use: " + m.use : ""}${m.caption ? " [caption sent to customer: \"" + m.caption + "\"]" : ""}`).join("\n")
-        + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send a media item when its 'when to use' genuinely matches the moment. Only send labels from this list; never invent one."
-      : "";
-    const stockHint = await buildStockHint(); // inventario (rental): mismo patrón que mediaHint, bloque aparte sin cachear
-    const priceHint = await buildPriceHint(); // tarifas (rental): mismo patrón/caché que stockHint
-    const deliveryHint = await buildDeliveryHint(); // zonas de delivery (rental): mismo patrón/caché que priceHint
-    const offerHint = await buildOfferHint(); // ofertas activas (rental): mismo patrón/caché que deliveryHint
     // Streaming (no create): evita el "Premature close" en respuestas no-stream y mantiene viva la conexión.
     const response = await claudeMessage({
       model: MODEL,
       max_tokens: 500,
       thinking: { type: "disabled" }, // respuestas cortas y baratas; en Sonnet 5 el thinking va ON por defecto y se comería el max_tokens
-      // Prompt caching: el system (~11.5k tok fijos: context.md + BASE_INSTRUCTIONS) es idéntico en cada turno.
-      // Con cache_control, la 1ª vez paga 1.25x y el resto de la charla (dentro de 5 min) paga 0.1x → ~-78% del coste de system.
-      // mediaHint/stockHint/priceHint/deliveryHint/offerHint van en bloque aparte tras el prefijo cacheado (cambian solos, sin invalidar la caché).
-      system: [
-        { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
-        { type: "text", text: dateHint() },
-        ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
-        ...(stockHint ? [{ type: "text", text: stockHint }] : []),
-        ...(priceHint ? [{ type: "text", text: priceHint }] : []),
-        ...(deliveryHint ? [{ type: "text", text: deliveryHint }] : []),
-        ...(offerHint ? [{ type: "text", text: offerHint }] : []),
-      ],
+      system: await buildSystemBlocks(mediaLib), // mismos bloques que el simulador del panel — ver buildSystemBlocks
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // prompt = últimos 20; el resto es historial del panel
     });
 
@@ -2712,20 +2713,11 @@ app.post("/admin/api/simulate", async (req, res) => {
     const history = await getConversation(phone);
     history.push({ role: "user", content: text, ts: Date.now() });
     const mediaLib = await getMediaLib();
-    const mediaHint = mediaLib.length
-      ? "\n\nMEDIA YOU CAN SEND (real photos/videos that reinforce the pitch — use sparingly, at most 1–2 per conversation, only when it genuinely helps). For each item, 'when to use' tells you the situation to send it in; match it to what the customer is talking about. Available:\n"
-        + mediaLib.map((m) => `- "${m.label}" (${m.type})${m.use ? " — when to use: " + m.use : ""}${m.caption ? " [caption sent to customer: \"" + m.caption + "\"]" : ""}`).join("\n")
-        + "\nTo send, append on its own NEW line at the very end: [MEDIA:label] (exact label; several allowed comma-separated). Stripped before sending — never mention it. Only send a media item when its 'when to use' genuinely matches the moment. Only send labels from this list; never invent one."
-      : "";
     const response = await claudeMessage({
       model: MODEL,
       max_tokens: 500,
       thinking: { type: "disabled" },
-      system: [
-        { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
-        { type: "text", text: dateHint() },
-        ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
-      ],
+      system: await buildSystemBlocks(mediaLib), // MISMOS bloques que el webhook: si aquí falta uno, la QA miente
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // mismo recorte que el webhook real
     });
     const textBlock = response.content.find((b) => b.type === "text");
