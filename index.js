@@ -1500,6 +1500,22 @@ function customerAskedAgain(text) {
   return /\b(?:did\s?n[o']?t|have\s?n[o']?t|has\s?n[o']?t|not)\b[^.]{0,25}\b(?:receiv|arriv|come|came|show|get|got)|still\s+(?:nothing|no|not)|no\s+video|send\s+(?:it|them|again)|again\s*\?/i.test(text || "");
 }
 
+// Títulos de la biblioteca escritos como texto suelto = intención de enviar ese item sin haber
+// emitido la etiqueta. Devuelve el reply sin esas líneas + los items a mandar de verdad.
+// Solo cuenta si el título ocupa la línea entera: dentro de una frase sería un falso positivo.
+// Self-check: test-media-resend.js
+function rescueNarratedMedia(reply, mediaLib) {
+  const rescued = [];
+  for (const item of mediaLib) {
+    const title = String(item.caption || item.label).trim();
+    if (title.length < 6) continue; // un título muy corto dispararía por casualidad
+    const line = new RegExp(`^[ \\t]*${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[ \\t]*$`, "gim");
+    if (line.test(reply)) { rescued.push(item); reply = reply.replace(line, ""); }
+  }
+  if (rescued.length) reply = reply.replace(/\n{3,}/g, "\n\n").trim();
+  return { reply, rescued };
+}
+
 // Bloque de instrucciones de media para el prompt. Vive aquí y no duplicado en cada llamada
 // (webhook + simulador): una regla añadida en una copia y no en la otra es deriva garantizada.
 function buildMediaHint(mediaLib) {
@@ -1899,13 +1915,29 @@ app.post("/webhook", async (req, res) => {
       else console.warn(`[${PROJECT_NAME}] [RESEND_LINK] pedido pero no hay link previo para ${from} (el bot no debería prometerlo)`);
     }
 
+    // RESCATE de media narrada: el modelo a veces escribe los TÍTULOS de los clips en el texto en
+    // vez de emitir [MEDIA:label] → el cliente recibe un mensaje que nombra vídeos que nunca llegan.
+    // Corregirlo por prompt NO basta: en un hilo donde ya lo hizo, el modelo copia sus propios
+    // turnos anteriores y esa imitación gana a cualquier regla del system (verificado — en sesión
+    // nueva obedece, en el hilo contaminado no). Por eso el arreglo es determinista: si el texto
+    // nombra un item de la biblioteca en su propia línea y no hay etiqueta, esa ES la intención de
+    // enviarlo. Se quita el título del texto y se manda de verdad. Limpiar el reply ANTES de
+    // guardarlo en el historial además descontamina el hilo para los turnos siguientes.
+    let rescued = [];
+    if (!mediaMatch && mediaLib.length) {
+      ({ reply, rescued } = rescueNarratedMedia(reply, mediaLib));
+      if (rescued.length) console.warn(`[${PROJECT_NAME}] [MEDIA] RESCATE: el modelo escribió los títulos sin etiqueta (${rescued.map((r) => r.label).join(", ")}) — se envían de verdad`);
+    }
+
     history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
     await saveConversation(from, history);
 
     await sendHumanized(from, reply, message.id);
     // Fotos/vídeos que el bot decidió enviar ([MEDIA:label]) → se buscan en la biblioteca, se mandan y se anotan en el historial.
-    if (mediaMatch) {
-      const wanted = mediaMatch[1].split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+    if (mediaMatch || rescued.length) {
+      const wanted = mediaMatch
+        ? mediaMatch[1].split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+        : rescued.map((r) => String(r.label).toLowerCase());
       // ponytail: no reenviar una foto/vídeo que ya se mandó en esta conversación. El modelo
       // a veces repite [MEDIA:label] en un turno posterior aunque ya conste en el historial
       // (bug: foto enviada 2 veces, la 2ª sin pedirla). Dedup por url ya enviada.
