@@ -100,6 +100,95 @@ async function claudeMessage(params, tries = 3) {
 const MODEL = BOT_MODEL || "claude-sonnet-4-6";
 const PERSONA_NAME = BOT_PERSONA_NAME || "Daniel"; // default = persona de B2K (retrocompatible)
 
+// ─── COTIZACIÓN AUTORITATIVA VÍA ERP (rental) ─────────────────────────────
+// El cliente (Dion) actualizó su ERP: GET /api/chat/v1/quote?product_id&from&to devuelve el
+// rental_rate YA calculado (el server combina los tramos: 10 días = semana + 3 días). Antes ese
+// cálculo lo hacía el MODELO derivándolo de la tabla LIVE PRICING, y ESE razonamiento se filtraba
+// como "self-thought" en el chat (reporte del cliente 23-jul). Con una tool `get_quote` el modelo
+// pide el número en vez de calcularlo → cierra la fuga por diseño y el precio es el del sistema real.
+// Solo se activa en vertical rental con el ERP configurado; en tour (B2K) no se ofrece ninguna tool
+// y el bot se comporta exactamente igual que antes. NOTA: el delivery de /quote no se cablea aquí
+// porque su cálculo devuelve 500 con direcciones reales (bug del ERP, avisado a Dion 23-jul); el
+// delivery sigue por el bloque LIVE DELIVERY (zonas Supabase) + escalado, que funciona.
+const quoteToolEnabled = () => BOT_VERTICAL === "rental" && !!BBM_API_URL && !!BBM_API_KEY;
+const CATALOG_TTL_MS = 5 * 60 * 1000;
+let catalogSnap = null, catalogSnapAt = 0;
+async function getCatalog() {
+  if (catalogSnap && Date.now() - catalogSnapAt < CATALOG_TTL_MS) return catalogSnap;
+  const r = await axios.get(`${BBM_API_URL.replace(/\/+$/, "")}/api/chat/v1/catalog`, {
+    headers: { Authorization: `Bearer ${BBM_API_KEY}` }, timeout: 12000,
+  });
+  catalogSnap = (r.data && r.data.products) || [];
+  catalogSnapAt = Date.now();
+  return catalogSnap;
+}
+const GET_QUOTE_TOOL = {
+  name: "get_quote",
+  description:
+    "Get the AUTHORITATIVE total rental price for one bike over an exact date range, straight from the "
+    + "fleet system. You MUST call this to quote a total for ANY rental duration. NEVER add up, combine, "
+    + "prorate, or derive a total yourself from the per-period rates in LIVE PRICING — those are reference "
+    + "only. The rental_rate this returns is the single source of truth for the bike price. (Delivery and "
+    + "the refundable deposit are separate and NOT included here.)",
+  input_schema: {
+    type: "object",
+    properties: {
+      bike_model: { type: "string", description: "Bike name EXACTLY as shown in LIVE PRICING, e.g. \"Honda Vario\" or \"BMW 310\"." },
+      from: { type: "string", description: "Rental start date, YYYY-MM-DD." },
+      to: { type: "string", description: "Rental end date (return date), YYYY-MM-DD." },
+    },
+    required: ["bike_model", "from", "to"],
+  },
+};
+// Ejecuta la tool: resuelve el nombre de la moto a product_id vía catálogo y pega a /quote.
+// Devuelve SIEMPRE un objeto (nunca lanza): un error controlado vuelve al modelo como texto para
+// que reaccione (pida el modelo correcto, o escale) en vez de tumbar el turno entero.
+async function runGetQuote({ bike_model, from, to }) {
+  try {
+    if (!bike_model || !from || !to) return { ok: false, error: "Missing bike_model, from or to." };
+    const cat = await getCatalog();
+    const norm = (s) => String(s || "").trim().toLowerCase();
+    const hit = cat.find((p) => norm(p.name) === norm(bike_model))
+      || cat.find((p) => norm(p.name).includes(norm(bike_model)) || norm(bike_model).includes(norm(p.name)));
+    if (!hit) return { ok: false, error: `No bike named "${bike_model}" in the fleet. Ask the customer to pick a model from the LIVE PRICING list, then call get_quote again.` };
+    const r = await axios.get(`${BBM_API_URL.replace(/\/+$/, "")}/api/chat/v1/quote`, {
+      params: { product_id: hit.id, from, to },
+      headers: { Authorization: `Bearer ${BBM_API_KEY}` }, timeout: 12000, validateStatus: () => true,
+    });
+    if (r.status !== 200) {
+      const msg = (r.data && r.data.message) || `Quote service returned HTTP ${r.status}.`;
+      return { ok: false, error: `${msg} Tell the customer you're confirming the exact rate with the team and add tags: pricing_check.` };
+    }
+    const d = r.data || {};
+    return { ok: true, bike: hit.name, from, to, duration_days: d.duration_days, rental_rate: d.rental_rate, currency: d.currency || "IDR" };
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] get_quote fallo: ${e.message}`);
+    return { ok: false, error: "Quote service is unreachable right now. Tell the customer you're confirming the rate with the team and add tags: pricing_check." };
+  }
+}
+// Envuelve la llamada a Claude con el bucle de tool-use. Sin tools (tour, o rental sin ERP) es una
+// sola llamada = comportamiento idéntico al anterior. Con tools, itera hasta end_turn (tope de
+// seguridad) ejecutando get_quote. NO persiste los turnos intermedios: opera sobre una copia local
+// de messages; el server sigue guardando solo el texto final en el historial de Redis.
+async function claudeConverse(params) {
+  if (!quoteToolEnabled()) return claudeMessage(params);
+  const messages = [...params.messages];
+  let msg;
+  for (let iter = 0; iter < 4; iter++) {
+    msg = await claudeMessage({ ...params, tools: [GET_QUOTE_TOOL], messages });
+    if (msg.stop_reason !== "tool_use") return msg;
+    const toolUses = msg.content.filter((b) => b.type === "tool_use");
+    messages.push({ role: "assistant", content: msg.content }); // incluye thinking + tool_use (obligatorio replicarlo)
+    const results = [];
+    for (const tu of toolUses) {
+      const out = tu.name === "get_quote" ? await runGetQuote(tu.input || {}) : { ok: false, error: "Unknown tool." };
+      results.push({ type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(out) });
+    }
+    messages.push({ role: "user", content: results });
+  }
+  return msg; // tope alcanzado: devuelve lo último (el caller extrae el bloque text si lo hay)
+}
+
 const contextFileName = CONTEXT_FILE || "context.md";
 const CONTEXT = fs.existsSync(contextFileName)
   ? fs.readFileSync(contextFileName, "utf8")
@@ -1268,10 +1357,22 @@ async function buildPriceHint() {
     + `3-week ${fmt3w(r.three_week_low_rate, r.three_week_high_rate)} · Monthly ${fmt(r.monthly_rate)} · `
     + `Biannual ${fmt(r.biannual_rate)} · Yearly ${fmt(r.yearly_rate)}`
   ).join("\n")).join("\n");
-  return "\n\nLIVE PRICING (IDR per rental period, refreshed every few minutes straight from the fleet "
+  const head = "\n\nLIVE PRICING (IDR per rental period, refreshed every few minutes straight from the fleet "
     + "system — this is the current source of truth, ignore any older price list you may recall):\n" + lines
     + "\n\n\"—\" means that period's rate hasn't been set in the fleet system yet for that model — never "
-    + "invent it, tell the customer the team will confirm and add `tags: pricing_check`."
+    + "invent it, tell the customer the team will confirm and add `tags: pricing_check`.";
+  // Con la tool get_quote activa, estas tarifas por tramo son SOLO referencia: cualquier total exacto
+  // sale del ERP (el server combina los tramos), no del modelo. Así se cierra la fuga de "self-thought".
+  if (quoteToolEnabled()) {
+    return head
+      + "\nThese per-period rates are REFERENCE ONLY — for browsing and rough ranges. To quote an actual "
+      + "total for a specific bike and specific dates, you MUST call the get_quote tool (bike_model, from, "
+      + "to) and use its rental_rate. NEVER add, combine, prorate, or otherwise derive a total from the "
+      + "periods above yourself — the fleet system already works out the cheapest combination (e.g. a week "
+      + "plus a few days), so a number you compute by hand can disagree with what the customer is actually "
+      + "charged. One bike + one date range = one get_quote call.";
+  }
+  return head
     + "\nBefore quoting a Fortnight (14-day) price, compare its per-day rate against 2× the Weekly rate for "
     + "the SAME model — if 2 back-to-back Weekly periods work out cheaper, suggest that instead of the "
     + "Fortnight rate; never silently upsell the worse option. Add `tags: pricing_check` when you catch this "
@@ -2348,13 +2449,14 @@ app.post("/webhook", async (req, res) => {
     // Media disponible (gestionada desde el panel): se inyecta para que el bot solo ofrezca lo que existe.
     const mediaLib = await getMediaLib();
     // Streaming (no create): evita el "Premature close" en respuestas no-stream y mantiene viva la conexión.
-    const response = await claudeMessage({
+    // claudeConverse = claudeMessage + bucle de tool-use (get_quote) cuando es rental+ERP; si no, 1 llamada igual.
+    const response = await claudeConverse({
       model: MODEL,
       // Thinking ADAPTIVE, no disabled: sin borrador privado el modelo razonaba EN el texto visible
       // ("self-thought" que el cliente vio en el chat, 23-jul-2026). Con adaptive, el cálculo va a un
       // bloque thinking que este server nunca envía (solo se extrae el bloque type==="text") — el
       // razonamiento no puede llegar al cliente por construcción. effort:low contiene el gasto.
-      // max_tokens cubre pensamiento + respuesta; la respuesta sigue corta por prompt.
+      // max_tokens cubre pensamiento + tool-use + respuesta; la respuesta sigue corta por prompt.
       thinking: { type: "adaptive" },
       output_config: { effort: "low" },
       max_tokens: 2000,
@@ -2944,7 +3046,7 @@ app.post("/admin/api/simulate", async (req, res) => {
     const history = await getConversation(phone);
     history.push({ role: "user", content: text, ts: Date.now() });
     const mediaLib = await getMediaLib();
-    const response = await claudeMessage({
+    const response = await claudeConverse({ // espejo del webhook: mismo bucle de tool-use (get_quote)
       model: MODEL,
       thinking: { type: "adaptive" }, // espejo del webhook real (paridad simulador/producción)
       output_config: { effort: "low" },
