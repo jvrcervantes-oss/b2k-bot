@@ -2350,8 +2350,14 @@ app.post("/webhook", async (req, res) => {
     // Streaming (no create): evita el "Premature close" en respuestas no-stream y mantiene viva la conexión.
     const response = await claudeMessage({
       model: MODEL,
-      max_tokens: 500,
-      thinking: { type: "disabled" }, // respuestas cortas y baratas; en Sonnet 5 el thinking va ON por defecto y se comería el max_tokens
+      // Thinking ADAPTIVE, no disabled: sin borrador privado el modelo razonaba EN el texto visible
+      // ("self-thought" que el cliente vio en el chat, 23-jul-2026). Con adaptive, el cálculo va a un
+      // bloque thinking que este server nunca envía (solo se extrae el bloque type==="text") — el
+      // razonamiento no puede llegar al cliente por construcción. effort:low contiene el gasto.
+      // max_tokens cubre pensamiento + respuesta; la respuesta sigue corta por prompt.
+      thinking: { type: "adaptive" },
+      output_config: { effort: "low" },
+      max_tokens: 2000,
       system: await buildSystemBlocks(mediaLib), // mismos bloques que el simulador del panel — ver buildSystemBlocks
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // prompt = últimos 20; el resto es historial del panel
     });
@@ -2940,8 +2946,9 @@ app.post("/admin/api/simulate", async (req, res) => {
     const mediaLib = await getMediaLib();
     const response = await claudeMessage({
       model: MODEL,
-      max_tokens: 500,
-      thinking: { type: "disabled" },
+      thinking: { type: "adaptive" }, // espejo del webhook real (paridad simulador/producción)
+      output_config: { effort: "low" },
+      max_tokens: 2000,
       system: await buildSystemBlocks(mediaLib), // MISMOS bloques que el webhook: si aquí falta uno, la QA miente
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // mismo recorte que el webhook real
     });
