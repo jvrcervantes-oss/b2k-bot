@@ -436,6 +436,13 @@
   .cal-day.today .dnum{background:var(--accent);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center}
   .cal-day.today .todaytag{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent);align-self:flex-start;margin-top:-2px}
   .appt{font-size:11px;background:var(--accent-soft);color:#1d4ed8;border-radius:5px;padding:2px 6px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid var(--accent)}
+  /* eventos de reserva en el calendario: entrega (violeta) / devolución (verde), distintos de la cita (azul) */
+  .bkev{font-size:11px;border-radius:5px;padding:2px 6px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid}
+  .bkev.del{background:var(--violet-soft);color:var(--violet);border-left-color:var(--violet)}
+  .bkev.ret{background:var(--green-soft);color:var(--green);border-left-color:var(--green)}
+  .cal-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-soft);font-weight:600;padding:0 2px}
+  .cal-legend span{display:inline-flex;align-items:center;gap:5px}
+  .cal-legend i{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
   .cal-side{width:280px;border-left:1px solid var(--line);background:var(--card);padding:18px;overflow-y:auto;flex-shrink:0}
   .cal-side h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:12px}
   .up{position:relative;border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:8px}
@@ -754,6 +761,7 @@
   <div id="calView">
     <div class="cal-top">
       <div class="cal-nav"><button id="calPrev">‹</button><h2 id="calMonth"></h2><button id="calNext">›</button></div>
+      <div class="cal-legend"><span><i style="background:var(--accent)"></i><span data-i18n="cal_leg_appt">Cita</span></span><span><i style="background:var(--violet)"></i><span data-i18n="cal_leg_del">Entrega</span></span><span><i style="background:var(--green)"></i><span data-i18n="cal_leg_ret">Devolución</span></span></div>
       <button id="newAppt" class="cal-new" data-i18n="cal_new">+ Nueva cita</button>
     </div>
     <div class="cal-wrap">
@@ -1023,7 +1031,7 @@
       h_conv:'Conversaciones', st_wait:'por responder', st_int:'interesados', st_book:'en reserva', st_today:'hoy',
       ph_search_lead:'Buscar lead…', chip_all:'Todos', chip_wait:'🔔 Por responder', chip_int:'🟡 Interesados', chip_book:'🔴 Reserva',
       pick_lead:'Selecciona un lead', nochat:'Elige una conversación de la izquierda', ph_reply:'Escribe para tomar el control…', t_canned:'Respuestas rápidas', t_attach:'Enviar foto/vídeo', t_send:'Enviar', by_bot:'Enviado por el bot', by_human:'Enviado a mano', detail_empty:'Selecciona un lead para ver su ficha',
-      cal_new:'+ Nueva cita', cal_upcoming:'Próximas citas', cal_none:'Sin citas próximas', dow:['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'],
+      cal_new:'+ Nueva cita', cal_upcoming:'Próximos', cal_none:'Nada próximo', cal_leg_appt:'Cita', cal_leg_del:'Entrega', cal_leg_ret:'Devolución', dow:['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'],
       h_flota:'Flota de motos', ph_search_flota:'Buscar modelo, matrícula, código…', ft_unidades:'Unidades', ft_tarifas:'Tarifas',
       h_db:'Base de datos', ph_search_client:'Buscar cliente…', btn_import:'⬆ Importar Meta', ti_import:'Sube el CSV de leads que descargas de Meta Lead Ads', btn_enrich:'🔄 Actualizar desde chats', ti_enrich:'Lee las conversaciones y rellena los datos que falten', btn_csv:'⬇ Exportar CSV',
       m_canned:'Respuestas rápidas', m_canned_help:'Una por línea · formato', m_canned_fmt:'Título | texto', btn_cancel:'Cancelar', btn_save:'Guardar',
@@ -1075,7 +1083,7 @@
       h_conv:'Conversations', st_wait:'to reply', st_int:'interested', st_book:'booking', st_today:'today',
       ph_search_lead:'Search lead…', chip_all:'All', chip_wait:'🔔 To reply', chip_int:'🟡 Interested', chip_book:'🔴 Booking',
       pick_lead:'Select a lead', nochat:'Pick a conversation on the left', ph_reply:'Type to take over…', t_canned:'Quick replies', t_attach:'Send photo/video', t_send:'Send', by_bot:'Sent by the bot', by_human:'Sent manually', detail_empty:'Select a lead to see their card',
-      cal_new:'+ New appointment', cal_upcoming:'Upcoming', cal_none:'No upcoming appointments', dow:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+      cal_new:'+ New appointment', cal_upcoming:'Upcoming', cal_none:'Nothing upcoming', cal_leg_appt:'Appointment', cal_leg_del:'Delivery', cal_leg_ret:'Return', dow:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
       h_flota:'Motorbike fleet', ph_search_flota:'Search model, plate, code…', ft_unidades:'Units', ft_tarifas:'Rates',
       h_db:'Database', ph_search_client:'Search client…', btn_import:'⬆ Import Meta', ti_import:'Upload the leads CSV you download from Meta Lead Ads', btn_enrich:'🔄 Update from chats', ti_enrich:'Reads conversations and fills in missing data', btn_csv:'⬇ Export CSV',
       m_canned:'Quick replies', m_canned_help:'One per line · format', m_canned_fmt:'Title | text', btn_cancel:'Cancel', btn_save:'Save',
@@ -1940,20 +1948,37 @@
     if(calY==null){ var n=new Date(); calY=n.getFullYear(); calM=n.getMonth(); }
     document.getElementById('calMonth').textContent = new Date(calY,calM,1).toLocaleDateString(t('locale'),{month:'long',year:'numeric'});
     var startDow=(new Date(calY,calM,1).getDay()+6)%7, daysInMonth=new Date(calY,calM+1,0).getDate(), today=new Date();
+    // Reservas cerradas → eventos por día: entrega (startDate) y devolución (endDate). Fuente = /admin/api/bookings.
+    var bk=bookings||[], dk=function(d){ return d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate(); };
+    var delivByDay={}, retByDay={};
+    bk.forEach(function(r){
+      var sd=dashDate(r.startDate); if(sd){ (delivByDay[dk(sd)]=delivByDay[dk(sd)]||[]).push(r); }
+      var ed=dashDate(r.endDate); if(ed){ (retByDay[dk(ed)]=retByDay[dk(ed)]||[]).push(r); }
+    });
     var html='';
     for(var i=0;i<42;i++){
       var d=new Date(calY,calM,i-startDow+1);
       var out=d.getMonth()!==calM, isToday=sameDay(d,today);
       var da=appts.filter(function(a){ return sameDay(new Date(a.when),d); }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); });
-      var chips=da.slice(0,3).map(function(a){ return '<div class="appt" onclick="openApptView(\''+a.id+'\')" title="'+esc(a.title)+(a.closer?' · '+esc(a.closer):'')+'">'+timeOf(a.when)+' '+esc(a.title)+'</div>'; }).join('');
-      if(da.length>3) chips+='<div class="appt" style="background:none;border:0;color:#9aa3b5">+'+(da.length-3)+' '+t('more')+'</div>';
+      var items=da.map(function(a){ return '<div class="appt" onclick="event.stopPropagation();openApptView(\''+a.id+'\')" title="'+esc(a.title)+(a.closer?' · '+esc(a.closer):'')+'">'+timeOf(a.when)+' '+esc(a.title)+'</div>'; });
+      (delivByDay[dk(d)]||[]).forEach(function(r){ items.push('<div class="bkev del" onclick="event.stopPropagation();dashOpenLead(\''+r.phone+'\')" title="'+t('cal_leg_del')+': '+esc(r.model||'')+' · '+esc(r.name||r.phone)+(r.deliveryLocation?' · '+esc(r.deliveryLocation):'')+'">🛵 '+esc(r.model||r.name||('+'+r.phone))+'</div>'); });
+      (retByDay[dk(d)]||[]).forEach(function(r){ items.push('<div class="bkev ret" onclick="event.stopPropagation();dashOpenLead(\''+r.phone+'\')" title="'+t('cal_leg_ret')+': '+esc(r.model||'')+' · '+esc(r.name||r.phone)+'">🏁 '+esc(r.model||r.name||('+'+r.phone))+'</div>'); });
+      var chips=items.slice(0,3).join('');
+      if(items.length>3) chips+='<div class="appt" style="background:none;border:0;color:#9aa3b5">+'+(items.length-3)+' '+t('more')+'</div>';
       html+='<div class="cal-day'+(out?' out':'')+(isToday?' today':'')+'"><span class="dnum">'+d.getDate()+'</span>'+(isToday?'<span class="todaytag">'+t('cal_today')+'</span>':'')+chips+'</div>';
     }
     document.getElementById('calGrid').innerHTML=html;
-    var now=Date.now()-3600000;
-    var up=appts.filter(function(a){ return new Date(a.when).getTime()>=now; }).sort(function(a,b){ return new Date(a.when)-new Date(b.when); }).slice(0,12);
-    document.getElementById('upList').innerHTML = up.length ? up.map(function(a){
-      return '<div class="up" style="cursor:pointer" onclick="openApptView(\''+a.id+'\')"><span class="del" onclick="cancelAppt(event,\''+a.id+'\')">✕</span><div class="ut">'+esc(a.title)+'</div><div class="uw">'+fmtWhen(a.when)+'</div>'+((a.name||a.phone)?'<div class="un">'+esc(a.name||('+'+a.phone))+'</div>':'')+(a.closer?'<div class="un" style="color:var(--accent)">👤 '+esc(a.closer)+'</div>':'')+'</div>';
+    // Panel lateral "Próximos": citas + entregas + devoluciones, ordenados por fecha.
+    var now=Date.now()-3600000, floor=now-86400000; // reservas: incluye las de hoy aunque sean de esta mañana
+    var ev=[];
+    appts.forEach(function(a){ var ts=new Date(a.when).getTime(); if(ts>=now) ev.push({ts:ts,k:'appt',a:a}); });
+    bk.forEach(function(r){ var sd=dashDate(r.startDate); if(sd&&sd.getTime()>=floor) ev.push({ts:sd.getTime(),k:'del',r:r}); var ed=dashDate(r.endDate); if(ed&&ed.getTime()>=floor) ev.push({ts:ed.getTime(),k:'ret',r:r}); });
+    ev.sort(function(a,b){ return a.ts-b.ts; }); ev=ev.slice(0,14);
+    document.getElementById('upList').innerHTML = ev.length ? ev.map(function(e){
+      if(e.k==='appt'){ var a=e.a; return '<div class="up" style="cursor:pointer" onclick="openApptView(\''+a.id+'\')"><span class="del" onclick="cancelAppt(event,\''+a.id+'\')">✕</span><div class="ut">📅 '+esc(a.title)+'</div><div class="uw">'+fmtWhen(a.when)+'</div>'+((a.name||a.phone)?'<div class="un">'+esc(a.name||('+'+a.phone))+'</div>':'')+(a.closer?'<div class="un" style="color:var(--accent)">👤 '+esc(a.closer)+'</div>':'')+'</div>'; }
+      var r=e.r, isDel=e.k==='del', col=isDel?'var(--violet)':'var(--green)';
+      var when=new Date(e.ts).toLocaleDateString(t('locale'),{weekday:'short',day:'numeric',month:'short'});
+      return '<div class="up" style="cursor:pointer;border-left:3px solid '+col+'" onclick="dashOpenLead(\''+r.phone+'\')"><div class="ut">'+(isDel?'🛵 '+t('cal_leg_del'):'🏁 '+t('cal_leg_ret'))+'</div><div class="uw">'+when+'</div><div class="un">'+esc(r.model||t('res_nodata'))+(r.name?' · '+esc(r.name):'')+'</div>'+(isDel&&r.deliveryLocation?'<div class="un">📍 '+esc(r.deliveryLocation)+'</div>':'')+'</div>';
     }).join('') : '<div style="color:#9aa3b5;font-size:13px">'+t('cal_none')+'</div>';
   }
 
@@ -2581,7 +2606,7 @@
   function setUrl(p){ try{ history.replaceState(null,'',p); }catch(e){} }
   document.getElementById('navConv').onclick=function(){ clearModes(document.getElementById('app')); setNav('navConv'); setUrl('/admin'); };
   document.getElementById('navDash').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dashmode'); setNav('navDash'); setUrl('/admin/dash'); renderDash(); loadAppts(renderDash); loadDropoff(renderDash); api('leads').then(function(r){return r.json();}).then(function(L){ leads=L; renderDash(); }).catch(function(){}); };
-  document.getElementById('navCal').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('calmode'); setNav('navCal'); setUrl('/admin'); buildLeadsDL(); loadAppts(renderCal); };
+  document.getElementById('navCal').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('calmode'); setNav('navCal'); setUrl('/admin'); buildLeadsDL(); loadBookings(renderCal); loadAppts(renderCal); };
   document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dbmode'); setNav('navDb'); setUrl('/admin/db'); dbPage=1; loadHealth(); loadAppts(renderDb); };
   document.getElementById('navInv').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('invmode'); setNav('navInv'); setUrl('/admin'); renderInvoices(); loadInvoices(renderInvoices); };
   document.getElementById('navRes').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('resmode'); setNav('navRes'); setUrl('/admin'); renderBookings(); loadBookings(renderBookings); };
