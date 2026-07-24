@@ -1603,9 +1603,54 @@ async function sendWhatsAppMedia(to, item) {
   }
 }
 
+// ─── CUENTA BLOQUEADA: hay códigos de fallo que no son del mensaje sino de la CUENTA ──
+// (131042 = billing restringido, 131031 = cuenta suspendida). Mientras están activos falla
+// TODO envío proactivo, y la API devuelve 200 igual: el fallo llega después por el webhook
+// de `statuses`. Sin esta bandera el panel dice "✓ enviado" y se queman leads a ciegas —
+// el 24-jul se dispararon 13 outreach de B2K con 11 rebotes 131042 y cero aviso.
+// TTL de 6h para que se cure sola aunque no llegue ningún `delivered` que la limpie.
+const ACCOUNT_BLOCK_CODES = new Set([131042, 131031]);
+// Pura, para poder probarla: qué hacer con un objeto `status` del webhook.
+// "delivered"/"read" = prueba de vida → levanta el bloqueo. "failed" con código de cuenta → lo pone.
+function classifyDeliveryStatus(st) {
+  if (!st) return { action: "ignore" };
+  if (st.status === "delivered" || st.status === "read") return { action: "clear" };
+  if (st.status !== "failed") return { action: "ignore" };
+  const err = (st.errors && st.errors[0]) || {};
+  const code = Number(err.code);
+  return {
+    action: "fail",
+    code: Number.isFinite(code) ? code : null,
+    detail: err.error_data?.details || err.message || err.title || "",
+    accountBlock: ACCOUNT_BLOCK_CODES.has(code),
+  };
+}
+let waBlockedRam = null;
+async function setWaBlocked(code, detail) {
+  waBlockedRam = { code, detail: String(detail || "").slice(0, 300), ts: Date.now() };
+  if (redisClient) { try { await redisClient.setEx("wa:blocked", 6 * 3600, JSON.stringify(waBlockedRam)); } catch (e) { /* best-effort */ } }
+}
+async function getWaBlocked() {
+  if (redisClient) { try { const v = await redisClient.get("wa:blocked"); return v ? JSON.parse(v) : null; } catch (e) { /* cae al de RAM */ } }
+  return waBlockedRam;
+}
+async function clearWaBlocked() {
+  if (!waBlockedRam && !redisClient) return;
+  waBlockedRam = null;
+  if (redisClient) { try { await redisClient.del("wa:blocked"); } catch (e) { /* best-effort */ } }
+}
+
 // Mensaje de PLANTILLA (única forma de escribir al owner fuera de su ventana de 24h)
 async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams = []) {
   const toClean = normalizePhone(to);
+  // Cuenta bloqueada → no gastar el intento: rebotaría igual y el lead quedaría marcado
+  // como contactado sin haberlo sido. El texto libre SÍ se intenta (ver comentario arriba):
+  // más vale fallar contestando a un cliente que callarse.
+  const blocked = await getWaBlocked();
+  if (blocked) {
+    console.error(`[${PROJECT_NAME}] Plantilla "${templateName}" NO enviada a ${toClean} — cuenta bloqueada (code ${blocked.code})`);
+    return { ok: false, error: `Cuenta de WhatsApp bloqueada (code ${blocked.code}): ${blocked.detail}` };
+  }
   const clean = (s) => String(s).replace(/[\r\n\t]+/g, " ").replace(/ {4,}/g, "   ").trim();
   const components = bodyParams.length
     ? [{ type: "body", parameters: bodyParams.map((t) => ({ type: "text", text: clean(t) || "-" })) }]
@@ -1752,13 +1797,15 @@ app.post("/webhook", async (req, res) => {
     const statuses = change?.value?.statuses;
     if (Array.isArray(statuses) && statuses.length) {
       for (const st of statuses) {
-        if (st.status !== "failed") continue;                 // delivered/read/sent = ruido
-        const err = (st.errors && st.errors[0]) || {};
-        const detail = err.error_data?.details || err.message || err.title || "";
-        console.error(`[${PROJECT_NAME}] ENTREGA FALLIDA a ${st.recipient_id} — code ${err.code ?? "?"}: ${detail} (wamid ${st.id})`);
+        const c = classifyDeliveryStatus(st);
+        if (c.action === "clear") { await clearWaBlocked(); continue; }  // entrega confirmada = cuenta viva
+        if (c.action !== "fail") continue;                               // sent = ruido
+        const detail = c.detail;
+        console.error(`[${PROJECT_NAME}] ENTREGA FALLIDA a ${st.recipient_id} — code ${c.code ?? "?"}: ${detail} (wamid ${st.id})`);
+        if (c.accountBlock) await setWaBlocked(c.code, detail);
         // Panel: solo si ya es lead conocido (no crear ficha para el owner ni desconocidos)
         if (!isOwner(st.recipient_id) && (await getLead(st.recipient_id))) {
-          await logEvent(st.recipient_id, "delivery_failed", { code: err.code, detail: String(detail).slice(0, 200) });
+          await logEvent(st.recipient_id, "delivery_failed", { code: c.code, detail: String(detail).slice(0, 200) });
         }
       }
       return; // un webhook de estado no trae mensaje que procesar
@@ -2095,6 +2142,12 @@ app.get("/admin/api/leads", async (req, res) => {
   try { res.json(await listLeads()); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Estado de la cuenta de WhatsApp: null = sana. Lo alimenta el webhook de `statuses`.
+app.get("/admin/api/wa-status", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try { res.json({ blocked: await getWaBlocked() }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Enriquecer un lead: extrae de su conversación los datos que falten en la ficha.
 app.post("/admin/api/enrich", async (req, res) => {
   if (!adminAuth(req, res)) return;
@@ -2428,6 +2481,7 @@ app.post("/admin/api/bulk", async (req, res) => {
   const { phones, action, value } = req.body || {};
   if (!Array.isArray(phones) || !phones.length || !action) return res.status(400).json({ error: "phones[] y action requeridos" });
   let n = 0;
+  const failed = [];
   try {
     for (const phone of phones) {
       if (action === "status") {
@@ -2447,13 +2501,16 @@ app.post("/admin/api/bulk", async (req, res) => {
         const tags = Array.isArray(prev.tags) ? prev.tags.slice() : [];
         if (value && tags.indexOf(value) < 0) { tags.push(value); await updateLeadFields(phone, { tags }); logEvent(phone, "tag", { to: value }); }
       } else if (action === "outreach") {
-        await sendIntro(phone);
+        // Si falla (cuenta bloqueada, plantilla sin aprobar…) NO cuenta como enviado:
+        // antes el lote decía "13 enviados" con 11 rebotados.
+        const r = await sendIntro(phone);
+        if (!r || !r.ok) { failed.push({ phone, error: (r && r.error) || "envío fallido" }); continue; }
       } else if (action === "delete") {
         await deleteLead(phone);
       } else { continue; }
       n++;
     }
-    res.json({ ok: true, count: n });
+    res.json({ ok: true, count: n, failed });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
