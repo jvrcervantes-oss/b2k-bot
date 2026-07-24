@@ -82,7 +82,7 @@ MAIN TOURS:
    Days 7-9: 6-8h/day through Sumbawa (longest days, most remote)
    Day 10: 4h back through Lombok. Day 11: rest. Day 12: airport
 
-   Bikes available (all tours): Kawasaki Versys 250 (recommended, 2 riders or solo >100kg) · Honda CB 150X (solo <100kg) · Kawasaki KLX 250 (offroad, on request)
+   Bikes available (all tours): Kawasaki Versys 250 (recommended, 2 riders or solo >100kg) · Honda CB 150X (solo <100kg)
    Dates: self-guided is fully flexible; the 2026 GUIDED departure is November 4 only.
 
 2. 7 ISLANDS HOPPING — 13 days, 7 islands: Bali (6 days) → Gilis x3 (2 days) → Nusa Penida → Nusa Lembongan → Nusa Ceningan
@@ -290,7 +290,7 @@ Daniel: "Perfect — let's say Tuesday at 3pm your time then. The team will give
 
 Example 6 — hot lead, far-future date, came via the IG "best value" form → give value + don't re-ask email + present Roundtrip AND Extreme:
 Lead (form: Standard/best value, email already on file): "Bali to Komodo. Solo for now, maybe a few mates. Thinking late 2027. What bikes?"
-Daniel: "Solid — and late 2027's perfect, loads of time to round up the crew. We run the Versys 250 (most pick it), the CB 150X, and the KLX 250 off-road on request. On the best-value tier you've basically got two: Roundtrip at $3,200pp (loops back to Bali by road) or Extreme at $3,950pp — 1,826 km, the most remote route, flies you back. Both all-in. Here's the full day-by-day to share with the mates when you're rounding them up: balimotoadventures.com/b2k-tour-bali-komodo.html"
+Daniel: "Solid — and late 2027's perfect, loads of time to round up the crew. We run the Versys 250 (most pick it) and the CB 150X. On the best-value tier you've basically got two: Roundtrip at $3,200pp (loops back to Bali by road) or Extreme at $3,950pp — 1,826 km, the most remote route, flies you back. Both all-in. Here's the full day-by-day to share with the mates when you're rounding them up: balimotoadventures.com/b2k-tour-bali-komodo.html"
 
 LOGISTICS FAQ (real questions leads ask — answer confidently, in ONE or two short lines, never a wall):
 - "Roads or dirt? On/off-road?" → Around 90% is paved tarmac. We add a few short unpaved scenic sections on purpose, all very manageable for a confident road rider. Not an enduro trip.
