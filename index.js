@@ -111,9 +111,15 @@ const PERSONA_NAME = BOT_PERSONA_NAME || "Daniel"; // default = persona de B2K (
 // como "self-thought" en el chat (reporte del cliente 23-jul). Con una tool `get_quote` el modelo
 // pide el número en vez de calcularlo → cierra la fuga por diseño y el precio es el del sistema real.
 // Solo se activa en vertical rental con el ERP configurado; en tour (B2K) no se ofrece ninguna tool
-// y el bot se comporta exactamente igual que antes. NOTA: el delivery de /quote no se cablea aquí
-// porque su cálculo devuelve 500 con direcciones reales (bug del ERP, avisado a Dion 23-jul); el
-// delivery sigue por el bloque LIVE DELIVERY (zonas Supabase) + escalado, que funciona.
+// y el bot se comporta exactamente igual que antes.
+//
+// DELIVERY (24-jul): también sale de aquí. El 500 con direcciones reales que bloqueaba esto el
+// 23-jul ya está arreglado en el ERP (reverificado hoy), y el bloque LIVE DELIVERY que lo suplía
+// estaba COBRANDO DE MENOS: servía `delivery_area_presets.fee` (50.000 Canggu) como "tarifa plana
+// que cubre ida y vuelta", cuando ese campo es el precio de UN trayecto — el sistema del cliente
+// cobra 100.000 (`one_way_fee` × `round_trip`), igual que el ejemplo de su propia doc. Además el
+// tramo por km depende del plan, así que "el delivery no depende de la duración" tampoco era
+// cierto. Ya no derivamos delivery: se pide con la dirección y el ERP geocodifica y cobra.
 const quoteToolEnabled = () => BOT_VERTICAL === "rental" && !!BBM_API_URL && !!BBM_API_KEY;
 const CATALOG_TTL_MS = 5 * 60 * 1000;
 let catalogSnap = null, catalogSnapAt = 0;
@@ -132,14 +138,18 @@ const GET_QUOTE_TOOL = {
     "Get the AUTHORITATIVE total rental price for one bike over an exact date range, straight from the "
     + "fleet system. You MUST call this to quote a total for ANY rental duration. NEVER add up, combine, "
     + "prorate, or derive a total yourself from the per-period rates in LIVE PRICING — those are reference "
-    + "only. The rental_rate this returns is the single source of truth for the bike price. (Delivery and "
-    + "the refundable deposit are separate and NOT included here.)",
+    + "only. The rental_rate this returns is the single source of truth for the bike price. "
+    + "It ALSO returns the delivery+pickup fee whenever you pass delivery_address — the fleet system "
+    + "geocodes the address, so it works for ANY address in Bali, not just well-known areas. "
+    + "NEVER quote, estimate or recall a delivery fee any other way. (The refundable deposit is separate "
+    + "and NOT included here.)",
   input_schema: {
     type: "object",
     properties: {
       bike_model: { type: "string", description: "Bike name EXACTLY as shown in LIVE PRICING, e.g. \"Honda Vario\" or \"BMW 310\"." },
       from: { type: "string", description: "Rental start date, YYYY-MM-DD." },
       to: { type: "string", description: "Rental end date (return date), YYYY-MM-DD." },
+      delivery_address: { type: "string", description: "Where the customer wants the bike delivered, as they said it (\"Canggu\", \"Jl. Pantai Berawa 99\", a hotel name). Pass it as soon as you know it — that is the ONLY way to get the delivery fee. Omit only if they haven't said where yet." },
     },
     required: ["bike_model", "from", "to"],
   },
@@ -147,7 +157,7 @@ const GET_QUOTE_TOOL = {
 // Ejecuta la tool: resuelve el nombre de la moto a product_id vía catálogo y pega a /quote.
 // Devuelve SIEMPRE un objeto (nunca lanza): un error controlado vuelve al modelo como texto para
 // que reaccione (pida el modelo correcto, o escale) en vez de tumbar el turno entero.
-async function runGetQuote({ bike_model, from, to }) {
+async function runGetQuote({ bike_model, from, to, delivery_address }) {
   try {
     if (!bike_model || !from || !to) return { ok: false, error: "Missing bike_model, from or to." };
     const cat = await getCatalog();
@@ -155,16 +165,30 @@ async function runGetQuote({ bike_model, from, to }) {
     const hit = cat.find((p) => norm(p.name) === norm(bike_model))
       || cat.find((p) => norm(p.name).includes(norm(bike_model)) || norm(bike_model).includes(norm(p.name)));
     if (!hit) return { ok: false, error: `No bike named "${bike_model}" in the fleet. Ask the customer to pick a model from the LIVE PRICING list, then call get_quote again.` };
-    const r = await axios.get(`${BBM_API_URL.replace(/\/+$/, "")}/api/chat/v1/quote`, {
-      params: { product_id: hit.id, from, to },
+    const ask = (addr) => axios.get(`${BBM_API_URL.replace(/\/+$/, "")}/api/chat/v1/quote`, {
+      params: Object.assign({ product_id: hit.id, from, to }, addr ? { delivery_address: addr } : {}),
       headers: { Authorization: `Bearer ${BBM_API_KEY}` }, timeout: 12000, validateStatus: () => true,
     });
+    let r = await ask(delivery_address);
+    // Dirección que el ERP no sabe geocodificar → 400. Reintentamos sin ella para no perder también
+    // el precio de la moto: el modelo cotiza la moto y pide una dirección más concreta.
+    let addressFailed = false;
+    if (r.status === 400 && delivery_address) { addressFailed = true; r = await ask(null); }
     if (r.status !== 200) {
       const msg = (r.data && r.data.message) || `Quote service returned HTTP ${r.status}.`;
       return { ok: false, error: `${msg} Tell the customer you're confirming the exact rate with the team and add tags: pricing_check.` };
     }
     const d = r.data || {};
-    return { ok: true, bike: hit.name, from, to, duration_days: d.duration_days, rental_rate: d.rental_rate, currency: d.currency || "IDR" };
+    const out = { ok: true, bike: hit.name, from, to, duration_days: d.duration_days, rental_rate: d.rental_rate, currency: d.currency || "IDR" };
+    if (addressFailed) {
+      out.delivery_note = `Could not locate "${delivery_address}". Quote the bike price, then ask for a more precise address (street + area, or a hotel/villa name) and call get_quote again to get the delivery fee. Do NOT guess it.`;
+    } else if (delivery_address) {
+      const dv = d.delivery || {};
+      out.delivery_fee = d.delivery_fee;               // total ida + vuelta, ya calculado por el ERP
+      out.delivery_matched = dv.matched_area || dv.matched_address || delivery_address;
+      out.delivery_note = "delivery_fee is the FULL delivery + pickup total for this address and this rental length. Quote it as-is; never halve, double or round it.";
+    }
+    return out;
   } catch (e) {
     console.error(`[${PROJECT_NAME}] get_quote fallo: ${e.message}`);
     return { ok: false, error: "Quote service is unreachable right now. Tell the customer you're confirming the rate with the team and add tags: pricing_check." };
@@ -1389,46 +1413,21 @@ async function buildPriceHint() {
     + "so the team can review that model's pricing.";
 }
 
-// ─── DELIVERY: zonas con tarifa plana (Supabase BBM: delivery_area_presets) ──────
-// Mismo patrón/caché que buildPriceHint — lee las zonas reales que el equipo gestiona en su panel
-// de delivery en vez de una tabla fija en el contexto. Deliberadamente NO se expone
-// delivery_km_rates (la fórmula por km): el bot no tiene geocoding, así que darle los parámetros
-// solo invitaría a que se inventara una distancia y calculara un número con confianza falsa —
-// fuera de estas zonas sigue escalando al equipo, igual que hacía antes.
-async function computeDeliverySnapshot() {
-  const key = SUPABASE_ANON_KEY || SUPABASE_SERVICE_KEY; // anon basta: RLS da SELECT a anon (migración 015)
-  if (!SUPABASE_URL || !key) return null;
-  const res = await axios.get(`${SUPABASE_URL}/rest/v1/delivery_area_presets`, {
-    params: { select: "area_name,fee", active: "eq.true", order: "sort_order.asc" },
-    headers: { apikey: key, Authorization: `Bearer ${key}` },
-    timeout: 10000,
-  });
-  return res.data || [];
-}
-let deliverySnap = null, deliverySnapAt = 0;
-async function getDeliverySnapshot() {
-  if (deliverySnap && Date.now() - deliverySnapAt < INVENTORY_TTL_MS) return deliverySnap;
-  try {
-    deliverySnap = await computeDeliverySnapshot();
-  } catch (e) {
-    console.error(`[${PROJECT_NAME}] Delivery: error leyendo Supabase — ${e.response ? JSON.stringify(e.response.data) : e.message}`);
-  }
-  deliverySnapAt = Date.now();
-  return deliverySnap;
-}
-async function buildDeliveryHint() {
-  if (BOT_VERTICAL !== "rental") return "";
-  const zones = await getDeliverySnapshot();
-  if (!zones || !zones.length) return "";
-  const lines = zones.map((z) => `- ${z.area_name}: ${Number(z.fee).toLocaleString("id-ID")} IDR (flat, any rental length)`).join("\n");
-  return "\n\nLIVE DELIVERY (IDR, refreshed every few minutes straight from the fleet system — this is the "
-    + "current source of truth, ignore any older delivery table you may recall). Each zone below has ONE "
-    + "flat fee that already covers delivery AND pickup together — never split it into two legs, never "
-    + "double it, never say \"each way\". The fee does NOT depend on the rental plan/length — a zone costs "
-    + "the same for a daily rental and for a 6-month one; never say delivery is \"free\" for a long plan, "
-    + "that rule no longer applies:\n" + lines
-    + "\n\nFor any address NOT in this list: do not estimate kilometres or a price yourself — say the team "
-    + "will confirm the exact delivery cost for that address, and add `tags: pricing_check`.";
+// ─── DELIVERY ────────────────────────────────────────────────────────────────
+// Ya NO se lista ninguna tarifa en el prompt. Se listaban las zonas de
+// `delivery_area_presets` como "tarifa plana que cubre ida y vuelta", pero ese campo es UN
+// trayecto: el sistema del cliente cobra el doble (Canggu 50.000 en la tabla → 100.000 reales,
+// como su propia doc `bbm/delivery-fee.md`). Y el tramo por km depende del plan, así que
+// tampoco era plano. Un número en el prompt es un número que el modelo puede cotizar sin
+// pasar por el ERP; ahora el delivery solo existe como `delivery_address` en get_quote, que
+// además geocodifica cualquier dirección de Bali (antes escalábamos todo lo que no fuera zona).
+function buildDeliveryHint() {
+  if (BOT_VERTICAL !== "rental" || !quoteToolEnabled()) return "";
+  return "\n\nDELIVERY & PICKUP: there is no fee table here on purpose. The ONLY way to get a delivery "
+    + "price is to call get_quote with delivery_address — the fleet system geocodes it, so it works for "
+    + "any address in Bali, and what it returns already covers BOTH the drop-off and the pickup for that "
+    + "rental length. Never quote, estimate, halve, double or recall a delivery fee any other way; if "
+    + "get_quote can't price it, say the team will confirm and add `tags: pricing_check`.";
 }
 
 // ─── OFERTAS: descuentos activos por modelo (Supabase BBM: offers) ──────
