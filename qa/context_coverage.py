@@ -32,7 +32,7 @@ TOPICS = [
  ("seven_islands",     [["7 islands","seven islands"],["2,050","2050"]], ["tell me about 7 islands","other tour options","lighter trip"]),
  ("sumba",             [["sumba"]], ["do you go to sumba","sumba tour","sumba challenge"]),
  ("video_call",        [["video call","30-min","30 min"]], ["can we talk on a call","book a call","speak to the team"]),
- ("deposit_booking",   [["1,000 per person","deposit"],["balance","60 days"]], ["how do I book","deposit to reserve","when is the balance due"]),
+ ("deposit_booking",   [["500 per person"],["balance","60 days"]], ["how do I book","deposit to reserve","when is the balance due"]),
  # --- candidatos a HUECO ---
  ("visa",              [["visa"]], ["do I need a visa for indonesia","visa requirements","visa on arrival"]),
  ("travel_insurance",  [["travel insurance"]], ["is travel insurance required","do I need travel insurance","medical insurance needed"]),
