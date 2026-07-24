@@ -260,6 +260,32 @@
   #app.resmode #resView{display:flex}
   .res-meta{color:var(--ink-soft);font-size:11.5px;line-height:1.5;margin-top:3px}
   .res-done{opacity:.55}
+  /* Reservas — tarjetas escaneables (cola de traspaso al ERP). Clases propias, no tocan .dlrow (compartido). */
+  .bk-group{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin:18px 2px 8px}
+  .bk-group:first-child{margin-top:0}
+  .bk{display:grid;grid-template-columns:44px 1fr auto;gap:14px;align-items:center;background:var(--card);border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:12px;padding:14px 16px;margin-bottom:10px;box-shadow:var(--sh);cursor:pointer}
+  .bk.done{border-left-color:var(--green);opacity:.72}
+  .bk-ic{width:44px;height:44px;border-radius:10px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+  .bk-main{min-width:0}
+  .bk-top{display:flex;align-items:baseline;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+  .bk-bike{font-size:15px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bk-who{font-size:12px;color:var(--ink-soft);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bk-chips{display:flex;flex-wrap:wrap;gap:6px}
+  .bk-chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:7px;background:var(--bg);color:var(--ink-soft);white-space:nowrap;text-decoration:none}
+  .bk-chip.key{background:var(--accent-soft);color:var(--accent)}
+  .bk-chip.cover{background:var(--green-soft);color:var(--green)}
+  .bk-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex:none}
+  .bk-amt{font-size:16px;font-weight:800;font-family:var(--mono);white-space:nowrap;text-align:right}
+  .bk-amt small{font-size:10px;color:var(--faint);font-weight:600;display:block;text-align:right;margin-top:1px;font-family:inherit}
+  .bk-actline{display:flex;gap:6px;align-items:center}
+  .bk-badge{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;letter-spacing:.02em}
+  .bk-badge.pend{background:var(--amber-soft);color:var(--amber)}
+  .bk-badge.done{background:var(--green-soft);color:var(--green)}
+  .bk-act{border:1px solid var(--line);background:var(--card);color:var(--ink-soft);font-weight:700;padding:7px 13px;border-radius:8px;font-size:12px;cursor:pointer;white-space:nowrap}
+  .bk-act.primary{background:var(--green);color:#fff;border-color:var(--green)}
+  .bk-count{font-size:12px;font-weight:700;color:var(--amber);background:var(--amber-soft);padding:4px 10px;border-radius:999px}
+  .bk-count:empty{display:none}
+  @media(max-width:640px){.bk{grid-template-columns:36px 1fr;gap:10px}.bk-right{grid-column:1/-1;flex-direction:row;justify-content:space-between;align-items:center;border-top:1px solid var(--line-2);padding-top:10px;margin-top:2px}.bk-ic{width:36px;height:36px}}
   #app.mediamode #list,#app.mediamode #chat,#app.mediamode #detail{display:none}
   #app.mediamode #mediaView{display:flex}
   #app.invmode #list,#app.invmode #chat,#app.invmode #detail{display:none}
@@ -775,7 +801,7 @@
 
   <!-- reservas: cola de traspaso al ERP del cliente (no retiene motos, ver /admin/api/bookings) -->
   <div id="resView">
-    <div class="sec-top"><h2 data-i18n="nav_res">Reservas</h2></div>
+    <div class="sec-top"><h2 data-i18n="nav_res">Reservas</h2><span id="resCount" class="bk-count"></span></div>
     <div class="dash-scroll"><div class="dash-inner"><p class="media-help" data-i18n="res_help">Alquileres cerrados que hay que crear en el ERP. Aquí no se reserva ninguna moto: el sistema del cliente manda.</p><div id="resBody"></div></div></div>
   </div>
 
@@ -892,29 +918,43 @@
   function loadBookings(cb){ api('bookings').then(function(r){return r.json();}).then(function(D){ bookings = D; if(cb) cb(); }).catch(function(){}); }
   function renderBookings(){
     var el=document.getElementById('resBody'); if(!el) return;
-    if(!bookings || !bookings.length){ el.innerHTML='<div class="dash-empty">'+t('res_empty')+'</div>'; return; }
+    var cnt=document.getElementById('resCount');
+    if(!bookings || !bookings.length){ el.innerHTML='<div class="dash-empty">'+t('res_empty')+'</div>'; if(cnt) cnt.textContent=''; return; }
     var pend=bookings.filter(function(r){return !r.erpCreated;}).length;
-    var rows=bookings.map(function(r){
-      var meta=[ r.model, r.plan,
-        (r.startDate||r.endDate) ? ((r.startDate||'?')+' → '+(r.endDate||'?')) : '',
-        r.deliveryLocation, r.insuranceTier ].filter(Boolean).map(esc).join(' · ');
-      var when=r.paidAt ? new Date(r.paidAt).toLocaleDateString(t('locale'),{day:'numeric',month:'short'}) : '';
-      // ID/carnet que mandó el cliente por WhatsApp: el equipo los necesita para la entrega.
+    // Importe exacto (el equipo lo teclea en el ERP): no se abrevia como en money().
+    function fullMoney(n){ n=parseInt(n,10)||0; return n?('Rp '+n.toLocaleString(t('locale'))):''; }
+    // Fecha de entrega — el dato que dispara su trabajo. Formatea sólo un YYYY-MM-DD; texto libre se muestra tal cual.
+    function fmtDay(s){ if(!s) return ''; var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s).trim()); if(!m) return esc(s); return new Date(+m[1],+m[2]-1,+m[3]).toLocaleDateString(t('locale'),{day:'numeric',month:'short'}); }
+    function card(r){
+      var dates=''; if(r.startDate&&r.endDate) dates=fmtDay(r.startDate)+' → '+fmtDay(r.endDate); else if(r.startDate) dates=fmtDay(r.startDate); else if(r.endDate) dates='→ '+fmtDay(r.endDate);
+      var chips='';
+      if(dates) chips+='<span class="bk-chip key">📅 '+t('bk_deliv')+' '+dates+'</span>';
+      if(r.deliveryLocation) chips+='<span class="bk-chip">📍 '+esc(r.deliveryLocation)+'</span>';
+      if(r.insuranceTier) chips+='<span class="bk-chip cover">🛡️ '+esc(r.insuranceTier)+'</span>';
+      // ID/carnet que mandó el cliente por WhatsApp: el equipo lo necesita para la entrega.
       // El endpoint pide clave de admin, así que va en la URL (mismo patrón que /admin?key=).
-      var docs=(r.docs||[]).map(function(d,j){
-        return '<a class="inv-act" href="/admin/api/doc/'+encodeURIComponent(d.id)+'?key='+encodeURIComponent(KEY)+'" target="_blank" rel="noopener noreferrer">📎 '+(j+1)+'</a>';
-      }).join('');
+      (r.docs||[]).forEach(function(d,j){ chips+='<a class="bk-chip docs" href="/admin/api/doc/'+encodeURIComponent(d.id)+'?key='+encodeURIComponent(KEY)+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">📎 '+t('bk_id')+(r.docs.length>1?' '+(j+1):'')+'</a>'; });
+      var payline=r.paidAt
+        ? esc(((r.provider||'').charAt(0).toUpperCase()+(r.provider||'').slice(1)))+' · '+t('bk_paid')+' '+new Date(r.paidAt).toLocaleDateString(t('locale'),{day:'numeric',month:'short'})
+        : t('bk_nopay');
+      var badge=r.erpCreated?'<span class="bk-badge done">'+t('bk_inerp')+'</span>':'<span class="bk-badge pend">'+t('bk_pending')+'</span>';
       var btn=r.erpCreated
-        ? '<button class="inv-act" onclick="resToggle(\''+r.phone+'\',\''+r.dealId+'\',false,this)">'+t('res_undo')+'</button>'
-        : '<button class="inv-act" onclick="resToggle(\''+r.phone+'\',\''+r.dealId+'\',true,this)">'+t('res_mark')+'</button>';
-      return '<div class="dlrow'+(r.erpCreated?' res-done':'')+'" onclick="dashOpenLead(\''+r.phone+'\')">'
-        + '<div class="dlic">'+(r.erpCreated?'✅':'📋')+'</div>'
-        + '<div class="dlmain"><div class="dlt">'+esc(r.name||('+'+r.phone))+(when?' <span class="dls" style="font-weight:400">· '+when+'</span>':'')+'</div>'
-        + '<div class="res-meta">'+(meta||t('res_nodata'))+'</div></div>'
-        + '<div class="dlw">'+(money(r.amount)||'')+'</div>'
-        + '<div class="inv-acts" onclick="event.stopPropagation()">'+docs+btn+'</div></div>';
-    }).join('');
-    el.innerHTML='<div class="dash-card">'+rows+'</div>';
+        ? '<button class="bk-act" onclick="resToggle(\''+r.phone+'\',\''+r.dealId+'\',false,this)">'+t('res_undo')+'</button>'
+        : '<button class="bk-act primary" onclick="resToggle(\''+r.phone+'\',\''+r.dealId+'\',true,this)">'+t('res_mark')+'</button>';
+      return '<div class="bk'+(r.erpCreated?' done':'')+'" onclick="dashOpenLead(\''+r.phone+'\')">'
+        + '<div class="bk-ic">🛵</div>'
+        + '<div class="bk-main"><div class="bk-top"><span class="bk-bike">'+esc(r.model||t('res_nodata'))+'</span>'+(r.name?'<span class="bk-who">· '+esc(r.name)+'</span>':'')+'</div>'
+        + '<div class="bk-chips">'+(chips||'<span class="bk-chip">'+t('res_nodata')+'</span>')+'</div></div>'
+        + '<div class="bk-right"><div class="bk-amt">'+(fullMoney(r.amount)||'—')+'<small>'+payline+'</small></div>'
+        + '<div class="bk-actline" onclick="event.stopPropagation()">'+badge+btn+'</div></div></div>';
+    }
+    var pendRows=bookings.filter(function(r){return !r.erpCreated;}).map(card).join('');
+    var doneRows=bookings.filter(function(r){return r.erpCreated;}).map(card).join('');
+    var html='';
+    if(pendRows) html+='<div class="bk-group">'+t('bk_grp_pending')+'</div>'+pendRows;
+    if(doneRows) html+='<div class="bk-group">'+t('bk_grp_done')+'</div>'+doneRows;
+    el.innerHTML=html;
+    if(cnt) cnt.textContent = pend ? (pend+' '+t('bk_tocreate')) : '';
     var n=document.getElementById('navRes'); if(n) n.classList.toggle('has-pending', pend>0);
   }
   function resToggle(phone, dealId, done, btn){
@@ -974,7 +1014,7 @@
   // ── i18n (ES / EN) ──────────────────────────────────────────────
   var I18N = {
     es:{ brand:'CRM BBM', login_title:'Panel de conversaciones', login_sub:'CRM BBM · acceso del equipo', ph_pw:'Contraseña', btn_enter:'Entrar', err_pw:'Contraseña incorrecta',
-      nav_conv:'Conversaciones', nav_cal:'Calendario', nav_db:'Base de datos', nav_inv:'Facturas', nav_res:'Reservas', nav_flota:'Flota', nav_media:'Fotos y vídeos', nav_theme:'Cambiar tema', nav_logout:'Salir', nav_lang:'English', nav_toggle:'Colapsar menú', inv_empty:'Aún no hay links de pago ni pagos registrados.', res_help:'Alquileres cerrados que hay que crear en el ERP del cliente. Aquí no se reserva ninguna moto: su sistema manda.', res_empty:'Todavía no hay alquileres cerrados.', res_mark:'Creada en el ERP', res_undo:'Deshacer', res_nodata:'Sin datos del alquiler', res_err:'No se pudo actualizar la reserva', inv_paid:'Pagado', inv_sent:'Enviado', inv_cancelled:'Cancelado', inv_cancel:'Cancelar', inv_view:'Ver factura', inv_add_receipt:'Pegar recibo', inv_add_receipt_prompt:'Pega la URL del recibo/factura del proveedor:', inv_add_receipt_err:'No se pudo guardar el recibo', inv_cancel_err:'No se pudo anular el link (puede que ya esté pagado o expirado)', cfm_inv_cancel:'¿Anular este link de pago en el proveedor? El cliente ya no podrá pagarlo.', cfm_inv_delete:'¿Quitar esta factura del panel? Esto NO revierte ningún cobro ya realizado, solo la quita de esta vista.',
+      nav_conv:'Conversaciones', nav_cal:'Calendario', nav_db:'Base de datos', nav_inv:'Facturas', nav_res:'Reservas', nav_flota:'Flota', nav_media:'Fotos y vídeos', nav_theme:'Cambiar tema', nav_logout:'Salir', nav_lang:'English', nav_toggle:'Colapsar menú', inv_empty:'Aún no hay links de pago ni pagos registrados.', res_help:'Alquileres cerrados que hay que crear en el ERP del cliente. Aquí no se reserva ninguna moto: su sistema manda.', res_empty:'Todavía no hay alquileres cerrados.', res_mark:'Creada en el ERP', res_undo:'Deshacer', res_nodata:'Sin datos del alquiler', res_err:'No se pudo actualizar la reserva', bk_deliv:'Entrega', bk_id:'ID', bk_paid:'pagado', bk_nopay:'sin pago registrado', bk_pending:'PENDIENTE', bk_inerp:'EN ERP', bk_grp_pending:'Pendientes', bk_grp_done:'Ya en el ERP', bk_tocreate:'por crear en el ERP', inv_paid:'Pagado', inv_sent:'Enviado', inv_cancelled:'Cancelado', inv_cancel:'Cancelar', inv_view:'Ver factura', inv_add_receipt:'Pegar recibo', inv_add_receipt_prompt:'Pega la URL del recibo/factura del proveedor:', inv_add_receipt_err:'No se pudo guardar el recibo', inv_cancel_err:'No se pudo anular el link (puede que ya esté pagado o expirado)', cfm_inv_cancel:'¿Anular este link de pago en el proveedor? El cliente ya no podrá pagarlo.', cfm_inv_delete:'¿Quitar esta factura del panel? Esto NO revierte ningún cobro ya realizado, solo la quita de esta vista.',
       nav_dash:'Dashboard', da_kpi_won:'Motos alquiladas', da_week:'esta semana', da_kpi_rev:'Ingresos', da_rev_sub:'de alquileres ganados', da_kpi_pipe:'Pipeline abierto', da_act:'leads activos', da_kpi_conv:'Conversión', da_decided:'decididos', da_bystatus:'Leads por estado', da_leg_won:'ganados', da_leg_lost:'perdidos / no-show', da_next:'Próximas citas', da_viewcal:'Ver calendario →', da_viewdb:'Ver base de datos →', da_top:'Motos alquiladas', da_none:'Sin datos todavía', da_nocitas:'No hay citas próximas', da_s_new:'Nuevos', da_s_quoted:'Cotizados', da_s_won:'Ganados', da_s_lost:'Perdidos', da_s_noshow:'No-show',
       da_kpi_out:'En la calle', da_out_sub:'con devolución pendiente', da_ev_del_title:'Entregas', da_ev_ret_title:'Devoluciones', da_ev_del:'Entrega', da_ev_ret:'Devolución', da_noev:'Nada programado con fecha. Rellena "Fecha inicio" y "Fecha devolución" en la ficha del lead (o deja que el bot las capture).', e_return:'Fecha devolución', c_return:'Devolución', ph_date:'p. ej. 2026-07-20',
       da_dropoff:'Por qué no cierran', da_dropoff_list:'Leads fríos recientes', da_dropoff_empty:'Sin leads fríos que analizar (ningún lead lleva 24+ horas sin novedad).', da_dropoff_scanned:'Analizados {n} de {t} leads fríos',
@@ -1026,7 +1066,7 @@
       bulk_partial:'Lote a medias: {ok} hechos, {ko} fallidos.',
       al_save:'No se pudo guardar', edit_tpl:'✎ Editar plantillas…', locale:'es-ES' },
     en:{ brand:'CRM BBM', login_title:'Conversations panel', login_sub:'CRM BBM · team access', ph_pw:'Password', btn_enter:'Sign in', err_pw:'Wrong password',
-      nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_inv:'Invoices', nav_res:'Bookings', nav_flota:'Fleet', nav_media:'Photos & videos', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español', nav_toggle:'Collapse menu', inv_empty:'No payment links or payments recorded yet.', res_help:'Closed rentals that still need creating in the client ERP. Nothing is reserved here: their system is the source of truth.', res_empty:'No closed rentals yet.', res_mark:'Created in ERP', res_undo:'Undo', res_nodata:'No rental details', res_err:'Could not update the booking', inv_paid:'Paid', inv_sent:'Sent', inv_cancelled:'Cancelled', inv_cancel:'Cancel', inv_view:'View invoice', inv_add_receipt:'Paste receipt', inv_add_receipt_prompt:'Paste the provider\'s receipt/invoice URL:', inv_add_receipt_err:'Could not save the receipt', inv_cancel_err:'Could not void the link (it may already be paid or expired)', cfm_inv_cancel:'Void this payment link at the provider? The customer will no longer be able to pay it.', cfm_inv_delete:'Remove this invoice from the panel? This does NOT reverse any payment already made, it only removes it from this view.',
+      nav_conv:'Conversations', nav_cal:'Calendar', nav_db:'Database', nav_inv:'Invoices', nav_res:'Bookings', nav_flota:'Fleet', nav_media:'Photos & videos', nav_theme:'Toggle theme', nav_logout:'Log out', nav_lang:'Español', nav_toggle:'Collapse menu', inv_empty:'No payment links or payments recorded yet.', res_help:'Closed rentals that still need creating in the client ERP. Nothing is reserved here: their system is the source of truth.', res_empty:'No closed rentals yet.', res_mark:'Created in ERP', res_undo:'Undo', res_nodata:'No rental details', res_err:'Could not update the booking', bk_deliv:'Delivery', bk_id:'ID', bk_paid:'paid', bk_nopay:'no payment recorded', bk_pending:'PENDING', bk_inerp:'IN ERP', bk_grp_pending:'To create', bk_grp_done:'Already in ERP', bk_tocreate:'to create in ERP', inv_paid:'Paid', inv_sent:'Sent', inv_cancelled:'Cancelled', inv_cancel:'Cancel', inv_view:'View invoice', inv_add_receipt:'Paste receipt', inv_add_receipt_prompt:'Paste the provider\'s receipt/invoice URL:', inv_add_receipt_err:'Could not save the receipt', inv_cancel_err:'Could not void the link (it may already be paid or expired)', cfm_inv_cancel:'Void this payment link at the provider? The customer will no longer be able to pay it.', cfm_inv_delete:'Remove this invoice from the panel? This does NOT reverse any payment already made, it only removes it from this view.',
       nav_dash:'Dashboard', da_kpi_won:'Bikes rented', da_week:'this week', da_kpi_rev:'Revenue', da_rev_sub:'from won rentals', da_kpi_pipe:'Open pipeline', da_act:'active leads', da_kpi_conv:'Conversion', da_decided:'decided', da_bystatus:'Leads by status', da_leg_won:'won', da_leg_lost:'lost / no-show', da_next:'Upcoming appointments', da_viewcal:'View calendar →', da_viewdb:'View database →', da_top:'Bikes rented', da_none:'No data yet', da_nocitas:'No upcoming appointments', da_s_new:'New', da_s_quoted:'Quoted', da_s_won:'Won', da_s_lost:'Lost', da_s_noshow:'No-show',
       da_kpi_out:'Out now', da_out_sub:'awaiting return', da_ev_del_title:'Deliveries', da_ev_ret_title:'Returns', da_ev_del:'Delivery', da_ev_ret:'Return', da_noev:'Nothing scheduled with a date. Fill "Start date" and "Return date" on the lead (or let the bot capture them).', e_return:'Return date', c_return:'Return', ph_date:'e.g. 2026-07-20',
       da_dropoff:'Why deals don\'t close', da_dropoff_list:'Recently cold leads', da_dropoff_empty:'No cold leads to analyze (no lead has been quiet for 24+ hours).', da_dropoff_scanned:'Analyzed {n} of {t} cold leads',
