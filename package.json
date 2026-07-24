@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "express": "^4.21.2",
-    "@anthropic-ai/sdk": "^0.32.1",
+    "@anthropic-ai/sdk": "^0.110.0",
     "googleapis": "^144.0.0",
     "axios": "^1.7.9",
     "redis": "^4.7.0",

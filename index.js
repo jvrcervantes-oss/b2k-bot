@@ -64,7 +64,11 @@ const {
 
 // La BD del CRM es Redis (lead:phone + leads_index). El Google Sheet era un espejo
 // heredado y queda DESACTIVADO salvo que se ponga CRM_SHEET_SYNC=1 en Railway.
-const SHEET_SYNC = CRM_SHEET_SYNC === "1" || CRM_SHEET_SYNC === "true";
+// Una sola condición para las 3 puertas (saveLead / writeLeadToSheet / log de arranque):
+// con SHEET_SYNC=1 y GOOGLE_SERVICE_ACCOUNT vacío, saveLead entraba igual y reventaba en
+// JSON.parse("") una vez por mensaje ("Error guardando lead — HTTP ?: Unexpected end of JSON
+// input", visto en producción de BBM el 23-jul) mientras el arranque decía "desactivado".
+const SHEET_SYNC = (CRM_SHEET_SYNC === "1" || CRM_SHEET_SYNC === "true") && !!SHEET_ID && !!GOOGLE_SERVICE_ACCOUNT;
 
 const stripeClient = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
@@ -704,6 +708,14 @@ function leadMissingKeyFields(l) {
   return KEY_FIELDS.some((k) => l[k] == null || l[k] === "");
 }
 
+// El system pide "ONLY a compact JSON object" y aun así el modelo antepone prosa
+// ("Based on the conversation…" — visto en producción de BBM el 23-jul) o vallas ```json.
+// Nos quedamos con el objeto: del primer "{" al último "}". Sin objeto → throw, lo caza el catch.
+function parseJsonLoose(text) {
+  const s = String(text || "");
+  return JSON.parse(s.slice(s.indexOf("{"), s.lastIndexOf("}") + 1));
+}
+
 async function enrichLeadFromConversation(phone, { force = false } = {}) {
   const lead = (await getLead(phone)) || { phone };
   // No repetir si ya está completo o se enriqueció hace poco (salvo force).
@@ -724,9 +736,7 @@ async function enrichLeadFromConversation(phone, { force = false } = {}) {
       system: PLAYBOOK.enrichSystem + `\n${dateHint()}`, // sin esto guardaba fechas del año anterior en la ficha
       messages: [{ role: "user", content: transcript }],
     });
-    let txt = ((r.content[0] && r.content[0].text) || "").trim();
-    txt = txt.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
-    data = JSON.parse(txt);
+    data = parseJsonLoose(((r.content.find((b) => b.type === "text") || {}).text) || "");
   } catch (e) {
     console.error(`[${PROJECT_NAME}] enrich ${phone}: fallo extracción — ${e.message}`);
     return null;
@@ -1877,8 +1887,14 @@ app.post("/webhook", async (req, res) => {
     // Streaming (no create): evita el "Premature close" en respuestas no-stream y mantiene viva la conexión.
     const response = await claudeMessage({
       model: MODEL,
-      max_tokens: 500,
-      thinking: { type: "disabled" }, // respuestas cortas y baratas; en Sonnet 5 el thinking va ON por defecto y se comería el max_tokens
+      // Thinking ADAPTIVE, no disabled: sin borrador privado el modelo razonaba EN el texto visible
+      // ("self-thought" que el cliente vio en el chat, 23-jul-2026). Con adaptive, el cálculo va a un
+      // bloque thinking que este server nunca envía (solo se extrae el bloque type==="text") — el
+      // razonamiento no puede llegar al cliente por construcción. effort:low contiene el gasto.
+      // max_tokens cubre pensamiento + respuesta; la respuesta sigue corta por prompt.
+      thinking: { type: "adaptive" },
+      output_config: { effort: "low" },
+      max_tokens: 2000,
       // Prompt caching: el system (~11.5k tok fijos: context.md + BASE_INSTRUCTIONS) es idéntico en cada turno.
       // Con cache_control, la 1ª vez paga 1.25x y el resto de la charla (dentro de 5 min) paga 0.1x → ~-78% del coste de system.
       // mediaHint va en bloque aparte tras el prefijo cacheado (cambia solo al editar la media library).
@@ -2288,8 +2304,9 @@ app.post("/admin/api/simulate", async (req, res) => {
     const mediaHint = buildMediaHint(mediaLib);
     const response = await claudeMessage({
       model: MODEL,
-      max_tokens: 500,
-      thinking: { type: "disabled" },
+      thinking: { type: "adaptive" }, // espejo del webhook real (paridad simulador/producción)
+      output_config: { effort: "low" },
+      max_tokens: 2000,
       system: [
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
         { type: "text", text: dateHint() },
