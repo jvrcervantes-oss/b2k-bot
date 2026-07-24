@@ -16,7 +16,7 @@ TOPICS = [
  ("guided_future",     [["guided"],["future","not yet","waitlist","form a group","2027","scheduled later"]], ["we want a guided tour in 2027","do you have guided trips next year","guided departure for late 2027"]),
  ("islands",           [["6 islands","six islands"],["komodo"]], ["how many islands","which islands do you visit","route islands"]),
  ("duration",          [["12 day","12-day"]], ["how many days","trip length","how long is the tour"]),
- ("bikes",             [["versys"],["cb 150x","cb150x"],["klx"]], ["what bikes do you use","which motorcycles","bike options"]),
+ ("bikes",             [["versys"],["cb 150x","cb150x"]], ["what bikes do you use","which motorcycles","bike options"]),
  ("license_idp",       [["international driving permit","idp"]], ["what license do I need","do I need an international permit","driving licence requirement"]),
  ("age_minors",        [["18"],["minor"]], ["can my 16 year old come","age limit","are kids allowed"]),
  ("insurance_deposit", [["275"],["1,000","1000"]], ["insurance cost","security deposit","damage deposit"]),
