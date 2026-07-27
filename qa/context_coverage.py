@@ -34,7 +34,7 @@ TOPICS = [
  ("seven_islands",     [["7 islands","seven islands"],["2,050","2050"]], ["tell me about 7 islands","other tour options","lighter trip"]),
 # El 4 Islands cuesta 990 EUR fijos y NO admite guiado. El check vigila las dos cosas: si alguien
  # borra el "no guided option", el bot volveria a sumarle el suplemento de 550 que no le corresponde.
- ("four_islands",      [["4 islands","4islands"],["990"],["no guided option","not just for riders"]], ["tell me about the 4 islands tour","how much is 4 islands","a shorter trip without the gilis"]),
+ ("four_islands",      [["4 islands","4islands"],["1,100"],["no guided option","not just for riders"]], ["tell me about the 4 islands tour","how much is 4 islands","a shorter trip without the gilis"]),
  ("nov4_departure",    [["november 4"],["only"],["550"]], ["when is the guided departure","what dates do you have","is there a group i can join"]),
  ("sumba",             [["sumba"]], ["do you go to sumba","sumba tour","sumba challenge"]),
  ("video_call",        [["video call","30-min","30 min"]], ["can we talk on a call","book a call","speak to the team"]),
