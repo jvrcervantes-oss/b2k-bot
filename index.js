@@ -50,6 +50,10 @@ const {
   FOLLOWUP_MAX,
   FOLLOWUP_SCHEDULE,
   FOLLOWUP_TEMPLATE_VARS,
+  REVIEW_TEMPLATE_NAME,    // "dijiste que te lo mirabas" — 1er toque el día que vence nextFollowUp
+  REVIEW2_TEMPLATE_NAME,   // re-follow-up, REVIEW_GAP_DAYS después si sigue callado
+  REVIEW_TEMPLATE_LANG,
+  REVIEW_GAP_DAYS,
   INTRO_TEMPLATE_NAME,
   INTRO_TEMPLATE_LANG,
   INTRO_TEMPLATE_VARS,
@@ -411,6 +415,26 @@ async function setFollowupCount(phone, n) {
 async function resetFollowup(phone) {
   if (redisClient) await redisClient.del(`followup:${phone}`);
   else delete fallbackFollowup[phone];
+  // OJO: `sfu:` NO se borra aquí. Esto corre en CADA mensaje entrante, y borrarlo haría que
+  // un lead que contesta volviera a empezar la cadena agendada desde cero — le llegaría otra
+  // vez "dijiste que te lo mirabas". La cadena se cierra sola al detectar su respuesta, y se
+  // reabre solo si el bot le pone una fecha de seguimiento NUEVA (ver `fu` abajo).
+}
+
+// Seguimiento AGENDADO (el lead dijo "me lo reviso" y el bot le puso fecha en nextFollowUp).
+// Cadena aparte de la de arriba: aquella cuenta horas de silencio, esta arranca en una FECHA.
+// {n: toques dados · at: ms del último · fu: la fecha que la originó}. Atarlo a `fu` es lo que
+// permite que una fecha nueva arranque una cadena nueva sin resucitar la vieja.
+const fallbackSfu = {};
+async function getSfu(phone) {
+  const raw = redisClient ? await redisClient.get(`sfu:${phone}`) : (fallbackSfu[phone] || null);
+  if (!raw) return { n: 0, at: 0, fu: null };
+  try { return JSON.parse(raw); } catch (e) { return { n: 0, at: 0, fu: null }; }
+}
+async function setSfu(phone, n, at, fu) {
+  const v = JSON.stringify({ n, at, fu });
+  if (redisClient) await redisClient.setEx(`sfu:${phone}`, 180 * 24 * 3600, v);
+  else fallbackSfu[phone] = v;
 }
 
 async function getLead(phone) {
@@ -1012,17 +1036,16 @@ async function followupTick() {
     const maxN = parseInt(FOLLOWUP_MAX) || schedule.length;
     const nVars = FOLLOWUP_TEMPLATE_VARS != null ? parseInt(FOLLOWUP_TEMPLATE_VARS) : 1;
     const now = Date.now();
-    const _d = new Date();
-    const todayStr = _d.getFullYear() + "-" + ("0" + (_d.getMonth() + 1)).slice(-2) + "-" + ("0" + _d.getDate()).slice(-2);
     const leads = await listLeads();
     for (const l of leads) {
       if (isOwner(l.phone)) continue;
       if (l.paused) continue;                              // humano al mando
       if (FOLLOWUP_SKIP_STATUS.has(l.status)) continue;    // cerrado (ganado/perdido/no-show)
       if (FOLLOWUP_SKIP_INTENT.has(l.intent)) continue;    // hay una duda escalada al owner
-      // Seguimiento AGENDADO a futuro (p.ej. waitlist "avísame cuando abráis 2027"):
-      // no auto-nudge; ya lo cubre followUpReminderTick avisando al owner en esa fecha.
-      if (l.nextFollowUp && String(l.nextFollowUp).slice(0, 10) > todayStr) continue;
+      // Con fecha de seguimiento AGENDADA el lead es de la otra cadena (followUpReminderTick),
+      // vencida o no. Antes solo se saltaba si la fecha era futura, así que al vencer le caía
+      // ADEMÁS este nudge genérico: dos plantillas distintas por el mismo motivo.
+      if (l.nextFollowUp) continue;
       if (Array.isArray(l.tags) && l.tags.some((t) => /waitlist/i.test(t))) continue; // en lista de espera
       if (!l.lastInboundAt) continue;
       const coldH = (now - l.lastInboundAt) / 3600000;
@@ -1031,8 +1054,7 @@ async function followupTick() {
       if (sent >= maxN) continue;                          // tope de intentos alcanzado
       const dueH = schedule[sent] != null ? schedule[sent] : schedule[schedule.length - 1];
       if (coldH < dueH) continue;                          // aún no toca el siguiente intento
-      const firstName = (l.name || "").trim().split(/\s+/)[0] || "there";
-      const params = nVars >= 1 ? [firstName] : [];
+      const params = nVars >= 1 ? [firstNameOf(l)] : [];
       await sendWhatsAppTemplate(l.phone, FOLLOWUP_TEMPLATE_NAME, FOLLOWUP_TEMPLATE_LANG, params);
       await setFollowupCount(l.phone, sent + 1);
       console.log(`[${PROJECT_NAME}] Follow-up ${sent + 1}/${maxN} enviado a ${l.phone} (frío ${coldH.toFixed(0)}h)`);
@@ -1046,11 +1068,24 @@ setInterval(followupTick, 30 * 60000); // revisar cada 30 minutos
 // ─── RECORDATORIOS DE SEGUIMIENTO MANUAL ───────────────────────────
 // Cuando un lead llega a su fecha "Próximo seguimiento" (nextFollowUp), avisa al OWNER
 // por WhatsApp para que lo contacte. Una vez por fecha (fuReminded). No al lead, al estudio.
+// Qué estaba revisando el lead, para el {{2}} de la plantilla. Nunca vacío: Meta rechaza
+// un parámetro en blanco, y "your trip" es cierto aunque no sepamos el paquete.
+function reviewSubject(l) {
+  const parts = [l.tour, l.package].filter(Boolean).join(" ").trim();
+  return parts ? `the ${parts}` : "your Indonesia trip";
+}
+const firstNameOf = (l) => (l.name || "").trim().split(/\s+/)[0] || "there";
+
+// Un lead en lista de espera NO dijo "me lo reviso": espera noticias nuestras (que abran
+// las salidas guiadas de 2027). Mandarle "¿alguna duda con lo que te pasé?" es responderle
+// a algo que no preguntó, así que esos siguen siendo solo aviso al owner.
+const isWaitlist = (l) => Array.isArray(l.tags) && l.tags.some((t) => /waitlist/i.test(t));
+
 async function followUpReminderTick() {
   try {
-    if (!OWNER_PHONE) return;
     const now = new Date();
     const todayStr = now.getFullYear() + "-" + ("0" + (now.getMonth() + 1)).slice(-2) + "-" + ("0" + now.getDate()).slice(-2);
+    const gapMs = (parseFloat(REVIEW_GAP_DAYS) || 4) * 24 * 3600000;
     const leads = await listLeads();
     for (const l of leads) {
       if (l.archived) continue;
@@ -1058,13 +1093,43 @@ async function followUpReminderTick() {
       if (!l.nextFollowUp) continue;
       const fu = String(l.nextFollowUp).slice(0, 10);
       if (fu > todayStr) continue;                          // aún no vence
-      if (l.fuReminded === fu) continue;                    // ya avisado para esta fecha
-      const who = l.name || ("+" + l.phone);
-      const extra = [l.package, l.owner ? "· " + l.owner : ""].filter(Boolean).join(" ");
-      await sendWhatsApp(OWNER_PHONE, `📅 ${PROJECT_NAME} — Seguimiento pendiente\n\n*${who}* ${extra}\nTel: +${l.phone}\nVencía: ${fu}\n\nToca contactarle 👇`);
-      await updateLeadFields(l.phone, { fuReminded: fu });
-      await logEvent(l.phone, "fu_reminded", { date: fu });
-      console.log(`[${PROJECT_NAME}] Recordatorio de seguimiento (owner) para ${l.phone} — vencía ${fu}`);
+
+      // ── 1) Escribirle AL LEAD (lo que antes no hacía nadie) ──────────────
+      let sentNow = null;
+      const elegible = REVIEW_TEMPLATE_NAME && !isOwner(l.phone) && !l.paused && !isWaitlist(l);
+      if (elegible) {
+        let sfu = await getSfu(l.phone);
+        if (sfu.fu !== fu) sfu = { n: 0, at: 0, fu };      // fecha nueva → cadena nueva
+        // Contestó después del último toque → ya está en conversación viva, se corta la cadena.
+        if (sfu.n > 0 && sfu.n < 99 && l.lastInboundAt && l.lastInboundAt > sfu.at) {
+          await setSfu(l.phone, 99, sfu.at, fu);           // cerrada para esta fecha
+        } else if (sfu.n === 0) {
+          const r = await sendWhatsAppTemplate(l.phone, REVIEW_TEMPLATE_NAME, REVIEW_TEMPLATE_LANG, [firstNameOf(l), reviewSubject(l)]);
+          if (r.ok) { await setSfu(l.phone, 1, Date.now(), fu); sentNow = REVIEW_TEMPLATE_NAME; await logEvent(l.phone, "review_followup", { n: 1 }); }
+        } else if (sfu.n === 1 && REVIEW2_TEMPLATE_NAME && Date.now() - sfu.at >= gapMs) {
+          const r = await sendWhatsAppTemplate(l.phone, REVIEW2_TEMPLATE_NAME, REVIEW_TEMPLATE_LANG, [firstNameOf(l), reviewSubject(l)]);
+          if (r.ok) { await setSfu(l.phone, 2, Date.now(), fu); sentNow = REVIEW2_TEMPLATE_NAME; await logEvent(l.phone, "review_followup", { n: 2 }); }
+        }
+        // n >= 2 → agotada. Se queda para el owner, sin más envíos automáticos.
+      }
+
+      // ── 2) Avisar al OWNER ───────────────────────────────────────────────
+      // Una vez cuando vence la fecha, y otra al agotarse la cadena: si no, el owner se
+      // queda con el "espera su respuesta" del primer día y nadie retoma nunca al lead.
+      const agotada = sentNow === REVIEW2_TEMPLATE_NAME;
+      if (OWNER_PHONE && (l.fuReminded !== fu || agotada)) {
+        const who = l.name || ("+" + l.phone);
+        const extra = [l.package, l.owner ? "· " + l.owner : ""].filter(Boolean).join(" ");
+        const cola = agotada
+          ? "\n\n🤖 Le he escrito 2 veces y no contesta. Se acabaron mis intentos: te toca a ti."
+          : sentNow
+            ? `\n\n🤖 Acabo de escribirle yo. Dale margen antes de insistir; si no contesta le mando un último toque en ${parseFloat(REVIEW_GAP_DAYS) || 4} días.`
+            : elegible ? "\n\n🤖 Yo ya agoté mis intentos con este. Te toca." : "\n\nToca contactarle 👇";
+        await sendWhatsApp(OWNER_PHONE, `📅 ${PROJECT_NAME} — Seguimiento pendiente\n\n*${who}* ${extra}\nTel: +${l.phone}\nVencía: ${fu}${cola}`);
+        await updateLeadFields(l.phone, { fuReminded: fu });
+        await logEvent(l.phone, "fu_reminded", { date: fu, agotada: agotada || undefined });
+        console.log(`[${PROJECT_NAME}] Recordatorio de seguimiento (owner) para ${l.phone} — vencía ${fu}${agotada ? " (cadena agotada)" : ""}`);
+      }
     }
   } catch (e) {
     console.error(`[${PROJECT_NAME}] followUpReminderTick error: ${e.message}`);
