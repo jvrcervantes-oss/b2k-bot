@@ -705,6 +705,7 @@
     <div class="spacer"></div>
     <div class="ic" id="langToggle" data-ti="nav_lang">EN</div>
     <div class="ic" data-ti="nav_theme" id="themeToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_theme">Cambiar tema</span></div>
+    <div class="ic" id="botPower" title="Encender / apagar el bot" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v9" stroke-linecap="round"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0" stroke-linecap="round"/></svg><span class="lbl" id="botPowerLbl">Bot</span></div>
     <div class="ic" data-ti="nav_logout" id="logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_logout">Salir</span></div>
   </nav>
 
@@ -1185,6 +1186,7 @@
       leads = L; processAlerts(L); render(); start();
       if(/\/db\/?$/.test(location.pathname)) document.getElementById('navDb').click(); // URL dedicada → abrir BD
       if(/\/dash\/?$/.test(location.pathname)) document.getElementById('navDash').click(); // URL dedicada → abrir dashboard
+      initBotPower();
       return true;
     });
   }
@@ -1206,6 +1208,39 @@
     applyTheme(theme);
   };
   document.getElementById('langToggle').onclick = function(){ setLang(LANG==='es'?'en':'es'); };
+
+  // ── Interruptor GLOBAL del bot (solo el dueño; exige la 2ª contraseña) ──
+  var botOn = true;
+  function paintBotPower(){
+    var el = document.getElementById('botPower'); if(!el) return;
+    el.style.display = 'flex';
+    el.style.color = botOn ? '#16a34a' : '#dc2626';
+    var lbl = document.getElementById('botPowerLbl');
+    if(lbl) lbl.textContent = LANG==='es' ? (botOn?'Bot ON':'Bot OFF') : (botOn?'Bot ON':'Bot OFF');
+    el.title = LANG==='es'
+      ? (botOn ? 'Bot ENCENDIDO — clic para apagar' : 'Bot APAGADO — clic para encender')
+      : (botOn ? 'Bot ON — click to turn off' : 'Bot OFF — click to turn on');
+  }
+  function initBotPower(){
+    api('bot').then(function(r){ return r.ok ? r.json() : null; }).then(function(d){
+      if(d && typeof d.enabled === 'boolean'){ botOn = d.enabled; }
+      paintBotPower();
+    }).catch(function(){});
+  }
+  document.getElementById('botPower').onclick = function(){
+    var want = !botOn;
+    var q = LANG==='es'
+      ? (want ? '¿ENCENDER el bot? Volverá a responder a todos los clientes.' : '¿APAGAR el bot? Dejará de responder y de hacer seguimiento (los mensajes se siguen guardando en el CRM).')
+      : (want ? 'Turn the bot ON? It will reply to all customers again.' : 'Turn the bot OFF? It stops replying and following up (messages are still saved in the CRM).');
+    if(!confirm(q)) return;
+    var pass = prompt(LANG==='es' ? 'Contraseña de administración del interruptor:' : 'Master password for the switch:');
+    if(!pass) return;
+    apiPost('bot', { enabled: want, pass: pass }).then(function(r){
+      if(r.status === 403){ alert(LANG==='es' ? 'Contraseña incorrecta.' : 'Wrong password.'); return; }
+      if(!r.ok){ return r.json().catch(function(){return {};}).then(function(e){ alert('Error: ' + (e.error||r.status)); }); }
+      return r.json().then(function(d){ botOn = !!d.enabled; paintBotPower(); });
+    }).catch(function(){ alert(LANG==='es' ? 'Error de red.' : 'Network error.'); });
+  };
 
   // ── sidebar colapsable a mano (persistente; solo cambia el icono, la etiqueta la gestiona el i18n normal) ──
   var navCollapsed = localStorage.getItem('botpanel_navcollapsed') === '1';
