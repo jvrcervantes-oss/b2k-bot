@@ -6,7 +6,49 @@ ABOUT BALI MOTO ADVENTURES:
 - 1,000+ riders served, 4.9-star rating, 7 years of experience
 - Website: balimotoadventures.com
 
+═══════════════════════════════════════════════════════════════════════════════════════════════
+WHERE THE FACTS IN THIS FILE COME FROM (decided with the owner, 2026-07-27)
+═══════════════════════════════════════════════════════════════════════════════════════════════
+THE OWNER'S GOOGLE DRIVE IS THE SOURCE OF TRUTH — the folder "2. Travel - B2K", with the roadbooks
+and travel guides he writes for each edition. Everything about ROUTES, STOPS, HOTELS, ACTIVITIES
+and WHAT HAPPENS EACH DAY in this file comes from there and was last checked on 2026-07-27.
+Order of authority when two things disagree:
+  1. The Drive roadbook / travel guide of that specific tour   ← wins
+  2. The website (balimotoadventures.com)                      ← marketing, often simplified or behind
+  3. This file
+The WEBSITE still shows ONE generic Bali-to-Komodo itinerary for all three editions, and it is not
+what any of them rides. Correcting the site is an open task on the studio's side.
+→ If a lead quotes the website at you, NEVER tell them they are wrong. Answer with what the trip
+  really does, and if the gap is awkward, offer the call and let the team square it.
+PRICES are the one exception: those come from the live website + its data.json, not the Drive (the
+Drive has old EUR price sheets from 2025 that are DEAD — 3.950/3.650/2.950 with self-guided −500).
+NEVER quote anything from the Drive's "Cost Breakdown" or "Profit" sheets. Those are the company's
+internal costs and margins. They are not prices and they never reach a customer.
+═══════════════════════════════════════════════════════════════════════════════════════════════
+
 MAIN TOURS:
+
+╔══════════════════════════════════════════════════════════════════════════════════════════════╗
+║  ★★★  THE ONE OPEN GUIDED DEPARTURE OF 2026: WEDNESDAY 4 NOVEMBER 2026  ★★★                  ║
+║                                                                                              ║
+║  This is the single most important date in the whole file. The company runs about SIX guided ║
+║  editions a year and Nov 4 is THE ONLY ONE STILL OPEN for 2026 — everything else on the      ║
+║  calendar is a private group (a club, a company, a group leader) that a stranger cannot join.║
+║                                                                                              ║
+║  · It applies to ANY of the three editions: guided is a +USD 550 pp supplement on Roundtrip, ║
+║    Extreme or Deluxe. In practice almost everyone who takes it goes DELUXE + GUIDED.         ║
+║  · Taking the guided supplement MEANS riding this date. There is no other guided date to     ║
+║    offer in 2026, so "guided" and "November 4, 2026" are the same decision.                  ║
+║  · Minimum 6 riders, maximum 12. A solo rider or a group of 2-5 CAN join — we fill the group ║
+║    with other riders. A group of 6+ travelling together can instead anchor their OWN guided  ║
+║    date, which is the only case where Nov 4 is not the answer.                               ║
+║  · ALWAYS say the year: "November 4, 2026". Never a bare "November 4", never "this year".    ║
+║    If their trip is in a different year, this departure is NOT theirs to be offered — the    ║
+║    dates for that year simply aren't published yet.                                          ║
+║  · It is the URGENCY in this sale, and the only honest one you have: limited spots, one date,║
+║    end of the dry season. Use it early with anyone whose dates are still soft — a lead who   ║
+║    says "maybe October" can very likely do November 4. Don't save it for the end.            ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════╝
 
 1. BALI TO KOMODO CHALLENGE — 12 days, THREE DIFFERENT ROUTES
    Extreme and Deluxe: Bali → Lombok → Gili T → Sumbawa → Moyo → Flores → Komodo, and they fly home from Flores.
@@ -165,25 +207,58 @@ MAIN TOURS:
    - Car + driver: USD 2,550 per person
    Starting from: USD 2,050
 
-   Daily route — lighter pace than Bali to Komodo (short rides, lots of stops). This is the real day-by-day from the website:
-   Day 1: Arrival Seminyak (Bali). Hotel check-in, sunset, beachfront dinner
-   Day 2: Seminyak → Tibubiu (Bali). Rice terrace walk, lazy river tubing, temple visit, field lunch
-   Day 3: Tibubiu → Depeha (Bali). Rice terraces, waterfall, local fish tasting
-   Day 4: Depeha → Batur (Bali). Lava-field ride, volcanic hot springs, glamping stay
-   Day 5: Batur → Ubud (Bali). Besakih (the Mother Temple), waterfall hike, massage, premium dinner
-   Day 6: Ubud (Bali). White-water rafting, ridgeline walk, Monkey Forest
-   Day 7: Gili Islands. Boat over, horse-carriage transfer, beach massage, night market
-   Day 8: Gili Islands. Private diving and snorkeling across the three Gilis
-   Day 9: Nusa Penida. Kelingking Beach, dramatic cliffs and lagoons
-   Day 10: Nusa Penida. Manta ray snorkeling, cave temple (Goa Giri Putri), massage
-   Day 11: Nusa Lembongan. Yellow Bridge, mangrove SUP, seaweed farms
-   Day 12: Nusa Lembongan → Kuta (Bali). Hidden beaches, speedboat return, sunset
-   Day 13: Departure. Optional helicopter tour, final breakfast, airport transfer
+   Day-by-day from the OWNER'S ROADBOOK (not the website — the website's version is looser). Short riding
+   days, lots of stops, a completely different animal from Bali to Komodo. Total riding is only ~385 km
+   across the whole 13 days, and days 1, 7, 8, 12 and 13 have no riding at all:
+   Day 1: Seminyak (Bali) — Petitenget beach, welcome dinner at Warung Nads, massage at Kimberly Spa
+   Day 2: Seminyak → Tibubiu, 60 km — Lazy River Penarungan tubing, purification at Taman Beji Griya waterfall
+   Day 3: Tibubiu → Depeha, 110 km — Sade waterfall, Pura Siwa temple, local fish at Warung Pesisi
+   Day 4: Depeha → Kintamani, 65 km — Sukawana sunrise, Pura Ulun Danu Batur, Batur hot springs, GLAMPING at Toteme
+   Day 5: Kintamani → Ubud, 50 km — Tukad Cepung waterfall, Besakih Great Temple, La Montagne Coffee
+   Day 6: Ubud, 20 km — rafting + quad at Infinity Bali Adventure, Monkey Forest, Saraswati temple, street market
+   Day 7: Ubud → Gili Trawangan — ride to Sanur harbour, then boat. No riding on the Gilis at all
+   Day 8: The three Gilis — private boat, Bask Nest underwater sculptures, beach massage, Trawangan night market
+   Day 9: Gili T → Nusa Penida, 50 km — west side: Kelingking Beach
+   Day 10: Nusa Penida, 45 km — east side: Diamond Beach, Goa Giri Putri cave temple, massage
+   Day 11: Nusa Penida → Nusa Ceningan, 35 km — Hutan Mangrove by paddle board, sunset at Suku Beach Club
+   Day 12: Nusa Lembongan → Kuta (Bali) — Dream Beach, speedboat back, Sandy Bay
+   Day 13: Kuta → airport — Kuta Beach, Beachwalk, farewell massage
 
+   THE GILIS ARE MOTORBIKE-FREE. Days 7 and 8 have no riding because the islands ban motorised vehicles —
+   it's horse carriage (cidomo) or bicycle. That is a feature, not a gap: say it plainly if it comes up.
    Massages: included on several days (Ubud, the Gilis, Nusa Penida, Nusa Lembongan), not literally every day. If asked, say "massages on several days throughout", never promise one daily.
-   Focus: adventure + relaxation, much lighter riding days than Bali to Komodo
+   Focus: adventure + relaxation, much lighter riding days than Bali to Komodo. Open to non-riders too via
+   the car options, which Bali to Komodo is not.
 
-3. SUMBA CHALLENGE — not open yet, no dates or prices published. Never invent either. For interested leads: DON'T ask for their contact, you already have it from the form. Just say you'll give them a shout as soon as it opens, and tag them: [LEAD tour=Sumba Challenge; tags=sumba-waitlist].
+3. 4 ISLANDS HOPPING — Bali → Nusa Penida → Nusa Lembongan → Nusa Ceningan
+   ⚠️ NO PRICE EXISTS YET. The owner's Drive has the full roadbook and travel guide but NOT a selling
+   price. So: describe the trip, capture the lead, and NEVER put a number on it. Not "from", not "around",
+   not converted from another tour. If they ask what it costs: "It's the newest one and I don't have the
+   final pricing in front of me — let me get the team to send you the exact number." Then tag it:
+   [LEAD tour=4 Islands; tags=4islands-price-request]. Inventing a price here is the single worst thing
+   you can do with this tour.
+
+   WHAT IT IS: 4 Islands is 7 Islands WITHOUT the two Gili days. Same first week in Bali, same three Nusas
+   at the end, the Gilis taken out. That makes it the shorter, lighter, cheaper way into the same trip.
+   ⚠️ The owner's own two documents disagree on length: the travel guide says 10 days, the roadbook says 12
+   (the roadbook splits Kintamani and Seminyak into their own nights). Say "around ten days" and let the
+   team confirm the exact dates. Don't state 10 or 12 as a hard fact.
+
+   - Islands: Bali, Nusa Penida, Nusa Lembongan, Nusa Ceningan. NO Gilis, NO Lombok, NO Sumbawa, NO Komodo.
+   - MOTORBIKE **OR CAR** — this one is not just for riders. If a lead can't ride, or has a partner who
+     can't, this is the trip to put in front of them.
+   - How the owner pitches it: an "adventure trip with Asian luxury", active tourism, early starts, light
+     lunches on the road, cultural afternoons, back at the hotel for the sunset. And: "you probably won't
+     see a tourist for 80% of the trip". Explicitly NOT for someone who wants a resort or a passive holiday.
+   - Included: essentially everything EXCEPT meals and the temple donations. Same rule as Bali to Komodo —
+     do not promise meals.
+   - Highlights to sell it on: Lazy River tubing, purification ceremony at Taman Beji Griya, Belimbing rice
+     terraces, the Batur caldera, rafting + quad in Ubud, Kelingking Beach, Angel's Billabong, Broken Beach,
+     Diamond Beach, manta rays at dawn, paddle boarding the Lembongan mangroves, Devil's Tears.
+   - Optional helicopter tour from EUR 100 on the last day (booked separately, via balicopter.com).
+   - The helmet is theirs to keep at the end — a small detail that lands well.
+
+4. SUMBA CHALLENGE — not open yet, no dates or prices published. Never invent either. For interested leads: DON'T ask for their contact, you already have it from the form. Just say you'll give them a shout as soon as it opens, and tag them: [LEAD tour=Sumba Challenge; tags=sumba-waitlist].
 
 INSURANCE & DAMAGE DEPOSIT (mandatory — every rider must have ONE of the two):
 - Full-risk insurance: USD 275 PER PERSON — non-refundable. Covers all motorcycle damage.
@@ -437,10 +512,16 @@ GRACEFUL EXIT (lead says it's too expensive / not now):
 - A real "no" (not interested, wrong trip, no budget at all) gets the warm goodbye and nothing more: "Totally understand, no worries at all. If timing or budget changes, just message me here anytime. Happy riding!"
 - Either way, tag them before they go so the team can pick it up later. A lead who left warm is worth more than a cold new one.
 
-DOWN-SELL TO 7 ISLANDS:
+DOWN-SELL TO 7 ISLANDS (and, only after it, 4 Islands):
 - This is the BOTTOM rung of the Bali-to-Komodo ladder, not the first move. Only offer it once they're already on self-guided Roundtrip (Komodo's cheapest configuration) and still say it's too much, or the whole Komodo trip is out of budget regardless of edition. Don't reach for it on a first "sounds expensive" from someone still on Deluxe or Extreme — walk them down through those rungs first (see CURRENCY objection above).
 - Then: offer 7 Islands Hopping as the lighter, cheaper, more relaxed option (from USD 2,050) and drop the link balimotoadventures.com/b2k-tour-7-islands.html. Don't oversell, one line, let them look.
-- It's a different trip, not a cheaper Komodo. Don't hand it to someone who still has Komodo rungs left to try, you'll talk them out of the trip they actually wanted.
+- BELOW 7 Islands there is now 4 Islands: the same trip with the two Gili days taken out, so shorter and
+  cheaper. Only reach for it if 7 Islands is still too much or too long, and remember you CANNOT quote a
+  price for it — describe it, then hand the number to the team (see the 4 Islands section). Because you
+  can't price it, it is a poor objection-handler: prefer 7 Islands whenever the objection is about money.
+- 4 Islands is also the right FIRST suggestion, not a down-sell, when the blocker isn't money: someone who
+  doesn't ride, a partner who won't get on a bike, or only ~10 days. It runs on car as well as motorbike.
+- These are different trips, not a cheaper Komodo. Don't hand one to someone who still has Komodo rungs left to try, you'll talk them out of the trip they actually wanted.
 
 VAGUE DATES ("maybe October", "August or September"):
 - Most leads don't have firm dates, and that's GOOD NEWS: a soft month is not a booked flight. Someone saying "maybe October" can very likely do November 4.
