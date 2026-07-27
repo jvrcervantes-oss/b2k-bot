@@ -31,6 +31,7 @@ const {
   OPENAI_API_KEY,          // opcional: activa la transcripción de notas de voz (Whisper); sin ella se pide el texto
   CONTEXT_FILE,            // nombre del archivo de contexto a cargar del repo (default "context.md")
   PANEL_FILE,              // nombre del archivo del panel /admin a cargar del repo (default "panel.html")
+  PANEL_MASTER_PASSWORD,   // 2ª clave para acciones sensibles del panel (interruptor global, wipe) — SOLO el dueño del estudio
   REDIS_URL,
   STRIPE_SECRET_KEY,
   STRIPE_SUCCESS_URL,
@@ -2805,6 +2806,16 @@ function adminAuth(req, res) {
   return true;
 }
 
+// 2ª clave para acciones sensibles del panel (interruptor global, wipe). Va en el body (no en
+// cabecera) y NUNCA en el repo: se compara contra PANEL_MASTER_PASSWORD del entorno. Fail-closed:
+// sin la variable, la acción queda denegada — una acción destructiva no puede quedar abierta por
+// olvidar configurar la clave.
+function masterAuth(req, res) {
+  if (!PANEL_MASTER_PASSWORD) { res.status(503).json({ error: "acción bloqueada: falta PANEL_MASTER_PASSWORD en el entorno" }); return false; }
+  if (!req.body || req.body.pass !== PANEL_MASTER_PASSWORD) { res.status(403).json({ error: "clave incorrecta" }); return false; }
+  return true;
+}
+
 app.get("/admin", (req, res) => {
   if (!ADMIN_PASSWORD) return res.status(503).send("Panel no configurado: define ADMIN_PASSWORD en Railway.");
   res.type("html").send(ADMIN_HTML.replace(/__PROJECT__/g, PROJECT_NAME || "Bot"));
@@ -3185,6 +3196,7 @@ app.post("/admin/api/pause", async (req, res) => {
 // guardando los leads). GET devuelve el estado actual.
 app.post("/admin/api/bot", async (req, res) => {
   if (!adminAuth(req, res)) return;
+  if (!masterAuth(req, res)) return; // el interruptor global solo lo acciona el dueño del estudio
   const { enabled } = req.body || {};
   if (typeof enabled !== "boolean") return res.status(400).json({ error: "enabled (boolean) requerido" });
   await setBotEnabled(enabled);
@@ -3194,6 +3206,59 @@ app.post("/admin/api/bot", async (req, res) => {
 app.get("/admin/api/bot", async (req, res) => {
   if (!adminAuth(req, res)) return;
   res.json({ enabled: await isBotEnabled() });
+});
+
+// ── WIPE: borra TODO el estado de conversaciones + CRM (IRREVERSIBLE) ────────────────────────
+// Borra por PATRÓN DE CLAVE en Redis, no por la lista del panel: así también caen los `conv:`
+// HUÉRFANOS que no están en leads_index — la causa de que el contexto "reapareciera" cuando el
+// cliente volvía a escribir tras vaciar el CRM. PRESERVA config y activos del estudio:
+// media_lib/mediablob (biblioteca del bot), canned (respuestas rápidas), unsub_emails (bajas del
+// newsletter, dato legal), nl_scheduled, bot_enabled. `sim:*` (simulador) cae dentro de `conv:*`.
+const WIPE_PATTERNS = [
+  "conv:*", "lead:*", "notes:*", "status:*", "paused:*", "waiting:*", "inbound:*",
+  "followup:*", "notified:*", "lastlink:*", "doc:*", "escmap:*", "wamid:*",
+  "paidevt:*", "reminded:*", "appt:*",
+];
+const WIPE_SINGLE = ["leads_index", "appts_index", "esc_queue"];
+const WIPE_BACKUP_SKIP = new Set(["doc:*"]); // no volcar fotos de ID (PII) a ningún archivo de backup
+
+async function wipeConversationState() {
+  if (!redisClient) { // modo RAM (sin Redis): vaciar los espejos en memoria
+    for (const m of [fallbackMemory, fallbackLeads, fallbackNotes, fallbackStatus, fallbackPaused, fallbackWaiting, fallbackInbound, fallbackFollowup, fallbackNotified]) {
+      if (m) for (const k of Object.keys(m)) delete m[k];
+    }
+    if (Array.isArray(fallbackEscQueue)) fallbackEscQueue.length = 0;
+    return { mode: "ram", deleted: {}, backup: {} };
+  }
+  const backup = {}; const deleted = {};
+  for (const pat of WIPE_PATTERNS) {
+    const keys = [];
+    let cursor = 0;
+    do {
+      const r = await redisClient.scan(cursor, { MATCH: pat, COUNT: 300 });
+      cursor = r.cursor;
+      if (r.keys.length) keys.push(...r.keys);
+    } while (cursor !== 0);
+    if (!WIPE_BACKUP_SKIP.has(pat)) {
+      for (const k of keys) { try { backup[k] = await redisClient.get(k); } catch (_) { /* clave no-string: se ignora en backup */ } }
+    }
+    deleted[pat] = keys.length ? await redisClient.del(keys) : 0;
+  }
+  for (const k of WIPE_SINGLE) deleted[k] = await redisClient.del(k); // índices/cola: reconstruibles, no se backupean
+  return { mode: "redis", deleted, backup };
+}
+
+// Doble llave: admin key (cabecera) + master pass (body) + confirm:"WIPE" explícito. Devuelve el
+// backup de las claves de texto (leads/convs/notas…) para guardarlo fuera; las fotos de ID no viajan.
+app.post("/admin/api/wipe", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  if (!masterAuth(req, res)) return;
+  if (!req.body || req.body.confirm !== "WIPE") return res.status(400).json({ error: 'confirm:"WIPE" requerido' });
+  try {
+    const r = await wipeConversationState();
+    console.log(`[${PROJECT_NAME}] WIPE ejecutado por el dueño — borrado: ${JSON.stringify(r.deleted)}`);
+    res.json({ ok: true, ...r });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── CRM: notas internas del lead (se escriben también en el Sheet, col. Javier Notes) ──
