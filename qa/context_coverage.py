@@ -14,7 +14,9 @@ TOPICS = [
  ("pillion",           [["pillion"],["380"]], ["my wife rides on the back","two up price","pillion discount"]),
  ("guided_dates",      [["guided"],["november 4","nov 4","fixed"]], ["when are guided departures","guided tour dates","is it a guided tour"]),
  ("guided_future",     [["guided"],["future","not yet","waitlist","form a group","2027","scheduled later"]], ["we want a guided tour in 2027","do you have guided trips next year","guided departure for late 2027"]),
- ("islands",           [["6 islands","six islands"],["komodo"]], ["how many islands","which islands do you visit","route islands"]),
+ # El nº de islas DEPENDE de la edición: el Roundtrip da la vuelta en Sumbawa y no llega a Komodo.
+ # Este check exige que el contexto lo diga explícitamente — antes exigía "6 islands", que era el error.
+ ("islands",           [["roundtrip"],["does not reach","not reach","never reaches","turns around"],["komodo"]], ["how many islands","which islands do you visit","does roundtrip go to komodo"]),
  ("duration",          [["12 day","12-day"]], ["how many days","trip length","how long is the tour"]),
  ("bikes",             [["versys"],["cb 150x","cb150x"]], ["what bikes do you use","which motorcycles","bike options"]),
  ("license_idp",       [["international driving permit","idp"]], ["what license do I need","do I need an international permit","driving licence requirement"]),
