@@ -15,7 +15,7 @@ más parecido.
 |-----|------|-------------------------------|--------------|----------|--------------|------------|-----|
 | **Bali Moto Adventures (B2K)** | `b2k` | b2k-bot (`0347015a-…`) | Bali Moto Adventures | tour *(default)* | `context.md` *(default)* | `panel.html` *(default)* | https://b2k-bot-production.up.railway.app |
 | **Bali Best Motorcycle (BBM)** | `balibest` | bbm-bot (`bcd4b2a6-…`) | BaliBest | `rental` | `context-balibest.md` | `panel-rental.html` | https://b2k-bot-production-5498.up.railway.app |
-| `bnb-bot` (`c26007ad-…`) | ? | proyecto existe, sin servicio accesible | — | — | — | — | placeholder — verificar o borrar |
+| `bnb-bot` (`c26007ad-…`) | ? | **entorno de pruebas del owner — NO tocar** | — | — | — | — | uso interno de testeo |
 
 `main` = rama **base común**. NO la despliega ningún servicio; es donde se integran cambios comunes del
 motor que luego se mergean a `b2k` y `balibest`. Ambas van por delante de `main`.
