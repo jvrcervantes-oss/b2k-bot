@@ -1305,13 +1305,34 @@ function splitBubbles(text, maxBubbles = 3) {
   head.push(paras.slice(maxBubbles - 1).join("\n\n")); // el resto, junto, en la última
   return head;
 }
-async function sendHumanized(to, text, messageId) {
+
+// Retardo ANTES de la primera burbuja. Faltaba, y es EL tell: medido sobre 119 respuestas reales
+// de B2K en producción, la mediana de "cliente escribe → bot contesta" era 3,4s y el 100% caía por
+// debajo de 10s, incluidas respuestas de 500 caracteres. Ningún humano teclea eso en 4s. Un lead lo
+// dijo con todas las letras y se fue: "How are you replying so quickly lol" → "No mate bit dodgy".
+// El objetivo se calcula sobre la longitud y se le DESCUENTA lo que ya tardó el modelo, así una
+// respuesta lenta no acumula espera encima. Tope 20s: cabe dentro de la ventana de 25s del
+// indicador "escribiendo…" que ya se lanzó al recibir el mensaje, así que el lead ve actividad
+// todo el rato. El jitter existe porque una latencia CONSTANTE también canta.
+const TYPE_MS_PER_CHAR = Number(process.env.HUMANIZE_MS_PER_CHAR || 55);  // ~18 car/s: mecanógrafo rápido
+const READ_MS = 2500;                                                     // leer lo que le han escrito
+const FIRST_BUBBLE_CAP_MS = 20000;
+function typingDelay(len, cap) {
+  const jitter = 0.85 + Math.random() * 0.3;
+  return Math.round(Math.min(READ_MS + len * TYPE_MS_PER_CHAR, cap) * jitter);
+}
+async function sendHumanized(to, text, messageId, startedAt) {
   if (!HUMANIZE_CHUNKS || !text) { await sendWhatsApp(to, text); return; }
   const chunks = splitBubbles(text);
   for (let i = 0; i < chunks.length; i++) {
-    if (i > 0) {
-      if (messageId) markRead(messageId, true);                    // "escribiendo…" antes de la siguiente
-      await sleep(Math.min(600 + chunks[i].length * 22, 3500));    // pausa ~velocidad de tecleo, tope 3.5s
+    // La 1ª descuenta lo que ya tardó Claude; las siguientes son pausa completa, con tope más bajo
+    // (una persona encadena sus propios mensajes rápido) — pero nunca instantáneas.
+    const wait = i === 0
+      ? typingDelay(chunks[0].length, FIRST_BUBBLE_CAP_MS) - (startedAt ? Date.now() - startedAt : 0)
+      : typingDelay(chunks[i].length, 9000);
+    if (wait > 0) {
+      if (messageId) markRead(messageId, true);                    // "escribiendo…" mientras espera
+      await sleep(wait);
     }
     await sendWhatsApp(to, chunks[i]);
   }
@@ -1647,6 +1668,25 @@ async function alreadyProcessed(wamid) {
   return false;
 }
 
+// UN TURNO A LA VEZ POR LEAD. Dos mensajes seguidos del mismo cliente lanzaban dos handlers en
+// paralelo: los dos leen el historial ANTES de que el otro lo guarde, así que Claude contesta dos
+// veces sin ver la segunda pregunta y el último `saveConversation` PISA el turno del primero. Con
+// la pausa de tecleo la ventana pasa de ~3s a ~20s, o sea que deja de ser un caso de laboratorio.
+// Cola en memoria porque el servicio corre con 1 réplica en Railway.
+// ponytail: si algún día hay varias réplicas, esto pasa a un lock en Redis (SET NX + TTL).
+const turnQueue = new Map();
+async function waitMyTurn(phone) {
+  const prev = turnQueue.get(phone);
+  let release;
+  const mine = new Promise((r) => { release = r; });
+  turnQueue.set(phone, mine);            // el siguiente ya espera por mí antes de que yo espere a nadie
+  if (prev) await prev;
+  return () => {
+    release();
+    if (turnQueue.get(phone) === mine) turnQueue.delete(phone);
+  };
+}
+
 app.post("/webhook", async (req, res) => {
   if (!validSignature(req)) {
     console.warn(`[${PROJECT_NAME}] Webhook POST con firma inválida — descartado`);
@@ -1654,6 +1694,7 @@ app.post("/webhook", async (req, res) => {
   }
   res.sendStatus(200);
 
+  let releaseTurn = null;
   try {
     const entry = req.body.entry?.[0];
     const change = entry?.changes?.[0];
@@ -1690,6 +1731,7 @@ app.post("/webhook", async (req, res) => {
 
     const from = message.from;
     const profileName = change.value.contacts?.[0]?.profile?.name || "";
+    releaseTurn = await waitMyTurn(from);   // el turno anterior de ESTE lead termina antes de seguir
 
     // ── Ubicación compartida → texto: el flujo normal la aprovecha (p.ej. dirección de entrega) ──
     let text;
@@ -1797,6 +1839,7 @@ app.post("/webhook", async (req, res) => {
     await setInbound(from, Date.now()); // reinicia la ventana de 24h de WhatsApp
     await resetFollowup(from);           // respondió → reinicia la cadencia de seguimiento
     markRead(message.id, true);          // ticks azules + "escribiendo…" mientras Claude responde
+    const replyStart = Date.now();       // ancla de la pausa de tecleo: lo que tarde Claude ya cuenta
 
     // Media disponible (gestionada desde el panel): se inyecta para que el bot solo ofrezca lo que existe.
     const mediaLib = await getMediaLib();
@@ -1883,7 +1926,7 @@ app.post("/webhook", async (req, res) => {
     history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
     await saveConversation(from, history);
 
-    await sendHumanized(from, reply, message.id);
+    await sendHumanized(from, reply, message.id, replyStart);
     // Fotos/vídeos que el bot decidió enviar ([MEDIA:label]) → se buscan en la biblioteca, se mandan y se anotan en el historial.
     if (mediaMatch || rescued.length) {
       const wanted = mediaMatch
@@ -1978,6 +2021,8 @@ app.post("/webhook", async (req, res) => {
     }
   } catch (e) {
     console.error(`[${PROJECT_NAME}] Error procesando mensaje:`, e.message);
+  } finally {
+    if (releaseTurn) releaseTurn();   // sin esto, un fallo deja al lead sin poder volver a escribir
   }
 });
 
