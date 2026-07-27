@@ -2415,6 +2415,35 @@ app.post("/webhook", async (req, res) => {
       return; // un webhook de estado no trae mensaje que procesar
     }
 
+    // ── Coexistence: lo que el equipo teclea desde la app de WhatsApp Business ────────
+    // Con Coexistence (mismo número vivo en app + Cloud API) Meta reenvía por el campo
+    // `smb_message_echoes` los mensajes que el staff manda DESDE la app del móvil. Ese
+    // campo NO incluye los envíos del bot por la API, así que un echo = un humano tomó
+    // la conversación → mismo efecto que "responder a mano" en el panel: pausar ese lead
+    // para que el bot no conteste encima. Requiere suscribir el campo en Meta (go-live).
+    if (change?.field === "smb_message_echoes") {
+      const echoes = change?.value?.message_echoes;
+      if (Array.isArray(echoes)) {
+        for (const e of echoes) {
+          const cust = e.to;                          // from = nuestro número; to = el cliente
+          if (!cust || isOwner(cust)) continue;
+          if (await alreadyProcessed(e.id)) continue; // reintento de Meta → no duplicar
+          await setPaused(cust, true);                // humano al mando → el bot calla
+          await setWaiting(cust, false);              // ya atendido por el staff
+          const body = e.type === "text" ? (e.text?.body || "").trim() : "";
+          if (body) {                                 // edit/revoke no traen texto: pausan igual, sin ensuciar el historial
+            const history = await getConversation(cust);
+            history.push({ role: "assistant", content: body, ts: Date.now(), by: "human" });
+            await saveConversation(cust, history);
+            const prev = await getLead(cust);
+            await recordLead(cust, prev && prev.name, (prev && prev.intent) || "interested", body, "human");
+          }
+          console.log(`[${PROJECT_NAME}] Echo de la app (Coexistence) → ${cust}: staff al mando, bot en pausa`);
+        }
+      }
+      return; // un echo no trae mensaje entrante que procesar
+    }
+
     const message = change?.value?.messages?.[0];
     if (!message) return;
     if (await alreadyProcessed(message.id)) {
