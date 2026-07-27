@@ -788,6 +788,21 @@ function isoDay(s) {
   const m = typeof s === "string" && s.match(/^\d{4}-\d{2}-\d{2}/);
   return m ? m[0] : null;
 }
+// Invoice de Xendit viva más reciente del lead, para adjuntarla a la inquiry (petición del cliente,
+// 27-jul-2026). No hace falta almacén nuevo: los eventos "paylink" del timeline ya guardan
+// provider/amount/refId y ahora también url. Se ignoran las anuladas desde el panel (cancelled).
+function lastXenditInvoice(lead) {
+  const h = Array.isArray(lead.history) ? lead.history : [];
+  for (let i = h.length - 1; i >= 0; i--) {
+    const e = h[i];
+    if (e.type !== "paylink" || e.provider !== "xendit" || !e.refId || e.cancelled) continue;
+    // El webhook de pago no vuelve a llamar aquí, así que en la práctica siempre es "pending";
+    // se comprueba igualmente para no mandar "pending" de una invoice ya cobrada en un re-post.
+    const paid = h.some((p) => p.type === "payment" && p.provider === "xendit" && p.ts >= e.ts);
+    return { id: e.refId, url: e.url || null, amount: Math.round(e.amount) || 0, status: paid ? "paid" : "pending" };
+  }
+  return null;
+}
 async function pushInquiryToERP(phone) {
   if (!BBM_API_URL || !BBM_API_KEY) return; // feature off si no está configurada
   try {
@@ -799,8 +814,13 @@ async function pushInquiryToERP(phone) {
     // umbral: no crear inquiries de un simple "hola" — hace falta señal real de alquiler
     if (!deal.model && !deal.dealValue && !deal.startDate) return;
 
+    const inv = lastXenditInvoice(lead);
     const key = `inqsent:${phone}:${deal.id}`;
-    if (redisClient && (await redisClient.get(key))) return; // ya enviada esta deal
+    const sent = redisClient ? await redisClient.get(key) : null;
+    // Ya enviada esta deal → solo se repite UNA vez, si entretanto nació la invoice de Xendit: el
+    // link de pago se crea casi siempre DESPUÉS de la inquiry, así que sin este re-post los campos
+    // xendit_* no viajarían nunca. El marker guarda "<inquiryId>|<xenditId>" para no repetir más.
+    if (sent && (!inv || sent.endsWith(`|${inv.id}`))) return;
 
     const body = { customer_name: name, customer_phone: phone, conversation_ref: `wa:${phone}` };
     if (lead.email) body.customer_email = lead.email;
@@ -811,14 +831,22 @@ async function pushInquiryToERP(phone) {
     if (start && end && end > start) { body.start_at = start; body.end_at = end; } // omitir si no cuadran → evita 400 invalid_dates
     const bits = [deal.plan && `Plan: ${deal.plan}`, deal.deliveryLocation && `Delivery: ${deal.deliveryLocation}`].filter(Boolean);
     body.notes = `WhatsApp bot lead.${bits.length ? " " + bits.join(". ") + "." : ""}`;
+    // Xendit (opcionales y null-safe en su ERP): id y url tal cual los devuelve POST /v2/invoices,
+    // importe en IDR entero (el ya cobrado, con el recargo de pasarela incluido).
+    if (inv) {
+      body.xendit_invoice_id = inv.id;
+      if (inv.url) body.xendit_invoice_url = inv.url;
+      if (inv.amount > 0) body.xendit_amount = inv.amount;
+      body.xendit_status = inv.status;
+    }
 
     const res = await axios.post(`${BBM_API_URL.replace(/\/+$/, "")}/api/chat/v1/inquiry`, body, {
       headers: { Authorization: `Bearer ${BBM_API_KEY}` }, timeout: 12000,
     });
     const inquiryId = res.data && res.data.inquiry_id;
-    if (redisClient) await redisClient.set(key, String(inquiryId || "1"), { EX: 60 * 60 * 24 * 30 });
+    if (redisClient) await redisClient.set(key, `${inquiryId || "1"}|${inv ? inv.id : ""}`, { EX: 60 * 60 * 24 * 30 });
     await logEvent(phone, "inquiry", { id: inquiryId || "", deal: deal.id });
-    console.log(`[${PROJECT_NAME}] inquiry #${inquiryId} creada en ERP (${phone}, deal ${deal.id})`);
+    console.log(`[${PROJECT_NAME}] inquiry #${inquiryId} ${sent ? "re-enviada con invoice Xendit" : "creada"} en ERP (${phone}, deal ${deal.id}${inv ? `, xendit ${inv.id}` : ""})`);
   } catch (e) {
     const st = e.response && e.response.status;
     console.error(`[${PROJECT_NAME}] pushInquiryToERP fallo${st ? " HTTP " + st : ""}: ${e.message} — lead sigue en Redis, reintento al próximo mensaje`);
@@ -2664,7 +2692,8 @@ app.post("/webhook", async (req, res) => {
         if (link) {
           reply = reply + "\n\n" + link.url;
           await setLastLink(from, link.url);
-          await logEvent(from, "paylink", { provider: link.provider, amount: link.amount, preFeeAmount: payAmount, refId: link.id });
+          await logEvent(from, "paylink", { provider: link.provider, amount: link.amount, preFeeAmount: payAmount, refId: link.id, url: link.url });
+          pushInquiryToERP(from).catch(() => {}); // el ERP quiere la invoice en la inquiry: no esperar al próximo mensaje
         } else console.error(`[${PROJECT_NAME}] [PAY] sin pasarela configurada (falta STRIPE_SECRET_KEY y XENDIT_SECRET_KEY) — no se envió link a ${from}`);
       } else console.warn(`[${PROJECT_NAME}] [PAY] importe inválido o fuera de rango (${payMatch[1]}) — no se cobra a ${from}`);
     } else if (resendMatch) {
@@ -3143,7 +3172,8 @@ app.post("/admin/api/paylink", async (req, res) => {
   if (!created) return res.status(502).json({ error: `No se pudo crear el link de pago (${provider})` });
   await setLastLink(phone, created.url);
   // refId (session/invoice id) queda en el evento para poder anularlo luego desde /admin/api/invoice/cancel.
-  await logEvent(phone, "paylink", { provider, amount: amt, refId: created.id });
+  await logEvent(phone, "paylink", { provider, amount: amt, refId: created.id, url: created.url });
+  pushInquiryToERP(phone).catch(() => {}); // ídem: link creado a mano desde el panel
   res.json({ ok: true, url: created.url });
 });
 
