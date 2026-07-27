@@ -418,6 +418,27 @@ async function isPaused(phone) {
   return !!fallbackPaused[phone];
 }
 
+// ─── INTERRUPTOR GLOBAL DEL BOT (BOT_ENABLED + toggle en vivo) ──────────────
+// Apagado = el bot NO responde a nadie ni hace seguimiento; sigue guardando el
+// lead y marcándolo "por responder" (no se pierde ningún mensaje). Estado de
+// arranque por env BOT_ENABLED (off/0/false/no = apagado; default encendido);
+// override en vivo desde el panel (Redis), instantáneo y sin redeploy. Si hay
+// override en Redis, manda sobre la env.
+const ENV_BOT_OFF = /^(off|0|false|no)$/i.test(process.env.BOT_ENABLED || "");
+let fallbackBotOff = ENV_BOT_OFF;
+async function setBotEnabled(val) {
+  if (redisClient) await redisClient.set("bot_enabled", val ? "1" : "0");
+  else fallbackBotOff = !val;
+}
+async function isBotEnabled() {
+  if (redisClient) {
+    const v = await redisClient.get("bot_enabled");
+    if (v === null || v === undefined) return !ENV_BOT_OFF; // sin override → estado de arranque
+    return v === "1";
+  }
+  return !fallbackBotOff;
+}
+
 // ─── "POR RESPONDER" (el cliente escribió y nadie le ha contestado) ──
 // Se enciende cuando llega un mensaje del cliente con el bot en pausa (control humano)
 // y se apaga cuando el bot responde solo o cuando el estudio responde a mano.
@@ -1105,6 +1126,7 @@ const FOLLOWUP_SKIP_INTENT = new Set(["escalate"]);          // pregunta pendien
 const FOLLOWUP_SKIP_STATUS = new Set(["won", "lost", "noshow"]); // ya cerrado
 async function followupTick() {
   try {
+    if (!(await isBotEnabled())) return; // bot apagado (interruptor global) → tampoco hace seguimiento
     if (!FOLLOWUP_TEMPLATE_NAME) return; // sin plantilla aprobada no se puede contactar fuera de 24h
     const schedule = (FOLLOWUP_SCHEDULE || "24,72").split(",").map((s) => parseFloat(s)).filter((n) => !isNaN(n) && n >= 24);
     if (!schedule.length) return;
@@ -2487,8 +2509,8 @@ app.post("/webhook", async (req, res) => {
       await setInbound(from, Date.now());
       await resetFollowup(from);
       const prev = await getLead(from);
-      if (await isPaused(from)) {
-        // Archivar TAMBIÉN en pausa: que el owner haya tomado la conversación a mano no puede
+      if (!(await isBotEnabled()) || await isPaused(from)) {
+        // Archivar TAMBIÉN con el bot apagado o en pausa: que el owner haya tomado la conversación a mano no puede
         // significar que el pasaporte del cliente se pierda.
         if (message.type === "image" || message.type === "document") await saveInboundDoc(from, (message[message.type] || {}).id);
         await saveConversation(from, history);
@@ -2557,8 +2579,8 @@ app.post("/webhook", async (req, res) => {
       console.log(`[${PROJECT_NAME}] Datos de formulario IG capturados para ${from}: ${Object.keys(formFields).join(", ")}`);
     }
 
-    // ── Control humano: si el bot está en pausa para este lead, guarda y calla ──
-    if (await isPaused(from)) {
+    // ── Bot apagado (interruptor global) o en pausa para este lead: guarda y calla ──
+    if (!(await isBotEnabled()) || await isPaused(from)) {
       await saveConversation(from, history);
       const prev = await getLead(from);
       await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "interested", text, "client");
@@ -3158,6 +3180,22 @@ app.post("/admin/api/pause", async (req, res) => {
   res.json({ ok: true, paused: !!paused });
 });
 
+// ── Interruptor GLOBAL del bot: apagar/encender el bot entero en vivo (sin redeploy) ──
+// POST {enabled:false} lo apaga (deja de responder a todos y de hacer seguimiento; sigue
+// guardando los leads). GET devuelve el estado actual.
+app.post("/admin/api/bot", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { enabled } = req.body || {};
+  if (typeof enabled !== "boolean") return res.status(400).json({ error: "enabled (boolean) requerido" });
+  await setBotEnabled(enabled);
+  console.log(`[${PROJECT_NAME}] Interruptor global → bot ${enabled ? "ENCENDIDO" : "APAGADO"} (via panel)`);
+  res.json({ ok: true, enabled });
+});
+app.get("/admin/api/bot", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  res.json({ enabled: await isBotEnabled() });
+});
+
 // ── CRM: notas internas del lead (se escriben también en el Sheet, col. Javier Notes) ──
 app.post("/admin/api/note", async (req, res) => {
   if (!adminAuth(req, res)) return;
@@ -3710,6 +3748,7 @@ app.get("/", (req, res) => res.send(`${PROJECT_NAME || "Bot"} activo ✅`));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`[${PROJECT_NAME}] Bot escuchando en puerto ${PORT}`);
+  console.log(`[${PROJECT_NAME}] Estado del bot: ${(await isBotEnabled()) ? "🟢 ENCENDIDO (responde)" : "🔴 APAGADO (interruptor global — guarda leads pero no responde)"}`);
   console.log(`[${PROJECT_NAME}] OWNER_PHONE: ${OWNER_PHONE ? normalizePhone(OWNER_PHONE) : "⚠️  NO CONFIGURADO"}`);
   console.log(`[${PROJECT_NAME}] CRM (BD): ${redisClient ? "Redis (persistente)" : "RAM (volátil — configura REDIS_URL)"}`);
   console.log(`[${PROJECT_NAME}] Firma webhook: ${META_APP_SECRET ? "🟢 X-Hub-Signature-256 activa" : "⚠️  SIN verificar — añade META_APP_SECRET en Railway"}`);
