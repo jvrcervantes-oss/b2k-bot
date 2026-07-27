@@ -151,6 +151,7 @@ const GET_QUOTE_TOOL = {
       from: { type: "string", description: "Rental start date, YYYY-MM-DD." },
       to: { type: "string", description: "Rental end date (return date), YYYY-MM-DD." },
       delivery_address: { type: "string", description: "Where the customer wants the bike delivered, as they said it (\"Canggu\", \"Jl. Pantai Berawa 99\", a hotel name). Pass it as soon as you know it — that is the ONLY way to get the delivery fee. Omit only if they haven't said where yet." },
+      self_return: { type: "boolean", description: "Set to true ONLY if the customer has said they will bring the bike back themselves instead of us collecting it (\"I'll return it myself\", \"I'll drop it off\"). The fee is charged per leg, so this halves it. Omit it in every other case — if they haven't said, they haven't said." },
     },
     required: ["bike_model", "from", "to"],
   },
@@ -158,7 +159,7 @@ const GET_QUOTE_TOOL = {
 // Ejecuta la tool: resuelve el nombre de la moto a product_id vía catálogo y pega a /quote.
 // Devuelve SIEMPRE un objeto (nunca lanza): un error controlado vuelve al modelo como texto para
 // que reaccione (pida el modelo correcto, o escale) en vez de tumbar el turno entero.
-async function runGetQuote({ bike_model, from, to, delivery_address }) {
+async function runGetQuote({ bike_model, from, to, delivery_address, self_return }) {
   try {
     if (!bike_model || !from || !to) return { ok: false, error: "Missing bike_model, from or to." };
     const cat = await getCatalog();
@@ -185,17 +186,25 @@ async function runGetQuote({ bike_model, from, to, delivery_address }) {
       out.delivery_note = `Could not locate "${delivery_address}". Quote the bike price, then ask for a more precise address (street + area, or a hotel/villa name) and call get_quote again to get the delivery fee. Do NOT guess it.`;
     } else if (delivery_address) {
       const dv = d.delivery || {};
-      out.delivery_fee = d.delivery_fee;               // total ida + vuelta, ya calculado por el ERP
+      // Regla del owner (27-jul-2026): el reparto se cobra POR TRAYECTO. Si el cliente devuelve la
+      // moto él mismo, la recogida no se le cobra → solo la ida. El ERP ya manda los dos números
+      // (delivery_fee = ida+vuelta, delivery.one_way_fee = un trayecto): la resta la hace el bot
+      // aquí, NUNCA el modelo, que solo ve un único número ya correcto y lo cotiza tal cual.
+      const oneWay = Math.round(Number(dv.one_way_fee) || 0);
+      const halved = self_return === true && dv.round_trip === true && oneWay > 0;
+      out.delivery_fee = halved ? oneWay : d.delivery_fee;
       out.delivery_matched = dv.matched_area || dv.matched_address || delivery_address;
       // ⚠️ Esta nota se la come el modelo dentro del tool_result y la ha llegado a RECITAR al cliente
       // ("the system quotes this as the full delivery + pickup total, since you're self-returning...",
       // chat real 27-jul-2026). Es una instrucción, no un dato cotizable: se marca como interna aquí y
       // hay una regla global en el PERSONA del system prompt. Ver también feedback_bot_context_stale_mentions.
       out.delivery_note = "INTERNAL INSTRUCTION — never quote, paraphrase or explain any part of this note to the customer. "
-        + "delivery_fee is the FULL delivery + pickup total for this address and this rental length. Quote the number as-is; "
-        + "never halve, double or round it. If the customer says they'll return the bike themselves, the fee still stands "
-        + "exactly as it is: give the number with no explanation of what it covers, and add tags: pricing_check so the team "
-        + "can adjust it at handover if they choose to.";
+        + (halved
+          ? "delivery_fee here is the DROP-OFF ONLY, already adjusted because you passed self_return: the customer is bringing "
+            + "the bike back themselves so the collection leg isn't charged. Quote this number as-is."
+          : "delivery_fee is the FULL delivery + pickup total for this address and this rental length. Quote the number as-is; "
+            + "never halve, double or round it. If the customer tells you they'll return the bike themselves, don't do the maths "
+            + "yourself: call get_quote again with self_return: true and quote whatever comes back.");
     }
     return out;
   } catch (e) {
@@ -811,6 +820,42 @@ function lastXenditInvoice(lead) {
   }
   return null;
 }
+// Los 4 campos xendit_* tal y como los espera el ERP. Todos opcionales por su parte; se omite lo que
+// no tengamos en vez de mandar null (un paylink viejo, anterior a este cambio, no guardó la url).
+function xenditFields(inv) {
+  const f = { xendit_invoice_id: inv.id, xendit_status: inv.status };
+  if (inv.url) f.xendit_invoice_url = inv.url;
+  if (inv.amount > 0) f.xendit_amount = inv.amount;
+  return f;
+}
+// id de la inquiry ya creada para este lead: sale del evento "inquiry" del propio timeline, así que
+// no hace falta una clave nueva en Redis ni saber en qué deal estamos (el webhook solo tiene el tel).
+function lastInquiryId(lead) {
+  const h = Array.isArray(lead.history) ? lead.history : [];
+  for (let i = h.length - 1; i >= 0; i--) if (h[i].type === "inquiry" && h[i].id) return h[i].id;
+  return null;
+}
+// Actualiza los campos xendit_* de una inquiry YA creada (endpoint que el cliente publicó el
+// 27-jul-2026). Su ERP cascadea solo al booking si la inquiry ya se convirtió — no rastreamos
+// ese estado, solo miramos mirrored_to_booking en la respuesta para el log. Best-effort.
+async function patchInquiryXendit(phone, fields) {
+  if (!BBM_API_URL || !BBM_API_KEY) return false;
+  try {
+    const lead = (await getLead(phone)) || {};
+    const id = lastInquiryId(lead);
+    if (!id) return false; // nunca se creó la inquiry (o el ERP no devolvió id) → nada que parchear
+    const res = await axios.patch(`${BBM_API_URL.replace(/\/+$/, "")}/api/chat/v1/inquiry/${id}`, fields, {
+      headers: { Authorization: `Bearer ${BBM_API_KEY}` }, timeout: 12000,
+    });
+    const booking = res.data && res.data.mirrored_to_booking;
+    console.log(`[${PROJECT_NAME}] inquiry #${id} actualizada en ERP (${Object.keys(fields).join(", ")})${booking ? ` → reflejado en booking ${booking}` : ""}`);
+    return true;
+  } catch (e) {
+    const st = e.response && e.response.status;
+    console.error(`[${PROJECT_NAME}] patchInquiryXendit fallo${st ? " HTTP " + st : ""}: ${e.message}`);
+    return false;
+  }
+}
 async function pushInquiryToERP(phone) {
   if (!BBM_API_URL || !BBM_API_KEY) return; // feature off si no está configurada
   try {
@@ -825,10 +870,16 @@ async function pushInquiryToERP(phone) {
     const inv = lastXenditInvoice(lead);
     const key = `inqsent:${phone}:${deal.id}`;
     const sent = redisClient ? await redisClient.get(key) : null;
-    // Ya enviada esta deal → solo se repite UNA vez, si entretanto nació la invoice de Xendit: el
-    // link de pago se crea casi siempre DESPUÉS de la inquiry, así que sin este re-post los campos
-    // xendit_* no viajarían nunca. El marker guarda "<inquiryId>|<xenditId>" para no repetir más.
-    if (sent && (!inv || sent.endsWith(`|${inv.id}`))) return;
+    // Ya existe la inquiry de esta deal. El link de pago nace casi siempre DESPUÉS, así que los
+    // campos xendit_* llegan tarde: se mandan por PATCH (no repitiendo el POST, que le crearía una
+    // inquiry duplicada). El marker guarda "<inquiryId>|<xenditId>" para no volver a hacerlo.
+    if (sent) {
+      if (!inv || sent.endsWith(`|${inv.id}`)) return;
+      if (await patchInquiryXendit(phone, xenditFields(inv)) && redisClient) {
+        await redisClient.set(key, `${sent.split("|")[0]}|${inv.id}`, { EX: 60 * 60 * 24 * 30 });
+      }
+      return;
+    }
 
     const body = { customer_name: name, customer_phone: phone, conversation_ref: `wa:${phone}` };
     if (lead.email) body.customer_email = lead.email;
@@ -840,13 +891,9 @@ async function pushInquiryToERP(phone) {
     const bits = [deal.plan && `Plan: ${deal.plan}`, deal.deliveryLocation && `Delivery: ${deal.deliveryLocation}`].filter(Boolean);
     body.notes = `WhatsApp bot lead.${bits.length ? " " + bits.join(". ") + "." : ""}`;
     // Xendit (opcionales y null-safe en su ERP): id y url tal cual los devuelve POST /v2/invoices,
-    // importe en IDR entero (el ya cobrado, con el recargo de pasarela incluido).
-    if (inv) {
-      body.xendit_invoice_id = inv.id;
-      if (inv.url) body.xendit_invoice_url = inv.url;
-      if (inv.amount > 0) body.xendit_amount = inv.amount;
-      body.xendit_status = inv.status;
-    }
+    // importe en IDR entero (el ya cobrado, con el recargo de pasarela incluido — su panel desglosa
+    // alquiler + fee). Solo en el caso raro de que la invoice exista ya en el primer POST.
+    if (inv) Object.assign(body, xenditFields(inv));
 
     const res = await axios.post(`${BBM_API_URL.replace(/\/+$/, "")}/api/chat/v1/inquiry`, body, {
       headers: { Authorization: `Bearer ${BBM_API_KEY}` }, timeout: 12000,
@@ -2331,6 +2378,9 @@ async function markLeadPaid(phone, provider, amountIDR, receiptUrl) {
   }
   if (!dealHandled && !(lead && parseInt(lead.dealValue, 10) > 0)) await updateLeadFields(phone, { dealValue: Math.round(amountIDR) });
   await logEvent(phone, "payment", { provider, amount: Math.round(amountIDR), from: prevStatus || "", to: "won", receiptUrl: receiptUrl || null });
+  // Estado en vivo para el ERP del cliente: su inquiry (y el booking, si ya convirtió) pasa a "paid"
+  // en el momento, sin que ellos monten webhooks propios. Solo Xendit — Stripe no viaja en esos campos.
+  if (provider === "xendit") patchInquiryXendit(phone, { xendit_status: "paid" }).catch(() => {});
   console.log(`[${PROJECT_NAME}] Pago confirmado (${provider}): ${phone} — ${amountIDR} IDR → status=won`);
 
   // Confirmación al propio cliente (no solo al owner) — queda en el chat como un mensaje más del bot.
@@ -2376,9 +2426,16 @@ app.post("/webhook/xendit", async (req, res) => {
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) { console.warn(`[${PROJECT_NAME}] /webhook/xendit token inválido`); return res.sendStatus(403); }
   try {
     const { status, external_id, amount, id } = req.body || {};
-    if (status !== "PAID") return res.sendStatus(200); // solo nos interesa el pago confirmado
+    if (status !== "PAID" && status !== "EXPIRED") return res.sendStatus(200); // pago confirmado o invoice caducada
+    const mp = /^paylink_(\d+)_/.exec(external_id || "");
+    // EXPIRED: no hay cobro que registrar, solo se le dice al ERP que ese link ya no sirve. No pasa
+    // por alreadyProcessedPayment (ese candado es del dinero) — el PATCH es idempotente por su parte.
+    if (status === "EXPIRED") {
+      if (mp) await patchInquiryXendit(mp[1], { xendit_invoice_id: id, xendit_status: "expired" });
+      return res.sendStatus(200);
+    }
     if (await alreadyProcessedPayment(`xendit:${id || external_id}`)) return res.sendStatus(200);
-    const m = /^paylink_(\d+)_/.exec(external_id || "");
+    const m = mp;
     if (!m) { console.warn(`[${PROJECT_NAME}] Xendit PAID sin phone parseable en external_id: ${external_id}`); return res.sendStatus(200); }
     // Recibo: se re-consulta ESTA invoice por id (no el "último link" guardado, que podría ser de
     // otro proveedor si se mandaron los dos) — invoice_url no viaja en el callback, solo en la API.

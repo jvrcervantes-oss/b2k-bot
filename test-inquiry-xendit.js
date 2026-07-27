@@ -13,6 +13,23 @@ function lastXenditInvoice(lead) {
   }
   return null;
 }
+function xenditFields(inv) {
+  const f = { xendit_invoice_id: inv.id, xendit_status: inv.status };
+  if (inv.url) f.xendit_invoice_url = inv.url;
+  if (inv.amount > 0) f.xendit_amount = inv.amount;
+  return f;
+}
+function lastInquiryId(lead) {
+  const h = Array.isArray(lead.history) ? lead.history : [];
+  for (let i = h.length - 1; i >= 0; i--) if (h[i].type === "inquiry" && h[i].id) return h[i].id;
+  return null;
+}
+// delivery_fee que ve el modelo: ida+vuelta, o solo la ida si el cliente devuelve la moto él mismo
+function deliveryFeeFor(d, self_return) {
+  const dv = d.delivery || {};
+  const oneWay = Math.round(Number(dv.one_way_fee) || 0);
+  return (self_return === true && dv.round_trip === true && oneWay > 0) ? oneWay : d.delivery_fee;
+}
 // gate real de pushInquiryToERP: true = no se manda nada
 const skip = (sent, inv) => !!(sent && (!inv || sent.endsWith(`|${inv.id}`)));
 
@@ -55,5 +72,29 @@ assert.strictEqual(skip("41", inv), false);
 assert.strictEqual(skip("41|inv_9", inv), true);
 // invoice distinta (la anterior se anuló y se creó otra) → vuelve a viajar
 assert.strictEqual(skip("41|inv_9", { id: "inv_10" }), false);
+
+// body del POST/PATCH: nunca se manda una clave con null, el ERP recibe solo lo que existe
+assert.deepStrictEqual(xenditFields({ id: "inv_1", url: null, amount: 0, status: "pending" }), {
+  xendit_invoice_id: "inv_1", xendit_status: "pending",
+});
+assert.deepStrictEqual(xenditFields({ id: "inv_1", url: "https://x/1", amount: 2832500, status: "paid" }), {
+  xendit_invoice_id: "inv_1", xendit_status: "paid", xendit_invoice_url: "https://x/1", xendit_amount: 2832500,
+});
+
+// id de la inquiry para el PATCH: sale del timeline, el más reciente
+assert.strictEqual(lastInquiryId({}), null);
+assert.strictEqual(lastInquiryId({ history: [{ type: "inquiry", id: "" }] }), null); // el ERP no devolvió id → no se parchea
+assert.strictEqual(lastInquiryId({ history: [
+  { type: "inquiry", id: 41 }, { type: "paylink", provider: "xendit", refId: "i" }, { type: "inquiry", id: 42 },
+] }), 42);
+
+// delivery por trayecto (regla del owner 27-jul): devolviéndola el cliente se cobra solo la ida
+const q = { delivery_fee: 100000, delivery: { one_way_fee: 50000, round_trip: true, matched_area: "Canggu" } };
+assert.strictEqual(deliveryFeeFor(q, true), 50000);
+assert.strictEqual(deliveryFeeFor(q, false), 100000);
+assert.strictEqual(deliveryFeeFor(q, undefined), 100000); // si no lo han dicho, se cobra entero
+// tarifa que el ERP no da por trayecto → nunca la partimos a ojo
+assert.strictEqual(deliveryFeeFor({ delivery_fee: 100000, delivery: { one_way_fee: 0, round_trip: true } }, true), 100000);
+assert.strictEqual(deliveryFeeFor({ delivery_fee: 80000, delivery: { one_way_fee: 80000, round_trip: false } }, true), 80000);
 
 console.log("OK — inquiry xendit fields");
