@@ -8,7 +8,9 @@ CTX = open(os.path.join(os.path.dirname(__file__),"..","context.md"), encoding="
 TOPICS = [
  ("pricing_roundtrip", [["2,700","2700"]], ["how much is the roundtrip","price of roundtrip","roundtrip cost"]),
  ("pricing_extreme",   [["3,450","3450"]], ["how much is extreme","extreme price","cost of the extreme package"]),
- ("pricing_deluxe",    [["3,950","3950"]], ["deluxe price","how much is deluxe","cost of deluxe"]),
+ # 27-jul-2026: exigía 3,950, el precio MUERTO. Pasaba igual porque esa cifra sigue apareciendo en los
+ # avisos de "precios viejos" — o sea, el check verde no probaba nada del precio vivo. Ahora exige 3,750.
+ ("pricing_deluxe",    [["3,750","3750"]], ["deluxe price","how much is deluxe","cost of deluxe"]),
  ("price_min",         [["2,700","2700"]], ["cheapest option","lowest price","starting price bali komodo"]),
  ("guided_supplement", [["self-guided","self guided"],["550"],["support vehicle","support car"],["meals"]], ["is a guide included","what does the guided option add","can we go without a guide"]),
  ("pillion",           [["pillion"],["380"]], ["my wife rides on the back","two up price","pillion discount"]),
@@ -32,7 +34,7 @@ TOPICS = [
  ("flight_back",       [["internal flight","flight back","fly back"]], ["do we fly back","return flight included","how do we get back from komodo"]),
  ("own_bike",          [["own bike","your own motorcycle","bring my bike"]], ["can I bring my own bike","use my motorcycle","ride my own bike"]),
  ("seven_islands",     [["7 islands","seven islands"],["2,050","2050"]], ["tell me about 7 islands","other tour options","lighter trip"]),
-# El 4 Islands cuesta 990 EUR fijos y NO admite guiado. El check vigila las dos cosas: si alguien
+# El 4 Islands cuesta 1.100 USD fijos (subió de los 990 EUR el 27-jul-2026) y NO admite guiado. El check vigila las dos cosas: si alguien
  # borra el "no guided option", el bot volveria a sumarle el suplemento de 550 que no le corresponde.
  ("four_islands",      [["4 islands","4islands"],["1,100"],["no guided option","not just for riders"]], ["tell me about the 4 islands tour","how much is 4 islands","a shorter trip without the gilis"]),
  ("nov4_departure",    [["november 4"],["only"],["550"]], ["when is the guided departure","what dates do you have","is there a group i can join"]),
