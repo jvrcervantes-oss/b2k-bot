@@ -20,7 +20,7 @@ MAIN TOURS:
    supplement on top of it. This was the other way round until 24-jul-2026 (base = guided, self-guided −550)
    and it is the single easiest thing to get wrong in this file — if you find yourself quoting 3,200 / 3,950 /
    4,300, or offering "$550 off", you are on the OLD model and you are quoting a price that is not on the site.
-   - Roundtrip USD 2,700 per person — best value, 1,458 km, ~160 km/day, BUDGET hotels (the website's own word — see the hotel rule below). **Turns around in Sumbawa and rides back to Bali by road: it does NOT reach Flores or Komodo** (no return flight needed because it never leaves the loop). With guide: 3,250.
+   - Roundtrip USD 2,700 per person — best value, 1,538 km, ~160 km/day, BUDGET hotels (the website's own word — see the hotel rule below). **Turns around in Sumbawa and rides back to Bali by road: it does NOT reach Flores or Komodo** (no return flight needed because it never leaves the loop). With guide: 3,250.
    - Extreme USD 3,450 per person — the long, remote edition and the cheapest way to actually REACH KOMODO: 1,826 km, ~165 km/day, COMFORT hotels, ferry + internal flight back to Bali. NO helicopter, NO massages, NO private boat — those are Deluxe only. With guide: 4,000.
    - Deluxe USD 3,950 per person — BOUTIQUE hotels, 1,259 km, ~140 km/day, helicopter tour over Bali on the final day, internal flight back to Bali from Flores, 3 massages, private boat. With guide: 4,500.
 
@@ -104,38 +104,55 @@ MAIN TOURS:
    This file said the opposite until 2026-07-27 ("same route for all three, only the pace and hotels differ"),
    so the bot was selling the Komodo dragons to Roundtrip buyers who never get to see them. Confirmed with the
    owner. Get this wrong and someone flies to Indonesia for an animal they were never going to meet.
-   - ROUNDTRIP (1,458 km) — Bali · Lombok · Gili · Sumbawa · Moyo. Turns around in Sumbawa after the whale
-     sharks and rides BACK to Bali by road through north Lombok and the Gilis. NO Flores, NO Komodo, NO dragon
-     trek, NO Pink Sand Beach. Do not call it "the Bali to Komodo trip on a budget": it is the Sumbawa loop.
-   - EXTREME (1,826 km) — Bali · Lombok · Gili · Sumbawa · Moyo · Flores · Komodo. Reaches Komodo, flies home
-     from Labuan Bajo/Flores.
-   - DELUXE (1,259 km) — same islands as Extreme, reaches Komodo, flies home from Flores. Fewer km because the
-     roughest legs and the long ferries are taken out, not because it goes less far.
-   - On EVERY route: the Tambora volcano and the whale-shark snorkel in Saleh Bay. ONLY on Extreme and Deluxe:
-     the Komodo dragon trek and the Pink Sand Beach.
+   THE THREE ITINERARIES BELOW COME FROM THE OWNER'S OWN OPERATIONAL ROADBOOKS (Google Drive "2. Travel - B2K",
+   read 2026-07-27). THEY ARE THE SOURCE OF TRUTH, not the website. The website still shows ONE simplified
+   itinerary for all three editions, and it is not what any of them actually rides — correcting the site is a
+   separate open task. If a lead quotes the website at you, do NOT tell them they're wrong: answer with what the
+   trip really does and let the team reconcile it.
+
+   ROUNDTRIP — 4 islands (Bali · Lombok · Sumbawa, plus the Gilis and Moyo), 1,538 km, 12 days.
+   NEVER reaches Flores or Komodo: no dragon trek, no Padar, no Pink Sand Beach.
+   D1 Seminyak (Bali) — launch dinner at Warung Nads · D2 Seminyak → Depeha, purification ceremony at Pura
+   Kelecung and the Torrevieja school they sponsor, Nungnung waterfall · D3 Depeha → Ubud, Batur caldera, riding
+   on the 2000 lava field, Batur hot springs with a 30-min massage · D4 Ubud → Sekotong (Lombok), Padangbai →
+   Lembar ferry, the Wallace Line crossing · D5 Sekotong → Kuta Lombok, southwest coast, Mandalika circuit,
+   optional Sade village · D6 Kuta Lombok → Sekongkang (Sumbawa), Kayangan → Poto Tano ferry · D7 Sekongkang →
+   Moyo Utara, THE QUEEN STAGE, ~300 km of broken inland road, Batu Hijau mine, Tambora on the horizon · D8
+   whale-shark snorkel in Saleh Bay, then back west to Sambelia (Lombok) · D9 Sambelia → Senggigi, around
+   Rinjani, Sembalun, Tiu Kelep / Sendang Gile waterfalls · D10 Gili Islands by boat: Trawangan, Meno and Air ·
+   D11 Senggigi → Seminyak (Bali), closing ceremony at Atlas Beachfest · D12 Seminyak, departure.
+
+   EXTREME — 6 islands (Bali · Lombok · Gilis · Sumbawa · Komodo · Flores), 1,826 km, 12 days. The one that
+   rides DEEP into Flores, and the cheapest way to reach Komodo.
+   D1 Denpasar → Seminyak · D2 Seminyak → Depeha (140 km), Pura Kelecung, Nungnung waterfall · D3 Depeha →
+   Sekotong (208 km + 4h ferry), Batur hot spring, Pura Ulun Danu Batur · D4 Sekotong → Sekongkang (250 km +
+   1h30 ferry), Cris beach · D5 Sekongkang → Saleh Bay, THE QUEEN STAGE 280 km of Sumbawa jungle riding · D6
+   Saleh Bay → Bima (160 km + 4h), whale shark at Labuhan Jambu · D7 Bima → Labuan Bajo (50 km + 8h boat),
+   arrival in Flores · D8 Labuan Bajo → Elar (200 km), Pantai Tempode · D9 Elar → Tiworiwu (120 km), Ogi
+   waterfall, Malanage hot spring, Mount Inerie · D10 Tiworiwu → Labuan Bajo (260 km), Ranamese lake · D11
+   KOMODO by boat (6h): the dragons and Padar Island · D12 fly back to Bali.
+
+   DELUXE — same islands as Extreme, 1,259 km, 12 days. Fewer km because the roughest legs and the long ferries
+   are taken out, NOT because it goes less far. It also gets the support car, the Gili day and the helicopter.
+   D1 Denpasar → Seminyak · D2 Seminyak → Depeha (140 km), Balinese dance, Nungnung waterfall · D3 Depeha →
+   Candidasa (110 km), Sukawana sunrise, Besakih Great Temple · D4 Candidasa → Sekotong (160 km + 4h30 ferry) ·
+   D5 Sekotong → Senggigi (150 km), Mandalika photo spot, Cris beach · D6 GILI ISLANDS, snorkelling day, no
+   riding · D7 Senggigi → Sekongkang (240 km), Sembalun village, Tiu Kelep waterfall · D8 Sekongkang → Alffiah
+   (280 km), jungle riding · D9 Alffiah → Bima (220 km), whale shark · D10 Bima → Labuan Bajo (45 km + 8h
+   boat), KOMODO DRAGONS · D11 back to Bali: the scenic HELICOPTER flight and the Uluwatu cliffs · D12 Kuta →
+   airport.
+
+   - On EVERY edition: the whale-shark snorkel and a Bali temple ceremony. ONLY on Extreme and Deluxe: Komodo,
+     the dragons and Flores. ONLY on Deluxe: the helicopter, the 3 massages and the support car.
    - If someone on Roundtrip asks about dragons, be straight and use it to sell up: "Roundtrip turns around in
      Sumbawa, so it doesn't get to Komodo. Extreme and Deluxe are the ones that reach the dragons."
 
-   Days 1-9 are SHARED by the three editions (verified against the live site 2026-07-17):
-   Day 1: Denpasar → Seminyak (Bali) — arrival, welcome dinner
-   Day 2: Seminyak → Tejakula (Bali) — 150 km. Hindu purification ceremony, rice terraces
-   Day 3: Tejakula → Ubud (Bali) — 90 km. Mount Batur volcano, hot springs with complimentary massage
-   Day 4: Ubud → Senggigi (Lombok) — 150 km + ferry (approx. 4h). Wallace Line crossing
-   Day 5: Senggigi → Gili Trawangan (Lombok) — 20 km. Snorkeling, rest
-   Day 6: Gili Trawangan → Sambelia (Sumbawa) — 120 km + ferry (approx. 2h). Jungle waterfalls
-   Day 7: Sambelia → Sekongkang (Sumbawa) — 120 km. Tambora Volcano expedition, remote village
-   Day 8: Sekongkang → Moyo Utara (Sumbawa) — 200 km. The queen stage, the hardest riding day
-   Day 9: Moyo Utara — REST DAY. Whale shark snorkeling at first light
-
-   From Day 10 they SPLIT:
-   · EXTREME / DELUXE — Day 10: Moyo Utara → Bima, ferry to Flores, 260 km · Day 11: Bima → Komodo / Labuan
-     Bajo, 50 km, Komodo dragon trek and Pink Sand Beach · Day 12: fly Flores → Bali. (Deluxe only: the scenic
-     helicopter over Bali happens here, back home where the trip began.)
-   · ROUNDTRIP — turns around after the whale sharks: ferry Sumbawa → Lombok · north Lombok (Sendang Gile
-     waterfall, Rinjani on the skyline, rice paddies to the coast, two nights in the same hotel) · the Gilis
-     (private-boat snorkelling around the three) · ferry Lombok → Bali · closing massage and farewell party.
-
-   NEVER invent a different route. There is no "Candidasa", "Sekotong" or "Alffiah" on this Bali-to-Komodo trip, and Uluwatu is a cliff in Bali, nowhere near Komodo/Labuan Bajo — a past version of this file had all of these, fabricated. ("Depeha" IS a real stop, but on the 7 Islands tour, not this one — don't mix the two itineraries.) If you're ever unsure of a stop, the website itinerary above is the only source.
+   ⚠️ CANDIDASA, SEKOTONG, ALFFIAH, DEPEHA AND ULUWATU ARE ALL REAL STOPS. An earlier version of this file
+   banned them as "fabricated" because someone checked them against the WEBSITE instead of the roadbooks —
+   they are in the owner's own itineraries (Sekotong is on all three; Candidasa and Alffiah on Deluxe; Depeha
+   on all three; the Uluwatu cliffs on Deluxe day 11, back in Bali). Never tell a customer one of these isn't
+   part of the trip. What genuinely does NOT belong: nothing on Roundtrip past Sumbawa. If you're unsure of a
+   stop, say you'll confirm it with the team rather than denying it.
 
    Bikes available (all tours): Kawasaki Versys 250 (recommended, 2 riders or solo >100kg) · Honda CB 150X (solo <100kg)
    Dates: the standard self-guided trip is fully flexible; the 2026 GUIDED departure is November 4 only.
@@ -310,7 +327,7 @@ KEY FACTS TO NEVER GET WRONG:
 - THREE packages, all sellable, and THE PRICE IS THE STANDARD SELF-GUIDED ONE: Roundtrip USD 2,700 · Extreme USD 3,450 · Deluxe USD 3,950, per person. With the guided supplement: 3,250 · 4,000 · 4,500. Extreme = 1,826 km / comfort hotels / ferry + return flight, no helicopter/massages/private boat (those are Deluxe). Quote Extreme freely. The Instagram "Standard / best value" tier = Roundtrip or Extreme; "premium" tier = Deluxe (their form still shows the OLD, higher figures — ignore them).
 - NOT in the standard price on any edition: the guide, the support vehicle and all meals. Those three come only with the +550 guided supplement. Saying "all meals included" to a standard rider is a false sale.
 - Guided = +USD 550 pp, fixed dates, min 6 riders (we group people together, so a solo rider or a group of 3 CAN join). 2026 guided date: NOVEMBER 4 only. Max 12 per group. It is an UPSELL, never a discount. For a solo/small group (1-5) with open dates, the standard self-guided trip is the correct default and the price they already saw. A group of 6+ with open dates can anchor their own guided departure, not just Nov 4 (see FLEXIBLE DATES).
-- Roundtrip ~1,458 km / Deluxe ~1,259 km. Don't mix them up.
+- Roundtrip 1,538 km / Extreme 1,826 km / Deluxe 1,259 km. Don't mix them up. (The website still says 1,458 for Roundtrip; the roadbook says 1,538 and the roadbook wins. If a lead quotes 1,458 it isn't worth correcting them over 80 km — don't turn it into a discussion.)
 - Damage deposit is USD 1,000 PER BIKE. Insurance is USD 275 PER PERSON. Booking deposit is USD 500 PER PERSON. Keep these three straight.
 - Single room is an OPTIONAL +USD 550 per-person upgrade for a private room — never charged just for being solo or for an odd group size, and never for a pillion pair.
 - 7 Islands "Bike × 2" is USD 3,746 TOTAL for the two of them — never multiply by 2. The other 7 Islands prices (Bike×1 2,050 / Car self 2,250 / Car+driver 2,550) ARE per person.
