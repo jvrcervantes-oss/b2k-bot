@@ -7,7 +7,8 @@ function lastXenditInvoice(lead) {
   const h = Array.isArray(lead.history) ? lead.history : [];
   for (let i = h.length - 1; i >= 0; i--) {
     const e = h[i];
-    if (e.type !== "paylink" || e.provider !== "xendit" || !e.refId || e.cancelled) continue;
+    if (e.type !== "paylink" || e.provider !== "xendit" || !e.refId) continue;
+    if (e.cancelled) return null;
     const paid = h.some((p) => p.type === "payment" && p.provider === "xendit" && p.ts >= e.ts);
     return { id: e.refId, url: e.url || null, amount: Math.round(e.amount) || 0, status: paid ? "paid" : "pending" };
   }
@@ -46,12 +47,16 @@ assert.deepStrictEqual(
   { id: "inv_old", url: null, amount: 2750000, status: "pending" }
 );
 
-// el más reciente gana y las anuladas se ignoran
-const lead = { history: [
-  { type: "paylink", provider: "xendit", refId: "inv_1", url: "https://checkout.xendit.co/1", amount: 1000000, ts: 10 },
-  { type: "paylink", provider: "xendit", refId: "inv_2", url: "https://checkout.xendit.co/2", amount: 2750000, ts: 20, cancelled: true },
-] };
-assert.strictEqual(lastXenditInvoice(lead).id, "inv_1");
+// el más reciente gana
+assert.strictEqual(lastXenditInvoice({ history: [
+  { type: "paylink", provider: "xendit", refId: "inv_1", amount: 1000000, ts: 10 },
+  { type: "paylink", provider: "xendit", refId: "inv_2", amount: 2750000, ts: 20 },
+] }).id, "inv_2");
+// si el vigente está anulado NO se resucita el anterior: el lead se queda sin link vivo
+assert.strictEqual(lastXenditInvoice({ history: [
+  { type: "paylink", provider: "xendit", refId: "inv_1", amount: 1000000, ts: 10 },
+  { type: "paylink", provider: "xendit", refId: "inv_2", amount: 2750000, ts: 20, cancelled: true },
+] }), null);
 
 // amount siempre entero IDR, nunca decimal
 assert.strictEqual(lastXenditInvoice({ history: [{ type: "paylink", provider: "xendit", refId: "i", amount: 2750000.4, ts: 1 }] }).amount, 2750000);

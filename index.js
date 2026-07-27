@@ -812,7 +812,10 @@ function lastXenditInvoice(lead) {
   const h = Array.isArray(lead.history) ? lead.history : [];
   for (let i = h.length - 1; i >= 0; i--) {
     const e = h[i];
-    if (e.type !== "paylink" || e.provider !== "xendit" || !e.refId || e.cancelled) continue;
+    if (e.type !== "paylink" || e.provider !== "xendit" || !e.refId) continue;
+    // La última anulada NO deja paso a una anterior: sin esto, cancelar el link vigente resucitaba
+    // en el ERP el invoice viejo que ya se había sustituido. Anulada = este lead no tiene link vivo.
+    if (e.cancelled) return null;
     // El webhook de pago no vuelve a llamar aquí, así que en la práctica siempre es "pending";
     // se comprueba igualmente para no mandar "pending" de una invoice ya cobrada en un re-post.
     const paid = h.some((p) => p.type === "payment" && p.provider === "xendit" && p.ts >= e.ts);
@@ -901,7 +904,7 @@ async function pushInquiryToERP(phone) {
     const inquiryId = res.data && res.data.inquiry_id;
     if (redisClient) await redisClient.set(key, `${inquiryId || "1"}|${inv ? inv.id : ""}`, { EX: 60 * 60 * 24 * 30 });
     await logEvent(phone, "inquiry", { id: inquiryId || "", deal: deal.id });
-    console.log(`[${PROJECT_NAME}] inquiry #${inquiryId} ${sent ? "re-enviada con invoice Xendit" : "creada"} en ERP (${phone}, deal ${deal.id}${inv ? `, xendit ${inv.id}` : ""})`);
+    console.log(`[${PROJECT_NAME}] inquiry #${inquiryId} creada en ERP (${phone}, deal ${deal.id}${inv ? `, xendit ${inv.id}` : ""})`);
   } catch (e) {
     const st = e.response && e.response.status;
     console.error(`[${PROJECT_NAME}] pushInquiryToERP fallo${st ? " HTTP " + st : ""}: ${e.message} — lead sigue en Redis, reintento al próximo mensaje`);
@@ -2430,8 +2433,15 @@ app.post("/webhook/xendit", async (req, res) => {
     const mp = /^paylink_(\d+)_/.exec(external_id || "");
     // EXPIRED: no hay cobro que registrar, solo se le dice al ERP que ese link ya no sirve. No pasa
     // por alreadyProcessedPayment (ese candado es del dinero) — el PATCH es idempotente por su parte.
+    // Solo se marca si la caducada es LA invoice vigente del lead y no está pagada: a un lead se le
+    // pueden haber mandado dos links, y el EXPIRED del primero (que llega tarde, o lo dispara el
+    // "Cancelar" del panel, que expira la invoice esté como esté) pisaría el "paid" del segundo —
+    // el ERP daría por caída una reserva ya cobrada.
     if (status === "EXPIRED") {
-      if (mp) await patchInquiryXendit(mp[1], { xendit_invoice_id: id, xendit_status: "expired" });
+      const cur = mp ? lastXenditInvoice((await getLead(mp[1])) || {}) : null;
+      if (cur && cur.id === id && cur.status !== "paid") {
+        await patchInquiryXendit(mp[1], { xendit_invoice_id: id, xendit_status: "expired" });
+      }
       return res.sendStatus(200);
     }
     if (await alreadyProcessedPayment(`xendit:${id || external_id}`)) return res.sendStatus(200);
