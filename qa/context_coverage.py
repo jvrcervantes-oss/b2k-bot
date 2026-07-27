@@ -6,11 +6,11 @@ CTX = open(os.path.join(os.path.dirname(__file__),"..","context.md"), encoding="
 # Cada tópico: required = lista de grupos (AND); cada grupo = lista de sinónimos (OR).
 # El bot puede responder bien SOLO si el context.md contiene fundamento para todos los grupos.
 TOPICS = [
- ("pricing_roundtrip", [["3,200","3200"]], ["how much is the roundtrip","price of roundtrip","roundtrip cost"]),
- ("pricing_extreme",   [["3,950","3950"]], ["how much is extreme","extreme price","cost of the extreme package"]),
- ("pricing_deluxe",    [["4,300","4300"]], ["deluxe price","how much is deluxe","cost of deluxe"]),
- ("price_min",         [["2,650","2650"]], ["cheapest option","lowest price","starting price bali komodo"]),
- ("self_guided",       [["self-guided","self guided"],["550"]], ["can we go without a guide","self guided discount","ride on our own"]),
+ ("pricing_roundtrip", [["2,700","2700"]], ["how much is the roundtrip","price of roundtrip","roundtrip cost"]),
+ ("pricing_extreme",   [["3,450","3450"]], ["how much is extreme","extreme price","cost of the extreme package"]),
+ ("pricing_deluxe",    [["3,950","3950"]], ["deluxe price","how much is deluxe","cost of deluxe"]),
+ ("price_min",         [["2,700","2700"]], ["cheapest option","lowest price","starting price bali komodo"]),
+ ("guided_supplement", [["self-guided","self guided"],["550"],["support vehicle","support car"],["meals"]], ["is a guide included","what does the guided option add","can we go without a guide"]),
  ("pillion",           [["pillion"],["380"]], ["my wife rides on the back","two up price","pillion discount"]),
  ("guided_dates",      [["guided"],["november 4","nov 4","fixed"]], ["when are guided departures","guided tour dates","is it a guided tour"]),
  ("guided_future",     [["guided"],["future","not yet","waitlist","form a group","2027","scheduled later"]], ["we want a guided tour in 2027","do you have guided trips next year","guided departure for late 2027"]),
@@ -22,7 +22,7 @@ TOPICS = [
  ("insurance_deposit", [["275"],["1,000","1000"]], ["insurance cost","security deposit","damage deposit"]),
  ("cancellation",      [["30 days"],["refund"]], ["cancellation policy","can I get a refund","what if I cancel"]),
  ("installments",      [["instal","payment plan","split"]], ["can I pay in installments","payment plan","split the payment"]),
- ("included",          [["included"],["meals","food"]], ["what is included","does it include meals","whats covered"]),
+ ("included",          [["included"],["meals","food"],["guided only","guided supplement"]], ["what is included","does it include meals","whats covered"]),
  ("roads",             [["tarmac","paved","90%"]], ["is it off road","how technical","roads or dirt"]),
  ("ferries",           [["ferry","ferries"]], ["how do you cross islands","ferries with bikes","island transfers"]),
  ("gilis",             [["gili"],["traffic-free","no bikes","boat"]], ["can we ride on gili","gili islands bikes","gili trawangan"]),
