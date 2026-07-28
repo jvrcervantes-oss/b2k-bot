@@ -102,4 +102,43 @@ assert.strictEqual(deliveryFeeFor(q, undefined), 100000); // si no lo han dicho,
 assert.strictEqual(deliveryFeeFor({ delivery_fee: 100000, delivery: { one_way_fee: 0, round_trip: true } }, true), 100000);
 assert.strictEqual(deliveryFeeFor({ delivery_fee: 80000, delivery: { one_way_fee: 80000, round_trip: false } }, true), 80000);
 
-console.log("OK — inquiry xendit fields");
+// ---- pagoAutoritativo: el importe lo pone la API, nunca el callback ----
+// (copia de index.js, misma convención que el resto de este archivo)
+function pagoAutoritativo(cb, inv) {
+  if (!inv) return { ok: false, motivo: "sin_respuesta_api" };
+  if (String(inv.id) !== String(cb.id)) return { ok: false, motivo: "id_no_coincide" };
+  if (inv.external_id !== cb.external_id) return { ok: false, motivo: "external_id_no_coincide" };
+  if (!["PAID", "SETTLED"].includes(String(inv.status || "").toUpperCase())) return { ok: false, motivo: `estado_${inv.status}` };
+  const amount = Number(inv.paid_amount != null ? inv.paid_amount : inv.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, motivo: "importe_invalido" };
+  return { ok: true, amount, receiptUrl: inv.invoice_url || null };
+}
+
+const CB = { id: "inv_123", external_id: "paylink_628123_1700000000" };
+const API = { id: "inv_123", external_id: "paylink_628123_1700000000", status: "PAID",
+              amount: 4500000, invoice_url: "https://checkout.xendit.co/w/inv_123" };
+
+// caso bueno: se cobra lo que dice la API, y el recibo sale de ahí
+assert.deepStrictEqual(pagoAutoritativo(CB, API),
+  { ok: true, amount: 4500000, receiptUrl: "https://checkout.xendit.co/w/inv_123" });
+// paid_amount (lo realmente cobrado) manda sobre amount (lo emitido)
+assert.strictEqual(pagoAutoritativo(CB, { ...API, paid_amount: 4400000 }).amount, 4400000);
+
+// EL ATAQUE: el token de Xendit es estático, así que quien lo tenga puede POSTear
+// {status:"PAID", amount:1}. Lo que impide que se cobre 1 IDR por una reserva de 4,5M
+// es que el importe NO sale del callback. Este assert es esa garantía.
+assert.strictEqual(pagoAutoritativo(CB, API).amount, 4500000, "el importe SIEMPRE sale de la API");
+// invoice de otro (o inventada) → se rechaza, no se marca pagado
+assert.strictEqual(pagoAutoritativo(CB, { ...API, id: "inv_otra" }).ok, false);
+assert.strictEqual(pagoAutoritativo(CB, { ...API, external_id: "paylink_628999_1" }).ok, false);
+// la API no confirma el pago → no se cobra, diga lo que diga el callback
+assert.strictEqual(pagoAutoritativo(CB, { ...API, status: "PENDING" }).ok, false);
+assert.strictEqual(pagoAutoritativo(CB, { ...API, status: "EXPIRED" }).ok, false);
+assert.strictEqual(pagoAutoritativo(CB, null).ok, false);
+// importes imposibles: 0, negativo o no numérico no marcan nada como ganado
+for (const bad of [0, -100, "muchos", null, undefined])
+  assert.strictEqual(pagoAutoritativo(CB, { ...API, amount: bad, paid_amount: bad }).ok, false, `importe ${bad}`);
+// SETTLED también es cobro bueno (Xendit lo usa al liquidar)
+assert.strictEqual(pagoAutoritativo(CB, { ...API, status: "SETTLED" }).ok, true);
+
+console.log("OK — inquiry xendit fields + el importe del cobro lo pone la API, no el callback");

@@ -2353,6 +2353,22 @@ async function alreadyProcessedPayment(id) {
   return false;
 }
 
+// Xendit se verifica con un token ESTÁTICO en la cabecera, no con una firma HMAC por
+// mensaje: quien tenga ese token puede POSTear un callback con el importe que quiera, y
+// ese importe acaba siendo el dealValue del CRM. Por eso el importe y el estado no se
+// creen del callback — se leen de la API por id, que es la única fuente que el atacante
+// no controla. Devuelve {ok,amount,receiptUrl} o {ok:false,motivo}.
+function pagoAutoritativo(cb, inv) {
+  if (!inv) return { ok: false, motivo: "sin_respuesta_api" };
+  if (String(inv.id) !== String(cb.id)) return { ok: false, motivo: "id_no_coincide" };
+  if (inv.external_id !== cb.external_id) return { ok: false, motivo: "external_id_no_coincide" };
+  if (!["PAID", "SETTLED"].includes(String(inv.status || "").toUpperCase())) return { ok: false, motivo: `estado_${inv.status}` };
+  // paid_amount es lo realmente cobrado; amount es lo emitido. Manda el cobrado.
+  const amount = Number(inv.paid_amount != null ? inv.paid_amount : inv.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, motivo: "importe_invalido" };
+  return { ok: true, amount, receiptUrl: inv.invoice_url || null };
+}
+
 // Marca el lead como pagado: status=won, dealValue si no lo tenía ya, timeline + aviso al owner.
 // Compartida por los dos webhooks para no duplicar la lógica de negocio.
 // receiptUrl (opcional): recibo oficial del propio proveedor (Stripe receipt_url / Xendit invoice_url
@@ -2444,17 +2460,32 @@ app.post("/webhook/xendit", async (req, res) => {
       }
       return res.sendStatus(200);
     }
-    if (await alreadyProcessedPayment(`xendit:${id || external_id}`)) return res.sendStatus(200);
     const m = mp;
     if (!m) { console.warn(`[${PROJECT_NAME}] Xendit PAID sin phone parseable en external_id: ${external_id}`); return res.sendStatus(200); }
-    // Recibo: se re-consulta ESTA invoice por id (no el "último link" guardado, que podría ser de
-    // otro proveedor si se mandaron los dos) — invoice_url no viaja en el callback, solo en la API.
-    let receiptUrl = null;
+    if (!id) { console.warn(`[${PROJECT_NAME}] Xendit PAID sin invoice id: ${external_id}`); return res.sendStatus(400); }
+    // Se re-consulta ESTA invoice por id (no el "último link" guardado, que podría ser de otro
+    // proveedor si se mandaron los dos). Antes esto se hacía solo para sacar el invoice_url y el
+    // importe se cogía del callback — o sea que ya teníamos el dato bueno delante y usábamos el
+    // que controla quien envía. Ahora la API manda en importe y estado.
+    //
+    // Va ANTES del candado de idempotencia a propósito: alreadyProcessedPayment marca al
+    // comprobar (SET NX), así que un 500 después de tomarlo dejaría el reintento de Xendit
+    // fuera y el cobro sin registrar nunca.
+    let inv = null;
     try {
       const invRes = await axios.get(`https://api.xendit.co/v2/invoices/${id}`, { auth: { username: XENDIT_SECRET_KEY, password: "" }, timeout: 10000 });
-      receiptUrl = invRes.data && invRes.data.invoice_url;
-    } catch (e) { console.warn(`[${PROJECT_NAME}] No se pudo obtener el invoice_url de Xendit para el recibo:`, e.message); }
-    await markLeadPaid(m[1], "xendit", amount, receiptUrl);
+      inv = invRes.data;
+    } catch (e) {
+      console.warn(`[${PROJECT_NAME}] No se pudo confirmar la invoice ${id} con Xendit:`, e.message);
+      return res.sendStatus(500); // 500 → Xendit reintenta. Sin confirmar no se marca nada pagado.
+    }
+    const v = pagoAutoritativo({ id, external_id }, inv);
+    if (!v.ok) { console.warn(`[${PROJECT_NAME}] Xendit callback RECHAZADO (${v.motivo}): ${external_id}`); return res.sendStatus(200); }
+    if (Math.round(Number(amount)) !== Math.round(v.amount)) {
+      console.warn(`[${PROJECT_NAME}] Xendit: importe del callback (${amount}) ≠ de la API (${v.amount}) en ${external_id} — se usa el de la API`);
+    }
+    if (await alreadyProcessedPayment(`xendit:${id}`)) return res.sendStatus(200);
+    await markLeadPaid(m[1], "xendit", v.amount, v.receiptUrl);
     res.sendStatus(200);
   } catch (e) {
     console.error(`[${PROJECT_NAME}] /webhook/xendit error:`, e.message);
