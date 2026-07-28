@@ -1855,8 +1855,17 @@ app.post("/webhook", async (req, res) => {
       thinking: { type: "adaptive" },
       output_config: { effort: "low" },
       max_tokens: 2000,
-      // Prompt caching: el system (~11.5k tok fijos: context.md + BASE_INSTRUCTIONS) es idéntico en cada turno.
-      // Con cache_control, la 1ª vez paga 1.25x y el resto de la charla (dentro de 5 min) paga 0.1x → ~-78% del coste de system.
+      // Prompt caching: el system (context.md + PERSONA + BASE_INSTRUCTIONS) es idéntico en cada turno.
+      // Tamaño MEDIDO 28-jul-2026 (por caracteres): ~25k tok en la rama b2k, ~16k en balibest — el
+      // "~11.5k" que decía aquí antes se había quedado a la mitad. El mínimo cacheable es 1.024 tok
+      // tanto en Sonnet 4.6 como en Sonnet 5, así que hay margen de 16-24x: no es algo que vigilar.
+      //
+      // NO cambiar a ttl:"1h" sin volver a medir. Medido sobre 214 llamadas reales de B2K (14,8 días):
+      // el TTL de 5 min ya acierta el 73,7% y cuesta 0,402x; el de 1h acierta 85% pero la escritura
+      // sube de 1,25x a 2x, así que se queda en 0,385x — ~$0,37/mes de diferencia. No compensa.
+      // La razón de que 5 min basten: la caché es GLOBAL por bot (mismo system para todos los leads),
+      // así que la mantiene caliente el tráfico entero, no el ritmo de una conversación suelta.
+      //
       // mediaHint va en bloque aparte tras el prefijo cacheado (cambia solo al editar la media library).
       system: [
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
