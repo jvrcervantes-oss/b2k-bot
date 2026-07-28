@@ -1626,6 +1626,26 @@ function isOwner(from) {
   return ownerClean.slice(-9) === fromClean.slice(-9);
 }
 
+// ─── HEALTH (monitor externo) ──────────────────────────────────────
+// Para UptimeRobot / Better Stack: paso 1 del apartado 4 de contexto/infraestructura_2026.md,
+// que estuvo escrito sin construir hasta el 28-jul-2026. Antes de esto la única señal de vida era
+// un 404 de Express, que no distingue un bot sano de uno con el webhook desuscrito.
+// Va SIN auth a propósito (un monitor no puede llevar la clave del panel) y por eso NO expone
+// recuento de leads ni nada del negocio — eso se queda en /admin/api/health, que sí va autenticado.
+// No toca Claude ni Sheets: el check no debe gastar cuota de nada.
+// ponytail: 200 mientras el proceso sirva. El estado de Redis viaja informativo y NO cambia el
+// código de respuesta: Redis reconecta solo (ver reconnectStrategy), así que devolver 503 por un
+// corte transitorio serían falsas alarmas de madrugada. Si algún día hay que paginar por Redis
+// caído, el sitio es este.
+app.get("/health", (_req, res) => {
+  res.json({
+    ok: true,
+    project: PROJECT_NAME,
+    storage: redisClient ? "redis" : "ram",
+    uptime_s: Math.round(process.uptime()),
+  });
+});
+
 // ─── WEBHOOK VERIFICATION ─────────────────────────────────────────
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
