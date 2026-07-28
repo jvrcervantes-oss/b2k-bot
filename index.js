@@ -2717,6 +2717,11 @@ app.get("/", (req, res) => res.send(`${PROJECT_NAME || "Bot"} activo ✅`));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`[${PROJECT_NAME}] Bot escuchando en puerto ${PORT}`);
+  // El banner anunciaba ocho cosas y no la que decide el coste y la calidad de cada respuesta.
+  // Delata el caso real: BBM llevaba sin `BOT_MODEL` y corría con el default del código una
+  // generación por detrás de B2K, sin que nada lo dijera (encontrado 28-jul-2026). Verificar el
+  // modelo de un servicio exigía leer las variables de Railway; ahora sale en el arranque.
+  console.log(`[${PROJECT_NAME}] Modelo: ${MODEL}${BOT_MODEL ? "" : "  ⚠️  BOT_MODEL sin definir → default del código"}`);
   console.log(`[${PROJECT_NAME}] OWNER_PHONE: ${OWNER_PHONE ? normalizePhone(OWNER_PHONE) : "⚠️  NO CONFIGURADO"}`);
   console.log(`[${PROJECT_NAME}] CRM (BD): ${redisClient ? "Redis (persistente)" : "RAM (volátil — configura REDIS_URL)"}`);
   console.log(`[${PROJECT_NAME}] Firma webhook: ${META_APP_SECRET ? "🟢 X-Hub-Signature-256 activa" : "⚠️  SIN verificar — añade META_APP_SECRET en Railway"}`);
