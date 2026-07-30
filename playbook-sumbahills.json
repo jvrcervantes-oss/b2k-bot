@@ -1,0 +1,21 @@
+{
+  "_comentario": "Vertical a medida de Sumba Hills (inmobiliario, cierre por visita al sitio). Se carga con PLAYBOOK_FILE=playbook-sumbahills.json y no toca el motor: es config, no codigo. closeStyle appointment porque el cierre es una cita fisica, igual que la videollamada de B2K.",
+  "closeStyle": "appointment",
+  "dealIdField": "interest",
+  "dealFields": ["interest", "visitDate", "stayingAt", "dealValue"],
+  "keyFields": ["email", "country", "interest", "inSumba", "visitDate", "stayingAt"],
+  "enrichTextFields": ["name", "email", "country", "interest", "inSumba", "visitDate", "stayingAt", "leavesOn"],
+  "enrichNumberFields": [],
+  "enrichSystem": "You extract CRM fields from a WhatsApp chat for a beachfront land project in Sumba, Indonesia. Return ONLY a compact JSON object - no prose, no code fences. Keys: name, email, country, interest (\"land\" | \"villa\" | \"info\"), inSumba (\"yes\" | \"no\" | null - is the lead physically in Sumba right now), visitDate (free text, when they can visit the site, e.g. \"tomorrow morning\"), stayingAt (free text, hotel or area where they are staying), leavesOn (free text, when they leave the island). Use null for anything not clearly stated by the customer. Never guess.",
+  "canned": [
+    { "title": "Saludo", "text": "Hi! Thanks for reaching out about Sumba Hills. Are you on the island right now?" },
+    { "title": "Proponer visita", "text": "If you're here, the best thing is to come and see the land yourself. When are you free, and where are you staying?" },
+    { "title": "El render", "text": "Fair question - the images in the ad are renders of what's being built. The land, the coast and the earthworks are real, and you can walk them today." },
+    { "title": "Precio", "text": "Beachfront plots start at 29,900 EUR. The exact figure for a specific plot comes from the team, on the visit or by email." },
+    { "title": "Sin regimen", "text": "It depends on the plot, and the team goes through it with the document in hand - it's the first thing they cover on the visit." },
+    { "title": "No esta en Sumba", "text": "No problem. Leave me your email and we'll send you the full dossier: sumbahills.lawangproperties.com. When do you expect to be on the island?" },
+    { "title": "Pedir datos", "text": "To get the visit confirmed I just need your name and email, and where you're staying." }
+  ],
+  "helpWith": "your visit to Sumba Hills",
+  "deposit": null
+}
