@@ -1536,7 +1536,11 @@ async function createStripeSession(numUnits, phone) {
       mode: "payment",
       success_url: STRIPE_SUCCESS_URL || "https://balimotoadventures.com/?booking=confirmed",
       cancel_url: STRIPE_CANCEL_URL || "https://balimotoadventures.com/",
-      ...(phone ? { client_reference_id: String(phone), metadata: { phone: String(phone), units: String(numUnits) } } : {}),
+      // `bot` es obligatorio, con o sin teléfono: B2K y BBM comparten UNA cuenta de Stripe y
+      // Stripe reparte cada evento a TODOS los endpoints. Sin esta marca, un cobro de B2K entra
+      // en el CRM de BaliBest como lead pagado (y su handler lee el importe como si fuera IDR).
+      metadata: { bot: PROJECT_NAME || "b2k", ...(phone ? { phone: String(phone), units: String(numUnits) } : {}) },
+      ...(phone ? { client_reference_id: String(phone) } : {}),
     });
     console.log(`[${PROJECT_NAME}] Stripe session: ${numUnits} ${unit}s → ${(major * numUnits).toLocaleString()} ${cur}`);
     return session.url;
@@ -2346,6 +2350,13 @@ app.post("/stripe/webhook", async (req, res) => {
     if (event.type !== "checkout.session.completed") return;
     const s = event.data.object;
     if (s.payment_status !== "paid") return;
+    // Cobro de OTRO bot de la misma cuenta de Stripe: no es nuestro y su importe puede ir en otra
+    // moneda. Se ignora sin dejar rastro (sin él acabaría en pay_unmatched ensuciando este CRM).
+    const owner = s.metadata && s.metadata.bot;
+    if (owner && owner !== (PROJECT_NAME || "b2k")) {
+      console.log(`[${PROJECT_NAME}] Pago de Stripe de otro bot (${owner}) — ignorado`);
+      return;
+    }
     const amount = (s.amount_total || 0) / 100;
     const phone = (s.metadata && s.metadata.phone) || s.client_reference_id || "";
     const common = { amount, currency: s.currency, method: "stripe", kind: "deposit", ref: s.id, at: (event.created || Date.now() / 1000) * 1000, by: "stripe" };
