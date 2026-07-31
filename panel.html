@@ -234,39 +234,53 @@
   #dbView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
   #app.dbmode #list,#app.dbmode #chat,#app.dbmode #detail{display:none}
   #app.dbmode #dbView{display:flex}
-  /* ── Panel de salidas y cobros ── */
+  /* ── Panel de salidas: lo primero es si arranca (mínimo) y si se llena (capacidad) ── */
   #dashView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
   #app.dashmode #list,#app.dashmode #chat,#app.dashmode #detail{display:none}
   #app.dashmode #dashView{display:flex}
   .dash-scroll{flex:1;overflow-y:auto;padding:18px 24px 40px}
-  .dash-sec{margin-bottom:26px}
+  .dash-sec{margin-top:26px}
   .dash-sec>h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:700;margin:0 0 10px}
-  .dep{border:1px solid var(--line);border-radius:12px;background:var(--card);margin-bottom:12px;overflow:hidden}
-  .dep-h{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;flex-wrap:wrap}
-  .dep-h:hover{background:var(--bg)}
-  .dep-date{font-size:16px;font-weight:800;letter-spacing:-.01em;min-width:112px}
+  .dash-empty{padding:16px;border:1px dashed var(--line);border-radius:10px;color:var(--ink-soft);font-size:13px}
+  .dep{border:1px solid var(--line);border-radius:12px;background:var(--card);margin-bottom:14px;overflow:hidden}
+  .dep.off{opacity:.55}
+  .dep-h{display:flex;align-items:center;gap:12px;padding:13px 16px;flex-wrap:wrap}
+  .dep-date{font-size:17px;font-weight:800;letter-spacing:-.01em;min-width:110px}
   .dep-tour{font-size:12.5px;color:var(--ink-soft);font-weight:600}
-  .dep-pax{font-size:12.5px;font-weight:700;padding:3px 9px;border-radius:100px;background:var(--bg);border:1px solid var(--line)}
-  .dep-money{margin-left:auto;display:flex;gap:16px;align-items:baseline;font-size:12.5px}
-  .dep-money b{font-size:14px}
-  .dep-rows{border-top:1px solid var(--line);display:none}
-  .dep.open .dep-rows{display:block}
+  .dep-actions{margin-left:auto;display:flex;gap:6px}
+  .mini{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:7px;padding:4px 10px;font-size:11.5px;font-weight:700;cursor:pointer}
+  .mini:hover{border-color:var(--accent)}
+  .mini.ghost{border-color:transparent;background:none;color:var(--ink-soft);margin-left:auto}
+  select.mini{padding:4px 8px;max-width:230px}
+  .mini.muted{opacity:.4;cursor:default;border-style:dashed}
+  .dep-badge{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;padding:3px 9px;border-radius:100px}
+  .b-form{background:rgba(180,83,9,.12);color:#b45309}
+  .b-ok{background:rgba(22,163,74,.12);color:#16a34a}
+  .b-full{background:rgba(37,99,235,.12);color:#2563eb}
+  .b-cancel{background:rgba(120,120,120,.15);color:#6b7280}
+  .dep-occ{display:flex;align-items:center;gap:12px;padding:0 16px 13px;flex-wrap:wrap;font-size:12.5px}
+  .dots{display:inline-flex;gap:3px;align-items:center}
+  .dots i{width:9px;height:9px;border-radius:50%;background:var(--line);display:block}
+  .dots i.on{background:#16a34a}
+  .dots b.over{color:#dc2626;font-size:11px;margin-left:3px}
+  .occ-note{color:var(--ink-soft)}
+  .occ-note.warn{color:#b45309;font-weight:700}
+  .dep-when{color:var(--ink-soft)}
+  .dep-money{margin-left:auto}
+  .warn{color:#b45309;font-weight:700}
+  .dep-rows{border-top:1px solid var(--line)}
   .dep-row{display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;flex-wrap:wrap}
   .dep-row:last-child{border-bottom:0}
   .dep-row:hover{background:var(--bg)}
+  .dep-row.empty{color:var(--ink-soft);cursor:default;font-style:italic}
+  .dep-row.empty:hover{background:none}
   .dep-row .nm{font-weight:600;min-width:150px}
   .dep-row .sub{color:var(--ink-soft);font-size:12px}
-  .paybar{width:92px;height:6px;border-radius:100px;background:var(--line);overflow:hidden;flex-shrink:0}
-  .paybar i{display:block;height:100%;background:#16a34a}
-  .warn{color:#b45309;font-weight:700}
-  .over{color:#dc2626;font-weight:700}
-  .est{font-size:10.5px;color:var(--ink-soft);font-weight:600;border:1px dashed var(--line);border-radius:5px;padding:1px 5px}
-  .dash-empty{padding:16px;border:1px dashed var(--line);border-radius:10px;color:var(--ink-soft);font-size:13px}
-  .sched{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:13px}
-  .sched th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);padding:9px 12px;border-bottom:1px solid var(--line)}
-  .sched td{padding:9px 12px;border-bottom:1px solid var(--line)}
-  .sched tr:last-child td{border-bottom:0}
-  .sched tr.clk{cursor:pointer}.sched tr.clk:hover td{background:var(--bg)}
+  .pay{margin-left:auto;font-size:12px;font-weight:700;padding:3px 10px;border-radius:100px;white-space:nowrap}
+  .p-ok{background:rgba(22,163,74,.12);color:#16a34a}
+  .p-half{background:rgba(180,83,9,.12);color:#b45309}
+  .p-no{background:rgba(220,38,38,.10);color:#dc2626}
+  .p-none{background:var(--bg);color:var(--ink-soft)}
   /* ── Operadores B2B: BD separada (no son leads de chat), mismo patrón visual que dbView ── */
   #opsView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
   #app.opsmode #list,#app.opsmode #chat,#app.opsmode #detail{display:none}
@@ -725,7 +739,8 @@
   <!-- base de datos: todos los clientes en tabla -->
   <div id="dashView">
     <div class="db-top">
-      <h2><span data-i18n="h_dash">Salidas y cobros</span></h2>
+      <h2><span data-i18n="h_dash">Salidas</span></h2>
+      <button class="db-ghost" id="dashNew" data-i18n="btn_new_dep">＋ Nueva salida</button>
       <button class="db-ghost" id="dashReload" data-i18n="btn_reload">↻ Actualizar</button>
     </div>
     <div class="db-metrics" id="dashMetrics"></div>
@@ -947,6 +962,30 @@
   </div>
 </div>
 
+<!-- alta/edición de una SALIDA: la crea el estudio, no se deduce de las fichas -->
+<div id="depModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <h3 id="depModalTitle" data-i18n="m_new_dep">Nueva salida</h3>
+    <label data-i18n="dep_date">Fecha de salida *</label>
+    <input id="depDate" type="date">
+    <label data-i18n="e_tour">Tour</label>
+    <input id="depTour" list="depTourList"><datalist id="depTourList"><option value="Bali to Komodo"><option value="7 Islands"><option value="4 Islands"></datalist>
+    <label data-i18n="e_package">Paquete</label>
+    <select id="depPackage"><option value="">—</option><option>Roundtrip</option><option>Extreme</option><option>Deluxe</option></select>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="depGuided" type="checkbox" style="width:auto;margin:0"> <span data-i18n="dep_guided">Salida guiada (+$550 por persona)</span></label>
+    <div style="display:flex;gap:10px">
+      <div style="flex:1"><label data-i18n="dep_min">Mínimo para que salga</label><input id="depMin" type="number" min="0" step="1" value="6"></div>
+      <div style="flex:1"><label data-i18n="dep_capacity">Plazas totales</label><input id="depCapacity" type="number" min="1" step="1" value="12"></div>
+    </div>
+    <label data-i18n="e_status">Estado</label>
+    <select id="depState"><option value="open" data-i18n="st_open">Abierta</option><option value="cancelled" data-i18n="st_cancelled">Cancelada</option></select>
+    <label data-i18n="op_notes">Notas</label>
+    <textarea id="depNotes" rows="2"></textarea>
+    <div class="modal-err" id="depErr"></div>
+    <div class="modal-actions"><button id="depDelete" class="btn-ghost" data-i18n="btn_delete_dep" style="display:none;margin-right:auto;color:#dc2626">Borrar salida</button><button id="depCancel" class="btn-ghost" data-i18n="btn_cancel">Cancelar</button><button id="depSave" class="btn-primary" data-i18n="btn_save">Guardar</button></div>
+  </div>
+</div>
+
 <!-- modal gestión de suscriptores (B2C solo-email de la web) -->
 <div id="subsModal" class="modal" style="display:none">
   <div class="modal-box">
@@ -995,15 +1034,22 @@
       ops_th_company:'Empresa', ops_th_contact:'Contacto', ops_th_email:'Email', ops_th_phone:'Teléfono', ops_th_country:'País', ops_th_pot:'Potential', ops_th_temp:'Temp', ops_th_tags:'Etiquetas', ops_th_updated:'Actualizado',
       ops_pot_all:'◇ Potential', ops_temp_all:'🌡 Temp', op_potential:'Potential', op_temp:'Temperatura',
       ops_empty:'Aún no hay operadores. Importa un CSV o añade el primero con "+ Operador".',
-      nav_dash:'Panel', h_dash:'Salidas y cobros', btn_reload:'↻ Actualizar', loading:'Cargando…',
-      m_travellers:'Viajeros', m_departures:'Salidas', m_collected:'Cobrado', m_outstanding:'Pendiente', m_overdue:'Vencido', m_live:'Clientes vivos',
-      h_departures:'Próximas salidas', no_departures:'Ninguna salida con fecha todavía.', p_month:'solo mes', p_year:'solo año',
-      pax:'pax', collected:'cobrado', of:'de', estimated:'estimado',
-      h_schedule:'Calendario de cobros', no_schedule:'Nada que cobrar con fecha firme.',
-      c_due:'Vence', c_client:'Cliente', c_concept:'Concepto', c_amount:'Importe', c_departure:'Salida',
-      k_deposit:'Depósito de reserva', k_balance:'Saldo',
-      h_unmatched:'Pagos de Stripe sin asignar', unmatched_n:'{n} pago(s) cobrados que no se han podido atribuir a ningún cliente. Vienen del link de pago de la web.',
-      h_undated:'Sin fecha firme', no_date:'sin fecha', due_now:'al reservar',
+      nav_dash:'Salidas', h_dash:'Salidas', btn_reload:'↻ Actualizar', loading:'Cargando…', btn_new_dep:'＋ Nueva salida',
+      m_travellers:'Viajeros', m_departures:'Salidas', m_confirmed:'Confirmadas', m_collected:'Cobrado', m_pending:'Pendiente', m_unassigned:'Sin asignar',
+      no_deps_yet:'Todavía no has creado ninguna salida. Créala con ＋ Nueva salida y asígnale los clientes que marques como Ganado.',
+      guided:'guiada', pax:'pax', collected:'cobrado', pending:'pendiente',
+      st_forming:'Formándose', st_confirmed:'Sale', st_full:'Completa', st_cancelled:'Cancelada', st_open:'Abierta',
+      to_min:'faltan {n} para el mínimo', free_left:'quedan {n} plazas', dep_full:'completa', dep_cancelled:'cancelada',
+      dep_in:'sale en {n} días', dep_today:'sale hoy', dep_past:'ya salió',
+      dep_empty:'Sin nadie asignado todavía.', n_unpriced:'{n} sin importe cerrado',
+      pay_paid:'pagado', pay_partial:'señal', pay_unpaid:'sin cobrar', pay_unpriced:'sin importe',
+      h_unassigned:'Ganados sin salida asignada', no_unassigned:'Ninguno: todos los ganados están en una salida.',
+      btn_add_pax:'Añadir pasajero', btn_assign:'Asignar', btn_remove_pax:'Sacar de la salida', btn_edit:'Editar',
+      m_new_dep:'Nueva salida', m_edit_dep:'Editar salida', dep_date:'Fecha de salida *', dep_guided:'Salida guiada (+$550 por persona)',
+      dep_min:'Mínimo para que salga', dep_capacity:'Plazas totales', btn_delete_dep:'Borrar salida',
+      al_dep_date:'Pon la fecha de salida', cfm_dep_delete:'¿Borrar esta salida? Los pasajeros no se borran: vuelven a "sin asignar".',
+      cfm_unassign:'¿Sacar a este cliente de la salida?', al_no_unassigned:'No hay ganados sin asignar. Marca antes a alguien como Ganado.',
+      al_no_deps:'Crea antes una salida.',
       btn_new_lead:'＋ Nuevo cliente', ti_new_lead:'Da de alta a mano un cliente que no ha llegado por el chat',
       m_new_lead:'Nuevo cliente', ld_phone:'WhatsApp * (con prefijo de país, solo dígitos)', al_ld_phone:'Teléfono inválido: solo dígitos, con prefijo de país (mín. 8)',
       f_payments:'Pagos', no_payments:'Sin pagos registrados.', total:'Total', k_other:'Otro', m_cash:'Efectivo', m_other:'Otro',
@@ -1062,15 +1108,22 @@
       ops_th_company:'Company', ops_th_contact:'Contact', ops_th_email:'Email', ops_th_phone:'Phone', ops_th_country:'Country', ops_th_pot:'Potential', ops_th_temp:'Temp', ops_th_tags:'Tags', ops_th_updated:'Updated',
       ops_pot_all:'◇ Potential', ops_temp_all:'🌡 Temp', op_potential:'Potential', op_temp:'Temperature',
       ops_empty:'No operators yet. Import a CSV or add the first one with "+ Operator".',
-      nav_dash:'Overview', h_dash:'Departures & payments', btn_reload:'↻ Refresh', loading:'Loading…',
-      m_travellers:'Travellers', m_departures:'Departures', m_collected:'Collected', m_outstanding:'Outstanding', m_overdue:'Overdue', m_live:'Live clients',
-      h_departures:'Upcoming departures', no_departures:'No departure has a date yet.', p_month:'month only', p_year:'year only',
-      pax:'pax', collected:'collected', of:'of', estimated:'estimated',
-      h_schedule:'Payment schedule', no_schedule:'Nothing due with a firm date.',
-      c_due:'Due', c_client:'Client', c_concept:'Item', c_amount:'Amount', c_departure:'Departure',
-      k_deposit:'Booking deposit', k_balance:'Balance',
-      h_unmatched:'Unassigned Stripe payments', unmatched_n:'{n} payment(s) collected that could not be matched to a client. They come from the website payment link.',
-      h_undated:'No firm date', no_date:'no date', due_now:'on booking',
+      nav_dash:'Departures', h_dash:'Departures', btn_reload:'↻ Refresh', loading:'Loading…', btn_new_dep:'＋ New departure',
+      m_travellers:'Travellers', m_departures:'Departures', m_confirmed:'Confirmed', m_collected:'Collected', m_pending:'Pending', m_unassigned:'Unassigned',
+      no_deps_yet:'No departures yet. Create one with ＋ New departure and assign the clients you mark as Won.',
+      guided:'guided', pax:'pax', collected:'collected', pending:'pending',
+      st_forming:'Forming', st_confirmed:'Running', st_full:'Full', st_cancelled:'Cancelled', st_open:'Open',
+      to_min:'{n} more to reach the minimum', free_left:'{n} seats left', dep_full:'full', dep_cancelled:'cancelled',
+      dep_in:'departs in {n} days', dep_today:'departs today', dep_past:'already departed',
+      dep_empty:'Nobody assigned yet.', n_unpriced:'{n} with no agreed price',
+      pay_paid:'paid', pay_partial:'deposit', pay_unpaid:'unpaid', pay_unpriced:'no price',
+      h_unassigned:'Won with no departure', no_unassigned:'None: every won client is on a departure.',
+      btn_add_pax:'Add passenger', btn_assign:'Assign', btn_remove_pax:'Remove from departure', btn_edit:'Edit',
+      m_new_dep:'New departure', m_edit_dep:'Edit departure', dep_date:'Departure date *', dep_guided:'Guided departure (+$550 per person)',
+      dep_min:'Minimum to run', dep_capacity:'Total seats', btn_delete_dep:'Delete departure',
+      al_dep_date:'Set the departure date', cfm_dep_delete:'Delete this departure? Passengers are not deleted: they go back to unassigned.',
+      cfm_unassign:'Remove this client from the departure?', al_no_unassigned:'No won clients waiting. Mark someone as Won first.',
+      al_no_deps:'Create a departure first.',
       btn_new_lead:'＋ New client', ti_new_lead:'Manually add a client who never came through the chat',
       m_new_lead:'New client', ld_phone:'WhatsApp * (country code, digits only)', al_ld_phone:'Invalid phone: digits only, with country code (min. 8)',
       f_payments:'Payments', no_payments:'No payments recorded.', total:'Total', k_other:'Other', m_cash:'Cash', m_other:'Other',
@@ -1472,6 +1525,7 @@
   // ── Pagos en la ficha ──────────────────────────────────────────
   // Stripe entra solo por webhook; esto es para lo que NO pasa por Stripe (Wise, efectivo), que
   // en este negocio es la mitad de los cobros. Sin ello el dashboard solo vería media caja.
+  function payDate(ts){ if(!ts) return '—'; var d=new Date(ts); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
   function paymentsHTML(l){
     var ps=(l.payments||[]).slice().sort(function(a,b){return a.at-b.at;});
     var tot=ps.reduce(function(a,p){return a+(Number(p.amount)||0);},0);
@@ -1480,7 +1534,7 @@
     ps.forEach(function(p){
       h+='<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line)">'
         +'<b>'+money(p.amount)+'</b><span style="color:var(--ink-soft)">'+esc(p.method)+' · '+t(p.kind==='deposit'?'k_deposit':(p.kind==='balance'?'k_balance':'k_other'))+'</span>'
-        +'<span style="color:var(--ink-soft);margin-left:auto">'+dashDue(p.at)+'</span>'
+        +'<span style="color:var(--ink-soft);margin-left:auto">'+payDate(p.at)+'</span>'
         +'<button class="qa-own" title="'+t('btn_delete_pay')+'" onclick="fichaDelPayment(\''+p.id+'\')">✕</button></div>';
     });
     if(ps.length) h+='<div style="padding:6px 0;font-weight:700">'+t('total')+': '+money(tot)+'</div>';
@@ -1497,12 +1551,12 @@
     apiPost('payment',{phone:curLead.phone,amount:amt,currency:'usd',
       method:document.getElementById('payMethod').value,kind:document.getElementById('payKind').value})
       .then(function(r){ if(!r.ok) throw 0; return r.json(); })
-      .then(function(){ open_(curLead.phone); if(DASH) loadDash(); })
+      .then(function(){ open_(curLead.phone); if(OV) loadOverview(); })
       .catch(function(){ alert(t('al_save')); });
   }
   function fichaDelPayment(id){
     if(!confirm(t('cfm_pay_delete'))) return;
-    apiPost('payment/delete',{phone:curLead.phone,id:id}).then(function(){ open_(curLead.phone); if(DASH) loadDash(); });
+    apiPost('payment/delete',{phone:curLead.phone,id:id}).then(function(){ open_(curLead.phone); if(OV) loadOverview(); });
   }
   function fichaTripEmail(){
     var to=prompt(t('ask_email'), curLead.email||'');
@@ -1518,6 +1572,8 @@
   window.rowScheduleCall=rowScheduleCall;
   window.leadAddTag=leadAddTag; window.leadRemoveTag=leadRemoveTag; window.fichaArchive=fichaArchive; window.fichaDelete=fichaDelete; window.fichaOutreach=fichaOutreach; window.rowOutreach=rowOutreach; window.qAssign=qAssign; window.fichaScheduleCall=fichaScheduleCall;
   window.fichaAddPayment=fichaAddPayment; window.fichaDelPayment=fichaDelPayment; window.fichaTripEmail=fichaTripEmail;
+  // Se llaman desde onclick de HTML generado → tienen que colgar de window o no existen al pulsar.
+  window.depEdit=depEdit; window.depAssignTo=depAssignTo; window.depUnassign=depUnassign;
   function flash(id, ok){
     var b = document.getElementById(id); if(!b) return; var orig = b.textContent;
     b.textContent = ok ? t('flash_saved') : t('flash_err'); b.classList.add(ok?'ok':'bad');
@@ -1874,7 +1930,7 @@
   var ST_OPTS = [['','—'],['new','🆕 Nuevo'],['quoted','💬 Cotizado'],['won','✅ Ganado'],['lost','❌ Perdido'],['noshow','🚫 No-show']];
   var PKG_OPTS = ['','Roundtrip','Extreme','Deluxe','Standard / best value'];
   var OWNER_OPTS = ['','Milad','Javier'];
-  // Precios de respaldo. La FUENTE es el servidor (PLAYBOOK.pkgPrice): loadDash() los sobreescribe
+  // Precios de respaldo. La FUENTE es el servidor (PLAYBOOK.pkgPrice): loadOverview() los sobreescribe
   // con los de verdad. Esta copia llevaba meses en 3200/3950/4300 e inflaba el pipeline — si vuelve
   // a divergir, se corrige en index.js, no aquí.
   var PKG_PRICE = {roundtrip:2700, extreme:3450, deluxe:3950, standard:2700};
@@ -2053,92 +2109,192 @@
     });
   }
   // ── orquestador de la vista BD ──
-  // ── PANEL DE SALIDAS Y COBROS ──────────────────────────────────
-  // Todo el cálculo (precios, vencimientos, agrupación por fecha) lo hace el servidor. Aquí solo
-  // se pinta: la tabla de precios duplicada en este archivo llevaba meses desfasada y mentía.
-  var DASH=null;
-  // Un depósito no tiene fecha futura: vence al reservar. "—" se leía como "sin fecha".
-  function dashDue(ts){ if(!ts) return t('due_now'); var d=new Date(ts); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
-  function loadDash(){
+  // ── PANEL DE SALIDAS ───────────────────────────────────────────
+  // Una salida es un objeto que se da de alta aquí, no algo deducido de las fichas. Solo aparecen
+  // los leads marcados GANADO a mano. Lo primero es si la salida arranca (mínimo 6) y si se llena
+  // (máximo 12); el dinero va detrás y es solo real.
+  var OV=null, depEditing=null;
+  var PAYST={paid:{cls:'p-ok',ico:'✓'},partial:{cls:'p-half',ico:'◐'},unpaid:{cls:'p-no',ico:'⚠'},unpriced:{cls:'p-none',ico:'—'}};
+
+  function loadOverview(){
     var body=document.getElementById('dashBody');
     body.innerHTML='<div class="dash-empty">'+t('loading')+'</div>';
-    api('dashboard').then(function(r){ return r.json(); }).then(function(d){ DASH=d; if(d.pricing) PKG_PRICE=d.pricing; if(typeof d.pillionAdjust==='number') PILLION_ADJ=d.pillionAdjust; renderDash(); })
-      .catch(function(){ body.innerHTML='<div class="dash-empty">'+t('al_save')+'</div>'; });
+    api('overview').then(function(r){return r.json();}).then(function(d){
+      OV=d;
+      if(d.pricing) PKG_PRICE=d.pricing;
+      if(typeof d.pillionAdjust==='number') PILLION_ADJ=d.pillionAdjust;
+      renderOverview();
+    }).catch(function(){ body.innerHTML='<div class="dash-empty">'+t('al_save')+'</div>'; });
   }
-  function renderDash(){
-    if(!DASH) return;
-    var m=DASH.metrics;
+
+  function dots(pax,cap){
+    var n=Math.min(pax,cap), h='';
+    for(var i=0;i<cap;i++) h+='<i class="'+(i<n?'on':'')+'"></i>';
+    if(pax>cap) h+='<b class="over">+'+(pax-cap)+'</b>';
+    return '<span class="dots">'+h+'</span>';
+  }
+  function depWhen(d){
+    if(d.daysOut<0) return t('dep_past');
+    if(d.daysOut===0) return t('dep_today');
+    return t('dep_in').replace('{n}',d.daysOut);
+  }
+  function depBadge(d){
+    var m={forming:'b-form',confirmed:'b-ok',full:'b-full',cancelled:'b-cancel'};
+    return '<span class="dep-badge '+m[d.occState]+'">'+t('st_'+d.occState)+'</span>';
+  }
+
+  function renderOverview(){
+    if(!OV) return;
+    var m=OV.metrics;
     document.getElementById('dashMetrics').innerHTML=[
-      ['m_travellers',m.travellers],['m_departures',DASH.departures.length],
-      ['m_collected',money(m.paidTotal)||'$0'],['m_outstanding',money(m.outstandingTotal)||'$0'],
-      ['m_overdue',money(m.overdue)||'$0'],['m_live',m.live]
+      ['m_departures',m.departures],['m_confirmed',m.confirmed],['m_travellers',m.travellers],
+      ['m_collected',money(m.collected)||'$0'],['m_pending',money(m.pending)||'$0'],['m_unassigned',m.unassigned]
     ].map(function(x){ return '<div class="metric"><div class="mv">'+esc(x[1])+'</div><div class="ml">'+t(x[0])+'</div></div>'; }).join('');
 
     var h='';
-    // ── Salidas ──
-    h+='<div class="dash-sec"><h3>'+t('h_departures')+'</h3>';
-    if(!DASH.departures.length) h+='<div class="dash-empty">'+t('no_departures')+'</div>';
-    DASH.departures.forEach(function(g,i){
-      var pct=g.expected>0?Math.min(100,Math.round(g.paid/g.expected*100)):0;
-      var loose=g.precision!=='day';
-      h+='<div class="dep" data-dep="'+i+'"><div class="dep-h">'
-        +'<span class="dep-date">'+esc(g.label)+'</span>'
-        +(loose?'<span class="est">'+t(g.precision==='month'?'p_month':'p_year')+'</span>':'')
-        +'<span class="dep-tour">'+esc(g.tours.join(' · ')||'—')+'</span>'
-        +'<span class="dep-pax">'+g.pax+' '+t('pax')+'</span>'
-        +'<span class="dep-money"><span>'+t('collected')+' <b>'+(money(g.paid)||'$0')+'</b></span>'
-        +'<span>'+t('of')+' '+(money(g.expected)||'$0')+'</span>'
-        +'<span class="paybar"><i style="width:'+pct+'%"></i></span></span></div>';
-      h+='<div class="dep-rows">';
-      g.leads.forEach(function(l){
-        var lp=l.expected>0?Math.min(100,Math.round(l.paid/l.expected*100)):0;
-        h+='<div class="dep-row" data-phone="'+esc(l.phone)+'">'
-          +'<span class="nm">'+esc(l.name||('+'+l.phone))+'</span>'
-          +'<span class="sub">'+esc(l.package||'—')+' · '+(l.riders||0)+'R'+(l.pillions?'+'+l.pillions+'P':'')+(l.country?' · '+esc(l.country):'')+'</span>'
-          +'<span class="dep-money"><span>'+(money(l.paid)||'$0')+' / '+(money(l.expected)||'—')+'</span>'
-          +(l.estimated&&l.expected?'<span class="est">'+t('estimated')+'</span>':'')
-          +'<span class="paybar"><i style="width:'+lp+'%"></i></span></span></div>';
+    if(!OV.departures.length){
+      h+='<div class="dash-empty">'+t('no_deps_yet')+'</div>';
+    }
+    OV.departures.forEach(function(d){
+      h+='<div class="dep'+(d.occState==='cancelled'?' off':'')+'">';
+      h+='<div class="dep-h">'
+        +'<span class="dep-date">'+esc(fmtDepDate(d.date))+'</span>'
+        +'<span class="dep-tour">'+esc([d.tour,d.package].filter(Boolean).join(' · ')||'—')+(d.guided?' · '+t('guided'):'')+'</span>'
+        +depBadge(d)
+        +'<span class="dep-actions">'
+          +addPaxSelect(d)
+          +'<button class="mini" onclick="depEdit(\''+d.id+'\')">'+t('btn_edit')+'</button>'
+        +'</span></div>';
+      h+='<div class="dep-occ">'+dots(d.pax,d.capacity)
+        +'<b>'+d.pax+' / '+d.capacity+'</b>'
+        +'<span class="occ-note'+(d.toMin>0?' warn':'')+'">'
+          +(d.occState==='cancelled' ? t('dep_cancelled')
+            : d.toMin>0 ? t('to_min').replace('{n}',d.toMin)
+            : d.free>0 ? t('free_left').replace('{n}',d.free) : t('dep_full'))+'</span>'
+        +'<span class="dep-when">'+depWhen(d)+'</span>'
+        +'<span class="dep-money">'+t('collected')+' <b>'+(money(d.collected)||'$0')+'</b>'
+          +(d.pending>0?' · '+t('pending')+' '+money(d.pending):'')
+          +(d.unpriced>0?' · <span class="warn">'+t('n_unpriced').replace('{n}',d.unpriced)+'</span>':'')
+        +'</span></div>';
+
+      if(d.roster.length){
+        h+='<div class="dep-rows">';
+        d.roster.forEach(function(r){
+          var ps=PAYST[r.state];
+          h+='<div class="dep-row" data-phone="'+esc(r.phone)+'">'
+            +'<span class="nm">'+esc(r.name||('+'+r.phone))+'</span>'
+            +'<span class="sub">'+esc(r.package||'—')+' · '+r.riders+'R'+(r.pillions?'+'+r.pillions+'P':'')+(r.country?' · '+esc(r.country):'')+'</span>'
+            +'<span class="pay '+ps.cls+'">'+ps.ico+' '+t('pay_'+r.state)
+              +(r.expected?' '+money(r.paid)+' / '+money(r.expected):(r.paid?' '+money(r.paid):''))+'</span>'
+            +'<button class="mini ghost" title="'+t('btn_remove_pax')+'" onclick="event.stopPropagation();depUnassign(\''+esc(r.phone)+'\')">✕</button>'
+            +'</div>';
+        });
+        h+='</div>';
+      } else {
+        h+='<div class="dep-rows"><div class="dep-row empty">'+t('dep_empty')+'</div></div>';
+      }
+      h+='</div>';
+    });
+
+    // Ganados sin salida: el agujero por el que se pierde un cliente ya cerrado.
+    h+='<div class="dash-sec"><h3>'+t('h_unassigned')+' ('+OV.unassigned.length+')</h3>';
+    if(!OV.unassigned.length) h+='<div class="dash-empty">'+t('no_unassigned')+'</div>';
+    else{
+      h+='<div class="dep"><div class="dep-rows">';
+      OV.unassigned.forEach(function(r){
+        h+='<div class="dep-row" data-phone="'+esc(r.phone)+'">'
+          +'<span class="nm">'+esc(r.name||('+'+r.phone))+'</span>'
+          +'<span class="sub">'+esc(r.package||'—')+' · '+r.pax+' pax'+(r.travelDate?' · "'+esc(r.travelDate)+'"':'')+'</span>'
+          +assignToSelect(r.phone)
+          +'</div>';
       });
       h+='</div></div>';
-    });
-    h+='</div>';
-
-    // ── Calendario de cobros ──
-    h+='<div class="dash-sec"><h3>'+t('h_schedule')+'</h3>';
-    if(!DASH.schedule.length) h+='<div class="dash-empty">'+t('no_schedule')+'</div>';
-    else{
-      h+='<table class="sched"><tr><th>'+t('c_due')+'</th><th>'+t('c_client')+'</th><th>'+t('c_concept')+'</th><th>'+t('c_amount')+'</th><th>'+t('c_departure')+'</th></tr>';
-      DASH.schedule.slice(0,40).forEach(function(s){
-        h+='<tr class="clk" data-phone="'+esc(s.phone)+'"><td'+(s.overdue?' class="over"':'')+'>'+dashDue(s.dueAt)+(s.overdue?' ⚠':'')+'</td>'
-          +'<td>'+esc(s.name||('+'+s.phone))+'</td>'
-          +'<td>'+t(s.kind==='deposit'?'k_deposit':'k_balance')+'</td>'
-          +'<td'+(s.overdue?' class="over"':'')+'>'+(money(Math.round(s.amount))||'$0')+'</td>'
-          +'<td>'+esc(s.departure)+'</td></tr>';
-      });
-      h+='</table>';
     }
     h+='</div>';
-
-    // ── Pagos de Stripe sin asignar ──
-    if(DASH.unmatched>0)
-      h+='<div class="dash-sec"><h3>'+t('h_unmatched')+'</h3><div class="dash-empty warn">'+t('unmatched_n').replace('{n}',DASH.unmatched)+'</div></div>';
-
-    // ── Sin fecha firme ──
-    if(DASH.undated.length){
-      h+='<div class="dash-sec"><h3>'+t('h_undated')+' ('+DASH.undated.length+')</h3><div class="dep"><div class="dep-rows" style="display:block">';
-      DASH.undated.slice(0,30).forEach(function(l){
-        h+='<div class="dep-row" data-phone="'+esc(l.phone)+'"><span class="nm">'+esc(l.name||('+'+l.phone))+'</span>'
-          +'<span class="sub">'+esc(l.package||'—')+(l.travelDate?' · "'+esc(l.travelDate)+'"':' · '+t('no_date'))+'</span></div>';
-      });
-      h+='</div></div></div>';
-    }
 
     var body=document.getElementById('dashBody');
     body.innerHTML=h;
-    body.querySelectorAll('.dep-h').forEach(function(el){ el.onclick=function(){ el.parentNode.classList.toggle('open'); }; });
-    body.querySelectorAll('[data-phone]').forEach(function(el){
-      el.onclick=function(e){ e.stopPropagation(); var a=document.getElementById('app'); clearModes(a); setNav('navConv'); setUrl('/admin'); open_(el.getAttribute('data-phone')); };
+    body.querySelectorAll('.dep-row[data-phone]').forEach(function(el){
+      el.onclick=function(){ var a=document.getElementById('app'); clearModes(a); setNav('navConv'); setUrl('/admin'); open_(el.getAttribute('data-phone')); };
     });
+  }
+  function fmtDepDate(iso){
+    var p=String(iso).split('-'); if(p.length!==3) return iso;
+    var M=(LANG==='en'?['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+                      :['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']);
+    return parseInt(p[2],10)+' '+M[parseInt(p[1],10)-1]+' '+p[0];
+  }
+
+  // ── alta / edición de salida ──
+  function depNew(){ depEditing=null; depFill({date:'',tour:'',package:'',guided:false,capacity:OV?OV.defaults.capacity:12,minPax:OV?OV.defaults.minPax:6,state:'open',notes:''}); }
+  function depEdit(id){
+    var d=(OV.departures||[]).find(function(x){return x.id===id;}); if(!d) return;
+    depEditing=id; depFill(d);
+  }
+  function depFill(d){
+    document.getElementById('depDate').value=d.date||'';
+    document.getElementById('depTour').value=d.tour||'';
+    document.getElementById('depPackage').value=d.package||'';
+    document.getElementById('depGuided').checked=!!d.guided;
+    document.getElementById('depCapacity').value=d.capacity||12;
+    document.getElementById('depMin').value=(d.minPax==null?6:d.minPax);
+    document.getElementById('depState').value=d.state||'open';
+    document.getElementById('depNotes').value=d.notes||'';
+    document.getElementById('depErr').textContent='';
+    document.getElementById('depDelete').style.display=depEditing?'':'none';
+    document.getElementById('depModalTitle').textContent=t(depEditing?'m_edit_dep':'m_new_dep');
+    document.getElementById('depModal').style.display='flex';
+  }
+  function depSave(){
+    var err=document.getElementById('depErr');
+    var date=document.getElementById('depDate').value.trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ err.textContent=t('al_dep_date'); return; }
+    apiPost('departure',{
+      id:depEditing||undefined, date:date,
+      tour:document.getElementById('depTour').value.trim(),
+      package:document.getElementById('depPackage').value,
+      guided:document.getElementById('depGuided').checked,
+      capacity:document.getElementById('depCapacity').value,
+      minPax:document.getElementById('depMin').value,
+      state:document.getElementById('depState').value,
+      notes:document.getElementById('depNotes').value.trim()
+    }).then(function(r){ return r.json().then(function(j){return {ok:r.ok,j:j};}); })
+      .then(function(res){
+        if(!res.ok){ err.textContent=res.j.error||t('al_save'); return; }
+        document.getElementById('depModal').style.display='none'; loadOverview();
+      }).catch(function(){ err.textContent=t('al_save'); });
+  }
+  function depDelete(){
+    if(!depEditing || !confirm(t('cfm_dep_delete'))) return;
+    apiPost('departure/delete',{id:depEditing}).then(function(){ document.getElementById('depModal').style.display='none'; loadOverview(); });
+  }
+
+  // ── asignar pasajeros ──
+  // Desplegables en línea, no un prompt con una lista numerada: se ve lo que hay sin abrir nada.
+  // Solo se ofrecen los GANADO sin salida — asignar a quien no lo está sería colar en la lista de
+  // viajeros a alguien que todavía no ha cerrado.
+  function addPaxSelect(d){
+    if(d.occState==='cancelled') return '';
+    if(!OV.unassigned.length) return '<span class="mini muted" title="'+t('al_no_unassigned')+'">'+t('btn_add_pax')+'</span>';
+    return '<select class="mini" onchange="depAssignTo(this.value,\''+d.id+'\')"><option value="">+ '+t('btn_add_pax')+'</option>'
+      + OV.unassigned.map(function(r){
+          return '<option value="'+esc(r.phone)+'">'+esc(r.name||('+'+r.phone))+' — '+esc(r.package||'?')+' · '+r.pax+' pax</option>'; }).join('')
+      + '</select>';
+  }
+  function assignToSelect(phone){
+    var open=(OV.departures||[]).filter(function(d){return d.occState!=='cancelled';});
+    if(!open.length) return '<span class="mini muted" title="'+t('al_no_deps')+'">'+t('btn_assign')+'</span>';
+    return '<select class="mini" style="margin-left:auto" onchange="depAssignTo(\''+esc(phone)+'\',this.value)"><option value="">'+t('btn_assign')+'…</option>'
+      + open.map(function(d){
+          return '<option value="'+d.id+'">'+esc(fmtDepDate(d.date))+' — '+esc([d.tour,d.package].filter(Boolean).join(' '))+' ('+d.pax+'/'+d.capacity+')</option>'; }).join('')
+      + '</select>';
+  }
+  function depAssignTo(phone,depId){ if(phone&&depId) assign(phone,depId); }
+  function depUnassign(phone){ if(confirm(t('cfm_unassign'))) assign(phone,''); }
+  function assign(phone,departureId){
+    apiPost('departure/assign',{phone:phone,departureId:departureId})
+      .then(function(r){ if(!r.ok) throw 0; loadOverview(); })
+      .catch(function(){ alert(t('al_save')); });
   }
 
   function renderDb(){
@@ -2692,8 +2848,12 @@
 
   function setUrl(p){ try{ history.replaceState(null,'',p); }catch(e){} }
   document.getElementById('navConv').onclick=function(){ clearModes(document.getElementById('app')); setNav('navConv'); setUrl('/admin'); };
-  document.getElementById('navDash').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dashmode'); setNav('navDash'); setUrl('/admin'); loadDash(); };
-  document.getElementById('dashReload').onclick=loadDash;
+  document.getElementById('navDash').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dashmode'); setNav('navDash'); setUrl('/admin'); loadOverview(); };
+  document.getElementById('dashReload').onclick=loadOverview;
+  document.getElementById('dashNew').onclick=depNew;
+  document.getElementById('depCancel').onclick=function(){ document.getElementById('depModal').style.display='none'; };
+  document.getElementById('depSave').onclick=depSave;
+  document.getElementById('depDelete').onclick=depDelete;
   document.getElementById('navCal').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('calmode'); setNav('navCal'); setUrl('/admin'); buildLeadsDL(); loadAppts(renderCal); };
   document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dbmode'); setNav('navDb'); setUrl('/admin/db'); dbPage=1; loadHealth(); loadAppts(renderDb); };
   document.getElementById('navOps').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('opsmode'); setNav('navOps'); setUrl('/admin'); loadOperators(); };

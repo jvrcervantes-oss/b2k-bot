@@ -265,6 +265,48 @@ async function listOperators() {
   return list.map((o) => ({ ...o, emailUnsub: !!(o.email && unsub.has(String(o.email).toLowerCase().trim())) }));
 }
 
+// ─── SALIDAS (las que de verdad viajan) ─────────────────────────────
+// Una salida es un objeto que crea el estudio (fecha, tour, paquete, plazas), NO algo que se
+// deduzca de las fichas. Se intentó deducirlas agrupando el `travelDate` del lead y no sirve:
+// es texto libre ("late 2027", "November 4"), así que dos clientes de la misma salida caían en
+// dos grupos, y una intención suelta se pintaba como salida programada. Además, deduciendo no
+// hay forma de saber cuántas plazas quedan ni si se llega al mínimo de 6 para que salga.
+//
+// El pasajero se ata por el LADO DEL LEAD (`lead.departureId`): una sola fuente, sin dos listas
+// que sincronizar. Solo cuenta como pasajero un lead en estado `won` — marcarlo es manual y
+// deliberado, que es justo lo que se pidió.
+const fallbackDeps = {};
+const DEP_CAPACITY = 12;   // máximo del grupo (ficha del tour: 6-12 personas)
+const DEP_MIN_PAX = 6;     // por debajo de esto la salida no arranca
+
+async function getDeparture(id) {
+  if (redisClient) { const d = await redisClient.get(`dep:${id}`); return d ? JSON.parse(d) : null; }
+  return fallbackDeps[id] || null;
+}
+async function saveDeparture(dep) {
+  dep.updatedAt = Date.now();
+  if (redisClient) {
+    await redisClient.set(`dep:${dep.id}`, JSON.stringify(dep));
+    // Ordenado por FECHA de salida, no por fecha de edición: el panel las lee en el orden en que ocurren.
+    await redisClient.zAdd("deps_index", { score: depScore(dep.date), value: dep.id });
+  } else fallbackDeps[dep.id] = dep;
+  return dep;
+}
+async function deleteDeparture(id) {
+  if (redisClient) { await redisClient.del(`dep:${id}`); await redisClient.zRem("deps_index", id); }
+  else delete fallbackDeps[id];
+}
+async function listDepartures() {
+  if (redisClient) {
+    const ids = await redisClient.zRange("deps_index", 0, -1);
+    if (!ids.length) return [];
+    const raws = await Promise.all(ids.map((id) => redisClient.get(`dep:${id}`)));
+    return raws.filter(Boolean).map((r) => JSON.parse(r));
+  }
+  return Object.values(fallbackDeps).sort((a, b) => depScore(a.date) - depScore(b.date));
+}
+const depScore = (d) => new Date(String(d) + "T00:00:00Z").getTime() || 0;
+
 // ─── SUSCRIPTORES B2C — solo email, para newsletter (web "déjanos tu correo") ───────────
 // BD separada: sub:<email> + subs_index. Sin chat ni pipeline. La baja (unsub) es global por
 // email, así que comparten el mismo sistema de baja que leads/operadores. El email ES la clave
@@ -583,7 +625,6 @@ const BUILTIN_PLAYBOOKS = {
     // "standard" es la banda del formulario de Instagram, no un paquete: se estima por el suelo.
     pkgPrice: { roundtrip: 2700, extreme: 3450, deluxe: 3950, standard: 2700 },
     pillionAdjust: -380,  // el copiloto paga 380 menos: cuenta como persona, no al mismo precio
-    balanceDueDays: 60,   // el saldo vence 60 días antes de la salida
     // 50000 = USD 500 por persona. Era 100000 (USD 1.000): el cliente lo bajó a 500 el 24-jul-2026
     // y se actualizó la web y el contexto del bot, pero NO esto — el bot decía 500 y el link cobraba
     // 1.000. Si cambia el importe, se cambia en los tres sitios: context.md, la web y aquí.
@@ -784,26 +825,36 @@ async function removePayment(phone, id) {
   return { ok: true };
 }
 
-// `travelDate` es TEXTO LIBRE: el bot guarda lo que dice el cliente ("late 2027",
-// "November 4, 2026", "2026-11-04"). Para agrupar salidas hace falta normalizarlo, y hace falta
-// saber CUÁNTO se sabe: una fecha de mes no es una salida cerrada, y tratarla como tal llena el
-// calendario de salidas que nadie ha confirmado. Devuelve la precisión, no solo la fecha.
-const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
-function parseTripDate(raw) {
-  const s = String(raw || "").toLowerCase().trim();
-  if (!s) return { precision: "none", key: "", label: "" };
-  const iso = s.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return { precision: "day", key: `${iso[1]}-${iso[2]}-${iso[3]}`, label: `${iso[1]}-${iso[2]}-${iso[3]}` };
-  const yearM = s.match(/\b(20\d{2})\b/);
-  if (!yearM) return { precision: "none", key: "", label: String(raw).trim() };
-  const year = yearM[1];
-  const mIdx = MONTHS.findIndex((m) => s.includes(m.slice(0, 3)) && new RegExp(`\\b${m.slice(0, 3)}`).test(s));
-  if (mIdx < 0) return { precision: "year", key: year, label: String(raw).trim() };
-  const mm = String(mIdx + 1).padStart(2, "0");
-  // Día: un número de 1 a 31 que no forme parte del año.
-  const day = s.replace(year, " ").match(/\b([1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\b/);
-  if (day) return { precision: "day", key: `${year}-${mm}-${String(day[1]).padStart(2, "0")}`, label: `${year}-${mm}-${String(day[1]).padStart(2, "0")}` };
-  return { precision: "month", key: `${year}-${mm}`, label: `${MONTHS[mIdx][0].toUpperCase() + MONTHS[mIdx].slice(1)} ${year}` };
+// ─── OCUPACIÓN Y COBRO DE UNA SALIDA (puras — self-check en test-salidas.js) ───
+// Personas que ocupa un lead: riders + pillions. Un ganado sin números sigue siendo UNA persona;
+// contarlo como 0 haría que una salida llena pareciera vacía.
+const paxOf = (l) => Math.max(1, (parseInt(l.riders, 10) || 0) + (parseInt(l.pillions, 10) || 0));
+
+// SOLO dinero real: el importe cerrado a mano (`dealValue`) y los pagos registrados. Sin importe
+// no se estima nada — una cifra inventada en un panel de caja es peor que un hueco.
+function paxPayment(l) {
+  const expected = Math.max(0, parseInt(l.dealValue, 10) || 0);
+  const paid = (Array.isArray(l.payments) ? l.payments : []).reduce((a, p) => a + (Number(p.amount) || 0), 0);
+  let state;
+  if (!expected) state = paid > 0 ? "partial" : "unpriced";   // pagó algo pero falta cerrar el precio
+  else if (paid >= expected) state = "paid";
+  else state = paid > 0 ? "partial" : "unpaid";
+  return { expected, paid, pending: Math.max(0, expected - paid), state };
+}
+
+// Estado de la salida por su ocupación. `forming` = aún no llega al mínimo y puede no salir.
+function depOccupancy(dep, roster) {
+  const capacity = parseInt(dep.capacity, 10) > 0 ? parseInt(dep.capacity, 10) : DEP_CAPACITY;
+  const minPax = parseInt(dep.minPax, 10) >= 0 ? parseInt(dep.minPax, 10) : DEP_MIN_PAX;
+  const pax = roster.reduce((a, l) => a + paxOf(l), 0);
+  // `occState` y NO `state`: el objeto salida ya tiene un `state` guardado (open/cancelled) y
+  // al fusionar ambos en la respuesta, el calculado lo pisaba — el desplegable de estado del
+  // formulario se quedaba en blanco porque "forming" no es ninguna de sus opciones.
+  const occState = dep.state === "cancelled" ? "cancelled"
+    : pax >= capacity ? "full"
+    : pax >= minPax ? "confirmed"
+    : "forming";
+  return { capacity, minPax, pax, free: Math.max(0, capacity - pax), toMin: Math.max(0, minPax - pax), occState, overbooked: pax > capacity };
 }
 
 // ─── ENRIQUECIMIENTO: rellena la ficha leyendo la conversación con el LLM ──────
@@ -2732,7 +2783,10 @@ app.post("/admin/api/lead/create", async (req, res) => {
   if (phone.length < 8) return res.status(400).json({ error: "teléfono inválido (solo dígitos, con prefijo de país)" });
   if (await getLead(phone)) return res.status(409).json({ error: "ya existe un cliente con ese teléfono", phone });
   const f = {};
-  ["name", "country", "email", "tour", "package", "riders", "pillions", "travelDate", "owner", "nextFollowUp", "tags", "status", "dealValue"]
+  // OJO: `status` NO va aquí. No vive en el registro del lead sino en su propia clave Redis
+  // (`status:<phone>`), y `listLeads` lo sobreescribe con `getStatus()` al leer — meterlo en el
+  // objeto lo pierde en silencio, que es justo lo que pasaba: el alta con status "won" salía sin él.
+  ["name", "country", "email", "tour", "package", "riders", "pillions", "travelDate", "owner", "nextFollowUp", "tags", "dealValue"]
     .forEach((k) => { if (req.body[k] != null && req.body[k] !== "") f[k] = req.body[k]; });
   if (f.dealValue != null) { const n = parseInt(String(f.dealValue).replace(/\D/g, ""), 10); f.dealValue = isNaN(n) ? 0 : n; }
   if (f.email) f.email = String(f.email).toLowerCase().trim();
@@ -2740,6 +2794,8 @@ app.post("/admin/api/lead/create", async (req, res) => {
     ...f, phone, intent: "interested", source: "manual",
     createdAt: Date.now(), updatedAt: Date.now(), lastMessage: "", archived: false,
   });
+  const st = String(req.body.status || "new");
+  if (["new", "quoted", "won", "lost", "noshow"].includes(st)) await setStatus(phone, st === "new" ? "" : st);
   await logEvent(phone, "created", { by: "panel", source: "manual" });
   res.json({ ok: true, phone });
 });
@@ -2789,107 +2845,109 @@ app.post("/admin/api/payments/assign", async (req, res) => {
   res.status(r.ok ? 200 : 400).json(r);
 });
 
-// ── DASHBOARD: salidas, quién va y cómo va el cobro ──
-// Todo se calcula AQUÍ y no en el panel: la tabla de precios duplicada en panel.html llevaba
-// meses desfasada (3200/3950/4300) y falseaba el pipeline. Una sola fuente.
-const pkgKeyOf = (p) => {
-  const s = String(p || "").toLowerCase();
-  if (s.includes("deluxe")) return "deluxe";
-  if (s.includes("extreme")) return "extreme";
-  if (s.includes("roundtrip") || s.includes("round trip")) return "roundtrip";
-  if (s.includes("standard") || s.includes("best value")) return "standard";
-  return "";
-};
-const paidOf = (l) => (Array.isArray(l.payments) ? l.payments : []).reduce((a, p) => a + (Number(p.amount) || 0), 0);
-function expectedOf(l, pricing, pillionAdjust) {
-  const dv = parseInt(l.dealValue, 10);
-  if (dv > 0) return { amount: dv, estimated: false };  // importe cerrado a mano: manda sobre la estimación
-  const unit = pricing[pkgKeyOf(l.package)] || 0;
-  if (!unit) return { amount: 0, estimated: true };     // sin paquete no se inventa un valor
-  const riders = parseInt(l.riders, 10) || 0;
-  const pillions = parseInt(l.pillions, 10) || 0;
-  if (!riders && !pillions) return { amount: 0, estimated: true };
-  return { amount: unit * riders + Math.max(0, unit + (pillionAdjust || 0)) * pillions, estimated: true };
-}
-
-app.get("/admin/api/dashboard", async (req, res) => {
+// ── SALIDAS: alta, edición, borrado y asignación de pasajeros ──
+app.get("/admin/api/departures", async (req, res) => {
   if (!adminAuth(req, res)) return;
-  const pricing = PLAYBOOK.pkgPrice || {};
-  const pillionAdj = PLAYBOOK.pillionAdjust || 0;
-  const dueDays = PLAYBOOK.balanceDueDays || 60;
-  const depositPP = (PLAYBOOK.deposit?.amountMinor || 0) / 100;
-  const all = await listLeads();
-  const live = all.filter((l) => !l.archived && !["lost", "noshow"].includes(l.status));
+  res.json({ departures: await listDepartures() });
+});
 
-  const byKey = new Map();
-  const undated = [];
-  const schedule = [];
-  const now = Date.now();
-  let paidTotal = 0, expectedTotal = 0;
+app.post("/admin/api/departure", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const b = req.body || {};
+  const date = String(b.date || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: "fecha obligatoria (YYYY-MM-DD)" });
+  const prev = b.id ? await getDeparture(b.id) : null;
+  if (b.id && !prev) return res.status(404).json({ error: "esa salida no existe" });
+  const dep = {
+    ...(prev || { id: newOpId(), createdAt: Date.now() }),
+    date,
+    tour: String(b.tour || "").slice(0, 80),
+    package: String(b.package || "").slice(0, 60),
+    guided: !!b.guided,
+    capacity: parseInt(b.capacity, 10) > 0 ? parseInt(b.capacity, 10) : DEP_CAPACITY,
+    minPax: parseInt(b.minPax, 10) >= 0 ? parseInt(b.minPax, 10) : DEP_MIN_PAX,
+    state: ["open", "cancelled"].includes(b.state) ? b.state : (prev ? prev.state : "open"),
+    notes: String(b.notes || "").slice(0, 500),
+  };
+  await saveDeparture(dep);
+  res.json({ ok: true, departure: dep });
+});
 
-  for (const l of live) {
-    const paid = paidOf(l);
-    const exp = expectedOf(l, pricing, pillionAdj);
-    paidTotal += paid;
-    expectedTotal += exp.amount;
-    const riders = parseInt(l.riders, 10) || 0;
-    const pillions = parseInt(l.pillions, 10) || 0;
-    const d = parseTripDate(l.travelDate);
-    const row = {
-      phone: l.phone, name: l.name || "", email: l.email || "", country: l.country || "",
-      package: l.package || "", riders, pillions, pax: riders + pillions,
-      status: l.status || "", owner: l.owner || "", travelDate: l.travelDate || "",
-      paid, expected: exp.amount, estimated: exp.estimated,
-      outstanding: Math.max(0, exp.amount - paid),
-      payments: Array.isArray(l.payments) ? l.payments : [],
-    };
-    if (!d.key) { undated.push(row); continue; }
+// Borrar una salida NO borra a nadie: solo suelta a sus pasajeros, que vuelven a "sin asignar".
+app.post("/admin/api/departure/delete", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { id } = req.body || {};
+  if (!id || !(await getDeparture(id))) return res.status(404).json({ error: "esa salida no existe" });
+  const freed = (await listLeads()).filter((l) => l.departureId === id);
+  for (const l of freed) await updateLeadFields(l.phone, { departureId: "" });
+  await deleteDeparture(id);
+  res.json({ ok: true, freed: freed.length });
+});
 
-    if (!byKey.has(d.key)) byKey.set(d.key, { key: d.key, label: d.label, precision: d.precision, tours: new Set(), leads: [], pax: 0, paid: 0, expected: 0 });
-    const g = byKey.get(d.key);
-    if (d.precision === "day") { g.precision = "day"; g.label = d.label; }
-    if (l.tour) g.tours.add(l.tour);
-    g.leads.push(row); g.pax += row.pax || riders; g.paid += paid; g.expected += exp.amount;
+// Asignar/quitar un pasajero. `departureId` vacío = sacarlo de la salida.
+app.post("/admin/api/departure/assign", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, departureId } = req.body || {};
+  if (!phone) return res.status(400).json({ error: "phone requerido" });
+  const lead = await getLead(phone);
+  if (!lead) return res.status(404).json({ error: "ese cliente no existe" });
+  if (departureId && !(await getDeparture(departureId))) return res.status(404).json({ error: "esa salida no existe" });
+  await updateLeadFields(phone, { departureId: departureId || "" });
+  await logEvent(phone, departureId ? "departure_assigned" : "departure_removed", { departureId: departureId || undefined });
+  res.json({ ok: true });
+});
 
-    // Calendario de cobro: el depósito vence ya (si no hay nada pagado) y el saldo 60 días antes
-    // de salir. Solo tiene sentido con fecha de día: con "October 2026" no hay vencimiento real.
-    if (d.precision === "day") {
-      const dep = new Date(d.key + "T00:00:00Z").getTime();
-      // El depósito es POR PERSONA, no por moto: un copiloto también reserva plaza.
-      const depositDue = depositPP * (row.pax || riders || 1);
-      if (paid < depositDue) {
-        schedule.push({ phone: l.phone, name: row.name, kind: "deposit", amount: depositDue - paid, dueAt: null, departure: d.key, overdue: false });
-      }
-      const balAt = dep - dueDays * 86400000;
-      const balance = Math.max(0, exp.amount - Math.max(paid, depositDue));
-      if (balance > 0) {
-        schedule.push({ phone: l.phone, name: row.name, kind: "balance", amount: balance, dueAt: balAt, departure: d.key, overdue: balAt < now, estimated: exp.estimated });
-      }
-    }
+// ── PANEL DE SALIDAS ──
+// Solo entran los leads en estado `won`: marcar es manual y deliberado. Un lead que dijo una
+// fecha en el chat NO es un pasajero, y tratarlo como tal fue justo el fallo de la versión
+// anterior de este panel. El dinero es SOLO real (importe cerrado + pagos registrados).
+app.get("/admin/api/overview", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const deps = await listDepartures();
+  const won = (await listLeads()).filter((l) => l.status === "won" && !l.archived);
+  const byDep = new Map(deps.map((d) => [d.id, []]));
+  const unassigned = [];
+  for (const l of won) {
+    const arr = l.departureId && byDep.get(l.departureId);
+    (arr || unassigned).push(l);
   }
 
-  const departures = [...byKey.values()]
-    .map((g) => ({ ...g, tours: [...g.tours], outstanding: Math.max(0, g.expected - g.paid) }))
-    .sort((a, b) => a.key.localeCompare(b.key));
-  schedule.sort((a, b) => (a.dueAt || 0) - (b.dueAt || 0));
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const row = (l) => {
+    const pay = paxPayment(l);
+    return {
+      phone: l.phone, name: l.name || "", email: l.email || "", country: l.country || "",
+      package: l.package || "", riders: parseInt(l.riders, 10) || 0, pillions: parseInt(l.pillions, 10) || 0,
+      pax: paxOf(l), owner: l.owner || "", travelDate: l.travelDate || "", ...pay,
+    };
+  };
 
-  const week = now - 7 * 86400000;
-  let unmatched = 0;
-  if (redisClient) unmatched = await redisClient.lLen("pay_unmatched");
+  const departures = deps.map((d) => {
+    const roster = (byDep.get(d.id) || []).map(row).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    const occ = depOccupancy(d, byDep.get(d.id) || []);
+    const collected = roster.reduce((a, r) => a + r.paid, 0);
+    const pending = roster.reduce((a, r) => a + r.pending, 0);
+    const unpriced = roster.filter((r) => r.state === "unpriced").length;
+    return {
+      ...d, ...occ, roster, collected, pending, unpriced,
+      daysOut: Math.round((depScore(d.date) - today.getTime()) / 86400000),
+    };
+  });
 
   res.json({
-    pricing, pillionAdjust: pillionAdj, depositPP, balanceDueDays: dueDays,
-    departures, undated, schedule, unmatched,
+    departures,
+    unassigned: unassigned.map(row),
+    defaults: { capacity: DEP_CAPACITY, minPax: DEP_MIN_PAX },
+    // El panel los usa para la columna Valor de la BD (estimación de PIPELINE, que es otra cosa
+    // que la caja de este panel). Van desde aquí para que no vuelva a haber dos tablas de precios.
+    pricing: PLAYBOOK.pkgPrice || {}, pillionAdjust: PLAYBOOK.pillionAdjust || 0,
     metrics: {
-      leads: all.length,
-      live: live.length,
-      won: all.filter((l) => l.status === "won").length,
-      lost: all.filter((l) => l.status === "lost").length,
-      new7d: all.filter((l) => (l.createdAt || l.updatedAt || 0) > week).length,
-      travellers: departures.reduce((a, g) => a + g.pax, 0),
-      paidTotal, expectedTotal,
-      outstandingTotal: Math.max(0, expectedTotal - paidTotal),
-      overdue: schedule.filter((s) => s.overdue).reduce((a, s) => a + s.amount, 0),
+      departures: departures.filter((d) => d.occState !== "cancelled").length,
+      confirmed: departures.filter((d) => d.occState === "confirmed" || d.occState === "full").length,
+      travellers: departures.filter((d) => d.occState !== "cancelled").reduce((a, d) => a + d.pax, 0),
+      collected: departures.reduce((a, d) => a + d.collected, 0),
+      pending: departures.reduce((a, d) => a + d.pending, 0),
+      unassigned: unassigned.length,
     },
   });
 });
