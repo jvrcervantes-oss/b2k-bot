@@ -1536,11 +1536,12 @@ async function createStripeSession(numUnits, phone) {
       mode: "payment",
       success_url: STRIPE_SUCCESS_URL || "https://balimotoadventures.com/?booking=confirmed",
       cancel_url: STRIPE_CANCEL_URL || "https://balimotoadventures.com/",
-      // `bot` es obligatorio, con o sin teléfono: B2K y BBM comparten UNA cuenta de Stripe y
-      // Stripe reparte cada evento a TODOS los endpoints. Sin esta marca, un cobro de B2K entra
-      // en el CRM de BaliBest como lead pagado (y su handler lee el importe como si fuera IDR).
-      metadata: { bot: PROJECT_NAME || "b2k", ...(phone ? { phone: String(phone), units: String(numUnits) } : {}) },
-      ...(phone ? { client_reference_id: String(phone) } : {}),
+      // B2K y BBM comparten UNA cuenta de Stripe y Stripe reparte cada evento a TODOS los
+      // endpoints. El teléfono va como `lead_phone` y NO como `phone`/`client_reference_id`
+      // A PROPÓSITO: el handler de BBM lee esas dos claves y, si las encontrara, se apuntaría un
+      // cobro de B2K como lead pagado suyo con el importe leído en IDR. Con `lead_phone` lo
+      // descarta igual que antes, sin tener que desplegar nada en su rama.
+      metadata: { bot: PROJECT_NAME || "b2k", ...(phone ? { lead_phone: String(phone), units: String(numUnits) } : {}) },
     });
     console.log(`[${PROJECT_NAME}] Stripe session: ${numUnits} ${unit}s → ${(major * numUnits).toLocaleString()} ${cur}`);
     return session.url;
@@ -2331,6 +2332,22 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
+// ¿De quién es este cobro? La cuenta de Stripe está COMPARTIDA entre B2K y BBM y Stripe reparte
+// cada evento a TODOS los endpoints de la cuenta, sin filtro posible por metadata. Pura y con
+// self-check en test-stripe-ownership.js — es el punto donde un fallo mete dinero de un cliente
+// en el CRM de otro.
+//   · "mine"      → sesión creada por este bot (lleva su marca) → se atribuye por lead_phone
+//   · "foreign"   → de otro bot: o está marcada, o trae las claves que solo pone el otro
+//   · "unmatched" → sin marcas: el link de pago de la web. Solo si la moneda es la nuestra
+function stripeOwnership(s, me, myCurrency = "usd") {
+  const md = (s && s.metadata) || {};
+  if (md.bot && md.bot === me) return { verdict: "mine", owner: me, phone: md.lead_phone || "" };
+  if (md.bot) return { verdict: "foreign", owner: md.bot, phone: "" };
+  if (md.phone || (s && s.client_reference_id)) return { verdict: "foreign", owner: "sin marcar", phone: "" };
+  if (String((s && s.currency) || "").toLowerCase() !== myCurrency) return { verdict: "foreign", owner: "otra moneda", phone: "" };
+  return { verdict: "unmatched", owner: "", phone: "" };
+}
+
 // ─── WEBHOOK DE STRIPE (cobros reales) ────────────────────────────
 // Sin esto el panel no sabe si alguien pagó: creábamos la sesión de checkout y nadie escuchaba
 // el resultado. Firma obligatoria — un cobro no se acepta porque venga en un POST.
@@ -2350,15 +2367,13 @@ app.post("/stripe/webhook", async (req, res) => {
     if (event.type !== "checkout.session.completed") return;
     const s = event.data.object;
     if (s.payment_status !== "paid") return;
-    // Cobro de OTRO bot de la misma cuenta de Stripe: no es nuestro y su importe puede ir en otra
-    // moneda. Se ignora sin dejar rastro (sin él acabaría en pay_unmatched ensuciando este CRM).
-    const owner = s.metadata && s.metadata.bot;
-    if (owner && owner !== (PROJECT_NAME || "b2k")) {
-      console.log(`[${PROJECT_NAME}] Pago de Stripe de otro bot (${owner}) — ignorado`);
+    const own = stripeOwnership(s, PROJECT_NAME || "b2k");
+    if (own.verdict === "foreign") {
+      console.log(`[${PROJECT_NAME}] Pago de Stripe de otro bot (${own.owner}) — ignorado`);
       return;
     }
     const amount = (s.amount_total || 0) / 100;
-    const phone = (s.metadata && s.metadata.phone) || s.client_reference_id || "";
+    const phone = own.phone;
     const common = { amount, currency: s.currency, method: "stripe", kind: "deposit", ref: s.id, at: (event.created || Date.now() / 1000) * 1000, by: "stripe" };
     if (phone && (await getLead(phone))) {
       const r = await addPayment(phone, common);
