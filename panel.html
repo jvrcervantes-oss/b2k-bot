@@ -234,6 +234,39 @@
   #dbView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
   #app.dbmode #list,#app.dbmode #chat,#app.dbmode #detail{display:none}
   #app.dbmode #dbView{display:flex}
+  /* ── Panel de salidas y cobros ── */
+  #dashView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
+  #app.dashmode #list,#app.dashmode #chat,#app.dashmode #detail{display:none}
+  #app.dashmode #dashView{display:flex}
+  .dash-scroll{flex:1;overflow-y:auto;padding:18px 24px 40px}
+  .dash-sec{margin-bottom:26px}
+  .dash-sec>h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:700;margin:0 0 10px}
+  .dep{border:1px solid var(--line);border-radius:12px;background:var(--card);margin-bottom:12px;overflow:hidden}
+  .dep-h{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;flex-wrap:wrap}
+  .dep-h:hover{background:var(--bg)}
+  .dep-date{font-size:16px;font-weight:800;letter-spacing:-.01em;min-width:112px}
+  .dep-tour{font-size:12.5px;color:var(--ink-soft);font-weight:600}
+  .dep-pax{font-size:12.5px;font-weight:700;padding:3px 9px;border-radius:100px;background:var(--bg);border:1px solid var(--line)}
+  .dep-money{margin-left:auto;display:flex;gap:16px;align-items:baseline;font-size:12.5px}
+  .dep-money b{font-size:14px}
+  .dep-rows{border-top:1px solid var(--line);display:none}
+  .dep.open .dep-rows{display:block}
+  .dep-row{display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;flex-wrap:wrap}
+  .dep-row:last-child{border-bottom:0}
+  .dep-row:hover{background:var(--bg)}
+  .dep-row .nm{font-weight:600;min-width:150px}
+  .dep-row .sub{color:var(--ink-soft);font-size:12px}
+  .paybar{width:92px;height:6px;border-radius:100px;background:var(--line);overflow:hidden;flex-shrink:0}
+  .paybar i{display:block;height:100%;background:#16a34a}
+  .warn{color:#b45309;font-weight:700}
+  .over{color:#dc2626;font-weight:700}
+  .est{font-size:10.5px;color:var(--ink-soft);font-weight:600;border:1px dashed var(--line);border-radius:5px;padding:1px 5px}
+  .dash-empty{padding:16px;border:1px dashed var(--line);border-radius:10px;color:var(--ink-soft);font-size:13px}
+  .sched{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:13px}
+  .sched th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);padding:9px 12px;border-bottom:1px solid var(--line)}
+  .sched td{padding:9px 12px;border-bottom:1px solid var(--line)}
+  .sched tr:last-child td{border-bottom:0}
+  .sched tr.clk{cursor:pointer}.sched tr.clk:hover td{background:var(--bg)}
   /* ── Operadores B2B: BD separada (no son leads de chat), mismo patrón visual que dbView ── */
   #opsView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
   #app.opsmode #list,#app.opsmode #chat,#app.opsmode #detail{display:none}
@@ -615,6 +648,7 @@
     </div>
     <div class="ic" id="navToggle" data-ti="nav_toggle" title="Colapsar menú"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="navToggleIcon"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_toggle">Colapsar menú</span></div>
     <div class="ic on" id="navConv" data-ti="nav_conv" title="Conversaciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.35 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.1A8.38 8.38 0 0 1 12 3.5a8.5 8.5 0 0 1 9 8z" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_conv">Conversaciones</span></div>
+    <div class="ic" id="navDash" data-ti="nav_dash" title="Panel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 13h6V3H3zM15 21h6V11h-6zM3 21h6v-4H3zM15 7h6V3h-6z" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_dash">Panel</span></div>
     <div class="ic" id="navCal" data-ti="nav_cal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_cal">Calendario</span></div>
     <div class="ic" id="navDb" data-ti="nav_db" title="Base de datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_db">Base de datos</span></div>
     <div class="ic" id="navOps" data-ti="nav_ops" title="Operadores"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21V8l9-5 9 5v13" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 21v-6h6v6M9 12h.01M15 12h.01M9 9h.01M15 9h.01" stroke-linecap="round"/></svg><span class="lbl" data-i18n="nav_ops">Operadores</span></div>
@@ -689,12 +723,22 @@
   </div>
 
   <!-- base de datos: todos los clientes en tabla -->
+  <div id="dashView">
+    <div class="db-top">
+      <h2><span data-i18n="h_dash">Salidas y cobros</span></h2>
+      <button class="db-ghost" id="dashReload" data-i18n="btn_reload">↻ Actualizar</button>
+    </div>
+    <div class="db-metrics" id="dashMetrics"></div>
+    <div class="dash-scroll" id="dashBody"></div>
+  </div>
+
   <div id="dbView">
     <div class="db-top">
       <h2><span data-i18n="h_db">Base de datos</span> <span class="count" id="dbCount">0</span></h2>
       <span class="db-store" id="dbStore">—</span>
       <div class="db-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg><input id="dbQ" data-ph="ph_search_client" placeholder="Buscar cliente…"></div>
       <input type="file" id="dbFile" accept=".csv,text/csv" style="display:none">
+      <button class="db-ghost" id="dbNew" data-i18n="btn_new_lead" data-ti="ti_new_lead" title="Da de alta a mano un cliente que no ha llegado por el chat">＋ Nuevo cliente</button>
       <button class="db-ghost" id="dbImport" data-i18n="btn_import" data-ti="ti_import" title="Sube el CSV de leads que descargas de Meta Lead Ads">⬆ Importar Meta</button>
       <button class="db-ghost" id="dbEnrich" data-i18n="btn_enrich" data-ti="ti_enrich" title="Lee las conversaciones y rellena los datos que falten">🔄 Actualizar desde chats</button>
       <button class="db-csv" id="dbCsv" data-i18n="btn_csv">⬇ Exportar CSV</button>
@@ -872,6 +916,37 @@
   </div>
 </div>
 
+<!-- alta MANUAL de cliente: el que llega por teléfono, feria o recomendación y nunca escribió al bot -->
+<div id="ldModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <h3 data-i18n="m_new_lead">Nuevo cliente</h3>
+    <label data-i18n="ld_phone">WhatsApp * (con prefijo de país, solo dígitos)</label>
+    <input id="ldPhone" inputmode="numeric" placeholder="34609764465">
+    <label data-i18n="e_name">Nombre</label>
+    <input id="ldName">
+    <label data-i18n="e_email">Email</label>
+    <input id="ldEmail" type="email">
+    <label data-i18n="e_country">País</label>
+    <input id="ldCountry">
+    <label data-i18n="e_tour">Tour</label>
+    <input id="ldTour" list="ldTourList"><datalist id="ldTourList"><option value="Bali to Komodo"><option value="7 Islands"><option value="4 Islands"></datalist>
+    <label data-i18n="e_package">Paquete</label>
+    <select id="ldPackage"><option value="">—</option><option>Roundtrip</option><option>Extreme</option><option>Deluxe</option></select>
+    <div style="display:flex;gap:10px">
+      <div style="flex:1"><label data-i18n="e_riders">Riders</label><input id="ldRiders" type="number" min="0" step="1"></div>
+      <div style="flex:1"><label data-i18n="e_pillions">Pillions</label><input id="ldPillions" type="number" min="0" step="1"></div>
+    </div>
+    <label data-i18n="e_travel">Fecha de viaje</label>
+    <input id="ldTravel" placeholder="2026-11-04">
+    <label data-i18n="e_value">Valor del trato (USD)</label>
+    <input id="ldValue" type="number" min="0" step="100">
+    <label data-i18n="op_tags">Etiquetas (separadas por coma)</label>
+    <input id="ldTags">
+    <div class="modal-err" id="ldErr"></div>
+    <div class="modal-actions"><button id="ldCancel" class="btn-ghost" data-i18n="btn_cancel">Cancelar</button><button id="ldSave" class="btn-primary" data-i18n="btn_save">Guardar</button></div>
+  </div>
+</div>
+
 <!-- modal gestión de suscriptores (B2C solo-email de la web) -->
 <div id="subsModal" class="modal" style="display:none">
   <div class="modal-box">
@@ -920,6 +995,20 @@
       ops_th_company:'Empresa', ops_th_contact:'Contacto', ops_th_email:'Email', ops_th_phone:'Teléfono', ops_th_country:'País', ops_th_pot:'Potential', ops_th_temp:'Temp', ops_th_tags:'Etiquetas', ops_th_updated:'Actualizado',
       ops_pot_all:'◇ Potential', ops_temp_all:'🌡 Temp', op_potential:'Potential', op_temp:'Temperatura',
       ops_empty:'Aún no hay operadores. Importa un CSV o añade el primero con "+ Operador".',
+      nav_dash:'Panel', h_dash:'Salidas y cobros', btn_reload:'↻ Actualizar', loading:'Cargando…',
+      m_travellers:'Viajeros', m_departures:'Salidas', m_collected:'Cobrado', m_outstanding:'Pendiente', m_overdue:'Vencido', m_live:'Clientes vivos',
+      h_departures:'Próximas salidas', no_departures:'Ninguna salida con fecha todavía.', p_month:'solo mes', p_year:'solo año',
+      pax:'pax', collected:'cobrado', of:'de', estimated:'estimado',
+      h_schedule:'Calendario de cobros', no_schedule:'Nada que cobrar con fecha firme.',
+      c_due:'Vence', c_client:'Cliente', c_concept:'Concepto', c_amount:'Importe', c_departure:'Salida',
+      k_deposit:'Depósito de reserva', k_balance:'Saldo',
+      h_unmatched:'Pagos de Stripe sin asignar', unmatched_n:'{n} pago(s) cobrados que no se han podido atribuir a ningún cliente. Vienen del link de pago de la web.',
+      h_undated:'Sin fecha firme', no_date:'sin fecha', due_now:'al reservar',
+      btn_new_lead:'＋ Nuevo cliente', ti_new_lead:'Da de alta a mano un cliente que no ha llegado por el chat',
+      m_new_lead:'Nuevo cliente', ld_phone:'WhatsApp * (con prefijo de país, solo dígitos)', al_ld_phone:'Teléfono inválido: solo dígitos, con prefijo de país (mín. 8)',
+      f_payments:'Pagos', no_payments:'Sin pagos registrados.', total:'Total', k_other:'Otro', m_cash:'Efectivo', m_other:'Otro',
+      btn_add_pay:'+ Añadir pago', btn_delete_pay:'Borrar pago', cfm_pay_delete:'¿Borrar este pago?', al_pay_amount:'Pon un importe mayor que 0',
+      q_email:'Enviar itinerario', ask_email:'¿A qué dirección le mando el itinerario?', al_email_sent:'Itinerario enviado.',
       m_new_op:'Nuevo operador', m_edit_op:'Editar operador', op_company:'Empresa *', op_contact:'Persona de contacto', op_phone:'Teléfono', op_country:'País', op_tags:'Etiquetas (separadas por coma)', op_notes:'Notas', btn_delete_op:'Borrar', cfm_op_delete:'¿Borrar este operador?', al_op_company:'La empresa es obligatoria',
       nl_dataset:'Base de datos', nl_ds_leads:'Leads (chat)', nl_ds_ops:'Operadores (B2B)', nl_ds_subs:'Suscriptores (web)', nl_subs_manage:'Gestionar suscriptores',
       subs_title:'Suscriptores', subs_help:'Contactos que dejaron su email en la web para recibir información. Solo se usan para newsletter.', subs_add:'Añadir emails (uno por línea o separados por coma)', subs_csv:'⬆ Desde CSV', subs_add_btn:'Añadir', subs_empty:'Aún no hay suscriptores. Pega emails arriba o súbelos por CSV.', subs_cfm_del:'¿Quitar a {e} de la lista de suscriptores?', subs_none:'No hay emails válidos que añadir.', subs_added:'✓ {a} añadidos · {e} ya estaban · {i} inválidos',
@@ -973,6 +1062,20 @@
       ops_th_company:'Company', ops_th_contact:'Contact', ops_th_email:'Email', ops_th_phone:'Phone', ops_th_country:'Country', ops_th_pot:'Potential', ops_th_temp:'Temp', ops_th_tags:'Tags', ops_th_updated:'Updated',
       ops_pot_all:'◇ Potential', ops_temp_all:'🌡 Temp', op_potential:'Potential', op_temp:'Temperature',
       ops_empty:'No operators yet. Import a CSV or add the first one with "+ Operator".',
+      nav_dash:'Overview', h_dash:'Departures & payments', btn_reload:'↻ Refresh', loading:'Loading…',
+      m_travellers:'Travellers', m_departures:'Departures', m_collected:'Collected', m_outstanding:'Outstanding', m_overdue:'Overdue', m_live:'Live clients',
+      h_departures:'Upcoming departures', no_departures:'No departure has a date yet.', p_month:'month only', p_year:'year only',
+      pax:'pax', collected:'collected', of:'of', estimated:'estimated',
+      h_schedule:'Payment schedule', no_schedule:'Nothing due with a firm date.',
+      c_due:'Due', c_client:'Client', c_concept:'Item', c_amount:'Amount', c_departure:'Departure',
+      k_deposit:'Booking deposit', k_balance:'Balance',
+      h_unmatched:'Unassigned Stripe payments', unmatched_n:'{n} payment(s) collected that could not be matched to a client. They come from the website payment link.',
+      h_undated:'No firm date', no_date:'no date', due_now:'on booking',
+      btn_new_lead:'＋ New client', ti_new_lead:'Manually add a client who never came through the chat',
+      m_new_lead:'New client', ld_phone:'WhatsApp * (country code, digits only)', al_ld_phone:'Invalid phone: digits only, with country code (min. 8)',
+      f_payments:'Payments', no_payments:'No payments recorded.', total:'Total', k_other:'Other', m_cash:'Cash', m_other:'Other',
+      btn_add_pay:'+ Add payment', btn_delete_pay:'Delete payment', cfm_pay_delete:'Delete this payment?', al_pay_amount:'Enter an amount greater than 0',
+      q_email:'Send itinerary', ask_email:'Which address should I send the itinerary to?', al_email_sent:'Itinerary sent.',
       m_new_op:'New operator', m_edit_op:'Edit operator', op_company:'Company *', op_contact:'Contact person', op_phone:'Phone', op_country:'Country', op_tags:'Tags (comma-separated)', op_notes:'Notes', btn_delete_op:'Delete', cfm_op_delete:'Delete this operator?', al_op_company:'Company is required',
       nl_dataset:'Database', nl_ds_leads:'Leads (chat)', nl_ds_ops:'Operators (B2B)', nl_ds_subs:'Subscribers (web)', nl_subs_manage:'Manage subscribers',
       subs_title:'Subscribers', subs_help:'Contacts who left their email on the website to receive information. Used only for newsletters.', subs_add:'Add emails (one per line or comma-separated)', subs_csv:'⬆ From CSV', subs_add_btn:'Add', subs_empty:'No subscribers yet. Paste emails above or upload a CSV.', subs_cfm_del:'Remove {e} from the subscribers list?', subs_none:'No valid emails to add.', subs_added:'✓ {a} added · {e} already there · {i} invalid',
@@ -1243,9 +1346,12 @@
         + '<div class="qa-row"><span class="qa-lbl">'+t('q_assign')+'</span>'
           + OWNER_OPTS.filter(function(o){return o;}).map(function(o){ return '<button class="qa-own'+((l.owner||'')===o?' on':'')+'" onclick="qAssign(\''+o+'\')">'+esc(o)+'</button>'; }).join('')
         + '</div>'
-        + '<div style="display:flex;gap:6px"><button class="qbtn call" onclick="fichaScheduleCall()">📞 '+t('q_call')+'</button>'
-          + '<button class="qbtn out" id="edOutreach" onclick="fichaOutreach()">'+(l.outreached?t('act_reoutreach'):t('act_outreach'))+'</button></div>'
+        + '<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="qbtn call" onclick="fichaScheduleCall()">📞 '+t('q_call')+'</button>'
+          + '<button class="qbtn out" id="edOutreach" onclick="fichaOutreach()">'+(l.outreached?t('act_reoutreach'):t('act_outreach'))+'</button>'
+          + '<button class="qbtn" onclick="fichaTripEmail()">✉ '+t('q_email')+'</button></div>'
       + '</div>'
+      // ── pagos ──
+      + '<div class="edit"><label>'+t('f_payments')+'</label>'+paymentsHTML(l)+'</div>'
       // ── actividad (timeline) arriba ──
       + '<div class="edit"><label>'+t('f_activity')+'</label>'+tlHTML(l)+'</div>'
       + (Array.isArray(l.deals) && l.deals.length ? '<div class="edit"><label>'+t('f_prevdeals')+'</label>'+dealsListHTML(l)+'</div>' : '')
@@ -1363,10 +1469,55 @@
     document.getElementById('amWhen').value=defaultApptWhen();
     fillCloserOpts(lead.owner||''); // el closer por defecto = quien lleva el lead; se puede cambiar
   }
+  // ── Pagos en la ficha ──────────────────────────────────────────
+  // Stripe entra solo por webhook; esto es para lo que NO pasa por Stripe (Wise, efectivo), que
+  // en este negocio es la mitad de los cobros. Sin ello el dashboard solo vería media caja.
+  function paymentsHTML(l){
+    var ps=(l.payments||[]).slice().sort(function(a,b){return a.at-b.at;});
+    var tot=ps.reduce(function(a,p){return a+(Number(p.amount)||0);},0);
+    var h='<div style="font-size:12.5px">';
+    if(!ps.length) h+='<div style="color:var(--ink-soft);padding:2px 0 8px">'+t('no_payments')+'</div>';
+    ps.forEach(function(p){
+      h+='<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line)">'
+        +'<b>'+money(p.amount)+'</b><span style="color:var(--ink-soft)">'+esc(p.method)+' · '+t(p.kind==='deposit'?'k_deposit':(p.kind==='balance'?'k_balance':'k_other'))+'</span>'
+        +'<span style="color:var(--ink-soft);margin-left:auto">'+dashDue(p.at)+'</span>'
+        +'<button class="qa-own" title="'+t('btn_delete_pay')+'" onclick="fichaDelPayment(\''+p.id+'\')">✕</button></div>';
+    });
+    if(ps.length) h+='<div style="padding:6px 0;font-weight:700">'+t('total')+': '+money(tot)+'</div>';
+    h+='<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
+      +'<input id="payAmt" type="number" min="0" step="50" placeholder="'+t('c_amount')+'" style="width:96px">'
+      +'<select id="payMethod"><option value="wise">Wise</option><option value="cash">'+t('m_cash')+'</option><option value="stripe">Stripe</option><option value="other">'+t('m_other')+'</option></select>'
+      +'<select id="payKind"><option value="deposit">'+t('k_deposit')+'</option><option value="balance">'+t('k_balance')+'</option><option value="other">'+t('k_other')+'</option></select>'
+      +'<button class="qbtn" onclick="fichaAddPayment()">'+t('btn_add_pay')+'</button></div></div>';
+    return h;
+  }
+  function fichaAddPayment(){
+    var amt=parseFloat(document.getElementById('payAmt').value);
+    if(!(amt>0)){ alert(t('al_pay_amount')); return; }
+    apiPost('payment',{phone:curLead.phone,amount:amt,currency:'usd',
+      method:document.getElementById('payMethod').value,kind:document.getElementById('payKind').value})
+      .then(function(r){ if(!r.ok) throw 0; return r.json(); })
+      .then(function(){ open_(curLead.phone); if(DASH) loadDash(); })
+      .catch(function(){ alert(t('al_save')); });
+  }
+  function fichaDelPayment(id){
+    if(!confirm(t('cfm_pay_delete'))) return;
+    apiPost('payment/delete',{phone:curLead.phone,id:id}).then(function(){ open_(curLead.phone); if(DASH) loadDash(); });
+  }
+  function fichaTripEmail(){
+    var to=prompt(t('ask_email'), curLead.email||'');
+    if(!to) return;
+    apiPost('send-trip-email',{phone:curLead.phone,to:to.trim()})
+      .then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); })
+      .then(function(res){ alert(res.ok?t('al_email_sent'):(res.j.error||t('al_save'))); if(res.ok) open_(curLead.phone); })
+      .catch(function(){ alert(t('al_save')); });
+  }
+
   function fichaScheduleCall(){ scheduleCallFor(curLead); }
   function rowScheduleCall(phone){ closeRowMenu(); scheduleCallFor(leads.filter(function(x){return x.phone===phone;})[0]); }
   window.rowScheduleCall=rowScheduleCall;
   window.leadAddTag=leadAddTag; window.leadRemoveTag=leadRemoveTag; window.fichaArchive=fichaArchive; window.fichaDelete=fichaDelete; window.fichaOutreach=fichaOutreach; window.rowOutreach=rowOutreach; window.qAssign=qAssign; window.fichaScheduleCall=fichaScheduleCall;
+  window.fichaAddPayment=fichaAddPayment; window.fichaDelPayment=fichaDelPayment; window.fichaTripEmail=fichaTripEmail;
   function flash(id, ok){
     var b = document.getElementById(id); if(!b) return; var orig = b.textContent;
     b.textContent = ok ? t('flash_saved') : t('flash_err'); b.classList.add(ok?'ok':'bad');
@@ -1723,10 +1874,22 @@
   var ST_OPTS = [['','—'],['new','🆕 Nuevo'],['quoted','💬 Cotizado'],['won','✅ Ganado'],['lost','❌ Perdido'],['noshow','🚫 No-show']];
   var PKG_OPTS = ['','Roundtrip','Extreme','Deluxe','Standard / best value'];
   var OWNER_OPTS = ['','Milad','Javier'];
-  var PKG_PRICE = {roundtrip:3200, extreme:3950, deluxe:4300, standard:3200};
+  // Precios de respaldo. La FUENTE es el servidor (PLAYBOOK.pkgPrice): loadDash() los sobreescribe
+  // con los de verdad. Esta copia llevaba meses en 3200/3950/4300 e inflaba el pipeline — si vuelve
+  // a divergir, se corrige en index.js, no aquí.
+  var PKG_PRICE = {roundtrip:2700, extreme:3450, deluxe:3950, standard:2700};
+  var PILLION_ADJ = -380;  // el copiloto paga 380 menos; también lo refresca el servidor
   var ORDER = {'':0,new:1,quoted:2,won:3,lost:4,noshow:5};
   function pkgKey(p){ p=(p||'').toLowerCase(); if(p.indexOf('roundtrip')>=0)return 'roundtrip'; if(p.indexOf('extreme')>=0)return 'extreme'; if(p.indexOf('deluxe')>=0)return 'deluxe'; if(p.indexOf('standard')>=0||p.indexOf('best')>=0)return 'standard'; return 'none'; }
-  function leadValue(l){ var dv=parseInt(l&&l.dealValue,10); if(dv>0) return dv; var p=PKG_PRICE[pkgKey(l.package)]; return p ? p*(l.riders||1) : 0; } // dealValue manual pisa la estimación paquete×riders
+  // MISMA fórmula que el servidor (index.js → expectedOf). Antes ignoraba a los pillions, así que
+  // la columna Valor y el panel de salidas daban dos cifras distintas del mismo cliente.
+  function leadValue(l){
+    var dv=parseInt(l&&l.dealValue,10); if(dv>0) return dv;   // el importe cerrado a mano manda
+    var p=PKG_PRICE[pkgKey(l.package)]; if(!p) return 0;
+    var r=parseInt(l.riders,10)||0, pl=parseInt(l.pillions,10)||0;
+    if(!r && !pl) return 0;
+    return p*r + Math.max(0, p+PILLION_ADJ)*pl;
+  }
   // Prioridad de lead: score 0-~200 con campos que ya llegan del servidor. ponytail: heurística de ranking, ajustar pesos si el owner discrepa del orden.
   function leadScore(l){
     if(!l || l.archived) return 0;
@@ -1890,6 +2053,94 @@
     });
   }
   // ── orquestador de la vista BD ──
+  // ── PANEL DE SALIDAS Y COBROS ──────────────────────────────────
+  // Todo el cálculo (precios, vencimientos, agrupación por fecha) lo hace el servidor. Aquí solo
+  // se pinta: la tabla de precios duplicada en este archivo llevaba meses desfasada y mentía.
+  var DASH=null;
+  // Un depósito no tiene fecha futura: vence al reservar. "—" se leía como "sin fecha".
+  function dashDue(ts){ if(!ts) return t('due_now'); var d=new Date(ts); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+  function loadDash(){
+    var body=document.getElementById('dashBody');
+    body.innerHTML='<div class="dash-empty">'+t('loading')+'</div>';
+    api('dashboard').then(function(r){ return r.json(); }).then(function(d){ DASH=d; if(d.pricing) PKG_PRICE=d.pricing; if(typeof d.pillionAdjust==='number') PILLION_ADJ=d.pillionAdjust; renderDash(); })
+      .catch(function(){ body.innerHTML='<div class="dash-empty">'+t('al_save')+'</div>'; });
+  }
+  function renderDash(){
+    if(!DASH) return;
+    var m=DASH.metrics;
+    document.getElementById('dashMetrics').innerHTML=[
+      ['m_travellers',m.travellers],['m_departures',DASH.departures.length],
+      ['m_collected',money(m.paidTotal)||'$0'],['m_outstanding',money(m.outstandingTotal)||'$0'],
+      ['m_overdue',money(m.overdue)||'$0'],['m_live',m.live]
+    ].map(function(x){ return '<div class="metric"><div class="mv">'+esc(x[1])+'</div><div class="ml">'+t(x[0])+'</div></div>'; }).join('');
+
+    var h='';
+    // ── Salidas ──
+    h+='<div class="dash-sec"><h3>'+t('h_departures')+'</h3>';
+    if(!DASH.departures.length) h+='<div class="dash-empty">'+t('no_departures')+'</div>';
+    DASH.departures.forEach(function(g,i){
+      var pct=g.expected>0?Math.min(100,Math.round(g.paid/g.expected*100)):0;
+      var loose=g.precision!=='day';
+      h+='<div class="dep" data-dep="'+i+'"><div class="dep-h">'
+        +'<span class="dep-date">'+esc(g.label)+'</span>'
+        +(loose?'<span class="est">'+t(g.precision==='month'?'p_month':'p_year')+'</span>':'')
+        +'<span class="dep-tour">'+esc(g.tours.join(' · ')||'—')+'</span>'
+        +'<span class="dep-pax">'+g.pax+' '+t('pax')+'</span>'
+        +'<span class="dep-money"><span>'+t('collected')+' <b>'+(money(g.paid)||'$0')+'</b></span>'
+        +'<span>'+t('of')+' '+(money(g.expected)||'$0')+'</span>'
+        +'<span class="paybar"><i style="width:'+pct+'%"></i></span></span></div>';
+      h+='<div class="dep-rows">';
+      g.leads.forEach(function(l){
+        var lp=l.expected>0?Math.min(100,Math.round(l.paid/l.expected*100)):0;
+        h+='<div class="dep-row" data-phone="'+esc(l.phone)+'">'
+          +'<span class="nm">'+esc(l.name||('+'+l.phone))+'</span>'
+          +'<span class="sub">'+esc(l.package||'—')+' · '+(l.riders||0)+'R'+(l.pillions?'+'+l.pillions+'P':'')+(l.country?' · '+esc(l.country):'')+'</span>'
+          +'<span class="dep-money"><span>'+(money(l.paid)||'$0')+' / '+(money(l.expected)||'—')+'</span>'
+          +(l.estimated&&l.expected?'<span class="est">'+t('estimated')+'</span>':'')
+          +'<span class="paybar"><i style="width:'+lp+'%"></i></span></span></div>';
+      });
+      h+='</div></div>';
+    });
+    h+='</div>';
+
+    // ── Calendario de cobros ──
+    h+='<div class="dash-sec"><h3>'+t('h_schedule')+'</h3>';
+    if(!DASH.schedule.length) h+='<div class="dash-empty">'+t('no_schedule')+'</div>';
+    else{
+      h+='<table class="sched"><tr><th>'+t('c_due')+'</th><th>'+t('c_client')+'</th><th>'+t('c_concept')+'</th><th>'+t('c_amount')+'</th><th>'+t('c_departure')+'</th></tr>';
+      DASH.schedule.slice(0,40).forEach(function(s){
+        h+='<tr class="clk" data-phone="'+esc(s.phone)+'"><td'+(s.overdue?' class="over"':'')+'>'+dashDue(s.dueAt)+(s.overdue?' ⚠':'')+'</td>'
+          +'<td>'+esc(s.name||('+'+s.phone))+'</td>'
+          +'<td>'+t(s.kind==='deposit'?'k_deposit':'k_balance')+'</td>'
+          +'<td'+(s.overdue?' class="over"':'')+'>'+(money(Math.round(s.amount))||'$0')+'</td>'
+          +'<td>'+esc(s.departure)+'</td></tr>';
+      });
+      h+='</table>';
+    }
+    h+='</div>';
+
+    // ── Pagos de Stripe sin asignar ──
+    if(DASH.unmatched>0)
+      h+='<div class="dash-sec"><h3>'+t('h_unmatched')+'</h3><div class="dash-empty warn">'+t('unmatched_n').replace('{n}',DASH.unmatched)+'</div></div>';
+
+    // ── Sin fecha firme ──
+    if(DASH.undated.length){
+      h+='<div class="dash-sec"><h3>'+t('h_undated')+' ('+DASH.undated.length+')</h3><div class="dep"><div class="dep-rows" style="display:block">';
+      DASH.undated.slice(0,30).forEach(function(l){
+        h+='<div class="dep-row" data-phone="'+esc(l.phone)+'"><span class="nm">'+esc(l.name||('+'+l.phone))+'</span>'
+          +'<span class="sub">'+esc(l.package||'—')+(l.travelDate?' · "'+esc(l.travelDate)+'"':' · '+t('no_date'))+'</span></div>';
+      });
+      h+='</div></div></div>';
+    }
+
+    var body=document.getElementById('dashBody');
+    body.innerHTML=h;
+    body.querySelectorAll('.dep-h').forEach(function(el){ el.onclick=function(){ el.parentNode.classList.toggle('open'); }; });
+    body.querySelectorAll('[data-phone]').forEach(function(el){
+      el.onclick=function(e){ e.stopPropagation(); var a=document.getElementById('app'); clearModes(a); setNav('navConv'); setUrl('/admin'); open_(el.getAttribute('data-phone')); };
+    });
+  }
+
   function renderDb(){
     renderMetrics(); renderTabs(); renderFilters(); renderBulk();
     var isK = dbView==='kanban';
@@ -2245,6 +2496,43 @@
       notes: document.getElementById('opNotes').value.trim(),
     }).then(function(){ document.getElementById('opModal').style.display='none'; loadOperators(); });
   };
+  // ── Alta MANUAL de cliente (mismo formulario que Operadores, contra la BD de leads) ──
+  // El servidor rechaza con 409 si el teléfono ya existe: un alta encima de una conversación
+  // viva borraría el historial de venta, así que aquí se avisa y se abre la ficha que ya hay.
+  var LD_FIELDS=['Phone','Name','Email','Country','Tour','Package','Riders','Pillions','Travel','Value','Tags'];
+  document.getElementById('dbNew').onclick=function(){
+    LD_FIELDS.forEach(function(f){ var el=document.getElementById('ld'+f); if(el) el.value=''; });
+    document.getElementById('ldErr').textContent='';
+    document.getElementById('ldModal').style.display='flex';
+    document.getElementById('ldPhone').focus();
+  };
+  document.getElementById('ldCancel').onclick=function(){ document.getElementById('ldModal').style.display='none'; };
+  document.getElementById('ldSave').onclick=function(){
+    var err=document.getElementById('ldErr');
+    var phone=document.getElementById('ldPhone').value.replace(/\D/g,'');
+    if(phone.length<8){ err.textContent=t('al_ld_phone'); return; }
+    var tags=document.getElementById('ldTags').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
+    err.textContent='';
+    apiPost('lead/create',{
+      phone:phone,
+      name:document.getElementById('ldName').value.trim(),
+      email:document.getElementById('ldEmail').value.trim(),
+      country:document.getElementById('ldCountry').value.trim(),
+      tour:document.getElementById('ldTour').value.trim(),
+      package:document.getElementById('ldPackage').value,
+      riders:document.getElementById('ldRiders').value,
+      pillions:document.getElementById('ldPillions').value,
+      travelDate:document.getElementById('ldTravel').value.trim(),
+      dealValue:document.getElementById('ldValue').value,
+      tags:tags, status:'new'
+    }).then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+      .then(function(res){
+        if(!res.ok){ err.textContent=res.j.error||t('al_save'); return; }
+        document.getElementById('ldModal').style.display='none';
+        api('leads').then(function(r){return r.json();}).then(function(L){ leads=L; renderDb(); });
+      }).catch(function(){ err.textContent=t('al_save'); });
+  };
+
   // ── CSV genérico (no el de Meta): company/contact/email/phone/country/notes, alias ES ──
   function opsParseCsv(text){
     var rows=[], row=[], field='', inQ=false;
@@ -2399,11 +2687,13 @@
       .then(function(j){ btn.disabled=false; btn.textContent=orig; return j; }, function(e){ btn.disabled=false; btn.textContent=orig; });
   }
 
-  function clearModes(a){ a.classList.remove('calmode','dbmode','opsmode','mediamode','nlmode','simmode'); }
+  function clearModes(a){ a.classList.remove('calmode','dbmode','opsmode','mediamode','nlmode','simmode','dashmode'); }
   function setNav(id){ ['navConv','navCal','navDb','navOps','navMedia','navNewsletter','navSim'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
 
   function setUrl(p){ try{ history.replaceState(null,'',p); }catch(e){} }
   document.getElementById('navConv').onclick=function(){ clearModes(document.getElementById('app')); setNav('navConv'); setUrl('/admin'); };
+  document.getElementById('navDash').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dashmode'); setNav('navDash'); setUrl('/admin'); loadDash(); };
+  document.getElementById('dashReload').onclick=loadDash;
   document.getElementById('navCal').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('calmode'); setNav('navCal'); setUrl('/admin'); buildLeadsDL(); loadAppts(renderCal); };
   document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dbmode'); setNav('navDb'); setUrl('/admin/db'); dbPage=1; loadHealth(); loadAppts(renderDb); };
   document.getElementById('navOps').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('opsmode'); setNav('navOps'); setUrl('/admin'); loadOperators(); };

@@ -64,6 +64,8 @@ const {
   MAIL_COMPANY,            // pie legal del email (nombre + dirección física — obligatorio anti-spam)
   MAIL_UNSUB_SECRET,       // firma los links de baja; si falta, se usa ADMIN_PASSWORD como fallback
   MAIL_LOGO,               // (opcional) URL del logo para la cabecera del email; si no, se usa el nombre en texto
+  MAIL_FROM_SALES,         // remitente COMERCIAL ("Bali Moto Adventures <ride@balimotoadventures.com>"): lo que el bot manda a un lead. Distinto de MAIL_FROM, que es la newsletter — un itinerario que llega desde newsletter@ parece publicidad y se responde a un buzón que nadie lee.
+  STRIPE_WEBHOOK_SECRET,   // firma de los eventos de Stripe (whsec_…). Sin ella el endpoint de pagos rechaza todo: un cobro es un dato que no se acepta sin verificar.
 } = process.env;
 
 // La BD del CRM es Redis (lead:phone + leads_index). El Google Sheet era un espejo
@@ -565,7 +567,27 @@ const BUILTIN_PLAYBOOKS = {
       { title: "Proponer videollamada", text: "Want to hop on a quick video call with the team? It's free, about 30 minutes, zero pressure — they'll walk you through everything." },
     ],
     helpWith: "your trip",
-    deposit: { currency: "usd", amountMinor: 100000, label: "Booking Deposit", unit: "rider" },
+    // Enlaces del itinerario que el bot manda por email. Hoy el vertical "tour" lo usa solo B2K;
+    // si entra otro bot de tours, esto sale a config por servicio en vez de duplicarse aquí.
+    tripEmail: {
+      site: "https://balimotoadventures.com",
+      fallback: "bali to komodo",
+      tours: {
+        "bali to komodo": { label: "Bali to Komodo", path: "/b2k-tour-bali-komodo", pdf: "/pdf/B2K.pdf" },
+        "7 islands": { label: "7 Islands Hopping", path: "/b2k-tour-7-islands", pdf: "/pdf/7Islands.pdf" },
+        "4 islands": { label: "4 Islands Hopping", path: "/b2k-tour-4-islands", pdf: "" }, // sin PDF todavía: no se enlaza un botón que no descarga nada
+      },
+    },
+    // Precio por persona del paquete, para estimar el valor de un lead que aún no tiene importe
+    // cerrado. VERIFICADO contra producción el 31-jul-2026 (self-guided; el guiado suma 550).
+    // "standard" es la banda del formulario de Instagram, no un paquete: se estima por el suelo.
+    pkgPrice: { roundtrip: 2700, extreme: 3450, deluxe: 3950, standard: 2700 },
+    pillionAdjust: -380,  // el copiloto paga 380 menos: cuenta como persona, no al mismo precio
+    balanceDueDays: 60,   // el saldo vence 60 días antes de la salida
+    // 50000 = USD 500 por persona. Era 100000 (USD 1.000): el cliente lo bajó a 500 el 24-jul-2026
+    // y se actualizó la web y el contexto del bot, pero NO esto — el bot decía 500 y el link cobraba
+    // 1.000. Si cambia el importe, se cambia en los tres sitios: context.md, la web y aquí.
+    deposit: { currency: "usd", amountMinor: 50000, label: "Booking Deposit", unit: "rider" },
   },
   rental: {
     closeStyle: "direct",
@@ -721,6 +743,67 @@ async function logEvent(phone, type, meta) {
     history.push(Object.assign({ ts: Date.now(), type }, meta || {}));
     await updateLeadFields(phone, { history });
   } catch (e) { /* best-effort */ }
+}
+
+// ─── PAGOS ────────────────────────────────────────────────────────
+// Viven DENTRO del lead (`payments[]`), no en un índice aparte: el panel ya carga todos los
+// leads de una vez, así que el dashboard sale gratis y no hay una segunda BD que sincronizar.
+// `ref` deduplica: Stripe reintenta sus webhooks y sin esto un mismo cobro se contaría dos veces.
+const PAY_KINDS = new Set(["deposit", "balance", "other"]);
+const PAY_METHODS = new Set(["stripe", "wise", "cash", "other"]);
+
+async function addPayment(phone, { amount, currency, method, kind, ref, at, note, by }) {
+  const amt = Math.round(Number(amount) * 100) / 100;
+  if (!phone || !(amt > 0)) return { ok: false, error: "phone e importe > 0 son obligatorios" };
+  const prev = (await getLead(phone)) || {};
+  const list = Array.isArray(prev.payments) ? prev.payments : [];
+  if (ref && list.some((p) => p.ref === ref)) return { ok: false, duplicate: true, error: "pago ya registrado" };
+  const pay = {
+    id: "p" + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36),
+    amount: amt,
+    currency: String(currency || "usd").toLowerCase(),
+    method: PAY_METHODS.has(method) ? method : "other",
+    kind: PAY_KINDS.has(kind) ? kind : "other",
+    ref: ref || "",
+    at: at || Date.now(),
+    note: String(note || "").slice(0, 200),
+    by: by || "panel",
+  };
+  await updateLeadFields(phone, { payments: [...list, pay] });
+  await logEvent(phone, "payment", { amount: pay.amount, currency: pay.currency, method: pay.method, kind: pay.kind });
+  return { ok: true, payment: pay };
+}
+
+async function removePayment(phone, id) {
+  const prev = (await getLead(phone)) || {};
+  const list = Array.isArray(prev.payments) ? prev.payments : [];
+  const next = list.filter((p) => p.id !== id);
+  if (next.length === list.length) return { ok: false, error: "pago no encontrado" };
+  await updateLeadFields(phone, { payments: next });
+  await logEvent(phone, "payment_deleted", { id });
+  return { ok: true };
+}
+
+// `travelDate` es TEXTO LIBRE: el bot guarda lo que dice el cliente ("late 2027",
+// "November 4, 2026", "2026-11-04"). Para agrupar salidas hace falta normalizarlo, y hace falta
+// saber CUÁNTO se sabe: una fecha de mes no es una salida cerrada, y tratarla como tal llena el
+// calendario de salidas que nadie ha confirmado. Devuelve la precisión, no solo la fecha.
+const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+function parseTripDate(raw) {
+  const s = String(raw || "").toLowerCase().trim();
+  if (!s) return { precision: "none", key: "", label: "" };
+  const iso = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return { precision: "day", key: `${iso[1]}-${iso[2]}-${iso[3]}`, label: `${iso[1]}-${iso[2]}-${iso[3]}` };
+  const yearM = s.match(/\b(20\d{2})\b/);
+  if (!yearM) return { precision: "none", key: "", label: String(raw).trim() };
+  const year = yearM[1];
+  const mIdx = MONTHS.findIndex((m) => s.includes(m.slice(0, 3)) && new RegExp(`\\b${m.slice(0, 3)}`).test(s));
+  if (mIdx < 0) return { precision: "year", key: year, label: String(raw).trim() };
+  const mm = String(mIdx + 1).padStart(2, "0");
+  // Día: un número de 1 a 31 que no forme parte del año.
+  const day = s.replace(year, " ").match(/\b([1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\b/);
+  if (day) return { precision: "day", key: `${year}-${mm}-${String(day[1]).padStart(2, "0")}`, label: `${year}-${mm}-${String(day[1]).padStart(2, "0")}` };
+  return { precision: "month", key: `${year}-${mm}`, label: `${MONTHS[mIdx][0].toUpperCase() + MONTHS[mIdx].slice(1)} ${year}` };
 }
 
 // ─── ENRIQUECIMIENTO: rellena la ficha leyendo la conversación con el LLM ──────
@@ -1241,6 +1324,13 @@ When you output [RIDERS:N], NEVER type a link, a URL, or the word "https" yourse
 - [RIDERS:N] CREATES A REAL CHARGE. Output it ONLY when the customer EXPLICITLY asks to pay right now ("send me the payment link", "how do I pay the deposit", "I want to pay"). Confirming trip details, riders, dates or "I'd like to book" is NOT a pay-now request → push the free video CALL instead, do NOT output [RIDERS:N].
 - RESEND: if the customer asks to resend the SAME payment link they already got ("can you send it again?", "resend the link"), output [RESEND_LINK] on its own new line — NOT [RIDERS:N]. The server re-attaches the exact same link (no new charge). If you never sent them a link, don't output [RESEND_LINK]; offer the call instead.
 
+EMAILING THE ITINERARY — you CAN send email now (you couldn't before; never say you can't):
+- When the customer asks you to email them anything about the trip (the route, the itinerary, "send me the details so I can show my mate"), ask for their address if you don't have it, then output on its own new line:
+  [EMAIL:their@address.com]
+- The server sends it from ride@balimotoadventures.com: the full day-by-day route, the PDF, what's included, and the next step. You do NOT write the email yourself and you do NOT paste the links instead of tagging — just the tag.
+- Mention it naturally in your reply ("just sent it over to that address"), and use the address THEY gave you. Never invent or guess an address, and never email someone who didn't ask for it.
+- One tag per message. If they ask again later, tag again — it just re-sends.
+
 LEAD DATA TAGGING — fill the CRM as you learn things (do this consistently):
 - Whenever you LEARN or CONFIRM a concrete fact about the lead, append a SILENT data tag at the very end of your message, on its own new line:
   [LEAD key=value; key=value]
@@ -1420,7 +1510,9 @@ async function writeLeadToSheet(phone, vals) {
 }
 
 // ─── STRIPE CHECKOUT SESSION ─────────────────────────────────────
-async function createStripeSession(numUnits) {
+// `phone` viaja en metadata: sin él, un pago que entra por el webhook de Stripe no se puede
+// atribuir a nadie y el panel solo sabría que "alguien" pagó.
+async function createStripeSession(numUnits, phone) {
   if (!stripeClient) return null;
   const dep = PLAYBOOK.deposit; // importe/moneda/etiqueta del depósito, por playbook (antes: $1000 USD hardcodeado)
   if (!dep) { console.error(`[${PROJECT_NAME}] createStripeSession: el playbook (${PLAYBOOK.closeStyle}) no define deposit`); return null; }
@@ -1444,6 +1536,7 @@ async function createStripeSession(numUnits) {
       mode: "payment",
       success_url: STRIPE_SUCCESS_URL || "https://balimotoadventures.com/?booking=confirmed",
       cancel_url: STRIPE_CANCEL_URL || "https://balimotoadventures.com/",
+      ...(phone ? { client_reference_id: String(phone), metadata: { phone: String(phone), units: String(numUnits) } } : {}),
     });
     console.log(`[${PROJECT_NAME}] Stripe session: ${numUnits} ${unit}s → ${(major * numUnits).toLocaleString()} ${cur}`);
     return session.url;
@@ -1540,7 +1633,8 @@ async function sendHumanized(to, text, messageId, startedAt) {
 function cleanReply(reply) {
   return reply
     .replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "")
-    .replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").trim()
+    .replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "")
+    .replace(/\[EMAIL:[^\]]*\]/gi, "").trim()
     .replace(/[ \t]*(—|–|--)[ \t]*$/gm, ".").replace(/[ \t]*(—|–|--)[ \t]*/g, ", ")
     .replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1")  // **URL** → URL
     .replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
@@ -2073,6 +2167,7 @@ app.post("/webhook", async (req, res) => {
     const numRiders = ridersMatch ? parseInt(ridersMatch[1]) : null;
     const apptMatch = reply.match(/\[APPT:([^\]|]+)\|([^\]]+)\]/);
     const mediaMatch = reply.match(/\[MEDIA:([^\]]+)\]/i);
+    const emailMatch = reply.match(/\[EMAIL:\s*([^\]\s]+@[^\]\s]+)\s*\]/i);
     const resendMatch = /\[RESEND_LINK\]/i.test(reply); // el cliente pide reenviar el link que ya recibió
     let leadFields = parseLeadTag(reply); // datos confirmados en la charla → ficha/BD
     reply = cleanReply(reply); // etiquetas internas + guion + markdown de WhatsApp (helper compartido)
@@ -2092,7 +2187,7 @@ app.post("/webhook", async (req, res) => {
     // Adjuntar el link real SOLO si el cliente pide pagar ya (intent booking + riders).
     // El cierre por defecto es la LLAMADA, no el pago — el link es la excepción.
     if (numRiders && stripeClient && intent === "booking") {
-      const sessionUrl = await createStripeSession(numRiders);
+      const sessionUrl = await createStripeSession(numRiders, from);
       if (sessionUrl) { reply = reply + "\n\n" + sessionUrl; await setLastLink(from, sessionUrl); }
       else console.error(`[${PROJECT_NAME}] booking detectado pero no se pudo crear la sesión Stripe`);
     } else if (numRiders && intent === "booking" && !stripeClient) {
@@ -2143,6 +2238,17 @@ app.post("/webhook", async (req, res) => {
           + (unknown.length ? `label inexistente en la biblioteca: ${unknown.join(", ")}` : "ya se había enviado en esta conversación (dedup)"));
       }
     }
+    // ── Itinerario por email ([EMAIL:dirección]) ──────────────────
+    // Va DESPUÉS de responder por WhatsApp: si Brevo falla, el cliente ya tiene su mensaje y el
+    // fallo queda en el timeline en vez de tumbar el turno entero.
+    if (emailMatch) {
+      const r = await sendTripEmail(from, emailMatch[1].trim());
+      if (!r.ok) {
+        console.error(`[${PROJECT_NAME}] [EMAIL] no enviado a ${emailMatch[1]}: ${r.error}`);
+        if (OWNER_PHONE) await sendWhatsApp(OWNER_PHONE, `⚠️ ${PROJECT_NAME} — no pude mandar el itinerario a ${emailMatch[1]} (${profileName || from}). Motivo: ${r.error}`);
+      }
+    }
+
     await setWaiting(from, false); // el bot ya respondió → no queda pendiente
     await saveLead(from, profileName, text, intent);
     await recordLead(from, profileName, intent, reply, "bot");  // índice para el panel web (preview = última respuesta del bot)
@@ -2218,6 +2324,42 @@ app.post("/webhook", async (req, res) => {
     console.error(`[${PROJECT_NAME}] Error procesando mensaje:`, e.message);
   } finally {
     if (releaseTurn) releaseTurn();   // sin esto, un fallo deja al lead sin poder volver a escribir
+  }
+});
+
+// ─── WEBHOOK DE STRIPE (cobros reales) ────────────────────────────
+// Sin esto el panel no sabe si alguien pagó: creábamos la sesión de checkout y nadie escuchaba
+// el resultado. Firma obligatoria — un cobro no se acepta porque venga en un POST.
+// Un pago del Payment Link de la web no trae metadata.phone (no nace del chat): en vez de
+// tirarlo, se guarda en `pay_unmatched` para asignarlo a mano desde el panel.
+app.post("/stripe/webhook", async (req, res) => {
+  if (!stripeClient || !STRIPE_WEBHOOK_SECRET) return res.status(503).send("stripe webhook no configurado");
+  let event;
+  try {
+    event = stripeClient.webhooks.constructEvent(req.rawBody, req.get("stripe-signature"), STRIPE_WEBHOOK_SECRET);
+  } catch (e) {
+    console.warn(`[${PROJECT_NAME}] Stripe webhook con firma inválida — descartado: ${e.message}`);
+    return res.sendStatus(400);
+  }
+  res.sendStatus(200);
+  try {
+    if (event.type !== "checkout.session.completed") return;
+    const s = event.data.object;
+    if (s.payment_status !== "paid") return;
+    const amount = (s.amount_total || 0) / 100;
+    const phone = (s.metadata && s.metadata.phone) || s.client_reference_id || "";
+    const common = { amount, currency: s.currency, method: "stripe", kind: "deposit", ref: s.id, at: (event.created || Date.now() / 1000) * 1000, by: "stripe" };
+    if (phone && (await getLead(phone))) {
+      const r = await addPayment(phone, common);
+      console.log(`[${PROJECT_NAME}] PAGO Stripe ${amount} ${String(s.currency).toUpperCase()} → ${phone}${r.duplicate ? " (duplicado, ignorado)" : ""}`);
+    } else if (redisClient) {
+      const rec = JSON.stringify({ ...common, email: s.customer_details?.email || "", name: s.customer_details?.name || "" });
+      await redisClient.lPush("pay_unmatched", rec);
+      await redisClient.lTrim("pay_unmatched", 0, 199);
+      console.log(`[${PROJECT_NAME}] PAGO Stripe ${amount} ${String(s.currency).toUpperCase()} SIN asignar (${s.customer_details?.email || "sin email"}) — pendiente en el panel`);
+    }
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] Error procesando pago de Stripe:`, e.message);
   }
 });
 
@@ -2555,6 +2697,177 @@ app.post("/admin/api/lead", async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── CRM: alta MANUAL de un cliente (el que llega por teléfono, feria o recomendación) ──
+// Mismo formulario que Operadores, pero contra la BD de leads. Rechaza pisar a uno existente:
+// un alta silenciosa encima de una conversación viva borraría el historial de venta.
+app.post("/admin/api/lead/create", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const phone = String(req.body?.phone || "").replace(/\D/g, "");
+  if (phone.length < 8) return res.status(400).json({ error: "teléfono inválido (solo dígitos, con prefijo de país)" });
+  if (await getLead(phone)) return res.status(409).json({ error: "ya existe un cliente con ese teléfono", phone });
+  const f = {};
+  ["name", "country", "email", "tour", "package", "riders", "pillions", "travelDate", "owner", "nextFollowUp", "tags", "status", "dealValue"]
+    .forEach((k) => { if (req.body[k] != null && req.body[k] !== "") f[k] = req.body[k]; });
+  if (f.dealValue != null) { const n = parseInt(String(f.dealValue).replace(/\D/g, ""), 10); f.dealValue = isNaN(n) ? 0 : n; }
+  if (f.email) f.email = String(f.email).toLowerCase().trim();
+  await updateLeadFields(phone, {
+    ...f, phone, intent: "interested", source: "manual",
+    createdAt: Date.now(), updatedAt: Date.now(), lastMessage: "", archived: false,
+  });
+  await logEvent(phone, "created", { by: "panel", source: "manual" });
+  res.json({ ok: true, phone });
+});
+
+// ── Itinerario por email, a mano desde la ficha ──
+app.post("/admin/api/send-trip-email", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, to } = req.body || {};
+  if (!phone) return res.status(400).json({ error: "phone requerido" });
+  const r = await sendTripEmail(phone, to);
+  res.status(r.ok ? 200 : 400).json(r);
+});
+
+// ── Pagos: alta manual (Wise/efectivo) y borrado ──
+app.post("/admin/api/payment", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, amount, currency, method, kind, note, at } = req.body || {};
+  if (!phone) return res.status(400).json({ error: "phone requerido" });
+  const r = await addPayment(phone, { amount, currency, method, kind, note, at: at ? new Date(at).getTime() : Date.now(), by: "panel" });
+  res.status(r.ok ? 200 : 400).json(r);
+});
+app.post("/admin/api/payment/delete", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, id } = req.body || {};
+  if (!phone || !id) return res.status(400).json({ error: "phone e id requeridos" });
+  res.json(await removePayment(phone, id));
+});
+
+// ── Pagos de Stripe que no se pudieron atribuir (Payment Link de la web) ──
+app.get("/admin/api/payments/unmatched", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  if (!redisClient) return res.json({ payments: [] });
+  const raw = await redisClient.lRange("pay_unmatched", 0, -1);
+  res.json({ payments: raw.map((r, i) => ({ idx: i, ...JSON.parse(r) })) });
+});
+app.post("/admin/api/payments/assign", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { idx, phone } = req.body || {};
+  if (!redisClient) return res.status(503).json({ error: "sin Redis" });
+  if (!phone || !(await getLead(phone))) return res.status(400).json({ error: "ese cliente no existe" });
+  const raw = await redisClient.lRange("pay_unmatched", 0, -1);
+  const rec = raw[idx];
+  if (!rec) return res.status(404).json({ error: "pago no encontrado" });
+  const p = JSON.parse(rec);
+  const r = await addPayment(phone, { ...p, by: "panel", note: `Asignado a mano — ${p.email || p.name || "Stripe"}` });
+  if (r.ok) await redisClient.lRem("pay_unmatched", 1, rec);
+  res.status(r.ok ? 200 : 400).json(r);
+});
+
+// ── DASHBOARD: salidas, quién va y cómo va el cobro ──
+// Todo se calcula AQUÍ y no en el panel: la tabla de precios duplicada en panel.html llevaba
+// meses desfasada (3200/3950/4300) y falseaba el pipeline. Una sola fuente.
+const pkgKeyOf = (p) => {
+  const s = String(p || "").toLowerCase();
+  if (s.includes("deluxe")) return "deluxe";
+  if (s.includes("extreme")) return "extreme";
+  if (s.includes("roundtrip") || s.includes("round trip")) return "roundtrip";
+  if (s.includes("standard") || s.includes("best value")) return "standard";
+  return "";
+};
+const paidOf = (l) => (Array.isArray(l.payments) ? l.payments : []).reduce((a, p) => a + (Number(p.amount) || 0), 0);
+function expectedOf(l, pricing, pillionAdjust) {
+  const dv = parseInt(l.dealValue, 10);
+  if (dv > 0) return { amount: dv, estimated: false };  // importe cerrado a mano: manda sobre la estimación
+  const unit = pricing[pkgKeyOf(l.package)] || 0;
+  if (!unit) return { amount: 0, estimated: true };     // sin paquete no se inventa un valor
+  const riders = parseInt(l.riders, 10) || 0;
+  const pillions = parseInt(l.pillions, 10) || 0;
+  if (!riders && !pillions) return { amount: 0, estimated: true };
+  return { amount: unit * riders + Math.max(0, unit + (pillionAdjust || 0)) * pillions, estimated: true };
+}
+
+app.get("/admin/api/dashboard", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const pricing = PLAYBOOK.pkgPrice || {};
+  const pillionAdj = PLAYBOOK.pillionAdjust || 0;
+  const dueDays = PLAYBOOK.balanceDueDays || 60;
+  const depositPP = (PLAYBOOK.deposit?.amountMinor || 0) / 100;
+  const all = await listLeads();
+  const live = all.filter((l) => !l.archived && !["lost", "noshow"].includes(l.status));
+
+  const byKey = new Map();
+  const undated = [];
+  const schedule = [];
+  const now = Date.now();
+  let paidTotal = 0, expectedTotal = 0;
+
+  for (const l of live) {
+    const paid = paidOf(l);
+    const exp = expectedOf(l, pricing, pillionAdj);
+    paidTotal += paid;
+    expectedTotal += exp.amount;
+    const riders = parseInt(l.riders, 10) || 0;
+    const pillions = parseInt(l.pillions, 10) || 0;
+    const d = parseTripDate(l.travelDate);
+    const row = {
+      phone: l.phone, name: l.name || "", email: l.email || "", country: l.country || "",
+      package: l.package || "", riders, pillions, pax: riders + pillions,
+      status: l.status || "", owner: l.owner || "", travelDate: l.travelDate || "",
+      paid, expected: exp.amount, estimated: exp.estimated,
+      outstanding: Math.max(0, exp.amount - paid),
+      payments: Array.isArray(l.payments) ? l.payments : [],
+    };
+    if (!d.key) { undated.push(row); continue; }
+
+    if (!byKey.has(d.key)) byKey.set(d.key, { key: d.key, label: d.label, precision: d.precision, tours: new Set(), leads: [], pax: 0, paid: 0, expected: 0 });
+    const g = byKey.get(d.key);
+    if (d.precision === "day") { g.precision = "day"; g.label = d.label; }
+    if (l.tour) g.tours.add(l.tour);
+    g.leads.push(row); g.pax += row.pax || riders; g.paid += paid; g.expected += exp.amount;
+
+    // Calendario de cobro: el depósito vence ya (si no hay nada pagado) y el saldo 60 días antes
+    // de salir. Solo tiene sentido con fecha de día: con "October 2026" no hay vencimiento real.
+    if (d.precision === "day") {
+      const dep = new Date(d.key + "T00:00:00Z").getTime();
+      // El depósito es POR PERSONA, no por moto: un copiloto también reserva plaza.
+      const depositDue = depositPP * (row.pax || riders || 1);
+      if (paid < depositDue) {
+        schedule.push({ phone: l.phone, name: row.name, kind: "deposit", amount: depositDue - paid, dueAt: null, departure: d.key, overdue: false });
+      }
+      const balAt = dep - dueDays * 86400000;
+      const balance = Math.max(0, exp.amount - Math.max(paid, depositDue));
+      if (balance > 0) {
+        schedule.push({ phone: l.phone, name: row.name, kind: "balance", amount: balance, dueAt: balAt, departure: d.key, overdue: balAt < now, estimated: exp.estimated });
+      }
+    }
+  }
+
+  const departures = [...byKey.values()]
+    .map((g) => ({ ...g, tours: [...g.tours], outstanding: Math.max(0, g.expected - g.paid) }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+  schedule.sort((a, b) => (a.dueAt || 0) - (b.dueAt || 0));
+
+  const week = now - 7 * 86400000;
+  let unmatched = 0;
+  if (redisClient) unmatched = await redisClient.lLen("pay_unmatched");
+
+  res.json({
+    pricing, pillionAdjust: pillionAdj, depositPP, balanceDueDays: dueDays,
+    departures, undated, schedule, unmatched,
+    metrics: {
+      leads: all.length,
+      live: live.length,
+      won: all.filter((l) => l.status === "won").length,
+      lost: all.filter((l) => l.status === "lost").length,
+      new7d: all.filter((l) => (l.createdAt || l.updatedAt || 0) > week).length,
+      travellers: departures.reduce((a, g) => a + g.pax, 0),
+      paidTotal, expectedTotal,
+      outstandingTotal: Math.max(0, expectedTotal - paidTotal),
+      overdue: schedule.filter((s) => s.overdue).reduce((a, s) => a + s.amount, 0),
+    },
+  });
+});
+
 // ── CRM: archivar / restaurar un lead (reversible; sale de las vistas) ──
 app.post("/admin/api/archive", async (req, res) => {
   if (!adminAuth(req, res)) return;
@@ -2792,12 +3105,12 @@ function renderEmailHtml(bodyHtml, unsub) {
 //  · plantilla de Brevo → { to, templateId, params } (usa su asunto/diseño; params = {{params.x}})
 //  · HTML propio        → { to, subject, html }
 // Devuelve {ok} o {ok:false,error}.
-async function sendEmail({ to, name, subject, html, templateId, params }) {
+async function sendEmail({ to, name, subject, html, templateId, params, from }) {
   if (!MAIL_READY) return { ok: false, error: "email no configurado" };
   const dest = [{ email: to, ...(name ? { name } : {}) }];
   const payload = templateId
     ? { templateId, to: dest, params: params || {} }
-    : { sender: parseFrom(MAIL_FROM), to: dest, subject, htmlContent: html };
+    : { sender: parseFrom(from || MAIL_FROM), to: dest, subject, htmlContent: html };
   if (MAIL_REPLY_TO) payload.replyTo = { email: MAIL_REPLY_TO };
   try {
     await axios.post("https://api.brevo.com/v3/smtp/email", payload,
@@ -2806,6 +3119,74 @@ async function sendEmail({ to, name, subject, html, templateId, params }) {
   } catch (e) {
     return { ok: false, error: e.response?.data ? JSON.stringify(e.response.data) : e.message };
   }
+}
+
+// ─── EMAIL DE ITINERARIO ──────────────────────────────────────────
+// El caso real: "can you email me the route so I can show it to my mate". El bot contestaba
+// "I can't send emails myself" — cierto hasta ahora, y perdía al acompañante que traía el lead.
+// Sale desde MAIL_FROM_SALES (ride@), NO desde el remitente de la newsletter.
+// El PDF va por ENLACE, no adjunto: pesa 12 MB y los adjuntos así rebotan.
+function tripLinksFor(lead) {
+  const cfg = PLAYBOOK.tripEmail;
+  if (!cfg) return null;
+  const want = String((lead && lead.tour) || "").toLowerCase();
+  const key = Object.keys(cfg.tours).find((k) => want.includes(k)) || cfg.fallback;
+  const t = cfg.tours[key];
+  return t ? { ...t, url: cfg.site + t.path, pdfUrl: t.pdf ? cfg.site + t.pdf : "" } : null;
+}
+
+async function sendTripEmail(phone, toOverride) {
+  const lead = (await getLead(phone)) || {};
+  const to = String(toOverride || lead.email || "").trim();
+  if (!to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return { ok: false, error: "sin email válido" };
+  if ((await getUnsubSet()).has(to.toLowerCase())) return { ok: false, error: "ese email se dio de baja" };
+  const trip = tripLinksFor(lead);
+  if (!trip) return { ok: false, error: "este bot no tiene itinerarios configurados" };
+
+  const first = (lead.name || "").trim().split(/\s+/)[0] || "there";
+  const bits = [lead.package && `**Package:** ${lead.package}`,
+                lead.riders && `**Riders:** ${lead.riders}`,
+                lead.travelDate && `**Dates:** ${lead.travelDate}`].filter(Boolean);
+  const md = [
+    `Hi ${first},`,
+    ``,
+    `Here's everything on the **${trip.label}** ride, so you can look it over properly (and forward it to whoever's riding with you).`,
+    ``,
+    bits.length ? `### What we've got so far\n${bits.map((b) => "- " + b).join("\n")}` : "",
+    ``,
+    `### The full day-by-day route`,
+    `${trip.url}`,
+    trip.pdfUrl ? `\n### The itinerary as a PDF\n${trip.pdfUrl}` : "",
+    ``,
+    `### What's included`,
+    `- Accommodation, the bike and fuel, full riding gear`,
+    `- A mechanic with the group, all inter-island ferries and their fees`,
+    `- The water activities: snorkelling with whale sharks, the purification ceremony`,
+    ``,
+    `A guide, the support car and all meals come with the **guided** option (+$550 per person). Every rider also needs either full-risk insurance ($275 each) or the refundable $1,000 damage deposit per bike.`,
+    ``,
+    `### The easiest next step`,
+    `A free 30-minute video call with the team. No pressure, no commitment, and you get every question answered at once. Just reply on WhatsApp with a day and time that suits you.`,
+    ``,
+    `Talk soon,`,
+    `${PERSONA_NAME}`,
+  ].filter((l) => l !== "").join("\n");
+
+  const host = process.env.RAILWAY_PUBLIC_DOMAIN || "";
+  const html = renderEmailHtml(mdToHtml(md), host ? unsubUrl(host, to) : "#");
+  const r = await sendEmail({
+    to, name: lead.name || "", from: MAIL_FROM_SALES || MAIL_FROM,
+    subject: `Your ${trip.label} route — Bali Moto Adventures`, html,
+  });
+  if (r.ok) {
+    if (!lead.email) await updateLeadFields(phone, { email: to.toLowerCase() });
+    await logEvent(phone, "email_sent", { to, kind: "itinerary", tour: trip.label });
+    console.log(`[${PROJECT_NAME}] Itinerario "${trip.label}" enviado por email a ${to} (${phone})`);
+  } else {
+    await logEvent(phone, "email_failed", { to, error: String(r.error).slice(0, 200) });
+    console.error(`[${PROJECT_NAME}] Fallo enviando itinerario a ${to}: ${r.error}`);
+  }
+  return r;
 }
 
 // Lista las plantillas transaccionales activas de Brevo (para elegir en el panel).
