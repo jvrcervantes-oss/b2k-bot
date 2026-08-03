@@ -295,6 +295,9 @@
 
   /* ── Operadores B2B: BD separada (no son leads de chat), mismo patrón visual que dbView ── */
   #opsView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
+  /* Aire arriba: el título de las dos agendas quedaba pegado al borde. Va en la vista, no en
+     .db-top, que la comparten Base de datos y Salidas y ahí no sobra sitio. */
+  #opsView .db-top{padding-top:32px}
   #app.opsmode #list,#app.opsmode #chat,#app.opsmode #detail{display:none}
   #app.opsmode #opsView{display:flex}
   .ops-chips{display:flex;gap:6px;padding:0 24px 14px;flex-wrap:wrap}
