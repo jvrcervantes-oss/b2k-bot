@@ -78,4 +78,35 @@ assert.equal(isOutreachBounce({ id: WAMID_INTRO }, { ...LEAD, outreachWamid: "" 
 assert.equal(isOutreachBounce({ id: WAMID_INTRO }, { ...LEAD, outreached: false }), false, "ya desmarcado: idempotente");
 assert.equal(isOutreachBounce({ id: WAMID_INTRO }, null), false, "un fallo a un desconocido no crea nada");
 
-console.log("OK — test-wa-blocked: 131042/131031 bloquean, 131026 no, delivered/read desbloquean, y el rebote del intro desmarca `outreached`");
+// ── ¿A qué ficha se apunta el rebote? (index.js → findLeadLoose) ──
+// Producción, 3-ago-2026: `Plantilla "intro_form" enviada a 4254329068` y acto seguido
+// `ENTREGA FALLIDA a 14254329068`. Meta devuelve el recipient_id CON prefijo de país aunque el
+// mensaje se enviara sin él, así que el match exacto falla justo en los leads peor grabados y el
+// rebote no se apunta en ninguna ficha. Mismo criterio que el import de Meta: últimos 8 dígitos
+// y solo si hay UN candidato — fusionar dos personas es peor que no encontrar ninguna.
+function findLeadLoose(raw, all) {
+  const clean = String(raw || "").replace(/\D/g, "");
+  if (!clean) return null;
+  const exact = all.find((l) => l.phone === clean);
+  if (exact) return exact;
+  const tail = clean.slice(-8);
+  if (tail.length < 8) return null;
+  const cand = all.filter((l) => String(l.phone || "").endsWith(tail));
+  return cand.length === 1 ? cand[0] : null;
+}
+
+const BD = [{ phone: "4254329068" }, { phone: "19198305157" }, { phone: "34600111222" }];
+assert.equal(findLeadLoose("14254329068", BD).phone, "4254329068", "el caso real: rebote con prefijo, lead sin él");
+assert.equal(findLeadLoose("19198305157", BD).phone, "19198305157", "el match exacto sigue mandando");
+assert.equal(findLeadLoose("+34 600 111 222", BD).phone, "34600111222", "el formato con espacios y + no importa");
+assert.equal(findLeadLoose("15551234567", BD), null, "un desconocido no se pega al primero que se parezca");
+assert.equal(findLeadLoose("", BD), null);
+assert.equal(findLeadLoose("4329068", BD), null, "menos de 8 dígitos no basta para decidir");
+// Guarda de unicidad: DOS leads acaban en los mismos 8 dígitos ("38309862") y ninguno es
+// match exacto → no se elige ninguno. (Comprobado que los dos son candidatos de verdad; si no,
+// el assert pasaría por no encontrar a nadie, que es otro caso.)
+const AMBIGUOS = [{ phone: "138309862" }, { phone: "9938309862" }];
+assert.equal(AMBIGUOS.filter((l) => l.phone.endsWith("38309862")).length, 2, "el propio caso de prueba tiene que ser ambiguo");
+assert.equal(findLeadLoose("5538309862", AMBIGUOS), null, "con dos candidatos no se adivina: apuntar el rebote en la ficha equivocada es peor");
+
+console.log("OK — test-wa-blocked: 131042/131031 bloquean, 131026 no, delivered/read desbloquean, el rebote del intro desmarca `outreached` y cae en la ficha correcta");

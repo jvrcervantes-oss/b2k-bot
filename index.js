@@ -932,22 +932,30 @@ async function enrichLeadFromConversation(phone, { force = false } = {}) {
 // ─── IMPORTAR LEADS DE META (CSV de Lead Ads) ────────────────────────
 // Crea/actualiza el lead en la BD a partir de una fila ya parseada en el cliente.
 // No pisa datos existentes (merge solo-vacíos): si el lead ya chateó, manda el chat.
+// Busca un lead aunque el número no venga escrito igual. Dos formatos conviven de verdad:
+// el formulario lo manda nacional (0812…) y el chat internacional (62812…), y Meta devuelve el
+// `recipient_id` del webhook CON prefijo de país aunque el mensaje se enviara sin él (visto en
+// producción el 3-ago: enviado a 4254329068, rebote a 14254329068). Con match exacto, esos leads
+// se duplican al importar y sus rebotes no se apuntan en ninguna ficha.
+// Se acepta la coincidencia SOLO si hay un único candidato por los últimos 8 dígitos: sin esa
+// guarda se fusionarían dos personas distintas, que es peor que no encontrar ninguna.
+// ponytail: scan O(n); pasa en imports y en rebotes (raros), con n≈cientos → sin índice extra.
+async function findLeadLoose(raw) {
+  const clean = normalizePhone(raw);
+  if (!clean) return null;
+  const exact = await getLead(clean);
+  if (exact) return exact;
+  const tail = clean.slice(-8);
+  if (tail.length < 8) return null;
+  const cand = (await listLeads()).filter((l) => String(l.phone || "").endsWith(tail));
+  return cand.length === 1 ? cand[0] : null;
+}
+
 async function importMetaLead(row) {
   const raw = String((row && row.whatsapp) || "").replace(/\D/g, "");
   if (!raw) return "skip";
-  let phone = raw, prev = await getLead(raw);
-  // Fallback anti-duplicado: el nº del formulario puede venir en formato nacional (0812…) y el
-  // del chat en internacional (62812…), y el match exacto fallaría. Si NO hay match exacto pero
-  // exactamente UN lead existente comparte los últimos 8 dígitos, es la misma persona → se fusiona
-  // sobre ese lead, no se crea otro. La guarda de unicidad evita fusiones erróneas.
-  // ponytail: scan O(n) por fila; el import es puntual y n≈cientos → no compensa un índice extra.
-  if (!prev) {
-    const tail = raw.slice(-8);
-    if (tail.length === 8) {
-      const cand = (await listLeads()).filter((l) => String(l.phone || "").endsWith(tail));
-      if (cand.length === 1) { prev = cand[0]; phone = cand[0].phone; }
-    }
-  }
+  const prev = await findLeadLoose(raw);
+  const phone = prev ? prev.phone : raw;
   const fields = {};
   if (row.name && !(prev && prev.name)) fields.name = String(row.name).slice(0, 120);
   if (row.email && !(prev && prev.email)) fields.email = String(row.email).toLowerCase().slice(0, 160);
@@ -2086,16 +2094,16 @@ app.post("/webhook", async (req, res) => {
         if (c.accountBlock) await setWaBlocked(c.code, detail);
         // Panel: solo si ya es lead conocido (no crear ficha para el owner ni desconocidos)
         if (!isOwner(st.recipient_id)) {
-          const lead = await getLead(st.recipient_id);
+          const lead = await findLeadLoose(st.recipient_id); // el recipient_id de Meta no siempre es la clave del lead
           if (lead) {
-            await logEvent(st.recipient_id, "delivery_failed", { code: c.code, detail: String(detail).slice(0, 200) });
+            await logEvent(lead.phone, "delivery_failed", { code: c.code, detail: String(detail).slice(0, 200) });
             // El intro se marcó `outreached` en cuanto la API dijo 200. Si ESE mensaje es el que
             // ha rebotado (mismo wamid), el lead nunca fue contactado: se desmarca para que vuelva
             // a la cola en vez de quedarse como "ya hablado" para siempre. Un rebote de OTRA
             // plantilla (recordatorio, newsletter) no toca la marca — el intro sí llegó.
             if (isOutreachBounce(st, lead)) {
-              await updateLeadFields(st.recipient_id, { outreached: false, outreachFailed: { code: c.code, detail: String(detail).slice(0, 200), at: Date.now() } });
-              console.warn(`[${PROJECT_NAME}] Outreach a ${st.recipient_id} NO entregado (code ${c.code ?? "?"}) — desmarcado, vuelve a la cola`);
+              await updateLeadFields(lead.phone, { outreached: false, outreachFailed: { code: c.code, detail: String(detail).slice(0, 200), at: Date.now() } });
+              console.warn(`[${PROJECT_NAME}] Outreach a ${lead.phone} NO entregado (code ${c.code ?? "?"}) — desmarcado, vuelve a la cola`);
             }
           }
         }
