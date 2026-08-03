@@ -2889,11 +2889,14 @@ app.get("/admin/api/payments/unmatched", async (req, res) => {
 });
 app.post("/admin/api/payments/assign", async (req, res) => {
   if (!adminAuth(req, res)) return;
-  const { idx, phone } = req.body || {};
+  const { idx, phone, ref } = req.body || {};
   if (!redisClient) return res.status(503).json({ error: "sin Redis" });
   if (!phone || !(await getLead(phone))) return res.status(400).json({ error: "ese cliente no existe" });
   const raw = await redisClient.lRange("pay_unmatched", 0, -1);
-  const rec = raw[idx];
+  // El `idx` es POSICIONAL: si entra o se asigna otro pago entre el listado y este POST, la
+  // posición ya apunta a otro cobro y el dinero acaba en la ficha equivocada. Cuando el panel
+  // manda el `ref` (id de la sesión de Stripe) manda ese, y la posición solo es el respaldo.
+  const rec = ref ? raw.find((r) => { try { return JSON.parse(r).ref === ref; } catch { return false; } }) : raw[idx];
   if (!rec) return res.status(404).json({ error: "pago no encontrado" });
   const p = JSON.parse(rec);
   const r = await addPayment(phone, { ...p, by: "panel", note: `Asignado a mano — ${p.email || p.name || "Stripe"}` });

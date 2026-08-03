@@ -281,6 +281,18 @@
   .p-half{background:rgba(180,83,9,.12);color:#b45309}
   .p-no{background:rgba(220,38,38,.10);color:#dc2626}
   .p-none{background:var(--bg);color:var(--ink-soft)}
+  /* ── Pagos sin asignar: bandeja arriba de Salidas, en ámbar porque es dinero parado ── */
+  .pu{margin:0 24px 14px;border:1px solid var(--amber);border-radius:12px;background:var(--card);overflow:hidden}
+  .pu-h{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--line);font-size:13px;font-weight:800;color:var(--amber);flex-wrap:wrap}
+  .pu-sub{font-weight:500;font-size:12px;color:var(--ink-soft)}
+  .pu-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line-2);font-size:13px;flex-wrap:wrap}
+  .pu-row:last-child{border-bottom:0}
+  .pu-amt{font-weight:800;white-space:nowrap}
+  .pu-who{color:var(--ink-soft);flex:1;min-width:140px;overflow:hidden;text-overflow:ellipsis}
+  .pu-when{color:var(--ink-soft);font-size:12px;white-space:nowrap}
+  .pu-row input{border:1px solid var(--line);border-radius:7px;padding:5px 9px;font-size:12.5px;background:var(--card);color:var(--ink);min-width:190px}
+  .pu-err{padding:0 14px 10px;color:var(--amber);font-size:12.5px}
+
   /* ── Operadores B2B: BD separada (no son leads de chat), mismo patrón visual que dbView ── */
   #opsView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
   #app.opsmode #list,#app.opsmode #chat,#app.opsmode #detail{display:none}
@@ -744,6 +756,12 @@
       <button class="db-ghost" id="dashNew" data-i18n="btn_new_dep">＋ Nueva salida</button>
       <button class="db-ghost" id="dashReload" data-i18n="btn_reload">↻ Actualizar</button>
     </div>
+    <!-- Bandeja de cobros que entraron sin saber de quién son (link de pago de la web: no nace
+         del chat, así que no trae teléfono). Solo se pinta si hay alguno. -->
+    <div class="pu" id="puBox" style="display:none">
+      <div class="pu-h">💳 <span data-i18n="pu_title">Pagos sin asignar</span> <span class="count" id="puCount">0</span> <span class="pu-sub" data-i18n="pu_sub">Cobros recibidos que no se han podido atribuir a ningún cliente</span></div>
+      <div id="puRows"></div>
+    </div>
     <div class="db-metrics" id="dashMetrics"></div>
     <div class="dash-scroll" id="dashBody"></div>
   </div>
@@ -1036,6 +1054,7 @@
       ops_pot_all:'◇ Potential', ops_temp_all:'🌡 Temp', op_potential:'Potential', op_temp:'Temperatura',
       ops_empty:'Aún no hay operadores. Importa un CSV o añade el primero con "+ Operador".',
       nav_tao:'Travel Adv.', h_tao:'Travel Adventures Operators', nl_ds_tao:'Travel Adventures Operators',
+      pu_title:'Pagos sin asignar', pu_sub:'Cobros recibidos que no se han podido atribuir a ningún cliente', pu_assign:'Asignar', pu_noone:'Sin nombre ni email', pu_need_lead:'Elige el cliente al que pertenece este cobro.',
       tao_empty:'Travel Adventures Operators está vacía. Importa un CSV o añade el primero con "+ Operador".',
       nav_dash:'Salidas', h_dash:'Salidas', btn_reload:'↻ Actualizar', loading:'Cargando…', btn_new_dep:'＋ Nueva salida',
       m_travellers:'Viajeros', m_departures:'Salidas', m_confirmed:'Confirmadas', m_collected:'Cobrado', m_pending:'Pendiente', m_unassigned:'Sin asignar',
@@ -1112,6 +1131,7 @@
       ops_pot_all:'◇ Potential', ops_temp_all:'🌡 Temp', op_potential:'Potential', op_temp:'Temperature',
       ops_empty:'No operators yet. Import a CSV or add the first one with "+ Operator".',
       nav_tao:'Travel Adv.', h_tao:'Travel Adventures Operators', nl_ds_tao:'Travel Adventures Operators',
+      pu_title:'Unassigned payments', pu_sub:'Payments received that could not be matched to any client', pu_assign:'Assign', pu_noone:'No name or email', pu_need_lead:'Pick the client this payment belongs to.',
       tao_empty:'Travel Adventures Operators is empty. Import a CSV or add the first one with "+ Operator".',
       nav_dash:'Departures', h_dash:'Departures', btn_reload:'↻ Refresh', loading:'Loading…', btn_new_dep:'＋ New departure',
       m_travellers:'Travellers', m_departures:'Departures', m_confirmed:'Confirmed', m_collected:'Collected', m_pending:'Pending', m_unassigned:'Unassigned',
@@ -2136,7 +2156,48 @@
       if(typeof d.pillionAdjust==='number') PILLION_ADJ=d.pillionAdjust;
       renderOverview();
     }).catch(function(){ body.innerHTML='<div class="dash-empty">'+t('al_save')+'</div>'; });
+    loadUnmatched();
   }
+
+  // ── Pagos sin asignar ──────────────────────────────────────────
+  // El webhook de Stripe apunta el cobro en la ficha si sabe de quién es. Un pago por el link de
+  // la web no nace del chat, así que no trae teléfono: se guardaba y no lo veía nadie. Esto es
+  // esa bandeja. Se asigna por `ref` (id de la sesión), no por posición en la lista.
+  var unmatched=[];
+  function loadUnmatched(){
+    return api('payments/unmatched').then(function(r){return r.json();}).then(function(d){
+      unmatched=(d&&d.payments)||[]; renderUnmatched();
+    }).catch(function(){ unmatched=[]; renderUnmatched(); });
+  }
+  function puFmtWhen(ts){ return ts?new Date(ts).toLocaleString(t('locale'),{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
+  function renderUnmatched(){
+    var box=document.getElementById('puBox');
+    if(!unmatched.length){ box.style.display='none'; return; }
+    box.style.display='';
+    document.getElementById('puCount').textContent=unmatched.length;
+    buildLeadsDL(); // reutiliza el desplegable de clientes de las citas
+    document.getElementById('puRows').innerHTML=unmatched.map(function(p,i){
+      var who=[p.name,p.email].filter(Boolean).join(' · ')||t('pu_noone');
+      return '<div class="pu-row">'
+        + '<span class="pu-amt">'+esc(String(p.amount||0))+' '+esc(String(p.currency||'').toUpperCase())+'</span>'
+        + '<span class="pu-who">'+esc(who)+'</span>'
+        + '<span class="pu-when">'+puFmtWhen(p.at)+'</span>'
+        + '<input list="leadsDL" id="puLead'+i+'" data-ph="ph_lead" placeholder="'+t('ph_lead')+'">'
+        + '<button class="db-csv" onclick="puAssign('+i+')">'+t('pu_assign')+'</button>'
+        + '</div>';
+    }).join('')+'<div class="pu-err" id="puErr"></div>';
+  }
+  window.puAssign=function(i){
+    var p=unmatched[i], err=document.getElementById('puErr');
+    var v=(document.getElementById('puLead'+i).value||'').trim();
+    var m=v.match(/\((\+?\d[\d ]*)\)/);            // mismo formato que el desplegable de citas
+    var phone=(m?m[1]:v).replace(/\D/g,'');
+    if(!phone){ err.textContent=t('pu_need_lead'); return; }
+    err.textContent='';
+    apiPost('payments/assign',{ref:p.ref,idx:p.idx,phone:phone}).then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); })
+      .then(function(o){ if(!o.ok) throw ((o.j&&o.j.error)||'error'); loadOverview(); }) // refresca cobrado/pendiente y la bandeja
+      .catch(function(e){ err.textContent=(typeof e==='string'?e:t('al_save')); });
+  };
 
   function dots(pax,cap){
     var n=Math.min(pax,cap), h='';
