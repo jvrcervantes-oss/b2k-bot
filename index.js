@@ -1787,6 +1787,7 @@ async function createStripeSession(numUnits) {
         quantity: numUnits,
       }],
       mode: "payment",
+      metadata: { bot: PROJECT_NAME || "bbm" }, // cuenta de Stripe compartida con B2K — ver stripeOwnership
       success_url: STRIPE_SUCCESS_URL || "https://balimotoadventures.com/?booking=confirmed",
       cancel_url: STRIPE_CANCEL_URL || "https://balimotoadventures.com/",
     });
@@ -1814,7 +1815,7 @@ async function createStripeCheckoutIDR(amountIDR, description, phone) {
       }],
       mode: "payment",
       client_reference_id: phone,
-      metadata: { phone },
+      metadata: { bot: PROJECT_NAME || "bbm", phone }, // `bot` = de quién es el cobro (cuenta de Stripe compartida con B2K, ver stripeOwnership)
       success_url: STRIPE_SUCCESS_URL || "https://balibestmotorcycle.com/?booking=confirmed",
       cancel_url: STRIPE_CANCEL_URL || "https://balibestmotorcycle.com/",
     });
@@ -2493,6 +2494,25 @@ app.post("/webhook/xendit", async (req, res) => {
   }
 });
 
+// ¿De quién es este cobro? La cuenta de Stripe está COMPARTIDA con B2K y Stripe reparte cada
+// evento a TODOS los endpoints de la cuenta, sin filtro posible por metadata. Sin esto, un
+// depósito de tour de B2K (USD) entraría aquí y se leería como IDR — importe ×100 y en la ficha
+// de un lead que no es nuestro. Pura y con self-check en test-stripe-ownership.js.
+//   · "mine"    → sesión creada por este bot → se atribuye por phone
+//   · "foreign" → marcada por otro bot, o con las claves que solo pone B2K (`lead_phone`)
+//   · "unmatched" → sin marcas: el handler no tiene a quién atribuir y lo descarta con aviso
+function stripeOwnership(s, me, myCurrency = "idr") {
+  const md = (s && s.metadata) || {};
+  const ref = (s && s.client_reference_id) || "";
+  if (md.bot && md.bot === me) return { verdict: "mine", owner: me, phone: md.phone || ref };
+  if (md.bot) return { verdict: "foreign", owner: md.bot, phone: "" };
+  if (md.lead_phone) return { verdict: "foreign", owner: "b2k", phone: "" }; // clave que solo pone B2K
+  // Sesiones nuestras creadas ANTES de que existiera la marca `bot`: siguen en vuelo, se aceptan.
+  if (md.phone || ref) return { verdict: "mine", owner: me, phone: md.phone || ref };
+  if (String((s && s.currency) || "").toLowerCase() !== myCurrency) return { verdict: "foreign", owner: "otra moneda", phone: "" };
+  return { verdict: "unmatched", owner: "", phone: "" };
+}
+
 // Stripe verifica con la firma HMAC oficial del SDK sobre el rawBody (mismo req.rawBody que ya
 // captura express.json() para el webhook de Meta) — Dashboard → Webhooks → signing secret.
 app.post("/webhook/stripe", async (req, res) => {
@@ -2508,8 +2528,13 @@ app.post("/webhook/stripe", async (req, res) => {
     if (event.type !== "checkout.session.completed") return res.sendStatus(200);
     const session = event.data.object;
     if (session.payment_status !== "paid") return res.sendStatus(200);
+    const own = stripeOwnership(session, PROJECT_NAME || "bbm");
+    if (own.verdict === "foreign") {
+      console.log(`[${PROJECT_NAME}] Pago de Stripe de otro bot (${own.owner}) — ignorado`);
+      return res.sendStatus(200); // el candado de idempotencia NO se toma: el cobro no es nuestro
+    }
     if (await alreadyProcessedPayment(`stripe:${event.id}`)) return res.sendStatus(200);
-    const phone = session.client_reference_id || (session.metadata && session.metadata.phone);
+    const phone = own.phone;
     if (!phone) { console.warn(`[${PROJECT_NAME}] Stripe checkout.session.completed sin phone — sesión ${session.id}`); return res.sendStatus(200); }
     // Recibo oficial de Stripe: el webhook llega "plano" (sin expandir), hace falta una consulta
     // aparte al PaymentIntent → latest_charge.receipt_url (página hospedada por Stripe, no la creamos nosotros).
