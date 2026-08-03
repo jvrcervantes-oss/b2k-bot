@@ -666,6 +666,7 @@
     <div class="ic" id="navCal" data-ti="nav_cal" title="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_cal">Calendario</span></div>
     <div class="ic" id="navDb" data-ti="nav_db" title="Base de datos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_db">Base de datos</span></div>
     <div class="ic" id="navOps" data-ti="nav_ops" title="Operadores"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21V8l9-5 9 5v13" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 21v-6h6v6M9 12h.01M15 12h.01M9 9h.01M15 9h.01" stroke-linecap="round"/></svg><span class="lbl" data-i18n="nav_ops">Operadores</span></div>
+    <div class="ic" id="navTao" data-ti="nav_tao" title="Travel Adventures Operators"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20" stroke-linecap="round"/><circle cx="12" cy="12" r="10"/></svg><span class="lbl" data-i18n="nav_tao">Travel Adv.</span></div>
     <div class="ic" id="navMedia" data-ti="nav_media" title="Fotos y vídeos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_media">Fotos y vídeos</span></div>
     <div class="ic grp" id="navNewsletter" data-ti="nav_nl" title="Newsletter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_nl">Newsletter</span></div>
     <div class="ic" id="navSim" data-ti="nav_sim" title="Simulador"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12c0 4.418-4.03 8-9 8-1.06 0-2.076-.163-3.017-.463L3 21l1.35-3.746C3.494 15.85 3 14.482 3 13c0-4.418 4.03-8 9-8s9 3.582 9 8z" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 12h.01M12 12h.01M16 12h.01" stroke-linecap="round"/></svg><span class="lbl" data-i18n="nav_sim">Simulador</span></div>
@@ -775,7 +776,7 @@
   <!-- sección: Operadores B2B — BD separada de los leads de chat, sin conversación -->
   <div id="opsView">
     <div class="db-top">
-      <h2><span data-i18n="h_ops">Operadores</span> <span class="count" id="opsCount">0</span></h2>
+      <h2><span id="opsTitle" data-i18n="h_ops">Operadores</span> <span class="count" id="opsCount">0</span></h2>
       <div class="db-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg><input id="opsQ" data-ph="ph_search_op" placeholder="Buscar empresa, contacto, email…"></div>
       <input type="file" id="opsFile" accept=".csv,text/csv" style="display:none">
       <button class="db-ghost" id="opsImport" data-i18n="btn_import_ops">⬆ Importar CSV</button>
@@ -824,7 +825,7 @@
     <div class="sec-body">
       <p class="media-help" data-i18n="nl_help">Envía un email a los leads que dieron su correo. Incluye siempre un enlace de baja automático. Prueba primero contigo.</p>
       <label data-i18n="nl_dataset">Base de datos</label>
-      <select id="nlDataset"><option value="leads" data-i18n="nl_ds_leads">Leads (chat)</option><option value="operators" data-i18n="nl_ds_ops">Operadores (B2B)</option><option value="subscribers" data-i18n="nl_ds_subs">Suscriptores (web)</option></select>
+      <select id="nlDataset"><option value="leads" data-i18n="nl_ds_leads">Leads (chat)</option><option value="operators" data-i18n="nl_ds_ops">Operadores (B2B)</option><option value="tao" data-i18n="nl_ds_tao">Travel Adventures Operators</option><option value="subscribers" data-i18n="nl_ds_subs">Suscriptores (web)</option></select>
       <button id="nlSubsManage" class="btn-ghost" style="display:none;width:auto;margin-top:8px" data-i18n="nl_subs_manage">Gestionar suscriptores</button>
       <label data-i18n="nl_scope">Destinatarios</label>
       <select id="nlScope"><option value="all" data-i18n="nl_scope_all">Todos con email</option><option value="selected" data-i18n="nl_scope_sel">Seleccionados en la Base de datos</option></select>
@@ -1034,6 +1035,8 @@
       ops_th_company:'Empresa', ops_th_contact:'Contacto', ops_th_email:'Email', ops_th_phone:'Teléfono', ops_th_country:'País', ops_th_pot:'Potential', ops_th_temp:'Temp', ops_th_tags:'Etiquetas', ops_th_updated:'Actualizado',
       ops_pot_all:'◇ Potential', ops_temp_all:'🌡 Temp', op_potential:'Potential', op_temp:'Temperatura',
       ops_empty:'Aún no hay operadores. Importa un CSV o añade el primero con "+ Operador".',
+      nav_tao:'Travel Adv.', h_tao:'Travel Adventures Operators', nl_ds_tao:'Travel Adventures Operators',
+      tao_empty:'Travel Adventures Operators está vacía. Importa un CSV o añade el primero con "+ Operador".',
       nav_dash:'Salidas', h_dash:'Salidas', btn_reload:'↻ Actualizar', loading:'Cargando…', btn_new_dep:'＋ Nueva salida',
       m_travellers:'Viajeros', m_departures:'Salidas', m_confirmed:'Confirmadas', m_collected:'Cobrado', m_pending:'Pendiente', m_unassigned:'Sin asignar',
       no_deps_yet:'Todavía no has creado ninguna salida. Créala con ＋ Nueva salida y asígnale los clientes que marques como Ganado.',
@@ -1108,6 +1111,8 @@
       ops_th_company:'Company', ops_th_contact:'Contact', ops_th_email:'Email', ops_th_phone:'Phone', ops_th_country:'Country', ops_th_pot:'Potential', ops_th_temp:'Temp', ops_th_tags:'Tags', ops_th_updated:'Updated',
       ops_pot_all:'◇ Potential', ops_temp_all:'🌡 Temp', op_potential:'Potential', op_temp:'Temperature',
       ops_empty:'No operators yet. Import a CSV or add the first one with "+ Operator".',
+      nav_tao:'Travel Adv.', h_tao:'Travel Adventures Operators', nl_ds_tao:'Travel Adventures Operators',
+      tao_empty:'Travel Adventures Operators is empty. Import a CSV or add the first one with "+ Operator".',
       nav_dash:'Departures', h_dash:'Departures', btn_reload:'↻ Refresh', loading:'Loading…', btn_new_dep:'＋ New departure',
       m_travellers:'Travellers', m_departures:'Departures', m_confirmed:'Confirmed', m_collected:'Collected', m_pending:'Pending', m_unassigned:'Unassigned',
       no_deps_yet:'No departures yet. Create one with ＋ New departure and assign the clients you mark as Won.',
@@ -1187,6 +1192,12 @@
     var dows=document.querySelectorAll('.cal-dow span'), dw=t('dow');
     if(dows.length===7 && dw && dw.length===7){ for(var d2=0;d2<7;d2++) dows[d2].textContent=dw[d2]; }
     var lt=document.getElementById('langToggle'); if(lt){ var toEN=(LANG==='es'); lt.innerHTML=(toEN?FLAG.gb:FLAG.es)+'<span>'+(toEN?'EN':'ES')+'</span>'; }
+    // Título y vacío de la vista B2B son dinámicos (dos agendas, un solo HTML): el barrido de
+    // arriba los acaba de devolver a "Operadores". Si estamos en la otra, se reponen.
+    if(typeof opsDb!=='undefined' && opsDb==='tao'){
+      var ot=document.getElementById('opsTitle'); if(ot) ot.textContent=t('h_tao');
+      var oe=document.getElementById('opsEmpty'); if(oe) oe.textContent=t('tao_empty');
+    }
     rebuildI18nVars();
   }
   function setLang(lng){
@@ -2553,13 +2564,20 @@
     rd.readAsArrayBuffer(file);
   }
 
-  // ── Operadores B2B — BD separada de los leads de chat (op:*/ops_index en el servidor) ──
-  var ops = [], opsFilter = 'all', opsSelected = {};
+  // ── Operadores B2B — BD separada de los leads de chat (op:*|tao:* en el servidor) ──
+  // DOS agendas con la misma ficha: 'ops' (operadores) y 'tao' (Travel Adventures Operators).
+  // Cada una con su caché y su selección: si compartieran las de al lado, la newsletter podría
+  // salir a la agenda que no es solo porque la vista mostrara la otra.
+  var opsAll = { ops:[], tao:[] }, opsSel = { ops:{}, tao:{} }, opsDb = 'ops';
+  var opsFilter = 'all';
   var OPS_ST_LABEL = { new:'ops_new', contacted:'ops_contacted', negotiating:'ops_negotiating', partner:'ops_partner', inactive:'ops_inactive' };
-  function loadOperators(){ return api('operators').then(function(r){return r.json();}).then(function(L){ ops=L; renderOps(); }); }
+  function loadOperators(db){
+    var d = db || opsDb;
+    return api('operators?db='+d).then(function(r){return r.json();}).then(function(L){ opsAll[d]=Array.isArray(L)?L:[]; if(d===opsDb) renderOps(); });
+  }
   function opsFiltered(){
     var q=(document.getElementById('opsQ').value||'').toLowerCase().trim();
-    return ops.filter(function(o){
+    return opsAll[opsDb].filter(function(o){
       if(o.archived) return false;
       if(opsFilter!=='all' && (o.status||'new')!==opsFilter) return false;
       var pf=document.getElementById('opsPotF').value, tf=document.getElementById('opsTempF').value;
@@ -2579,7 +2597,7 @@
       var tags=(Array.isArray(o.tags)?o.tags:[]).map(function(x){return '<span class="db-tag">'+esc(x)+'</span>';}).join(' ');
       var stOpts=Object.keys(OPS_ST_LABEL).map(function(k){return '<option value="'+k+'"'+((o.status||'new')===k?' selected':'')+'>'+t(OPS_ST_LABEL[k])+'</option>';}).join('');
       return '<tr>'
-        + '<td class="chk" onclick="event.stopPropagation()"><input type="checkbox" '+(opsSelected[o.id]?'checked':'')+' onchange="opsToggleSel(\''+o.id+'\',this)"></td>'
+        + '<td class="chk" onclick="event.stopPropagation()"><input type="checkbox" '+(opsSel[opsDb][o.id]?'checked':'')+' onchange="opsToggleSel(\''+o.id+'\',this)"></td>'
         + '<td class="ops-company">'+esc(o.company||'—')+'</td>'
         + '<td>'+esc(o.contact||'')+'</td>'
         + '<td>'+esc(o.email||'')+(o.emailUnsub?' <span class="db-tag">baja</span>':'')+'</td>'
@@ -2594,10 +2612,10 @@
         + '</tr>';
     }).join('');
   }
-  window.opsToggleSel=function(id,el){ if(el.checked) opsSelected[id]=true; else delete opsSelected[id]; };
-  window.opsSetStatus=function(id,status){ apiPost('operator',{id:id,status:status}).then(loadOperators); };
+  window.opsToggleSel=function(id,el){ if(el.checked) opsSel[opsDb][id]=true; else delete opsSel[opsDb][id]; };
+  window.opsSetStatus=function(id,status){ apiPost('operator',{db:opsDb,id:id,status:status}).then(function(){ loadOperators(); }); };
   document.getElementById('opsSelAll').onchange=function(e){
-    var on=e.target.checked; opsFiltered().forEach(function(o){ if(on) opsSelected[o.id]=true; else delete opsSelected[o.id]; }); renderOps();
+    var on=e.target.checked; opsFiltered().forEach(function(o){ if(on) opsSel[opsDb][o.id]=true; else delete opsSel[opsDb][o.id]; }); renderOps();
   };
   document.getElementById('opsQ').addEventListener('input', renderOps);
   document.getElementById('opsPotF').addEventListener('change', renderOps);
@@ -2609,7 +2627,7 @@
   });
   // ── modal ficha de operador ──
   window.opsOpenModal=function(id){
-    var o = id ? ops.find(function(x){return x.id===id;}) : null;
+    var o = id ? opsAll[opsDb].find(function(x){return x.id===id;}) : null;
     document.getElementById('opModalTitle').textContent = t(o?'m_edit_op':'m_new_op');
     document.getElementById('opId').value = o?o.id:'';
     document.getElementById('opCompany').value = o?(o.company||''):'';
@@ -2631,7 +2649,7 @@
   document.getElementById('opDelete').onclick=function(){
     var id=document.getElementById('opId').value;
     if(!id || !confirm(t('cfm_op_delete'))) return;
-    apiPost('operator/delete',{id:id}).then(function(){ document.getElementById('opModal').style.display='none'; delete opsSelected[id]; loadOperators(); });
+    apiPost('operator/delete',{db:opsDb,id:id}).then(function(){ document.getElementById('opModal').style.display='none'; delete opsSel[opsDb][id]; loadOperators(); });
   };
   document.getElementById('opSave').onclick=function(){
     var company=document.getElementById('opCompany').value.trim();
@@ -2639,6 +2657,7 @@
     if(!company){ err.textContent=t('al_op_company'); return; }
     var tags=document.getElementById('opTags').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
     apiPost('operator', {
+      db: opsDb,
       id: document.getElementById('opId').value || undefined,
       company: company,
       contact: document.getElementById('opContact').value.trim(),
@@ -2711,7 +2730,7 @@
     reader.onload=function(){
       var rows=opsParseCsv(String(reader.result));
       if(!rows.length){ alert('CSV vacío o formato no reconocido'); return; }
-      apiPost('import-operators',{rows:rows}).then(function(r){return r.json();}).then(function(res){
+      apiPost('import-operators',{db:opsDb,rows:rows}).then(function(r){return r.json();}).then(function(res){
         alert('✓ '+res.created+' / '+res.updated+' / '+res.skipped);
         loadOperators();
       });
@@ -2742,7 +2761,8 @@
     var dataset=document.getElementById('nlDataset').value;
     var scope=document.getElementById('nlScope').value, ids=[], seen={}, unsub=0;
     var source, selMap, keyOf;
-    if(dataset==='operators'){ source=ops; selMap=opsSelected; keyOf=function(l){return l.id;}; }
+    // La agenda de la newsletter NO es la que se esté viendo: se lee la suya por nombre.
+    if(dataset==='operators'||dataset==='tao'){ var d=dataset==='tao'?'tao':'ops'; source=opsAll[d]; selMap=opsSel[d]; keyOf=function(l){return l.id;}; }
     else if(dataset==='subscribers'){ source=subs; selMap={}; keyOf=function(l){return l.email;}; scope='all'; } // sin selección por-item
     else { source=leads; selMap=dbSelected; keyOf=function(l){return l.phone;}; }
     source.forEach(function(l){
@@ -2765,6 +2785,9 @@
     b.disabled=!r.count;
   }
   // Lista de campañas programadas (con cancelar).
+  // Etiqueta de la base de datos de una campaña. Antes era un ternario que solo distinguía
+  // operadores: una campaña a suscriptores se listaba como "Leads (chat)".
+  function nlDsLabel(d){ return t(d==='operators'?'nl_ds_ops':d==='tao'?'nl_ds_tao':d==='subscribers'?'nl_ds_subs':'nl_ds_leads'); }
   function nlFmtWhen(ts){ return new Date(ts).toLocaleString(t('locale'),{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); }
   function nlLoadScheduled(){
     var box=document.getElementById('nlSchedList');
@@ -2772,7 +2795,7 @@
       if(!Array.isArray(list)||!list.length){ box.innerHTML=''; return; }
       box.innerHTML='<div class="nl-sched-h">'+t('nl_sched_title')+'</div>'+list.map(function(c){
         var scope=c.scope==null?t('nl_sched_all'):(c.scope+' '+t('nl_sched_sel'));
-        var ds=c.dataset==='operators'?t('nl_ds_ops'):t('nl_ds_leads');
+        var ds=nlDsLabel(c.dataset);
         return '<div class="nl-sched-row"><div class="nl-sched-info"><b>'+esc(c.subject||'')+'</b><span>'+nlFmtWhen(c.when)+' · '+ds+' · '+scope+'</span></div><button title="✕" onclick="nlCancelSched(\''+c.id+'\')">✕</button></div>';
       }).join('');
     }).catch(function(){ box.innerHTML=''; });
@@ -2785,7 +2808,7 @@
     api('newsletter/history').then(function(r){return r.json();}).then(function(list){
       if(!Array.isArray(list)||!list.length){ box.innerHTML=''; return; }
       box.innerHTML='<div class="nl-sched-h">'+t('nl_hist_title')+'</div>'+list.map(function(c){
-        var ds=c.dataset==='operators'?t('nl_ds_ops'):t('nl_ds_leads');
+        var ds=nlDsLabel(c.dataset);
         var stat=t('nl_sent').replace('{s}',c.sent||0).replace('{f}',c.failed||0);
         return '<div class="nl-sched-row"><div class="nl-sched-info"><b>'+esc(c.subject||'—')+'</b>'
           + '<span>'+nlFmtWhen(c.at)+' · '+ds+' · '+stat+'</span></div>'
@@ -2844,7 +2867,7 @@
   }
 
   function clearModes(a){ a.classList.remove('calmode','dbmode','opsmode','mediamode','nlmode','simmode','dashmode'); }
-  function setNav(id){ ['navConv','navCal','navDb','navOps','navMedia','navNewsletter','navSim'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
+  function setNav(id){ ['navConv','navCal','navDb','navOps','navTao','navMedia','navNewsletter','navSim'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
 
   function setUrl(p){ try{ history.replaceState(null,'',p); }catch(e){} }
   document.getElementById('navConv').onclick=function(){ clearModes(document.getElementById('app')); setNav('navConv'); setUrl('/admin'); };
@@ -2856,7 +2879,18 @@
   document.getElementById('depDelete').onclick=depDelete;
   document.getElementById('navCal').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('calmode'); setNav('navCal'); setUrl('/admin'); buildLeadsDL(); loadAppts(renderCal); };
   document.getElementById('navDb').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('dbmode'); setNav('navDb'); setUrl('/admin/db'); dbPage=1; loadHealth(); loadAppts(renderDb); };
-  document.getElementById('navOps').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('opsmode'); setNav('navOps'); setUrl('/admin'); loadOperators(); };
+  // Las dos agendas B2B comparten vista, tabla y modal: solo cambia contra qué BD hablan.
+  function openOps(db){
+    var a=document.getElementById('app'); clearModes(a); a.classList.add('opsmode');
+    setNav(db==='tao'?'navTao':'navOps'); setUrl('/admin');
+    opsDb=db;
+    document.getElementById('opsTitle').textContent=t(db==='tao'?'h_tao':'h_ops');
+    document.getElementById('opsEmpty').textContent=t(db==='tao'?'tao_empty':'ops_empty');
+    renderOps();          // pinta ya la caché de esa agenda; la red solo refresca
+    loadOperators(db);
+  }
+  document.getElementById('navOps').onclick=function(){ openOps('ops'); };
+  document.getElementById('navTao').onclick=function(){ openOps('tao'); };
   document.getElementById('navMedia').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('mediamode'); setNav('navMedia'); setUrl('/admin'); openMedia(); };
   document.getElementById('navNewsletter').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('nlmode'); setNav('navNewsletter'); setUrl('/admin'); openNewsletter(); };
   document.getElementById('navSim').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('simmode'); setNav('navSim'); setUrl('/admin'); };
@@ -2927,7 +2961,10 @@
     document.getElementById('nlSubsManage').style.display=isSubs?'':'none';
     var sc=document.getElementById('nlScope'); sc.disabled=isSubs; if(isSubs) sc.value='all'; // suscriptores = siempre todos
     if(isSubs) loadSubscribers().then(nlUpdateCount);
-    else if(this.value==='operators' && !ops.length) loadOperators().then(nlUpdateCount);
+    else if(this.value==='operators'||this.value==='tao'){
+      var d=this.value==='tao'?'tao':'ops';
+      if(opsAll[d].length) nlUpdateCount(); else loadOperators(d).then(nlUpdateCount);
+    }
     else nlUpdateCount();
   };
   document.getElementById('nlMode').onchange=function(){ nlApplyMode(); };

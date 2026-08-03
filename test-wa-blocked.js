@@ -59,4 +59,23 @@ const c3 = classifyDeliveryStatus({ status: "failed", errors: [] });
 assert.equal(c3.code, null);
 assert.equal(c3.accountBlock, false);
 
-console.log("OK — test-wa-blocked: 131042/131031 bloquean, 131026 no, delivered/read desbloquean");
+// ── ¿Deshace el rebote la marca de "ya contactado"? (index.js → isOutreachBounce) ──
+// El 31-jul quedó abierto esto: `outreached` se pone en cuanto la API dice 200, y un rebote
+// por destinatario (131049 "healthy ecosystem engagement", 130472 "experimento de usuario")
+// dejaba al lead como hablado sin que le hubiera llegado nada. 6 de cada 10 outreach.
+function isOutreachBounce(st, lead) {
+  const wamid = lead && lead.outreachWamid;
+  return !!(lead && lead.outreached && wamid && st && st.id && st.id === wamid);
+}
+
+const WAMID_INTRO = "wamid.HBgLNDQ3ODUyMTQ4OTQyFQIAERgSNzcyMkE1RkE0RTdBQjAA";
+const LEAD = { phone: "447852148942", outreached: true, outreachWamid: WAMID_INTRO };
+
+assert.equal(isOutreachBounce({ id: WAMID_INTRO, status: "failed" }, LEAD), true, "el rebote del propio intro sí desmarca");
+assert.equal(isOutreachBounce({ id: "wamid.OTRO", status: "failed" }, LEAD), false, "un recordatorio que rebota no borra que el intro llegó");
+assert.equal(isOutreachBounce({ status: "failed" }, LEAD), false, "sin wamid no se adivina");
+assert.equal(isOutreachBounce({ id: WAMID_INTRO }, { ...LEAD, outreachWamid: "" }), false, "lead de antes de guardar el wamid: no se toca");
+assert.equal(isOutreachBounce({ id: WAMID_INTRO }, { ...LEAD, outreached: false }), false, "ya desmarcado: idempotente");
+assert.equal(isOutreachBounce({ id: WAMID_INTRO }, null), false, "un fallo a un desconocido no crea nada");
+
+console.log("OK — test-wa-blocked: 131042/131031 bloquean, 131026 no, delivered/read desbloquean, y el rebote del intro desmarca `outreached`");

@@ -229,37 +229,51 @@ async function listLeads() {
 // BD separada de los leads de chat B2C: claves op:<id> + índice ops_index propio
 // (mismo Redis, namespace propio — nunca se mezclan ni se listan juntos). Sin chat,
 // sin WhatsApp: son contactos cargados a mano o por CSV para la newsletter B2B.
-const fallbackOps = {};
+// Hay DOS agendas B2B con la misma ficha y las mismas funciones, pero que no se mezclan nunca:
+// "ops" (operadores de siempre) y "tao" (Travel Adventures Operators, 3-ago-2026, arranca vacía).
+// Se separan por namespace de Redis, no por código duplicado: un `db` mal escrito NO cae en la
+// otra agenda, cae en un 400 — mezclarlas sería exactamente el fallo que esta separación evita.
+const OP_DBS = { ops: { key: "op", index: "ops_index" }, tao: { key: "tao", index: "taos_index" } };
+function opNs(db) {
+  const ns = OP_DBS[db || "ops"];
+  if (!ns) throw new Error(`base de datos de operadores desconocida: ${db}`);
+  return ns;
+}
+const fallbackOps = { ops: {}, tao: {} };
 function newOpId() {
   return crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 }
-async function getOperator(id) {
-  if (redisClient) { const d = await redisClient.get(`op:${id}`); return d ? JSON.parse(d) : null; }
-  return fallbackOps[id] || null;
+async function getOperator(id, db) {
+  const ns = opNs(db);
+  if (redisClient) { const d = await redisClient.get(`${ns.key}:${id}`); return d ? JSON.parse(d) : null; }
+  return fallbackOps[db || "ops"][id] || null;
 }
-async function saveOperator(op) {
+async function saveOperator(op, db) {
+  const ns = opNs(db);
   op.updatedAt = Date.now();
   if (redisClient) {
-    await redisClient.set(`op:${op.id}`, JSON.stringify(op));
-    await redisClient.zAdd("ops_index", { score: op.updatedAt, value: op.id });
+    await redisClient.set(`${ns.key}:${op.id}`, JSON.stringify(op));
+    await redisClient.zAdd(ns.index, { score: op.updatedAt, value: op.id });
   } else {
-    fallbackOps[op.id] = op;
+    fallbackOps[db || "ops"][op.id] = op;
   }
   return op;
 }
-async function deleteOperator(id) {
-  if (redisClient) { await redisClient.del(`op:${id}`); await redisClient.zRem("ops_index", id); }
-  else delete fallbackOps[id];
+async function deleteOperator(id, db) {
+  const ns = opNs(db);
+  if (redisClient) { await redisClient.del(`${ns.key}:${id}`); await redisClient.zRem(ns.index, id); }
+  else delete fallbackOps[db || "ops"][id];
 }
-async function listOperators() {
+async function listOperators(db) {
+  const ns = opNs(db);
   let list;
   if (redisClient) {
-    const ids = await redisClient.zRange("ops_index", 0, -1, { REV: true });
+    const ids = await redisClient.zRange(ns.index, 0, -1, { REV: true });
     if (!ids.length) return [];
-    const raws = await Promise.all(ids.map((id) => redisClient.get(`op:${id}`)));
+    const raws = await Promise.all(ids.map((id) => redisClient.get(`${ns.key}:${id}`)));
     list = raws.filter(Boolean).map((r) => JSON.parse(r));
   } else {
-    list = Object.values(fallbackOps).sort((a, b) => b.updatedAt - a.updatedAt);
+    list = Object.values(fallbackOps[db || "ops"]).sort((a, b) => b.updatedAt - a.updatedAt);
   }
   const unsub = await getUnsubSet();
   return list.map((o) => ({ ...o, emailUnsub: !!(o.email && unsub.has(String(o.email).toLowerCase().trim())) }));
@@ -347,11 +361,11 @@ async function listSubscribers() {
 
 // Upsert de una fila de CSV genérico (alias ES/EN de columnas). Si el email ya existe,
 // solo rellena campos vacíos (no pisa ediciones manuales); si no, crea un operador nuevo.
-async function importOperatorRow(row) {
+async function importOperatorRow(row, db) {
   const email = String(row.email || "").trim().toLowerCase();
   const company = String(row.company || row.empresa || "").trim();
   if (!company && !email) return "skipped";
-  const all = await listOperators();
+  const all = await listOperators(db); // el dedup por email es POR agenda: la misma empresa puede estar en las dos
   const match = email ? all.find((o) => String(o.email || "").toLowerCase() === email) : null;
   // normaliza a un valor permitido (case-insensitive); vacío si no encaja
   const pick = (v, allowed) => { const s = String(v || "").trim(); return allowed.find((a) => a.toLowerCase() === s.toLowerCase()) || undefined; };
@@ -369,7 +383,7 @@ async function importOperatorRow(row) {
     const merged = { ...match };
     let changed = false;
     for (const k of Object.keys(fields)) if (fields[k] && !merged[k]) { merged[k] = fields[k]; changed = true; }
-    if (changed) await saveOperator(merged);
+    if (changed) await saveOperator(merged, db);
     return "updated";
   }
   await saveOperator({
@@ -377,7 +391,7 @@ async function importOperatorRow(row) {
     phone: fields.phone || "", country: fields.country || "", notes: fields.notes || "",
     potential: fields.potential || "", temp: fields.temp || "",
     tags: [], status: "new", source: "csv", archived: false, createdAt: Date.now(),
-  });
+  }, db);
   return "created";
 }
 
@@ -1861,6 +1875,13 @@ function classifyDeliveryStatus(st) {
     accountBlock: ACCOUNT_BLOCK_CODES.has(code),
   };
 }
+// ¿Este `failed` es el rebote del INTRO que marcó al lead como contactado? Se compara por wamid:
+// es lo único que ata un rebote a un envío concreto. Un rebote de otra plantilla (recordatorio,
+// newsletter) no cuenta — ese intro sí se entregó y el lead ya conoce al bot.
+function isOutreachBounce(st, lead) {
+  const wamid = lead && lead.outreachWamid;
+  return !!(lead && lead.outreached && wamid && st && st.id && st.id === wamid);
+}
 let waBlockedRam = null;
 async function setWaBlocked(code, detail) {
   waBlockedRam = { code, detail: String(detail || "").slice(0, 300), ts: Date.now() };
@@ -1892,7 +1913,7 @@ async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams = [])
     ? [{ type: "body", parameters: bodyParams.map((t) => ({ type: "text", text: clean(t) || "-" })) }]
     : [];
   try {
-    await axios.post(
+    const resp = await axios.post(
       `https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/messages`,
       {
         messaging_product: "whatsapp",
@@ -1903,7 +1924,9 @@ async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams = [])
       { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" } }
     );
     console.log(`[${PROJECT_NAME}] Plantilla "${templateName}" enviada a ${toClean}`);
-    return { ok: true };
+    // El wamid es lo ÚNICO que permite atar un `failed` posterior a este envío concreto: la API
+    // devuelve 200 aunque el mensaje no llegue nunca (ver webhook de `statuses`).
+    return { ok: true, wamid: resp.data?.messages?.[0]?.id || "" };
   } catch (e) {
     const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
     console.error(`[${PROJECT_NAME}] Error enviando plantilla "${templateName}" a ${toClean}:`, detail);
@@ -1925,7 +1948,9 @@ async function sendIntro(phone) {
   const params = nVars >= 1 ? [firstName] : [];
   const r = await sendWhatsAppTemplate(phone, INTRO_TEMPLATE_NAME, INTRO_TEMPLATE_LANG, params);
   if (!r || !r.ok) return { ok: false, error: (r && r.error) || "envío fallido" };
-  await updateLeadFields(phone, { outreached: true, outreachedAt: Date.now() });
+  // `outreached` se pone OPTIMISTA: la API ya ha dicho 200, pero eso solo significa "aceptado".
+  // Guardamos el wamid para que el webhook de `statuses` pueda deshacerlo si rebota.
+  await updateLeadFields(phone, { outreached: true, outreachedAt: Date.now(), outreachWamid: r.wamid || "", outreachFailed: null });
   try {
     const history = await getConversation(phone);
     const helpWith = PLAYBOOK.helpWith;
@@ -2060,8 +2085,19 @@ app.post("/webhook", async (req, res) => {
         console.error(`[${PROJECT_NAME}] ENTREGA FALLIDA a ${st.recipient_id} — code ${c.code ?? "?"}: ${detail} (wamid ${st.id})`);
         if (c.accountBlock) await setWaBlocked(c.code, detail);
         // Panel: solo si ya es lead conocido (no crear ficha para el owner ni desconocidos)
-        if (!isOwner(st.recipient_id) && (await getLead(st.recipient_id))) {
-          await logEvent(st.recipient_id, "delivery_failed", { code: c.code, detail: String(detail).slice(0, 200) });
+        if (!isOwner(st.recipient_id)) {
+          const lead = await getLead(st.recipient_id);
+          if (lead) {
+            await logEvent(st.recipient_id, "delivery_failed", { code: c.code, detail: String(detail).slice(0, 200) });
+            // El intro se marcó `outreached` en cuanto la API dijo 200. Si ESE mensaje es el que
+            // ha rebotado (mismo wamid), el lead nunca fue contactado: se desmarca para que vuelva
+            // a la cola en vez de quedarse como "ya hablado" para siempre. Un rebote de OTRA
+            // plantilla (recordatorio, newsletter) no toca la marca — el intro sí llegó.
+            if (isOutreachBounce(st, lead)) {
+              await updateLeadFields(st.recipient_id, { outreached: false, outreachFailed: { code: c.code, detail: String(detail).slice(0, 200), at: Date.now() } });
+              console.warn(`[${PROJECT_NAME}] Outreach a ${st.recipient_id} NO entregado (code ${c.code ?? "?"}) — desmarcado, vuelve a la cola`);
+            }
+          }
         }
       }
       return; // un webhook de estado no trae mensaje que procesar
@@ -2512,50 +2548,62 @@ app.post("/admin/api/import", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Operadores B2B — pestaña separada, BD separada (op:*/ops_index, nunca lead:*) ──
+// ─── Operadores B2B — pestaña separada, BD separada (op:*|tao:*, nunca lead:*) ──
+// `db` elige la agenda: "ops" (por defecto) o "tao" (Travel Adventures Operators). Un valor
+// que no esté en OP_DBS es 400: escribir en la agenda equivocada por un typo no puede pasar.
+function opDb(req, res) {
+  const db = String((req.body && req.body.db) || req.query.db || "ops");
+  if (!OP_DBS[db]) { res.status(400).json({ error: `db no válida: ${db}` }); return null; }
+  return db;
+}
 app.get("/admin/api/operators", async (req, res) => {
   if (!adminAuth(req, res)) return;
-  try { res.json(await listOperators()); } catch (e) { res.status(500).json({ error: e.message }); }
+  const db = opDb(req, res); if (!db) return;
+  try { res.json(await listOperators(db)); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post("/admin/api/operator", async (req, res) => {
   if (!adminAuth(req, res)) return;
+  const db = opDb(req, res); if (!db) return;
   const body = req.body || {};
   try {
-    let op = body.id ? await getOperator(body.id) : null;
+    let op = body.id ? await getOperator(body.id, db) : null;
     if (!op) op = { id: body.id || newOpId(), createdAt: Date.now(), tags: [], status: "new", potential: "", temp: "", archived: false };
     ["company", "contact", "email", "phone", "country", "notes", "status", "potential", "temp"].forEach((k) => { if (body[k] != null) op[k] = body[k]; });
     if (Array.isArray(body.tags)) op.tags = body.tags;
-    await saveOperator(op);
+    await saveOperator(op, db);
     res.json({ ok: true, operator: op });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post("/admin/api/operator/delete", async (req, res) => {
   if (!adminAuth(req, res)) return;
+  const db = opDb(req, res); if (!db) return;
   const { id } = req.body || {};
   if (!id) return res.status(400).json({ error: "id requerido" });
-  try { await deleteOperator(id); res.json({ ok: true }); } catch (e) { res.status(500).json({ error: e.message }); }
+  try { await deleteOperator(id, db); res.json({ ok: true }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post("/admin/api/operator/archive", async (req, res) => {
   if (!adminAuth(req, res)) return;
+  const db = opDb(req, res); if (!db) return;
   const { id, archived } = req.body || {};
   if (!id) return res.status(400).json({ error: "id requerido" });
   try {
-    const op = await getOperator(id);
+    const op = await getOperator(id, db);
     if (!op) return res.status(404).json({ error: "no encontrado" });
     op.archived = archived !== false;
-    await saveOperator(op);
+    await saveOperator(op, db);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // Import CSV genérico de operadores (no el formato Meta): company/contact/email/phone/country/notes, alias ES.
 app.post("/admin/api/import-operators", async (req, res) => {
   if (!adminAuth(req, res)) return;
+  const db = opDb(req, res); if (!db) return;
   const rows = req.body && req.body.rows;
   if (!Array.isArray(rows)) return res.status(400).json({ error: "rows (array) requerido" });
   let created = 0, updated = 0, skipped = 0;
   try {
     for (const r of rows) {
-      const out = await importOperatorRow(r);
+      const out = await importOperatorRow(r, db);
       if (out === "created") created++; else if (out === "updated") updated++; else skipped++;
     }
     res.json({ ok: true, created, updated, skipped, total: rows.length });
@@ -3300,15 +3348,19 @@ app.get("/unsubscribe", async (req, res) => {
 // Reutilizado por el envío inmediato y por el programado (tick). Devuelve {sent, failed, total}.
 // dataset "leads" (default) = leads de chat B2C, identificados por phone, logEvent en su timeline.
 // dataset "operators" = BD B2B separada, identificados por id, sin timeline (no hay conversación).
+const NL_DATASETS = new Set(["leads", "operators", "tao", "subscribers"]);
 async function runCampaign({ subject, body, templateId, phones, ids, dataset, host }) {
   const buildFor = (email, name) => templateId
     ? { to: email, name, templateId, params: { unsub: unsubUrl(host, email), name: name || "", email } }
     : { to: email, subject, html: renderEmailHtml(mdToHtml(body), unsubUrl(host, email)) };
-  const isOperators = dataset === "operators";
+  // "operators" = agenda B2B de siempre · "tao" = Travel Adventures Operators. Misma ficha y
+  // mismo trato (id, sin timeline), distinta lista: por eso `isOperators` cubre a las dos.
+  const opsDb = dataset === "operators" ? "ops" : (dataset === "tao" ? "tao" : null);
+  const isOperators = !!opsDb;
   const isSubs = dataset === "subscribers";
   const onlyIds = Array.isArray(ids) ? new Set(ids) : (Array.isArray(phones) ? new Set(phones) : null);
   const unsub = await getUnsubSet();
-  const source = isSubs ? await listSubscribers() : (isOperators ? await listOperators() : await listLeads());
+  const source = isSubs ? await listSubscribers() : (isOperators ? await listOperators(opsDb) : await listLeads());
   const seen = new Set();
   const recipients = [];
   for (const l of source) {
@@ -3375,8 +3427,7 @@ app.post("/admin/api/newsletter", async (req, res) => {
   const templateId = parseInt((req.body && req.body.templateId), 10) || null; // usar plantilla de Brevo
   const phones = Array.isArray(req.body && req.body.phones) ? req.body.phones : null;
   const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids : null;
-  const dsIn = req.body && req.body.dataset;
-  const dataset = dsIn === "operators" ? "operators" : dsIn === "subscribers" ? "subscribers" : "leads";
+  const dataset = NL_DATASETS.has(req.body && req.body.dataset) ? req.body.dataset : "leads";
   const when = String((req.body && req.body.when) || "").trim();
   if (!templateId && (!subject || !body)) return res.status(400).json({ error: "elige una plantilla de Brevo, o escribe asunto y cuerpo" });
   const host = req.get("host");
@@ -3434,7 +3485,7 @@ app.get("/admin/api/newsletter/scheduled", async (req, res) => {
       id: c.id, when: c.when,
       subject: c.templateId ? `Plantilla Brevo #${c.templateId}` : c.subject,
       scope: (c.ids || c.phones) ? (c.ids || c.phones).length : null, // nº seleccionados, o null = todos
-      dataset: c.dataset === "operators" ? "operators" : c.dataset === "subscribers" ? "subscribers" : "leads",
+      dataset: NL_DATASETS.has(c.dataset) ? c.dataset : "leads",
     })));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
