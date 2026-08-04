@@ -14,17 +14,30 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
        font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
-  main{max-width:38rem;margin:0 auto;padding:2.5rem 1.25rem 4rem}
+  main{max-width:42rem;margin:0 auto;padding:2.5rem 1.25rem 4rem}
   h1{font-size:1.6rem;line-height:1.25;margin:0 0 .5rem}
-  h2{font-size:1rem;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);margin:2rem 0 .75rem}
+  h2{font-size:1rem;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);margin:2.5rem 0 .75rem}
   p{margin:0 0 1rem}
   .lede{color:var(--muted)}
   .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:1.25rem 1.4rem;margin-bottom:1rem}
-  ul{margin:0;padding-left:1.15rem}
+  ul{margin:0 0 1rem;padding-left:1.15rem}
   li{margin-bottom:.6rem}
   li:last-child{margin-bottom:0}
   .note{background:var(--warn-bg);border:1px solid #f0dfae;color:var(--warn);
-        border-radius:10px;padding:.9rem 1.1rem;font-size:.94rem;margin-bottom:1.5rem}
+        border-radius:10px;padding:.9rem 1.1rem;font-size:.94rem;margin-bottom:1.25rem}
+  .quote{color:var(--muted);font-style:italic}
+  .tablewrap{overflow-x:auto;margin:0 0 1rem}
+  table{border-collapse:collapse;width:100%;font-size:.94rem;min-width:24rem}
+  th,td{text-align:left;padding:.55rem .7rem;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:.85rem;text-transform:uppercase;letter-spacing:.02em}
+  td.paid{color:var(--warn);font-weight:600}
+  td.free{color:var(--ok);font-weight:600}
+  code{background:#eef3f6;padding:.1rem .35rem;border-radius:4px;font-size:.9em;word-break:break-all}
+  .accept{background:#fff;border:2px solid var(--brand);border-radius:12px;padding:1.25rem 1.4rem;margin:1.5rem 0 1.25rem}
+  .accept h2{margin-top:0;color:var(--ink)}
+  .accept label{display:flex;gap:.7rem;align-items:flex-start;margin-bottom:.9rem;cursor:pointer;font-size:.95rem}
+  .accept label:last-of-type{margin-bottom:0}
+  .accept input{margin:.32rem 0 0;width:1.15rem;height:1.15rem;flex:0 0 auto;accent-color:var(--brand);cursor:pointer}
   button{display:block;width:100%;padding:.95rem 1.25rem;font:inherit;font-weight:600;color:#fff;
          background:var(--brand);border:0;border-radius:10px;cursor:pointer}
   button:hover:not(:disabled){background:var(--brand-dark)}
@@ -38,41 +51,191 @@
   dl{margin:.75rem 0 0;font-size:.9rem}
   dt{color:var(--muted);margin-top:.5rem}
   dd{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-all}
-  footer{margin-top:2.5rem;font-size:.85rem;color:var(--muted)}
+  footer{margin-top:2.5rem;padding-top:1.25rem;border-top:1px solid var(--line);font-size:.85rem;color:var(--muted)}
+  footer a{color:var(--muted)}
 </style>
 </head>
 <body>
 <main>
-  <h1>Connect your WhatsApp Business number</h1>
+  <h1>Connecting your WhatsApp number to the assistant</h1>
   <p class="lede">This links your existing WhatsApp Business number to __PROJECT__ so the assistant
   can reply to customers automatically. You keep using WhatsApp Business on your phone exactly as
-  today — both stay live on the same number, and messages stay in sync.</p>
+  today. Both stay live on the same number and messages stay in sync.</p>
 
   <div class="note">
     <strong>Open this page on a computer, with your phone next to you.</strong> Meta will show a QR
-    code on this screen that you scan with the WhatsApp Business app — the same way WhatsApp Web
+    code on this screen that you scan with the WhatsApp Business app, the same way WhatsApp Web
     works, so it cannot be the phone showing the code and scanning it.
   </div>
 
-  <div class="note">
-    <strong>Before you click the button</strong> — these are Meta's requirements, not ours, and the
-    flow cannot be finished without them.
-  </div>
+  <p>Before you connect anything, you should know exactly what changes. Some of it is permanent.
+  Most of it is small. One item costs money that you do not pay today. We would rather you refuse
+  now than discover something in week three.</p>
 
+  <p>Everything below comes from Meta's own documentation, and the sources are at the bottom of this
+  page. You have to accept these points before the connect button becomes available.</p>
+
+  <h2>1. Your chats are not deleted</h2>
+  <p>Your existing conversations stay on your phone. Meta's documentation is explicit: with
+  Coexistence <span class="quote">"you will be able to use both the WhatsApp Business app and the
+  partner's app concurrently, and your messaging history will be preserved."</span></p>
+  <p>There is a real reason for the worry, though. One way of connecting a number does destroy the
+  history: deleting the number from the WhatsApp Business app and registering it fresh on the Cloud
+  API. Meta warns that in that case <span class="quote">"your existing messaging history will be
+  lost."</span> That is the fast method, and avoiding it is why this setup has taken as long as it
+  has.</p>
+  <p><strong>Back up before you scan anyway.</strong> Google Drive on Android, iCloud on iPhone,
+  five minutes. A backup turns any surprise into an inconvenience instead of a loss.</p>
+
+  <h2>2. What you lose permanently</h2>
+  <p><strong>WhatsApp for Windows stops working with this number.</strong> After connecting, your
+  linked devices are signed out once and you re-link them. WhatsApp Web comes back. The Windows
+  desktop app does not: Meta states that <span class="quote">"WhatsApp for Windows and WhatsApp for
+  WearOS remain unsupported after relinking."</span></p>
+  <p>If anyone on your team answers customers from the Windows desktop app, they will need to use
+  WhatsApp Web in a browser instead. Please check this before you decide. Everything else on this
+  list can be undone by re-linking. This one cannot.</p>
+
+  <h2>3. Features that get switched off</h2>
+  <p>For one-to-one chats, Meta disables:</p>
   <div class="card">
     <ul>
-      <li><strong>A payment card on your WhatsApp Business Account.</strong> Meta bills conversations
-        to the account, so it will not connect without one.</li>
-      <li><strong>Your linked devices get signed out</strong> once, when you connect. WhatsApp Web and
-        any tablets need to be linked again afterwards.</li>
-      <li><strong>You have 24 hours</strong> after scanning to finish syncing your chat history. Past
-        that, the whole process has to be repeated from scratch.</li>
-      <li><strong>WhatsApp Business app 2.24.17 or newer</strong>, and open it at least once every
-        14 days — Meta drops the link otherwise.</li>
-      <li>On one-to-one chats, broadcast lists, disappearing messages, view-once and live location
-        are turned off. Groups are not synced.</li>
+      <li>Disappearing messages</li>
+      <li>View once</li>
+      <li>Live location</li>
+      <li>Broadcast lists, including the ability to create new ones</li>
     </ul>
   </div>
+  <p>Groups keep working on your phone, but they are not synchronised with the assistant, which
+  will not see or reply in them.</p>
+  <p>The broadcast one matters most. If you currently send promotions or seasonal offers to past
+  customers through broadcast lists, that route closes. The replacement is Meta's approved marketing
+  templates, which reach more people but cost money per message (see section 5) and need Meta's
+  approval for each template you write. If broadcasts are part of how you sell today, tell us and we
+  will plan the replacement before you connect.</p>
+
+  <h2>4. One-time disruption, and one ongoing rule</h2>
+  <p>Once, at connection time:</p>
+  <div class="card">
+    <ul>
+      <li>All companion devices are signed out and need re-linking.</li>
+      <li>You have <strong>24 hours</strong> from scanning to finish syncing your history. Miss that
+        window and the whole process has to be undone and repeated.</li>
+    </ul>
+  </div>
+  <p>Ongoing, for as long as you use this:</p>
+  <div class="card">
+    <ul>
+      <li>The WhatsApp Business app must be opened on the phone <strong>at least once every 14
+        days</strong>. If it is not, Meta drops the connection and the assistant stops working until
+        someone reconnects it.</li>
+      <li>The app must be version 2.24.17 or newer.</li>
+    </ul>
+  </div>
+  <p>Treat that 14-day rule as an operational risk worth planning for. If the phone holding this
+  number goes on a long trip or sits unused during low season, the assistant goes quiet. Decide now
+  whose phone this lives on and who is responsible for opening it.</p>
+
+  <h2>5. What it costs</h2>
+  <p>Today the WhatsApp Business app is free. The platform the assistant runs on is not, and Meta
+  requires <strong>a payment card on your WhatsApp Business Account</strong> before it will connect
+  at all.</p>
+  <p>Since 1 July 2025, Meta charges per message, and only for template messages that are
+  delivered:</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Situation</th><th>Charged?</th></tr></thead>
+      <tbody>
+        <tr><td>A customer messages you</td><td class="free">Free</td></tr>
+        <tr><td>The assistant replies within 24 hours of their message</td><td class="free">Free</td></tr>
+        <tr><td>Any normal text, image or document inside that 24-hour window</td><td class="free">Free</td></tr>
+        <tr><td>A follow-up or reminder sent after the 24-hour window closed</td><td class="paid">Paid (utility)</td></tr>
+        <tr><td>A promotional message</td><td class="paid">Paid (marketing), always</td></tr>
+        <tr><td>Customer arrives from a Click-to-WhatsApp ad</td><td class="free">Free for 72 hours</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Most of what the assistant does falls in the free column: answering enquiries, quoting prices,
+  sending payment links while the customer is still talking to you. The cost appears when you want
+  to re-open a conversation that has gone cold, which is the same follow-up behaviour that recovers
+  rentals you would otherwise lose.</p>
+  <p>We cannot predict your monthly bill, because it depends on how many cold leads you decide to
+  chase. Meta removed the free monthly allowance it used to give in July 2025, so charging starts
+  from the first paid message.</p>
+
+  <h2>6. Your customer data</h2>
+  <p>Up to <strong>6 months</strong> of your existing chat history synchronises from the phone into
+  the platform when you connect. After that, messages to and from this number flow through the
+  system we operate for you.</p>
+  <p>Conversations you have already had with customers become visible in the CRM we built for you,
+  including names, phone numbers and anything customers sent you. We hold that data to run your
+  assistant and for nothing else. We do not sell it and we do not use it for other clients.</p>
+  <p>Two obligations follow, and they sit with you as the business:</p>
+  <div class="card">
+    <ul>
+      <li>Your privacy policy needs to say that an automated system processes customer messages. The
+        policy Meta required is published at
+        <code>sumba.balibestmotorcycle.com/bbm-privacy-policy</code> and covers this. Your main site
+        still needs its own copy.</li>
+      <li>Indonesian data protection law (UU PDP) applies to you as the data controller. We act as
+        the processor. If you want that relationship documented formally, ask and we will prepare
+        it.</li>
+    </ul>
+  </div>
+  <p>If you would prefer the assistant not to receive the 6 months of history, say so before you
+  scan. We can skip it, and the assistant will start with no memory of returning customers.</p>
+
+  <h2>7. How the assistant and your team share one number</h2>
+  <p>Both work on the same number at the same time. When someone on your team types a reply from the
+  phone, the assistant detects it and stops replying to that customer automatically, so nobody gets
+  two answers to one question. It stays quiet on that conversation until you release it.</p>
+  <p>There is also a master switch. You can turn the assistant off completely, for everyone, from
+  the control panel. While it is off it still records every incoming lead and marks it as needing a
+  reply, so nothing gets lost.</p>
+
+  <h2>8. Reversing the decision</h2>
+  <p>Meta supports offboarding, and if you later re-register the app on a new phone you are offered
+  a pre-ticked option to reconnect everything.</p>
+  <p>What we cannot promise is that undoing it restores your setup to exactly how it is today. The
+  Windows desktop app is the known casualty. In practice you can reverse this, but not for free.</p>
+
+  <h2>9. Risks nobody controls</h2>
+  <div class="card">
+    <ul>
+      <li><strong>Message quality rating.</strong> If customers block or report the number, Meta
+        lowers its rating and can limit how many people you may message. Automated follow-ups
+        increase that exposure, which is why we keep them conservative.</li>
+      <li><strong>Approval timing.</strong> Meta has to accept the connection. We believe your setup
+        qualifies, but Meta decides, and a review can take weeks if they ask for one.</li>
+      <li><strong>Policy changes.</strong> Meta changed its pricing model in July 2025 and its
+        onboarding method in 2026. Both can change again.</li>
+    </ul>
+  </div>
+
+  <h2>10. What we need from you</h2>
+  <div class="card">
+    <ul>
+      <li>Confirm whether anyone uses WhatsApp for Windows on this number.</li>
+      <li>Confirm whether broadcast lists are part of how you sell today.</li>
+      <li>Add a payment card to the WhatsApp Business Account.</li>
+      <li>Decide whose phone holds this number and who keeps it opened every 14 days.</li>
+      <li>Back up the chat history.</li>
+      <li>Set aside 30 uninterrupted minutes at this computer, with the phone in hand.</li>
+    </ul>
+  </div>
+
+  <section class="accept" id="accept">
+    <h2>Acceptance</h2>
+    <p style="margin-bottom:1.1rem">Tick every box to enable the connect button. If any of these is
+    a problem, close this page and talk to us first.</p>
+    <label><input type="checkbox" data-accept> I understand my existing chats stay on the phone, and I have made a backup.</label>
+    <label><input type="checkbox" data-accept> I understand WhatsApp for Windows will no longer work with this number, permanently.</label>
+    <label><input type="checkbox" data-accept> I understand broadcast lists, disappearing messages, view once and live location are switched off for one-to-one chats.</label>
+    <label><input type="checkbox" data-accept> I understand the app must be opened at least once every 14 days or the assistant stops.</label>
+    <label><input type="checkbox" data-accept> I understand a payment card is required, and that messages sent outside the 24-hour window are charged per message.</label>
+    <label><input type="checkbox" data-accept> I understand up to 6 months of past customer conversations will be visible in the CRM operated by __PROJECT__ on my behalf.</label>
+    <label><input type="checkbox" data-accept> I accept and want to proceed.</label>
+  </section>
 
   <button id="go" type="button" disabled>Loading…</button>
   <div id="status" role="status" aria-live="polite"></div>
@@ -82,9 +245,17 @@
   business, pick your business portfolio and your WhatsApp Business Account, and then Meta shows a
   <strong>QR code on this computer screen</strong>. On your phone, open <em>WhatsApp Business →
   Settings → Linked devices → Link a device</em> and scan it. When it finishes, this page confirms
-  it and we take over from here — you do not need to send us anything.</p>
+  it and we take over from here. You do not need to send us anything.</p>
 
-  <footer>__PROJECT__ · Powered by the WhatsApp Business Platform.</footer>
+  <footer>
+    <p>Sources, all from Meta's official documentation:</p>
+    <ul>
+      <li><a href="https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-business-app-users/">Onboard WhatsApp Business app users (Coexistence)</a></li>
+      <li><a href="https://developers.facebook.com/documentation/business-messaging/whatsapp/solution-providers/migrate-existing-whatsapp-number-to-a-business-account/">Migrate an existing WhatsApp number to a business account</a></li>
+      <li><a href="https://developers.facebook.com/docs/whatsapp/pricing/">WhatsApp Business Platform pricing</a></li>
+    </ul>
+    <p>__PROJECT__ · Powered by the WhatsApp Business Platform.</p>
+  </footer>
 </main>
 
 <script>
@@ -96,7 +267,10 @@
 
   var btn = document.getElementById("go");
   var box = document.getElementById("status");
+  var boxes = [].slice.call(document.querySelectorAll("#accept input[data-accept]"));
   var sessionWabaId = "";   // llega por postMessage; puede adelantarse al callback de FB.login
+  var sdkReady = false;
+  var acceptedAt = "";      // sello de cuándo quedaron marcadas todas; viaja al servidor en el canje
 
   function say(kind, html) {
     box.className = "on " + kind;
@@ -111,6 +285,21 @@
     box.textContent = msg;       // mensajes de error de Meta: como TEXTO, nunca como HTML
   }
 
+  // El botón solo se abre con el SDK cargado Y todas las casillas marcadas. Se cuentan del DOM, no
+  // de una lista a mano: añadir una casilla al HTML la mete sola en el gate, sin tocar este script.
+  function allAccepted() {
+    return boxes.length > 0 && boxes.every(function (b) { return b.checked; });
+  }
+  function refreshButton() {
+    var ok = allAccepted();
+    if (ok && !acceptedAt) acceptedAt = new Date().toISOString();
+    if (!ok) acceptedAt = "";
+    if (!sdkReady) { btn.disabled = true; btn.textContent = "Loading…"; return; }
+    btn.disabled = !ok;
+    btn.textContent = ok ? "Connect WhatsApp" : "Tick every box above to continue";
+  }
+  boxes.forEach(function (b) { b.addEventListener("change", refreshButton); });
+
   // Meta manda el resultado de la sesión por postMessage. En Coexistence el evento de cierre es
   // FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING y trae el waba_id; el phone_number_id lo resolvemos
   // en el servidor listando los números de esa WABA.
@@ -121,8 +310,7 @@
     if (!data || data.type !== "WA_EMBEDDED_SIGNUP") return;
     if (data.data && data.data.waba_id) sessionWabaId = data.data.waba_id;
     if (data.event === "CANCEL" || data.event === "ERROR") {
-      btn.disabled = false;
-      btn.textContent = "Connect WhatsApp";
+      refreshButton();
       text("err", "The connection was not completed. You can try again.");
     }
   });
@@ -130,8 +318,7 @@
   function onLogin(response) {
     var code = response && response.authResponse && response.authResponse.code;
     if (!code) {
-      btn.disabled = false;
-      btn.textContent = "Connect WhatsApp";
+      refreshButton();
       text("err", "The connection was cancelled before it finished. You can try again.");
       return;
     }
@@ -139,7 +326,7 @@
     fetch("/onboarding/exchange", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: code, waba_id: sessionWabaId })
+      body: JSON.stringify({ code: code, waba_id: sessionWabaId, accepted_at: acceptedAt })
     })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
       .then(function (r) {
@@ -148,18 +335,20 @@
           return "<dt>" + (n.name || "Number") + "</dt><dd>" + n.phone + "</dd>";
         }).join("");
         say("ok", "<strong>Connected.</strong> Your number is now linked. Keep using WhatsApp "
-          + "Business on your phone as usual — nothing else is needed from you."
+          + "Business on your phone as usual. Nothing else is needed from you."
           + (nums ? "<dl>" + nums + "</dl>" : ""));
+        btn.disabled = true;
         btn.textContent = "Connected";
       })
       .catch(function (err) {
-        btn.disabled = false;
+        refreshButton();
         btn.textContent = "Try again";
         text("err", "Could not finish the connection: " + err.message);
       });
   }
 
   btn.addEventListener("click", function () {
+    if (!allAccepted()) return;   // el disabled ya lo impide; esto cubre un click sintético
     btn.disabled = true;
     btn.textContent = "Opening Meta…";
     text("wait", "A Meta window will open. Follow the steps there and come back to this page.");
@@ -177,8 +366,8 @@
 
   window.fbAsyncInit = function () {
     FB.init({ appId: APP_ID, autoLogAppEvents: true, xfbml: false, version: GRAPH });
-    btn.disabled = false;
-    btn.textContent = "Connect WhatsApp";
+    sdkReady = true;
+    refreshButton();
   };
 })();
 </script>

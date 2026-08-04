@@ -4025,6 +4025,15 @@ app.post("/onboarding/exchange", async (req, res) => {
   const code = String(req.body?.code || "").trim();
   if (!code) return res.status(400).json({ error: "falta el code de la sesión" });
 
+  // El cliente acepta las implicaciones ANTES de conectar (secciones 1-10 de onboarding.html:
+  // pérdida de WhatsApp for Windows, difusiones off, coste por mensaje, 6 meses de histórico al
+  // CRM). El gate del front no basta: sin esto, un POST a mano se lo salta y la aceptación sería
+  // decorativa. Se guarda el sello en el log del canje, que es donde queda el rastro de la sesión.
+  const acceptedAt = String(req.body?.accepted_at || "").trim();
+  if (!acceptedAt || Number.isNaN(Date.parse(acceptedAt))) {
+    return res.status(400).json({ error: "las implicaciones no constan aceptadas: repite el flujo desde /onboarding" });
+  }
+
   const api = `https://graph.facebook.com/${ES_GRAPH}`;
   try {
     // 1) code → token de negocio. Ese token NO se persiste: solo se usa aquí para suscribir la app.
@@ -4061,6 +4070,7 @@ app.post("/onboarding/exchange", async (req, res) => {
     // Log con IDs, nunca con el token ni el code.
     console.log(`[${PROJECT_NAME}] Embedded Signup OK — WABA ${wabaId}, app suscrita, números: ${
       numbers.map((n) => `${n.phone} (${n.id}${n.platform ? `, ${n.platform}` : ""})`).join(" · ") || "(ninguno todavía)"}`);
+    console.log(`[${PROJECT_NAME}]   → implicaciones aceptadas por el cliente: ${acceptedAt}`);
     console.log(`[${PROJECT_NAME}]   → pega ese phone id en WHATSAPP_PHONE_ID (Railway) para que el bot conteste por ese número`);
 
     res.json({ ok: true, waba_id: wabaId, numbers });

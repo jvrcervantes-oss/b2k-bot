@@ -54,4 +54,25 @@ assert.ok(html.includes('featureType: "whatsapp_business_app_onboarding"'), "fea
 assert.ok(html.includes('sessionInfoVersion: "3"'), "session logging");
 assert.ok(html.includes("override_default_response_type: true"), "response_type code");
 
-console.log("OK — waba_id a prueba de postMessage perdido, y la página sale sin placeholders");
+// El botón NO puede quedar habilitado sin aceptar las implicaciones. El fallo que vigila esto es
+// un `btn.disabled = false` suelto reaparecido en fbAsyncInit: dejaría conectar sin leer nada, y
+// nadie lo notaría porque el flujo funcionaría igual de bien.
+assert.ok(!/btn\.disabled\s*=\s*false/.test(html),
+  "el botón no puede habilitarse a pelo: tiene que pasar por refreshButton()");
+assert.ok(/sdkReady\s*&&|if\s*\(!sdkReady\)/.test(html), "el gate mira también a que el SDK esté listo");
+assert.ok(html.includes("accepted_at: acceptedAt"), "el sello de aceptación viaja al servidor");
+
+// Las casillas se cuentan del DOM. Si alguien añade una al HTML y el gate no la ve, el cliente
+// acepta menos de lo que cree haber aceptado.
+const checkboxes = (html.match(/type="checkbox" data-accept/g) || []).length;
+assert.ok(checkboxes >= 7, `esperadas >=7 casillas de aceptación, hay ${checkboxes}`);
+assert.ok(html.includes('querySelectorAll("#accept input[data-accept]")'),
+  "el gate cuenta las casillas del DOM, no de una lista a mano");
+
+// Y el servidor no se fía del front: sin accepted_at válido, no hay canje.
+const server = fs.readFileSync("index.js", "utf8");
+assert.ok(/accepted_at/.test(server) && /Date\.parse\(acceptedAt\)/.test(server),
+  "el exchange exige accepted_at válido: sin esto el gate se salta con un POST a mano");
+
+console.log("OK — waba_id a prueba de postMessage perdido, página sin placeholders, y el connect "
+  + `cerrado tras ${checkboxes} aceptaciones (front y servidor)`);
