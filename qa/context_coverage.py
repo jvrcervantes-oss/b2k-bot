@@ -94,3 +94,20 @@ print("HUECOS detectados (el bot improvisaría / respondería mal):")
 for g in gaps:
     print("  ❌", g, "—", tested[g], "preguntas de prueba")
 open(os.path.join(os.path.dirname(__file__),"qa_convos.json"),"w",encoding="utf-8").write(json.dumps(convos,ensure_ascii=False,indent=0))
+
+# --- CONTRADICCIONES: lo que el context NO puede decir -------------------------------------------
+# El coche de apoyo y las comidas son del suplemento GUIADO (+550), nunca de un paquete. Esto ya se
+# corrigió el 24-jul-2026 y volvió a aparecer el 4-ago en 7 sitios (descripción de Deluxe, "ONLY on
+# Deluxe", cabecera de EXAMPLES, luggage, safety...): el bot cotizaba Deluxe a 3.750 CON support car,
+# que es una venta falsa. Regla mecánica en vez de otra frase de prosa: cualquier línea que nombre el
+# coche de apoyo o "all meals" tiene que nombrar en la MISMA línea el guiado o el +550.
+NEEDS_GUIDED = re.compile(r"support car|support vehicle|all meals", re.I)
+HAS_GUIDED   = re.compile(r"guided|550", re.I)
+lines = open(os.path.join(os.path.dirname(__file__),"..","context.md"), encoding="utf-8").read().splitlines()
+bad = [(i+1, l.strip()[:120]) for i, l in enumerate(lines) if NEEDS_GUIDED.search(l) and not HAS_GUIDED.search(l)]
+print()
+print("CONTRADICCIONES (support car / meals prometidos sin el guiado):", len(bad))
+for n, l in bad:
+    print("  ❌ línea", n, "—", l)
+if bad or gaps:
+    raise SystemExit(1)

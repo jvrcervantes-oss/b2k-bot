@@ -635,9 +635,11 @@ const BUILTIN_PLAYBOOKS = {
       },
     },
     // Precio por persona del paquete, para estimar el valor de un lead que aún no tiene importe
-    // cerrado. VERIFICADO contra producción el 31-jul-2026 (self-guided; el guiado suma 550).
+    // cerrado. VERIFICADO contra el data.json de producción el 4-ago-2026 (self-guided; el guiado
+    // suma 550). Deluxe estaba en 3950 aquí y en 3750 en la web y en context.md: el panel inflaba
+    // 200 USD por rider de Deluxe. Un precio vive en TRES sitios — web, context.md y esto.
     // "standard" es la banda del formulario de Instagram, no un paquete: se estima por el suelo.
-    pkgPrice: { roundtrip: 2700, extreme: 3450, deluxe: 3950, standard: 2700 },
+    pkgPrice: { roundtrip: 2700, extreme: 3450, deluxe: 3750, standard: 2700 },
     pillionAdjust: -380,  // el copiloto paga 380 menos: cuenta como persona, no al mismo precio
     // 50000 = USD 500 por persona. Era 100000 (USD 1.000): el cliente lo bajó a 500 el 24-jul-2026
     // y se actualizó la web y el contexto del bot, pero NO esto — el bot decía 500 y el link cobraba

@@ -1967,7 +1967,7 @@
   // Precios de respaldo. La FUENTE es el servidor (PLAYBOOK.pkgPrice): loadOverview() los sobreescribe
   // con los de verdad. Esta copia llevaba meses en 3200/3950/4300 e inflaba el pipeline — si vuelve
   // a divergir, se corrige en index.js, no aquí.
-  var PKG_PRICE = {roundtrip:2700, extreme:3450, deluxe:3950, standard:2700};
+  var PKG_PRICE = {roundtrip:2700, extreme:3450, deluxe:3750, standard:2700};
   var PILLION_ADJ = -380;  // el copiloto paga 380 menos; también lo refresca el servidor
   var ORDER = {'':0,new:1,quoted:2,won:3,lost:4,noshow:5};
   function pkgKey(p){ p=(p||'').toLowerCase(); if(p.indexOf('roundtrip')>=0)return 'roundtrip'; if(p.indexOf('extreme')>=0)return 'extreme'; if(p.indexOf('deluxe')>=0)return 'deluxe'; if(p.indexOf('standard')>=0||p.indexOf('best')>=0)return 'standard'; return 'none'; }
