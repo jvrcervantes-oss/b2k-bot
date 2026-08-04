@@ -20,6 +20,8 @@ const {
   WHATSAPP_PHONE_ID,
   WHATSAPP_VERIFY_TOKEN,
   META_APP_SECRET,         // App Secret de la app de Meta — activa la verificación X-Hub-Signature-256 de los POST del webhook
+  META_APP_ID,             // App ID de la app de Meta (público) — Embedded Signup + canje del code
+  ES_CONFIG_ID,            // id de la configuración de "Facebook Login for Business" que lanza el Embedded Signup
   ANTHROPIC_API_KEY,
   GOOGLE_SERVICE_ACCOUNT,
   SHEET_ID,
@@ -3978,6 +3980,97 @@ app.delete("/admin/api/appts/:id", async (req, res) => {
   try { await deleteAppt(req.params.id); res.json({ ok: true }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── EMBEDDED SIGNUP (Coexistence) ────────────────────────────────
+// El cliente conecta SU número —el que ya usa en la app de WhatsApp Business— a nuestra app sin
+// perderlo del móvil. Coexistence solo se onboardea por Embedded Signup, no hay vía manual en
+// WhatsApp Manager. El flujo: esta página lanza el ES → Meta devuelve un `code` de un solo uso y el
+// `waba_id` por postMessage → aquí canjeamos el code por un token de negocio y suscribimos nuestra
+// app a esa WABA. El número NO se registra: en Coexistence ya está registrado (registrarlo lo
+// rompería), así que tampoco hay PIN de 6 dígitos.
+// Los campos `history` y `smb_app_state_sync` se suscriben en el dashboard de la app; sin handler
+// propio caen en el `if (!message) return` del webhook → 200 y se ignoran (solo se pierde ver en el
+// panel las conversaciones anteriores al onboarding).
+const ES_GRAPH = "v25.0"; // el ES v4 pide versión reciente; el resto del motor sigue en v21.0
+
+const onboardingFileName = "onboarding.html";
+const ONBOARDING_HTML = fs.existsSync(onboardingFileName)
+  ? fs.readFileSync(onboardingFileName, "utf8")
+  : `<!doctype html><meta charset='utf-8'><body style='font-family:sans-serif;padding:40px'>Falta ${onboardingFileName} en el despliegue.</body>`;
+
+app.get("/onboarding", (req, res) => {
+  if (!META_APP_ID || !ES_CONFIG_ID) {
+    return res.status(503).send("Onboarding no configurado: faltan META_APP_ID y/o ES_CONFIG_ID en el entorno.");
+  }
+  res.type("html").send(
+    ONBOARDING_HTML
+      .replace(/__APP_ID__/g, META_APP_ID)
+      .replace(/__CONFIG_ID__/g, ES_CONFIG_ID)
+      .replace(/__GRAPH__/g, ES_GRAPH)
+      .replace(/__PROJECT__/g, PROJECT_NAME || "Bot")
+  );
+});
+
+// Red de seguridad: si el postMessage con el waba_id se pierde (llega antes de que la página lo
+// escuche, o el navegador lo bloquea), el propio token dice a qué WABAs da acceso. Sin esto habría
+// que offboardear al cliente y repetirle el escaneo entero — y solo hay 24h de margen.
+function wabaIdFromDebug(debugData) {
+  const scopes = debugData?.data?.granular_scopes || [];
+  const s = scopes.find((x) => x.scope === "whatsapp_business_management")
+         || scopes.find((x) => x.scope === "whatsapp_business_messaging");
+  return (s?.target_ids || [])[0] || "";
+}
+
+app.post("/onboarding/exchange", async (req, res) => {
+  if (!META_APP_ID || !META_APP_SECRET) return res.status(503).json({ error: "faltan META_APP_ID/META_APP_SECRET en el entorno" });
+  const code = String(req.body?.code || "").trim();
+  if (!code) return res.status(400).json({ error: "falta el code de la sesión" });
+
+  const api = `https://graph.facebook.com/${ES_GRAPH}`;
+  try {
+    // 1) code → token de negocio. Ese token NO se persiste: solo se usa aquí para suscribir la app.
+    // El bot sigue mensajeando con el System User token del negocio del cliente (WHATSAPP_TOKEN).
+    const { data: tok } = await axios.get(`${api}/oauth/access_token`, {
+      params: { client_id: META_APP_ID, client_secret: META_APP_SECRET, code },
+    });
+    const businessToken = tok?.access_token;
+    if (!businessToken) return res.status(502).json({ error: "Meta no devolvió token en el canje" });
+    const auth = { headers: { Authorization: `Bearer ${businessToken}` } };
+
+    // 2) waba_id: el de la sesión, o el que declare el propio token.
+    let wabaId = String(req.body?.waba_id || "").trim();
+    if (!wabaId) {
+      const { data: dbg } = await axios.get(`${api}/debug_token`, {
+        params: { input_token: businessToken, access_token: `${META_APP_ID}|${META_APP_SECRET}` },
+      });
+      wabaId = wabaIdFromDebug(dbg);
+    }
+    if (!wabaId) return res.status(502).json({ error: "no llegó el waba_id de la sesión" });
+
+    // 3) suscribir NUESTRA app a su WABA → sus mensajes empiezan a llegar a este webhook.
+    await axios.post(`${api}/${wabaId}/subscribed_apps`, null, auth);
+
+    // 4) los números de esa WABA, para saber qué WHATSAPP_PHONE_ID pegar. NO se registra ninguno.
+    const { data: nums } = await axios.get(`${api}/${wabaId}/phone_numbers`, {
+      params: { fields: "id,display_phone_number,verified_name,platform_type" },
+      ...auth,
+    });
+    const numbers = (nums?.data || []).map((n) => ({
+      id: n.id, phone: n.display_phone_number, name: n.verified_name, platform: n.platform_type,
+    }));
+
+    // Log con IDs, nunca con el token ni el code.
+    console.log(`[${PROJECT_NAME}] Embedded Signup OK — WABA ${wabaId}, app suscrita, números: ${
+      numbers.map((n) => `${n.phone} (${n.id}${n.platform ? `, ${n.platform}` : ""})`).join(" · ") || "(ninguno todavía)"}`);
+    console.log(`[${PROJECT_NAME}]   → pega ese phone id en WHATSAPP_PHONE_ID (Railway) para que el bot conteste por ese número`);
+
+    res.json({ ok: true, waba_id: wabaId, numbers });
+  } catch (e) {
+    const detail = e.response?.data?.error?.message || e.message;
+    console.error(`[${PROJECT_NAME}] Embedded Signup falló: ${detail}`);
+    res.status(502).json({ error: detail });
+  }
+});
+
 // ─── HEALTH CHECK ─────────────────────────────────────────────────
 app.get("/", (req, res) => res.send(`${PROJECT_NAME || "Bot"} activo ✅`));
 
@@ -3989,6 +4082,7 @@ app.listen(PORT, async () => {
   console.log(`[${PROJECT_NAME}] CRM (BD): ${redisClient ? "Redis (persistente)" : "RAM (volátil — configura REDIS_URL)"}`);
   console.log(`[${PROJECT_NAME}] Firma webhook: ${META_APP_SECRET ? "🟢 X-Hub-Signature-256 activa" : "⚠️  SIN verificar — añade META_APP_SECRET en Railway"}`);
   console.log(`[${PROJECT_NAME}] Email (Brevo): ${MAIL_READY ? "🟢 listo" : `⚠️  NO configurado → BREVO_API_KEY=${BREVO_API_KEY ? "ok" : "FALTA"}, MAIL_FROM=${MAIL_FROM ? "ok" : "FALTA"}`}`);
+  console.log(`[${PROJECT_NAME}] Embedded Signup (Coexistence): ${META_APP_ID && ES_CONFIG_ID && META_APP_SECRET ? "🟢 /onboarding" : `⚠️  desactivado → META_APP_ID=${META_APP_ID ? "ok" : "FALTA"}, ES_CONFIG_ID=${ES_CONFIG_ID ? "ok" : "FALTA"}, META_APP_SECRET=${META_APP_SECRET ? "ok" : "FALTA"}`}`);
   // Sin esta línea no había forma de saber si el push de Inquiries estaba vivo: la feature es
   // env-gated y falla en silencio (best-effort), así que "apagada" y "funcionando" se veían igual.
   console.log(`[${PROJECT_NAME}] ERP del cliente (Inquiries): ${BBM_API_URL && BBM_API_KEY ? `🟢 ${BBM_API_URL}` : `⚠️  desactivado → BBM_API_URL=${BBM_API_URL ? "ok" : "FALTA"}, BBM_API_KEY=${BBM_API_KEY ? "ok" : "FALTA"}`}`);

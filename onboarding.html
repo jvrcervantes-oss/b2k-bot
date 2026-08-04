@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Connect your WhatsApp — __PROJECT__</title>
+<style>
+  :root{
+    --ink:#0b141a; --muted:#5c6f7c; --line:#e3e8ea; --bg:#f7f9fa;
+    --brand:#128c7e; --brand-dark:#0e6f64; --warn:#8a6100; --warn-bg:#fff8e6;
+    --ok:#0b7a3b; --ok-bg:#e9f7ef; --err:#a11; --err-bg:#fdecec;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  main{max-width:38rem;margin:0 auto;padding:2.5rem 1.25rem 4rem}
+  h1{font-size:1.6rem;line-height:1.25;margin:0 0 .5rem}
+  h2{font-size:1rem;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);margin:2rem 0 .75rem}
+  p{margin:0 0 1rem}
+  .lede{color:var(--muted)}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:1.25rem 1.4rem;margin-bottom:1rem}
+  ul{margin:0;padding-left:1.15rem}
+  li{margin-bottom:.6rem}
+  li:last-child{margin-bottom:0}
+  .note{background:var(--warn-bg);border:1px solid #f0dfae;color:var(--warn);
+        border-radius:10px;padding:.9rem 1.1rem;font-size:.94rem;margin-bottom:1.5rem}
+  button{display:block;width:100%;padding:.95rem 1.25rem;font:inherit;font-weight:600;color:#fff;
+         background:var(--brand);border:0;border-radius:10px;cursor:pointer}
+  button:hover:not(:disabled){background:var(--brand-dark)}
+  button:disabled{background:#9db3b0;cursor:not-allowed}
+  button:focus-visible{outline:3px solid #0b141a;outline-offset:2px}
+  #status{margin-top:1.1rem;padding:.9rem 1.1rem;border-radius:10px;font-size:.94rem;display:none}
+  #status.on{display:block}
+  #status.ok{background:var(--ok-bg);color:var(--ok);border:1px solid #b7e3c8}
+  #status.err{background:var(--err-bg);color:var(--err);border:1px solid #f2c2c2}
+  #status.wait{background:#eef3f6;color:var(--muted);border:1px solid var(--line)}
+  dl{margin:.75rem 0 0;font-size:.9rem}
+  dt{color:var(--muted);margin-top:.5rem}
+  dd{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-all}
+  footer{margin-top:2.5rem;font-size:.85rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Connect your WhatsApp Business number</h1>
+  <p class="lede">This links your existing WhatsApp Business number to __PROJECT__ so the assistant
+  can reply to customers automatically. You keep using WhatsApp Business on your phone exactly as
+  today — both stay live on the same number, and messages stay in sync.</p>
+
+  <div class="note">
+    <strong>Before you tap the button</strong> — these are Meta's requirements, not ours, and the
+    flow cannot be finished without them.
+  </div>
+
+  <div class="card">
+    <ul>
+      <li><strong>A payment card on your WhatsApp Business Account.</strong> Meta bills conversations
+        to the account, so it will not connect without one.</li>
+      <li><strong>Your linked devices get signed out</strong> once, when you connect. WhatsApp Web and
+        any tablets need to be linked again afterwards.</li>
+      <li><strong>You have 24 hours</strong> after scanning to finish syncing your chat history. Past
+        that, the whole process has to be repeated from scratch.</li>
+      <li><strong>WhatsApp Business app 2.24.17 or newer</strong>, and open it at least once every
+        14 days — Meta drops the link otherwise.</li>
+      <li>On one-to-one chats, broadcast lists, disappearing messages, view-once and live location
+        are turned off. Groups are not synced.</li>
+    </ul>
+  </div>
+
+  <button id="go" type="button" disabled>Loading…</button>
+  <div id="status" role="status" aria-live="polite"></div>
+
+  <h2>What happens next</h2>
+  <p>Meta opens a window where you pick your business, then shows a QR code. Scan it from
+  <em>WhatsApp Business → Settings → Linked devices</em>. When it finishes, this page confirms it and
+  we take over from here — you do not need to send us anything.</p>
+
+  <footer>__PROJECT__ · Powered by the WhatsApp Business Platform.</footer>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var APP_ID    = "__APP_ID__";
+  var CONFIG_ID = "__CONFIG_ID__";
+  var GRAPH     = "__GRAPH__";
+
+  var btn = document.getElementById("go");
+  var box = document.getElementById("status");
+  var sessionWabaId = "";   // llega por postMessage; puede adelantarse al callback de FB.login
+
+  function say(kind, html) {
+    box.className = "on " + kind;
+    box.innerHTML = "";
+    var p = document.createElement("p");
+    p.style.margin = "0";
+    p.innerHTML = html;          // solo texto nuestro, nunca respuesta cruda de la API
+    box.appendChild(p);
+  }
+  function text(kind, msg) {
+    box.className = "on " + kind;
+    box.textContent = msg;       // mensajes de error de Meta: como TEXTO, nunca como HTML
+  }
+
+  // Meta manda el resultado de la sesión por postMessage. En Coexistence el evento de cierre es
+  // FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING y trae el waba_id; el phone_number_id lo resolvemos
+  // en el servidor listando los números de esa WABA.
+  window.addEventListener("message", function (event) {
+    if (!/(^|\.)facebook\.com$/.test(new URL(event.origin).hostname)) return;
+    var data;
+    try { data = typeof event.data === "string" ? JSON.parse(event.data) : event.data; } catch (e) { return; }
+    if (!data || data.type !== "WA_EMBEDDED_SIGNUP") return;
+    if (data.data && data.data.waba_id) sessionWabaId = data.data.waba_id;
+    if (data.event === "CANCEL" || data.event === "ERROR") {
+      btn.disabled = false;
+      btn.textContent = "Connect WhatsApp";
+      text("err", "The connection was not completed. You can try again.");
+    }
+  });
+
+  function onLogin(response) {
+    var code = response && response.authResponse && response.authResponse.code;
+    if (!code) {
+      btn.disabled = false;
+      btn.textContent = "Connect WhatsApp";
+      text("err", "The connection was cancelled before it finished. You can try again.");
+      return;
+    }
+    text("wait", "Finishing the connection…");
+    fetch("/onboarding/exchange", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code, waba_id: sessionWabaId })
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.body && r.body.error ? r.body.error : "Unexpected error");
+        var nums = (r.body.numbers || []).map(function (n) {
+          return "<dt>" + (n.name || "Number") + "</dt><dd>" + n.phone + "</dd>";
+        }).join("");
+        say("ok", "<strong>Connected.</strong> Your number is now linked. Keep using WhatsApp "
+          + "Business on your phone as usual — nothing else is needed from you."
+          + (nums ? "<dl>" + nums + "</dl>" : ""));
+        btn.textContent = "Connected";
+      })
+      .catch(function (err) {
+        btn.disabled = false;
+        btn.textContent = "Try again";
+        text("err", "Could not finish the connection: " + err.message);
+      });
+  }
+
+  btn.addEventListener("click", function () {
+    btn.disabled = true;
+    btn.textContent = "Opening Meta…";
+    text("wait", "A Meta window will open. Follow the steps there and come back to this page.");
+    FB.login(onLogin, {
+      config_id: CONFIG_ID,
+      response_type: "code",
+      override_default_response_type: true,
+      extras: {
+        setup: {},
+        featureType: "whatsapp_business_app_onboarding",  // Coexistence ("coexistence" ya no vale)
+        sessionInfoVersion: "3"                           // session logging: obligatorio en el ES
+      }
+    });
+  });
+
+  window.fbAsyncInit = function () {
+    FB.init({ appId: APP_ID, autoLogAppEvents: true, xfbml: false, version: GRAPH });
+    btn.disabled = false;
+    btn.textContent = "Connect WhatsApp";
+  };
+})();
+</script>
+<!-- SDK de Meta: sin `integrity` a propósito (excepción razonada a la norma del estudio). Meta sirve
+     este fichero SIN versionar y lo actualiza a su ritmo; un hash SRI congelaría el flujo hasta el
+     primer cambio suyo y el onboarding dejaría de abrir. Meta además prohíbe auto-hospedarlo. -->
+<script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
+</body>
+</html>
