@@ -74,5 +74,14 @@ const server = fs.readFileSync("index.js", "utf8");
 assert.ok(/accepted_at/.test(server) && /Date\.parse\(acceptedAt\)/.test(server),
   "el exchange exige accepted_at válido: sin esto el gate se salta con un POST a mano");
 
+// El sync hay que ARRANCARLO en el canje. Si esto desaparece, el cliente escanea, todo parece ir
+// bien, y Meta le tira el onboarding a las 24h — el fallo más caro posible, porque se manifiesta
+// un día tarde y obliga a repetirle el proceso entero.
+assert.ok(server.includes("smb_app_data"), "falta arrancar el sync: Meta invalida el onboarding a las 24h");
+["smb_app_state_sync", "history"].forEach(function (t) {
+  assert.ok(new RegExp('"' + t + '"').test(server), `falta el sync_type ${t}`);
+});
+assert.ok(/sync_ok/.test(server), "el canje debe informar de si el sync salió bien, para reintentar dentro de la ventana");
+
 console.log("OK — waba_id a prueba de postMessage perdido, página sin placeholders, y el connect "
   + `cerrado tras ${checkboxes} aceptaciones (front y servidor)`);

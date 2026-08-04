@@ -3988,8 +3988,11 @@ app.delete("/admin/api/appts/:id", async (req, res) => {
 // app a esa WABA. El número NO se registra: en Coexistence ya está registrado (registrarlo lo
 // rompería), así que tampoco hay PIN de 6 dígitos.
 // Los campos `history` y `smb_app_state_sync` se suscriben en el dashboard de la app; sin handler
-// propio caen en el `if (!message) return` del webhook → 200 y se ignoran (solo se pierde ver en el
-// panel las conversaciones anteriores al onboarding).
+// propio caen en el `if (!message) return` del webhook → 200 y se ignoran, así que las
+// conversaciones anteriores al onboarding no se guardan en ningún sitio.
+// OJO — eso NO significa que la sincronización se pueda saltar: hay que ARRANCARLA por API dentro
+// de 24 h o Meta invalida el onboarding y el cliente tiene que repetir el flujo entero. Iniciar es
+// obligatorio, recibir es opcional. Se hace en el paso 5 de /onboarding/exchange.
 const ES_GRAPH = "v25.0"; // el ES v4 pide versión reciente; el resto del motor sigue en v21.0
 
 const onboardingFileName = "onboarding.html";
@@ -4067,13 +4070,41 @@ app.post("/onboarding/exchange", async (req, res) => {
       id: n.id, phone: n.display_phone_number, name: n.verified_name, platform: n.platform_type,
     }));
 
+    // 5) ARRANCAR LA SINCRONIZACIÓN. No es opcional y no es por el histórico: Meta invalida el
+    // onboarding entero si el partner no la inicia dentro de 24 h ("otherwise they must be
+    // offboarded and they must complete the flow again"). Sin esto el cliente escanea, todo parece
+    // ir bien, y al día siguiente se cae y hay que repetirle el proceso.
+    // Que RECIBAMOS los datos es otra cosa: el webhook `history` no tiene handler, así que lo que
+    // Meta envíe se descarta sin persistir. Iniciar ≠ guardar.
+    const sync = [];
+    for (const n of numbers) {
+      for (const sync_type of ["smb_app_state_sync", "history"]) {
+        try {
+          await axios.post(`${api}/${n.id}/smb_app_data`,
+            { messaging_product: "whatsapp", sync_type }, auth);
+          sync.push({ phone_id: n.id, sync_type, ok: true });
+        } catch (err) {
+          const why = err.response?.data?.error?.message || err.message;
+          sync.push({ phone_id: n.id, sync_type, ok: false, error: why });
+          console.error(`[${PROJECT_NAME}] ⚠️  sync ${sync_type} FALLÓ en ${n.id}: ${why}`);
+        }
+      }
+    }
+    const syncFailed = sync.filter((s) => !s.ok);
+
     // Log con IDs, nunca con el token ni el code.
     console.log(`[${PROJECT_NAME}] Embedded Signup OK — WABA ${wabaId}, app suscrita, números: ${
       numbers.map((n) => `${n.phone} (${n.id}${n.platform ? `, ${n.platform}` : ""})`).join(" · ") || "(ninguno todavía)"}`);
     console.log(`[${PROJECT_NAME}]   → implicaciones aceptadas por el cliente: ${acceptedAt}`);
+    console.log(`[${PROJECT_NAME}]   → sync: ${sync.filter((s) => s.ok).length}/${sync.length} OK`);
+    if (syncFailed.length) {
+      console.error(`[${PROJECT_NAME}] 🔴 QUEDAN <24h PARA REINTENTAR EL SYNC o hay que offboardear y repetir el flujo`);
+    }
     console.log(`[${PROJECT_NAME}]   → pega ese phone id en WHATSAPP_PHONE_ID (Railway) para que el bot conteste por ese número`);
 
-    res.json({ ok: true, waba_id: wabaId, numbers });
+    // El onboarding en sí ya está hecho: un sync fallido no se arregla tirando la conexión, se
+    // arregla reintentando dentro de la ventana. Por eso va como aviso y no como error.
+    res.json({ ok: true, waba_id: wabaId, numbers, sync_ok: syncFailed.length === 0 });
   } catch (e) {
     const detail = e.response?.data?.error?.message || e.message;
     console.error(`[${PROJECT_NAME}] Embedded Signup falló: ${detail}`);
