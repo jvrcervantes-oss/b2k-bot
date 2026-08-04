@@ -96,13 +96,14 @@ for g in gaps:
 open(os.path.join(os.path.dirname(__file__),"qa_convos.json"),"w",encoding="utf-8").write(json.dumps(convos,ensure_ascii=False,indent=0))
 
 # --- CONTRADICCIONES: lo que el context NO puede decir -------------------------------------------
-# El coche de apoyo y las comidas son del suplemento GUIADO (+550), nunca de un paquete. Esto ya se
-# corrigió el 24-jul-2026 y volvió a aparecer el 4-ago en 7 sitios (descripción de Deluxe, "ONLY on
+# Guía, MECÁNICO, coche de apoyo y comidas son del suplemento GUIADO (+550, min. 6 riders), nunca de
+# un paquete: en el viaje estándar el cliente va SOLO (confirmado por el owner el 4-ago-2026). Esto ya
+# se corrigió el 24-jul y volvió a aparecer el 4-ago en 7 sitios (descripción de Deluxe, "ONLY on
 # Deluxe", cabecera de EXAMPLES, luggage, safety...): el bot cotizaba Deluxe a 3.750 CON support car,
-# que es una venta falsa. Regla mecánica en vez de otra frase de prosa: cualquier línea que nombre el
-# coche de apoyo o "all meals" tiene que nombrar en la MISMA línea el guiado o el +550.
-NEEDS_GUIDED = re.compile(r"support car|support vehicle|all meals", re.I)
-HAS_GUIDED   = re.compile(r"guided|550", re.I)
+# que es una venta falsa. Regla mecánica en vez de otra frase de prosa: cualquier línea que nombre a
+# uno de los cuatro tiene que calificarlo en la MISMA línea — el guiado, el +550, o decir que NO va.
+NEEDS_GUIDED = re.compile(r"support car|support vehicle|all meals|mechanic", re.I)
+HAS_GUIDED   = re.compile(r"guided|550|nobody|no mechanic|no guide|not in", re.I)
 lines = open(os.path.join(os.path.dirname(__file__),"..","context.md"), encoding="utf-8").read().splitlines()
 bad = [(i+1, l.strip()[:120]) for i, l in enumerate(lines) if NEEDS_GUIDED.search(l) and not HAS_GUIDED.search(l)]
 print()
