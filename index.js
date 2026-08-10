@@ -4033,6 +4033,10 @@ app.post("/onboarding/exchange", async (req, res) => {
   if (!META_APP_ID || !META_APP_SECRET) return res.status(503).json({ error: "faltan META_APP_ID/META_APP_SECRET en el entorno" });
   const code = String(req.body?.code || "").trim();
   if (!code) return res.status(400).json({ error: "falta el code de la sesión" });
+  // Diagnóstico 10-ago: de dónde viene la llamada, para saber si el navegador de Dion abre /onboarding
+  // en un webview in-app (WhatsApp/Instagram) que degrada FB.login() a redirect y ata el code a una
+  // redirect_uri real de página, en vez del popup normal. Nunca loguea el code ni el token.
+  console.log(`[${PROJECT_NAME}] Embedded Signup intento — referer: ${req.get("referer") || "(ninguno)"} · UA: ${req.get("user-agent") || "(ninguno)"}`);
 
   // El cliente acepta las implicaciones ANTES de conectar (secciones 1-10 de onboarding.html:
   // pérdida de WhatsApp for Windows, difusiones off, coste por mensaje, 6 meses de histórico al
@@ -4112,8 +4116,11 @@ app.post("/onboarding/exchange", async (req, res) => {
     // arregla reintentando dentro de la ventana. Por eso va como aviso y no como error.
     res.json({ ok: true, waba_id: wabaId, numbers, sync_ok: syncFailed.length === 0 });
   } catch (e) {
-    const detail = e.response?.data?.error?.message || e.message;
-    console.error(`[${PROJECT_NAME}] Embedded Signup falló: ${detail}`);
+    const metaErr = e.response?.data?.error;
+    const detail = metaErr?.message || e.message;
+    // code/error_subcode/fbtrace_id localizan la causa real en un caso — nunca contienen el secret
+    // ni el code ni el token, son metadatos del propio error de Graph API.
+    console.error(`[${PROJECT_NAME}] Embedded Signup falló: ${detail} — code=${metaErr?.code} subcode=${metaErr?.error_subcode} type=${metaErr?.type} fbtrace_id=${metaErr?.fbtrace_id}`);
     res.status(502).json({ error: detail });
   }
 });
