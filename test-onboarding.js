@@ -83,11 +83,11 @@ assert.ok(server.includes("smb_app_data"), "falta arrancar el sync: Meta invalid
 });
 assert.ok(/sync_ok/.test(server), "el canje debe informar de si el sync salió bien, para reintentar dentro de la ventana");
 
-// 10-ago-2026: sin redirect_uri en el canje, Meta lo rechaza con "Error validating verification
-// code" aunque el popup de FB.login() se complete bien. Tiene que ir en la misma llamada al
-// oauth/access_token, no solo declarado en el dashboard.
-assert.ok(/oauth\/access_token[\s\S]{0,200}redirect_uri:\s*ES_REDIRECT_URI/.test(server),
-  "el canje del code debe mandar redirect_uri, o Meta lo rechaza");
+// 10-ago-2026: se probó a mandar redirect_uri en el canje (subcode 36008 apuntaba ahí) y Meta lo
+// rechazó igual — el valor no coincidía con lo que usa internamente el popup de FB.login(). Revertido:
+// la doc oficial de Business Integration System User Access Token no lo lleva, solo client_id/secret/code.
+assert.ok(!/oauth\/access_token[\s\S]{0,200}redirect_uri/.test(server),
+  "el canje NO debe mandar redirect_uri (probado y descartado 10-ago, ver memoria del proyecto)");
 
 console.log("OK — waba_id a prueba de postMessage perdido, página sin placeholders, y el connect "
   + `cerrado tras ${checkboxes} aceptaciones (front y servidor)`);

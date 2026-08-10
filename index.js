@@ -3994,12 +3994,6 @@ app.delete("/admin/api/appts/:id", async (req, res) => {
 // de 24 h o Meta invalida el onboarding y el cliente tiene que repetir el flujo entero. Iniciar es
 // obligatorio, recibir es opcional. Se hace en el paso 5 de /onboarding/exchange.
 const ES_GRAPH = "v25.0"; // el ES v4 pide versión reciente; el resto del motor sigue en v21.0
-// Tiene que ser CARÁCTER A CARÁCTER la misma URL que "Valid OAuth Redirect URIs" en el dashboard de
-// Meta (Facebook Login for Business → Settings → Client OAuth Settings de la app META_APP_ID) — sin
-// esto el canje del `code` en /onboarding/exchange falla con "Error validating verification code.
-// Please make sure your redirect_uri is identical..." aunque el popup de FB.login() se complete bien
-// (10-ago-2026: el popup no usa esta URL para nada visible, pero Meta la exige igual al canjear).
-const ES_REDIRECT_URI = "https://b2k-bot-production-5498.up.railway.app/onboarding";
 
 const onboardingFileName = "onboarding.html";
 const ONBOARDING_HTML = fs.existsSync(onboardingFileName)
@@ -4052,7 +4046,7 @@ app.post("/onboarding/exchange", async (req, res) => {
     // 1) code → token de negocio. Ese token NO se persiste: solo se usa aquí para suscribir la app.
     // El bot sigue mensajeando con el System User token del negocio del cliente (WHATSAPP_TOKEN).
     const { data: tok } = await axios.get(`${api}/oauth/access_token`, {
-      params: { client_id: META_APP_ID, client_secret: META_APP_SECRET, code, redirect_uri: ES_REDIRECT_URI },
+      params: { client_id: META_APP_ID, client_secret: META_APP_SECRET, code },
     });
     const businessToken = tok?.access_token;
     if (!businessToken) return res.status(502).json({ error: "Meta no devolvió token en el canje" });
