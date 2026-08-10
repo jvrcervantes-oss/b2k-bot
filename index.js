@@ -27,6 +27,7 @@ const {
   BOT_CONTEXT,
   BOT_MODEL,
   BOT_VERTICAL,            // "tour" (default) o "rental" — selecciona el bloque de cierre en BASE_INSTRUCTIONS
+  HUMAN_ONLY,              // "1"/"true": el bot nunca genera respuesta con IA, todo lead entra pausado desde el primer mensaje y se avisa al OWNER_PHONE una vez por lead nuevo. Para bots que arrancan sin persona todavía.
   BOT_PERSONA_NAME,        // nombre de la persona del bot (default "Daniel" = B2K); BBM debe definir el suyo
   OPENAI_API_KEY,          // opcional: activa la transcripción de notas de voz (Whisper); sin ella se pide el texto
   CONTEXT_FILE,            // nombre del archivo de contexto a cargar del repo (default "context.md")
@@ -68,6 +69,13 @@ const {
 // JSON.parse("") una vez por mensaje ("Error guardando lead — HTTP ?: Unexpected end of JSON
 // input", visto en producción de BBM el 23-jul) mientras el arranque decía "desactivado".
 const SHEET_SYNC = (CRM_SHEET_SYNC === "1" || CRM_SHEET_SYNC === "true") && !!SHEET_ID && !!GOOGLE_SERVICE_ACCOUNT;
+
+// HUMAN_ONLY: ningún lead llega a la IA. Se reusa la puerta isPaused ya existente
+// (control humano por lead) forzándola true para todos — así el resto del motor
+// (panel, "por responder", CRM) no cambia. Lo que sí hay que añadir aparte es el
+// aviso al owner: la puerta de pausa asume que un humano YA está mirando esa
+// conversación (la pausó él a mano); en HUMAN_ONLY nadie la está mirando todavía.
+const HUMAN_ONLY_MODE = HUMAN_ONLY === "1" || HUMAN_ONLY === "true";
 
 const stripeClient = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
@@ -1785,10 +1793,11 @@ app.post("/webhook", async (req, res) => {
       await setInbound(from, Date.now());
       await resetFollowup(from);
       const prev = await getLead(from);
-      if (await isPaused(from)) {
+      if (HUMAN_ONLY_MODE || await isPaused(from)) {
         await saveConversation(from, history);
         await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "interested", label, "client");
         await setWaiting(from, true);
+        if (HUMAN_ONLY_MODE && !prev) await notifyOwner("new", { name: profileName, phone: from, lastMessage: label });
         return;
       }
       markRead(message.id); // best-effort
@@ -1844,15 +1853,16 @@ app.post("/webhook", async (req, res) => {
       console.log(`[${PROJECT_NAME}] Datos de formulario IG capturados para ${from}: ${Object.keys(formFields).join(", ")}`);
     }
 
-    // ── Control humano: si el bot está en pausa para este lead, guarda y calla ──
-    if (await isPaused(from)) {
+    // ── Control humano: si el bot está en pausa para este lead (o HUMAN_ONLY_MODE global), guarda y calla ──
+    if (HUMAN_ONLY_MODE || await isPaused(from)) {
       await saveConversation(from, history);
       const prev = await getLead(from);
       await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "interested", text, "client");
       await setInbound(from, Date.now());
       await resetFollowup(from);    // respondió → reinicia la cadencia de seguimiento
       await setWaiting(from, true); // el cliente espera respuesta humana → marcar en el panel
-      console.log(`[${PROJECT_NAME}] Lead ${from} en pausa (control humano) — mensaje guardado, bot NO responde`);
+      if (HUMAN_ONLY_MODE && !prev) await notifyOwner("new", { name: profileName, phone: from, lastMessage: text });
+      console.log(`[${PROJECT_NAME}] Lead ${from} en pausa (${HUMAN_ONLY_MODE ? "HUMAN_ONLY" : "control humano"}) — mensaje guardado, bot NO responde`);
       return;
     }
 
@@ -2743,6 +2753,7 @@ app.listen(PORT, async () => {
   // modelo de un servicio exigía leer las variables de Railway; ahora sale en el arranque.
   console.log(`[${PROJECT_NAME}] Modelo: ${MODEL}${BOT_MODEL ? "" : "  ⚠️  BOT_MODEL sin definir → default del código"}`);
   console.log(`[${PROJECT_NAME}] OWNER_PHONE: ${OWNER_PHONE ? normalizePhone(OWNER_PHONE) : "⚠️  NO CONFIGURADO"}`);
+  if (HUMAN_ONLY_MODE) console.log(`[${PROJECT_NAME}] 🙋 HUMAN_ONLY activo — la IA no responde a ningún lead, todo pasa por el panel${OWNER_PHONE ? "" : " (⚠️ y OWNER_PHONE está vacío: no se avisará de leads nuevos)"}`);
   console.log(`[${PROJECT_NAME}] CRM (BD): ${redisClient ? "Redis (persistente)" : "RAM (volátil — configura REDIS_URL)"}`);
   console.log(`[${PROJECT_NAME}] Firma webhook: ${META_APP_SECRET ? "🟢 X-Hub-Signature-256 activa" : "⚠️  SIN verificar — añade META_APP_SECRET en Railway"}`);
   console.log(`[${PROJECT_NAME}] Email (Brevo): ${MAIL_READY ? "🟢 listo" : `⚠️  NO configurado → BREVO_API_KEY=${BREVO_API_KEY ? "ok" : "FALTA"}, MAIL_FROM=${MAIL_FROM ? "ok" : "FALTA"}`}`);

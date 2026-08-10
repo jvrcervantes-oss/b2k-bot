@@ -15,10 +15,19 @@ más parecido.
 |-----|------|-------------------------------|--------------|----------|--------------|------------|-----|
 | **Bali Moto Adventures (B2K)** | `b2k` | b2k-bot (`0347015a-…`) | Bali Moto Adventures | tour *(default)* | `context.md` *(default)* | `panel.html` *(default)* | https://b2k-bot-production.up.railway.app |
 | **Bali Best Motorcycle (BBM)** | `balibest` | bbm-bot (`bcd4b2a6-…`) | BaliBest | `rental` | `context-balibest.md` | `panel-rental.html` | https://b2k-bot-production-5498.up.railway.app |
+| **Lawang + Sumba Hills** (un solo número, dos campañas) | `lawang` | *(por crear)* | Lawang | *(sin definir — `PLAYBOOK_FILE=playbook-lawang.json` lo sustituye, closeStyle `appointment` cae en los bloques TOUR_* built-in, igual que sumbahills)* | `context-lawang.md` | `panel-rental.html` | — |
 | `bnb-bot` (`c26007ad-…`) | ? | **entorno de pruebas del owner — NO tocar** | — | — | — | — | uso interno de testeo |
 
 `main` = rama **base común**. NO la despliega ningún servicio; es donde se integran cambios comunes del
-motor que luego se mergean a `b2k` y `balibest`. Ambas van por delante de `main`.
+motor que luego se mergean a `b2k`, `balibest` y `lawang`. Las tres van por delante de `main`.
+
+**`lawang` nace de `origin/sumbahills`, no de `main`** (30-jul-2026, sesión previa: `context-sumbahills.md` +
+`playbook-sumbahills.json` + el mecanismo `PLAYBOOK_FILE` ya vivían ahí, sin desplegar). El número
+`+62 811-3830-5237` sirve las dos campañas (Bali/Lawang y Sumba Hills) — un número, un webhook, un
+servicio: no se puede repartir en dos ramas. `context-lawang.md` cubre ambas marcas y remite a
+`context-sumbahills.md` para el detalle de Sumba en vez de duplicarlo. **`HUMAN_ONLY=1`** arranca este bot
+sin IA — todo lead entra pausado desde el primer mensaje (misma puerta que el control humano por-lead) y
+se avisa una vez al `OWNER_PHONE` por lead nuevo. Se quita cuando el owner quiera activar la persona.
 
 ## Antes de EDITAR un archivo de bot (preflight — evita tocar el bot equivocado)
 1. **¿Qué bot?** Mira la tabla: su rama y qué `CONTEXT_FILE`/`PANEL_FILE` usa **ese** servicio.

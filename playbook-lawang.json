@@ -1,0 +1,24 @@
+{
+  "_comentario": "Vertical inmobiliario compartido por las DOS campanas que llegan a este numero (Bali/Lawang villas y Sumba Hills terreno) — un solo playbook porque solo hay un CONTEXT_FILE. Se carga con PLAYBOOK_FILE=playbook-lawang.json y no toca el motor: es config, no codigo. closeStyle appointment porque el cierre es una visita fisica. Los 'canned' sirven igual bajo HUMAN_ONLY: son botones de respuesta rapida en el panel, no dependen de que la IA este activa.",
+  "closeStyle": "appointment",
+  "dealIdField": "interest",
+  "dealFields": ["campaign", "interest", "visitDate", "stayingAt", "dealValue"],
+  "keyFields": ["email", "country", "campaign", "interest", "onIsland", "visitDate", "stayingAt"],
+  "enrichTextFields": ["name", "email", "country", "campaign", "interest", "onIsland", "visitDate", "stayingAt", "leavesOn"],
+  "enrichNumberFields": [],
+  "enrichSystem": "You extract CRM fields from a WhatsApp chat for a Bali/Indonesia property developer that runs two campaigns on this one number. Return ONLY a compact JSON object - no prose, no code fences. Keys: name, email, country, campaign (\"bali\" | \"sumba\" | null - which project the lead is about, from what they say or which ad they mention), interest (\"villa\" | \"land\" | \"info\"), onIsland (\"yes\" | \"no\" | null - is the lead physically in Bali or Sumba right now), visitDate (free text), stayingAt (free text, hotel or area), leavesOn (free text). Use null for anything not clearly stated. Never guess.",
+  "canned": [
+    { "title": "Saludo (generico)", "text": "Hi! Thanks for reaching out to Lawang. Are you in Bali or in Sumba right now?" },
+    { "title": "Saludo Bali", "text": "Hi! Thanks for your interest in the Dali villa. Are you in Bali right now?" },
+    { "title": "Saludo Sumba", "text": "Hi! Thanks for reaching out about Sumba Hills. Are you on the island right now?" },
+    { "title": "Proponer visita", "text": "If you're here, the best thing is to come and see it yourself. When are you free, and where are you staying?" },
+    { "title": "El render (Sumba)", "text": "Fair question - the images in the ad are renders of what's being built. The land, the coast and the earthworks are real, and you can walk them today." },
+    { "title": "Precio Bali (Dali)", "text": "The Dali villa starts from 69,000 EUR, land + turnkey villa. That's the only figure I can confirm right now - the team goes through the rest on the visit." },
+    { "title": "Precio Sumba", "text": "Beachfront plots start at 29,900 EUR. The exact figure for a specific plot comes from the team, on the visit or by email." },
+    { "title": "Sin regimen", "text": "It depends on the specific property, and the team goes through it with the document in hand - it's the first thing they cover on the visit." },
+    { "title": "No esta en la isla", "text": "No problem. Leave me your email and I'll make sure the team follows up. When do you expect to be here?" },
+    { "title": "Pedir datos", "text": "To get the visit confirmed I just need your name and email, and where you're staying." }
+  ],
+  "helpWith": "your visit to Lawang or Sumba Hills",
+  "deposit": null
+}
