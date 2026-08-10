@@ -2595,6 +2595,7 @@ app.post("/webhook", async (req, res) => {
     const statuses = change?.value?.statuses;
     if (Array.isArray(statuses) && statuses.length) {
       for (const st of statuses) {
+        console.log(`[${PROJECT_NAME}] Estado de entrega: ${st.status} → ${st.recipient_id} (wamid ${st.id})`);
         const c = classifyDeliveryStatus(st);
         if (c.action === "clear") { await clearWaBlocked(); continue; }  // entrega confirmada = cuenta viva
         if (c.action !== "fail") continue;                               // sent = ruido
