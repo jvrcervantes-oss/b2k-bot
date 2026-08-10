@@ -3228,6 +3228,15 @@ function mdToHtml(text) {
   flushPara(); closeList();
   return html;
 }
+// Sustituye {{nombre}} / {{empresa}} en el asunto/cuerpo del compositor propio, por destinatario.
+// {{empresa}} solo sale de dato real guardado (operadores B2B traen `company` de la agenda);
+// nunca se infiere del dominio del email — un adivinado mal puede llegar a un cliente real.
+function personalize(text, name, company) {
+  const firstName = (name || "").trim().split(/\s+/)[0] || "there";
+  return String(text || "")
+    .replace(/\{\{\s*nombre\s*\}\}/gi, firstName)
+    .replace(/\{\{\s*empresa\s*\}\}/gi, company || "");
+}
 // Envoltorio de marca del email (cabecera + cuerpo + pie legal con baja).
 function renderEmailHtml(bodyHtml, unsub) {
   const brand = escHtml(PROJECT_NAME || "Newsletter");
@@ -3363,9 +3372,9 @@ app.get("/unsubscribe", async (req, res) => {
 // dataset "operators" = BD B2B separada, identificados por id, sin timeline (no hay conversación).
 const NL_DATASETS = new Set(["leads", "operators", "tao", "subscribers"]);
 async function runCampaign({ subject, body, templateId, phones, ids, dataset, host }) {
-  const buildFor = (email, name) => templateId
-    ? { to: email, name, templateId, params: { unsub: unsubUrl(host, email), name: name || "", email } }
-    : { to: email, subject, html: renderEmailHtml(mdToHtml(body), unsubUrl(host, email)) };
+  const buildFor = (email, name, company) => templateId
+    ? { to: email, name, templateId, params: { unsub: unsubUrl(host, email), name: name || "", email, company: company || "" } }
+    : { to: email, subject: personalize(subject, name, company), html: renderEmailHtml(mdToHtml(personalize(body, name, company)), unsubUrl(host, email)) };
   // "operators" = agenda B2B de siempre · "tao" = Travel Adventures Operators. Misma ficha y
   // mismo trato (id, sin timeline), distinta lista: por eso `isOperators` cubre a las dos.
   const opsDb = dataset === "operators" ? "ops" : (dataset === "tao" ? "tao" : null);
@@ -3383,12 +3392,14 @@ async function runCampaign({ subject, body, templateId, phones, ids, dataset, ho
     const email = String(l.email || "").toLowerCase().trim();
     if (!EMAIL_RE.test(email) || unsub.has(email) || seen.has(email)) continue;
     seen.add(email);
-    recipients.push({ key, email, name: isSubs ? "" : ((isOperators ? (l.contact || l.company) : l.name) || "") });
+    const name = isSubs ? "" : ((isOperators ? (l.contact || l.company) : l.name) || "");
+    const company = isOperators ? (l.company || "") : "";
+    recipients.push({ key, email, name, company });
   }
   const label = templateId ? `template#${templateId}` : subject;
   let sent = 0, failed = 0;
   for (const r of recipients) {
-    const out = await sendEmail(buildFor(r.email, r.name));
+    const out = await sendEmail(buildFor(r.email, r.name, r.company));
     // logEvent solo aplica a leads (tienen timeline por phone); operadores/suscriptores no.
     if (out.ok) { sent++; if (!isOperators && !isSubs) await logEvent(r.key, "newsletter", { subject: label }); }
     else { failed++; console.warn(`[${PROJECT_NAME}] newsletter fallo a ${r.email}: ${out.error}`); }
@@ -3449,8 +3460,8 @@ app.post("/admin/api/newsletter", async (req, res) => {
   if (testTo) {
     if (!EMAIL_RE.test(testTo)) return res.status(400).json({ error: "email de prueba inválido" });
     const one = templateId
-      ? { to: testTo, templateId, params: { unsub: unsubUrl(host, testTo), name: "", email: testTo } }
-      : { to: testTo, subject, html: renderEmailHtml(mdToHtml(body), unsubUrl(host, testTo)) };
+      ? { to: testTo, templateId, params: { unsub: unsubUrl(host, testTo), name: "", email: testTo, company: "" } }
+      : { to: testTo, subject: personalize(subject, "", ""), html: renderEmailHtml(mdToHtml(personalize(body, "", "")), unsubUrl(host, testTo)) };
     const r = await sendEmail(one);
     return r.ok ? res.json({ ok: true, test: true }) : res.status(502).json({ error: r.error });
   }
