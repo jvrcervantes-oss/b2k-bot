@@ -480,8 +480,8 @@
   @media(max-width:900px){.cal-side{display:none}}
 
   /* ── modal ── */
-  .modal{position:fixed;inset:0;background:rgba(10,16,28,.55);display:flex;align-items:center;justify-content:center;z-index:40}
-  .modal-box{background:#fff;border-radius:16px;padding:26px;width:360px;box-shadow:0 30px 70px -30px rgba(0,0,0,.6)}
+  .modal{position:fixed;inset:0;background:rgba(10,16,28,.55);display:flex;align-items:center;justify-content:center;z-index:40;padding:24px;box-sizing:border-box}
+  .modal-box{background:#fff;border-radius:16px;padding:26px;width:360px;max-width:100%;max-height:100%;overflow:auto;box-shadow:0 30px 70px -30px rgba(0,0,0,.6)}
   .modal-box h3{font-size:18px;font-weight:700;margin-bottom:10px}
   .modal-box label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin:10px 0 5px}
   .modal-box input,.modal-box select,.modal-box textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:14px;outline:none;font-family:inherit;box-sizing:border-box}
