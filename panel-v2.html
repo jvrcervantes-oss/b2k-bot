@@ -343,7 +343,7 @@ table.leadstbl{width:100%;border-collapse:collapse}
       <span class="ttl" id="viewTitle">Resumen</span>
       <button class="iconbtn"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 11h8l-1-1.6V7a3 3 0 0 0-6 0v2.4z"/><path d="M6.8 13.2h2.4"/></svg></button>
       <button class="btn"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 10V3"/><path d="M5.3 5.4L8 2.6l2.7 2.8"/><path d="M3 10.5V13h10v-2.5"/></svg>Exportar</button>
-      <button class="btn dark">+ Nuevo lead</button>
+      <button class="btn dark" onclick="newLeadFlow()">+ Nuevo lead</button>
     </div>
 
     <!-- ---------- OVERVIEW ---------- -->
@@ -396,7 +396,7 @@ table.leadstbl{width:100%;border-collapse:collapse}
         </div>
       </div>
 
-      <div class="sechd"><span class="t">Leads que necesitan atención<span style="font-weight:400;color:var(--muted);font-size:13px;margin-left:8px">(ejemplos ilustrativos, no clientes reales)</span></span><span class="a" onclick="go('leads')">Ver todos los leads &rarr;</span></div>
+      <div class="sechd"><span class="t">Leads que necesitan atención</span><span class="a" onclick="go('leads')">Ver todos los leads &rarr;</span></div>
       <div class="card tblcard">
         <div class="tblhead"><span>Lead</span><span>Interés</span><span>Esperando</span><span>Valor</span><span></span></div>
         <div id="leadsTbl"></div>
@@ -413,8 +413,8 @@ table.leadstbl{width:100%;border-collapse:collapse}
         <div class="threadhd" id="threadHd"></div>
         <div class="msgs" id="threadMsgs"></div>
         <div class="composer">
-          <div class="fake">Escribe un mensaje de WhatsApp&hellip;</div>
-          <button class="send">Enviar</button>
+          <input id="composerInput" class="fake" style="border:1px solid var(--border);font-family:inherit" placeholder="Escribe un mensaje de WhatsApp…" onkeydown="if(event.key==='Enter')sendMessage()">
+          <button class="send" onclick="sendMessage()">Enviar</button>
         </div>
       </div>
     </div>
@@ -458,8 +458,6 @@ table.leadstbl{width:100%;border-collapse:collapse}
 const CB='#3767B1', CO='#E9A23B', CG='#2F9E77', CV='#8B7BE8', GR='#A3A39E';
 const RED='var(--red)', GREEN='var(--green)';
 
-// -------- real B2K catalog: Bali↔Komodo tour, 3 packages --------
-const PKG = { Roundtrip:{price:3200,tag:'Roundtrip'}, Extreme:{price:3950,tag:'Extreme'}, Deluxe:{price:4300,tag:'Deluxe'} };
 const fmt = n => '$' + n.toLocaleString('en-US');
 
 // ======================================================================
@@ -501,64 +499,44 @@ function buildChannels(){
   }));
 }
 
-const leadsData = [
-  {ini:'MG',abg:CB,name:'Marta Gómez',status:'Esperando respuesta',dot:CO,tour:'Roundtrip · 4 riders',wait:'hace 26 h',val:fmt(4*PKG.Roundtrip.price*0.1),act:'Responder',estado:'Cotizado',edot:CO},
-  {ini:'JW',abg:CO,name:'James Whitaker',status:'Seguimiento vencido',dot:RED,tour:'Extreme · 2 riders',wait:'venció ayer',val:fmt(2*PKG.Extreme.price*0.1),act:'Revisar',estado:'Cotizado',edot:CO},
-  {ini:'FB',abg:CG,name:'Familie Bauer',status:'Esperando respuesta',dot:CO,tour:'Deluxe · 3 riders',wait:'hace 31 h',val:fmt(3*PKG.Deluxe.price*0.1),act:'Responder',estado:'Cotizado',edot:CO},
-  {ini:'CD',abg:CV,name:'Claire Dubois',status:'Sin cotización',dot:CB,tour:'Roundtrip · 2 riders',wait:'hace 3 h',val:fmt(2*PKG.Roundtrip.price*0.1),act:'Cotizar',estado:'Nuevo',edot:CB}
-];
-
-const chatData = [
-  {ini:'MG',abg:CB,name:'Marta Gómez',last:'¿Sigue el hueco del 24 al 28?',time:'10:24',unread:2,meta:'Roundtrip · 4 riders · '+fmt(1280),msgs:[
-    {text:'Hola! Vimos el tour Bali–Komodo en Instagram. ¿Tenéis para 4 personas del 24 al 28?',time:'10:02',mine:false},
-    {text:'¡Hola Marta! Sí, quedan plazas esas fechas. El Roundtrip son $3.200 por persona, todo incluido menos vuelos internos. Con depósito de $1.000 se reserva.',time:'10:05',mine:true,tag:'Daniel'},
-    {text:'Genial, ¿el depósito es reembolsable?',time:'10:18',mine:false},
-    {text:'¿Sigue el hueco del 24 al 28?',time:'10:24',mine:false}]},
-  {ini:'JW',abg:CO,name:'James Whitaker',last:'Perfect, send me the deposit link',time:'09:51',unread:1,meta:'Extreme · 2 riders · '+fmt(790),msgs:[
-    {text:'Hi! Is the Extreme route running in September?',time:'09:44',mine:false},
-    {text:'Hi James! Yes, September has 3 departures left. $3,950 per rider, extra off-road days included.',time:'09:48',mine:true,tag:'Daniel'},
-    {text:'Perfect, send me the deposit link',time:'09:51',mine:false}]},
-  {ini:'FB',abg:CG,name:'Familie Bauer',last:'Danke! Wir sind zu dritt',time:'ayer',unread:0,meta:'Deluxe · 3 riders · '+fmt(1290),msgs:[
-    {text:'Guten Tag! Wir möchten die Deluxe-Tour buchen, drei Fahrer.',time:'ayer 18:12',mine:false},
-    {text:'Hallo! Sehr gern — Deluxe ist $4.300 pro Fahrer, mit Bootstransfer Komodo inklusive.',time:'ayer 18:20',mine:true,tag:'Daniel'},
-    {text:'Danke! Wir sind zu dritt',time:'ayer 18:31',mine:false}]},
-  {ini:'CD',abg:CV,name:'Claire Dubois',last:'Le dépôt est remboursable ?',time:'ayer',unread:0,meta:'Roundtrip · 2 riders · '+fmt(640),msgs:[
-    {text:'Bonjour ! Le Roundtrip Bali–Komodo est-il disponible en octobre ?',time:'ayer 12:02',mine:false},
-    {text:'Bonjour Claire ! Oui, plusieurs départs en octobre. $3.200 par personne.',time:'ayer 12:15',mine:true,tag:'Daniel'},
-    {text:'Le dépôt est remboursable ?',time:'ayer 12:26',mine:false}]},
-  {ini:'DR',abg:CB,name:'Diego Ramos',last:'Gracias, nos vemos el sábado',time:'mié',unread:0,meta:'Extreme · 3 riders · '+fmt(1185),msgs:[
-    {text:'Confirmado el Extreme del sábado, ¿verdad?',time:'mié 17:02',mine:false},
-    {text:'¡Confirmado! Salida sábado 07:00 desde Ubud, 3 riders.',time:'mié 17:10',mine:true,tag:'Daniel'},
-    {text:'Gracias, nos vemos el sábado',time:'mié 17:12',mine:false}]}
-];
-
-const kanCols = [
-  {name:'Nuevo',dot:CB,cards:[
-    {ini:'CD',abg:CV,name:'Claire Dubois',tour:'Roundtrip · 2 riders',val:fmt(640),meta:'hace 3 h',estado:'Nuevo'},
-    {ini:'AK',abg:CO,name:'Anna Kowalska',tour:'Roundtrip · 2 riders',val:fmt(640),meta:'hace 5 h',estado:'Nuevo'},
-    {ini:'LP',abg:CG,name:'Luca Pellegrini',tour:'Extreme · 4 riders',val:fmt(1580),meta:'hace 9 h',estado:'Nuevo'}]},
-  {name:'Cotizado',dot:CO,cards:[
-    {ini:'MG',abg:CB,name:'Marta Gómez',tour:'Roundtrip · 4 riders',val:fmt(1280),meta:'esperando 26 h',estado:'Cotizado'},
-    {ini:'JW',abg:CO,name:'James Whitaker',tour:'Extreme · 2 riders',val:fmt(790),meta:'venció ayer',estado:'Cotizado'},
-    {ini:'FB',abg:CG,name:'Familie Bauer',tour:'Deluxe · 3 riders',val:fmt(1290),meta:'esperando 31 h',estado:'Cotizado'}]},
-  {name:'Ganado',dot:CG,cards:[
-    {ini:'SR',abg:CV,name:'Sofia Rossi',tour:'Roundtrip · 3 riders',val:fmt(960),meta:'pagado',estado:'Ganado'},
-    {ini:'TB',abg:CB,name:'Tom Becker',tour:'Extreme · 4 riders',val:fmt(1580),meta:'pagado',estado:'Ganado'},
-    {ini:'DR',abg:CG,name:'Diego Ramos',tour:'Extreme · 3 riders',val:fmt(1185),meta:'señal 50%',estado:'Ganado'}]},
-  {name:'Perdido',dot:GR,cards:[
-    {ini:'LO',abg:GR,name:"Liam O'Brien",tour:'Roundtrip · 2 riders',val:fmt(640),meta:'precio',estado:'Perdido'},
-    {ini:'YT',abg:GR,name:'Yuki Tanaka',tour:'Deluxe · 3 riders',val:fmt(1290),meta:'fechas',estado:'Perdido'}]},
-  {name:'No-show',dot:GR,cards:[
-    {ini:'PK',abg:GR,name:'Piotr Kowal',tour:'Roundtrip · 2 riders',val:fmt(640),meta:'no llegó a videollamada',estado:'No-show'}]}
-];
-
-const profiles = {
-  'Marta Gómez':{phone:'+34 612 33 41 78',email:'marta.gomez@gmail.com',pais:'España',origen:'Instagram',creado:'8 ago 2026',fecha:'Sáb 24 ago &rarr; Mié 28 ago'},
-  'James Whitaker':{phone:'+44 7700 900412',email:'j.whitaker@outlook.com',pais:'Reino Unido',origen:'Web directa',creado:'4 ago 2026',fecha:'Sept · 3 salidas disponibles'},
-  'Familie Bauer':{phone:'+49 171 555 0134',email:'bauer.familie@gmx.de',pais:'Alemania',origen:'Referido',creado:'6 ago 2026',fecha:'Por confirmar'},
-  'Claire Dubois':{phone:'+33 6 12 44 90 21',email:'claire.dubois@orange.fr',pais:'Francia',origen:'WhatsApp',creado:'10 ago 2026',fecha:'Octubre · por confirmar'}
-};
-const defaultProfile = {phone:'+34 6·· ·· ·· ··',email:'&mdash;',pais:'&mdash;',origen:'WhatsApp',creado:'ago 2026',fecha:'Por confirmar'};
+// ======================================================================
+// LEADS REALES — decisión explícita del owner (11-ago-2026): esta vista deja
+// de ser ilustrativa. `leads` se llena en boot() desde GET /admin/api/leads
+// (mismo endpoint que usa /admin real), con nombre/teléfono/email reales.
+// Las acciones de escritura (Marcar ganado, Agendar cita, Enviar, Nuevo lead)
+// llaman a los mismos endpoints que ya usa /admin a diario — no hay lógica
+// nueva de escritura, solo una segunda UI sobre el mismo backend auditado.
+// ======================================================================
+let leads = [];
+const AV_COLORS = [CB,CO,CG,CV];
+function hashColor(s){ let h=0; for(const c of String(s)) h=(h*31+c.charCodeAt(0))|0; return AV_COLORS[Math.abs(h)%AV_COLORS.length]; }
+function initials(name){
+  const parts = String(name||'').trim().split(/\s+/).filter(Boolean);
+  if(!parts.length) return '?';
+  return (parts[0][0]+(parts[1]?parts[1][0]:'')).toUpperCase();
+}
+const STATUS_LABEL = {'':'Nuevo', new:'Nuevo', quoted:'Cotizado', won:'Ganado', lost:'Perdido', noshow:'No-show'};
+const STATUS_DOT = {'':CB, new:CB, quoted:CO, won:CG, lost:'var(--red)', noshow:GR};
+function tourLine(l){
+  const bits=[l.tour||'Bali–Komodo'];
+  if(l.package) bits.push(l.package);
+  const pax=(parseInt(l.riders,10)||0)+(parseInt(l.pillions,10)||0);
+  if(pax) bits.push(pax+' pax');
+  return bits.join(' · ');
+}
+function waitStr(ms){
+  if(!ms) return '';
+  const h=(Date.now()-ms)/3600000;
+  if(h<1) return 'hace '+Math.max(1,Math.round(h*60))+' min';
+  if(h<48) return 'hace '+Math.round(h)+' h';
+  return 'hace '+Math.round(h/24)+' d';
+}
+function needsAttention(l){
+  if(l.archived || ['won','lost','noshow'].includes(l.status)) return false;
+  if(l.waiting && l.lastInboundAt && (Date.now()-l.lastInboundAt)>24*3600*1000) return true;
+  if(l.nextFollowUp){ const d=new Date(l.nextFollowUp).getTime(); if(!isNaN(d) && d<Date.now()) return true; }
+  return false;
+}
 
 // ================= render helpers =================
 function renderKpis(){
@@ -593,66 +571,97 @@ function renderRealStats(){
   document.getElementById('dotSub').textContent = (total60/60).toFixed(1) + ' media/día · ' + days60 + ' días con altas';
 }
 function renderLeadsTbl(){
-  document.getElementById('leadsTbl').innerHTML = leadsData.map((l,i)=>`
+  const attention = leads.filter(needsAttention)
+    .sort((a,b)=>(a.lastInboundAt||0)-(b.lastInboundAt||0))
+    .slice(0,8);
+  document.getElementById('leadsTbl').innerHTML = attention.map(l=>`
     <div class="tblrow">
       <div class="leadid">
-        <span class="av" style="background:${l.abg}">${l.ini}</span>
-        <div><div class="nm" onclick="openLeadByName('${l.name}')">${l.name}</div>
-          <span class="st"><span class="d" style="background:${l.dot}"></span>${l.status}</span></div>
+        <span class="av" style="background:${hashColor(l.phone)}">${initials(l.name||l.phone)}</span>
+        <div><div class="nm" onclick="openLead('${l.phone}')">${l.name||l.phone}</div>
+          <span class="st"><span class="d" style="background:${STATUS_DOT[l.status]||CB}"></span>${l.waiting?'Esperando respuesta':'Seguimiento vencido'}</span></div>
       </div>
-      <span class="tourpill">${l.tour}</span>
-      <span class="wait">${l.wait}</span>
-      <span class="val">${l.val}</span>
-      <button class="actbtn" onclick="openLeadByName('${l.name}')">${l.act}</button>
-    </div>`).join('');
+      <span class="tourpill">${tourLine(l)}</span>
+      <span class="wait">${waitStr(l.lastInboundAt)||'—'}</span>
+      <span class="val">${l.dealValue?fmt(parseInt(l.dealValue,10)):'—'}</span>
+      <button class="actbtn" onclick="openLead('${l.phone}')">Ver</button>
+    </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">Nada pendiente ahora mismo.</div>`;
 }
-let curChat = 0;
+let curChatPhone = null;
 function renderChats(){
+  const sorted = leads.filter(l=>!l.archived).sort((a,b)=>(b.lastInboundAt||b.updatedAt||0)-(a.lastInboundAt||a.updatedAt||0)).slice(0,40);
+  if(!curChatPhone && sorted.length) curChatPhone = sorted[0].phone;
   const list = document.getElementById('chatItems');
-  list.innerHTML = chatData.map((c,i)=>`
-    <div class="chatitem ${i===curChat?'on':''}" onclick="selectChat(${i})">
-      <span class="av" style="background:${c.abg}">${c.ini}</span>
+  list.innerHTML = sorted.map(c=>`
+    <div class="chatitem ${c.phone===curChatPhone?'on':''}" onclick="selectChat('${c.phone}')">
+      <span class="av" style="background:${hashColor(c.phone)}">${initials(c.name||c.phone)}</span>
       <div class="body">
-        <div class="l1"><span class="nm">${c.name}</span><span class="tm">${c.time}</span></div>
-        <div class="l2"><span class="last">${c.last}</span>${c.unread?`<span class="unread">${c.unread}</span>`:''}</div>
+        <div class="l1"><span class="nm">${c.name||c.phone}</span><span class="tm">${waitStr(c.lastInboundAt||c.updatedAt)}</span></div>
+        <div class="l2"><span class="last">${tourLine(c)}</span>${c.waiting?`<span class="unread">1</span>`:''}</div>
       </div>
     </div>`).join('');
   renderThread();
 }
-function renderThread(){
-  const c = chatData[curChat];
-  document.getElementById('threadHd').innerHTML = `
-    <span class="av" style="background:${c.abg}">${c.ini}</span>
+async function renderThread(){
+  const c = leads.find(l=>l.phone===curChatPhone);
+  const box = document.getElementById('threadHd');
+  const msgsBox = document.getElementById('threadMsgs');
+  if(!c){ box.innerHTML=''; msgsBox.innerHTML=''; return; }
+  box.innerHTML = `
+    <span class="av" style="background:${hashColor(c.phone)}">${initials(c.name||c.phone)}</span>
     <div style="flex:1;min-width:0">
-      <div style="display:flex;align-items:center;gap:9px"><span class="nm" onclick="openLeadByName('${c.name}')">${c.name}</span>
-        <span class="estpill"><span class="d"></span>Cotizado</span></div>
-      <div class="meta">${c.meta}</div>
+      <div style="display:flex;align-items:center;gap:9px"><span class="nm" onclick="openLead('${c.phone}')">${c.name||c.phone}</span>
+        <span class="estpill"><span class="d" style="background:${STATUS_DOT[c.status]||CB}"></span>${STATUS_LABEL[c.status]||'Nuevo'}</span></div>
+      <div class="meta">${tourLine(c)}</div>
     </div>
-    <button class="btn" style="padding:7px 14px">Cotizar</button>
-    <button class="btn" style="padding:7px 14px">Agendar</button>
-    <button class="btn dark" style="padding:8px 14px" onclick="openLeadByName('${c.name}')">Ver ficha</button>`;
-  document.getElementById('threadMsgs').innerHTML = `<div class="daychip">Hoy</div>` + c.msgs.map(m=>`
-    <div class="msgrow ${m.mine?'mine':''}">
-      <div class="bubble ${m.mine?'mine':'other'}">${m.tag?`<div class="tag">${m.tag}</div>`:''}${m.text}<div class="tm">${m.time}</div></div>
-    </div>`).join('');
+    <button class="btn dark" style="padding:8px 14px" onclick="openLead('${c.phone}')">Ver ficha</button>`;
+  msgsBox.innerHTML = `<div class="daychip">Cargando conversación real…</div>`;
+  try{
+    const r = await fetch('/admin/api/conv/'+encodeURIComponent(c.phone), { headers:{'X-Admin-Key':sessionKey} });
+    const conv = r.ok ? await r.json() : [];
+    msgsBox.innerHTML = (Array.isArray(conv)?conv:[]).slice(-60).map(m=>{
+      const mine = m.role==='assistant';
+      return `<div class="msgrow ${mine?'mine':''}"><div class="bubble ${mine?'mine':'other'}">${mine?'<div class="tag">Daniel</div>':''}${(m.content||'').toString().replace(/</g,'&lt;')}</div></div>`;
+    }).join('') || `<div class="daychip">Sin mensajes todavía</div>`;
+    msgsBox.scrollTop = msgsBox.scrollHeight;
+  }catch(e){ msgsBox.innerHTML = `<div class="daychip">No se pudo cargar la conversación</div>`; }
 }
-function selectChat(i){ curChat=i; renderChats(); }
+function selectChat(phone){ curChatPhone=phone; renderChats(); }
+async function sendMessage(){
+  const box = document.getElementById('composerInput');
+  const text = (box.value||'').trim();
+  if(!text || !curChatPhone) return;
+  box.disabled = true;
+  try{
+    const r = await fetch('/admin/api/send', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:curChatPhone, text}) });
+    if(!r.ok) throw new Error('send failed');
+    box.value = '';
+    await renderThread();
+  }catch(e){ alert('No se pudo enviar el mensaje.'); }
+  box.disabled = false; box.focus();
+}
 
 function renderKanban(){
+  const order = ['new','quoted','won','lost','noshow'];
+  const inCol = (l,st) => st==='new' ? (!l.status || l.status==='new') : l.status===st;
+  const cols = order.map(st=>({
+    st, name: STATUS_LABEL[st], dot: STATUS_DOT[st],
+    cards: leads.filter(l=>!l.archived && inCol(l,st))
+  }));
   let total=0, sumAll=0;
-  document.getElementById('kanban').innerHTML = kanCols.map(col=>{
-    const sum = col.cards.reduce((a,c)=>a+parseInt(c.val.replace(/\D/g,'')),0);
+  document.getElementById('kanban').innerHTML = cols.map(col=>{
+    const sum = col.cards.reduce((a,c)=>a+(parseInt(c.dealValue,10)||0),0);
     total += col.cards.length; sumAll += sum;
     return `<div class="kancol">
       <div class="hd"><span class="dot" style="background:${col.dot}"></span><span class="nm">${col.name}</span><span class="cnt">${col.cards.length}</span><span class="sum">${fmt(sum)}</span></div>
       <div class="kancards">
         ${col.cards.map(cd=>`
-          <div class="kancard" onclick="openLeadByName('${cd.name}')">
-            <div class="nm">${cd.name}</div>
-            <span class="tour">${cd.tour}</span>
-            <div class="foot"><span class="val">${cd.val}</span><span class="meta">${cd.meta}</span><span class="av" style="background:${cd.abg}">${cd.ini}</span></div>
+          <div class="kancard" onclick="openLead('${cd.phone}')">
+            <div class="nm">${cd.name||cd.phone}</div>
+            <span class="tour">${tourLine(cd)}</span>
+            <div class="foot"><span class="val">${cd.dealValue?fmt(parseInt(cd.dealValue,10)):'—'}</span><span class="meta">${waitStr(cd.updatedAt)}</span><span class="av" style="background:${hashColor(cd.phone)}">${initials(cd.name||cd.phone)}</span></div>
           </div>`).join('')}
-        <div class="addcard">+ Añadir lead</div>
+        <div class="addcard" onclick="newLeadFlow()">+ Añadir lead</div>
       </div>
     </div>`;
   }).join('');
@@ -660,56 +669,79 @@ function renderKanban(){
 }
 
 let curLead = null;
-function findLead(name){
-  return leadsData.find(l=>l.name===name) || chatData.find(c=>c.name===name) ||
-    kanCols.flatMap(c=>c.cards).find(c=>c.name===name);
-}
-function openLeadByName(name){
-  const base = findLead(name);
-  curLead = {
-    ini:base.ini, abg:base.abg, name:base.name,
-    tour: base.tour || base.meta.split(' &middot; ').slice(0,2).join(' · '),
-    val: base.val || (base.meta ? base.meta.split(' · ').pop() : '$0'),
-    estado: base.estado || 'Cotizado', edot: base.dot || CB
-  };
+function openLead(phone){
+  curLead = leads.find(l=>l.phone===phone);
+  if(!curLead) return;
   renderLead();
   go('lead');
 }
+function fmtHistTime(ts){ return ts ? new Date(ts).toLocaleString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : ''; }
+const HIST_LABEL = {created:'Lead creado',imported:'Importado',status:'Cambio de estado',owner:'Propietario asignado',appt:'Cita agendada',note:'Nota añadida',tag:'Etiqueta',archived:'Archivado',restored:'Restaurado',enriched:'Enriquecido desde el chat',payment:'Pago registrado',outreach:'Contacto iniciado'};
 function renderLead(){
-  const l = curLead || {ini:'MG',abg:CB,name:'Marta Gómez',tour:'Roundtrip · 4 riders',val:fmt(1280),estado:'Cotizado',edot:CO};
-  const p = profiles[l.name] || defaultProfile;
+  const l = curLead;
+  if(!l) return;
   document.getElementById('ldHero').innerHTML = `
-    <span class="av" style="background:${l.abg}">${l.ini}</span>
+    <span class="av" style="background:${hashColor(l.phone)}">${initials(l.name||l.phone)}</span>
     <div style="flex:1;min-width:0">
-      <div class="nm">${l.name}</div>
+      <div class="nm">${l.name||l.phone}</div>
       <div class="tags">
-        <span class="estpill"><span class="d" style="background:${l.edot}"></span>${l.estado}</span>
-        <span class="tourpill2">${l.tour}</span>
-        <span class="via">vía ${p.origen}</span>
+        <span class="estpill"><span class="d" style="background:${STATUS_DOT[l.status]||CB}"></span>${STATUS_LABEL[l.status]||'Nuevo'}</span>
+        <span class="tourpill2">${tourLine(l)}</span>
+        <span class="via">vía ${l.source||l.adSource||'WhatsApp'}</span>
       </div>
     </div>
     <div class="actions">
-      <button class="primary" onclick="go('chats')">Responder</button>
-      <button class="ghost">Agendar cita</button>
-      <button class="win">Marcar ganado</button>
+      <button class="primary" onclick="selectChat('${l.phone}');go('chats')">Responder</button>
+      <button class="ghost" onclick="scheduleApptFlow('${l.phone}')">Agendar cita</button>
+      <button class="win" onclick="markWonFlow('${l.phone}')">Marcar ganado</button>
     </div>`;
-  const datos = [['Teléfono',p.phone],['Email',p.email],['País',p.pais],['Origen',p.origen],['Creado',p.creado]];
+  const datos = [['Teléfono','+'+l.phone],['Email',l.email||'—'],['País',l.country||'—'],['Origen',l.source||l.adSource||'WhatsApp'],['Creado',fmtHistTime(l.createdAt)||'—']];
   document.getElementById('ldDatos').innerHTML = datos.map(([k,v])=>`<div class="ldrow"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('');
   document.getElementById('ldInteres').innerHTML = `
-    <div class="tour">${l.tour}</div>
-    <div class="fecha">${p.fecha}</div>
-    <div class="valwrap"><span class="valbig">${l.val}</span><span class="vallbl">valor estimado (depósito 10%)</span></div>`;
-  const tl = [
-    {dot:CO,title:'Mensaje recibido',time:'hoy 10:24',desc:'Esperando respuesta del equipo.'},
-    {dot:CB,title:'Cotización enviada por Daniel',time:'hoy 10:05',desc:l.val+' &middot; '+l.tour+'. Depósito $1.000, válido 48 h.'},
-    {dot:CG,title:'Primer contacto',time:'hoy 10:02',desc:'WhatsApp entrante desde '+p.origen+'.'},
-    {dot:CV,title:'Lead creado',time:p.creado,desc:'Alta automática en el pipeline &middot; asignado a Milad.'}
-  ];
-  document.getElementById('ldTimeline').innerHTML = tl.map((t,i)=>`
+    <div class="tour">${tourLine(l)}</div>
+    <div class="fecha">${l.travelDate||'Por confirmar'}</div>
+    <div class="valwrap"><span class="valbig">${l.dealValue?fmt(parseInt(l.dealValue,10)):'—'}</span><span class="vallbl">${l.dealValue?'importe cerrado':'sin cotizar todavía'}</span></div>`;
+  const hist = (Array.isArray(l.history)?l.history:[]).slice().reverse().slice(0,10);
+  document.getElementById('ldTimeline').innerHTML = hist.length ? hist.map((t,i)=>`
     <div class="tlrow">
-      <div class="tlrail"><span class="d" style="background:${t.dot}"></span>${i<tl.length-1?'<span class="line"></span>':''}</div>
-      <div class="tlbody"><div class="tltop"><span class="t">${t.title}</span><span class="tm">${t.time}</span></div><div class="tldesc">${t.desc}</div></div>
-    </div>`).join('');
+      <div class="tlrail"><span class="d" style="background:${hashColor(t.type)}"></span>${i<hist.length-1?'<span class="line"></span>':''}</div>
+      <div class="tlbody"><div class="tltop"><span class="t">${HIST_LABEL[t.type]||t.type}</span><span class="tm">${fmtHistTime(t.ts)}</span></div><div class="tldesc">${t.notes||t.title||''}</div></div>
+    </div>`).join('') : `<div style="padding:8px 0;color:var(--muted);font-size:13px">Sin actividad registrada.</div>`;
+}
+async function markWonFlow(phone){
+  if(!confirm('¿Marcar este lead como ganado?')) return;
+  try{
+    const r = await fetch('/admin/api/status', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, status:'won'}) });
+    if(!r.ok) throw 0;
+    await refreshLeads(); openLead(phone); renderKanban();
+  }catch(e){ alert('No se pudo actualizar el estado.'); }
+}
+async function scheduleApptFlow(phone){
+  const l = leads.find(x=>x.phone===phone);
+  const when = prompt('Fecha y hora de la cita (AAAA-MM-DDTHH:MM):', '');
+  if(!when) return;
+  try{
+    const r = await fetch('/admin/api/appts', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, name:l?.name||'', title:'Llamada', when}) });
+    if(!r.ok) throw 0;
+    alert('Cita creada.'); await refreshLeads(); openLead(phone);
+  }catch(e){ alert('No se pudo crear la cita.'); }
+}
+async function newLeadFlow(){
+  const phone = prompt('Teléfono del lead nuevo (con prefijo de país, solo dígitos):', '');
+  if(!phone) return;
+  const digits = phone.replace(/\D/g,'');
+  if(digits.length<8){ alert('Teléfono inválido.'); return; }
+  const name = prompt('Nombre (opcional):', '') || '';
+  try{
+    const r = await fetch('/admin/api/lead/create', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:digits}) });
+    if(!r.ok) throw 0;
+    if(name) await fetch('/admin/api/lead', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:digits, name}) });
+    await refreshLeads(); renderKanban(); renderLeadsTbl(); openLead(digits);
+  }catch(e){ alert('No se pudo crear el lead (¿ya existe?).'); }
+}
+async function refreshLeads(){
+  const r = await fetch('/admin/api/leads', { headers:{'X-Admin-Key':sessionKey} });
+  if(r.ok) leads = await r.json();
 }
 
 // ================= hex-grid + dot-matrix charts (ported 1:1 from the reference algorithm, driven by REAL) =================
@@ -796,15 +828,20 @@ document.querySelectorAll('.navitem[data-view]').forEach(el=>{
 // ================= auth + live fetch =================
 // Misma clave que /admin: comparte sessionStorage('botpanel_key'), así que si ya
 // entraste al panel real en esta pestaña no hace falta volver a escribirla aquí.
+let sessionKey = '';
 function getStoredKey(){
   return new URLSearchParams(location.search).get('key') || sessionStorage.getItem('botpanel_key') || '';
 }
 async function loadReal(key){
-  const r = await fetch('/admin/api/overview-v2', { headers: { 'X-Admin-Key': key } });
-  if(!r.ok) throw new Error('auth');
-  REAL = await r.json();
+  const [ovR] = await Promise.all([
+    fetch('/admin/api/overview-v2', { headers: { 'X-Admin-Key': key } }),
+  ]);
+  if(!ovR.ok) throw new Error('auth');
+  REAL = await ovR.json();
+  sessionKey = key;
   sessionStorage.setItem('botpanel_key', key);
   if(location.search) history.replaceState(null,'',location.pathname);
+  await refreshLeads(); // leads reales — PII de verdad, ver aviso arriba del bloque `let leads`
 }
 function startApp(){
   renderRealStats();
@@ -812,10 +849,10 @@ function startApp(){
   renderChannels();
   buildHex();
   buildDots();
+  renderLeadsTbl();
+  renderKanban();
 }
 async function boot(){
-  renderLeadsTbl(); // datos de ejemplo, no dependen de auth
-  renderKanban();
   const k = getStoredKey();
   if(k){
     try{ await loadReal(k); document.getElementById('loginGate').classList.add('hidden'); startApp(); return; }
