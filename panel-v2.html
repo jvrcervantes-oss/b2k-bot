@@ -183,6 +183,22 @@ table.leadstbl{width:100%;border-collapse:collapse}
 .composer{display:flex;gap:10px;padding:14px 20px;border-top:1px solid var(--border)}
 .composer .fake{flex:1;display:flex;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:10px 14px;color:var(--muted);font-size:13.5px}
 .composer .send{background:var(--strong);color:var(--strong-ink);border:none;border-radius:12px;padding:0 20px;font-size:13.5px;font-weight:600}
+.composer input:disabled,.composer button:disabled{opacity:.5;cursor:not-allowed}
+.composer .iconround{width:40px;height:40px;flex-shrink:0;border-radius:50%;background:var(--card);border:1px solid var(--border);color:var(--icon);display:flex;align-items:center;justify-content:center;font-size:16px}
+.composer .cannedwrap{position:relative}
+.cannedpop{position:absolute;bottom:52px;left:0;width:280px;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.18);max-height:280px;overflow-y:auto;z-index:20}
+.cannedpop .ci{padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer}
+.cannedpop .ci:hover{background:var(--card2)}
+.cannedpop .ci .ct{font-weight:600;font-size:13px}
+.cannedpop .ci .cx{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.cannedpop .cedit{padding:11px 14px;text-align:center;font-size:12.5px;font-weight:600;color:var(--accent-ink);cursor:pointer}
+.cannedpop .cedit:hover{background:var(--card2)}
+.wininfo{font-size:12px;font-weight:500;padding:8px 20px;border-top:1px solid var(--border);display:none;align-items:center;gap:6px}
+.wininfo.open{display:flex;color:var(--green);background:rgba(30,127,79,.1)}
+.wininfo.closed{display:flex;color:var(--red);background:rgba(198,58,47,.1)}
+.threadhd .toolbtn{border:1px solid var(--border);background:var(--card);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;flex-shrink:0}
+.threadhd .toolbtn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
+.threadhd .toolbtn:disabled{opacity:.6;cursor:default}
 
 /* ---------- kanban ---------- */
 #vLeads{padding:18px 28px 30px;overflow:auto}
@@ -434,6 +450,14 @@ textarea.nlinput{resize:vertical}
     <div style="font-size:13px;font-weight:600;color:var(--muted)" data-i18n="loading">Cargando…</div>
   </div>
 </div>
+<div id="cannedModal" class="modalov hidden">
+  <div class="modalbox" style="max-width:460px">
+    <div style="font-weight:600;font-size:15px;margin-bottom:4px" data-i18n="m_canned">Respuestas rápidas</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px"><span data-i18n="m_canned_help">Una por línea · formato</span> <b data-i18n="m_canned_fmt">Título | texto</b></div>
+    <textarea id="cannedText" class="nlinput" rows="10"></textarea>
+    <div class="modalbtns"><button class="ghost" onclick="closeCannedEdit()" data-i18n="btn_cancel">Cancelar</button><button class="primary" onclick="saveCanned()" data-i18n="btn_ok">Aceptar</button></div>
+  </div>
+</div>
 <div class="app">
 
   <!-- ================= SIDEBAR ================= -->
@@ -619,9 +643,16 @@ textarea.nlinput{resize:vertical}
       <div class="thread">
         <div class="threadhd" id="threadHd"></div>
         <div class="msgs" id="threadMsgs"></div>
+        <div class="wininfo" id="winInfo"></div>
         <div class="composer">
+          <div class="cannedwrap">
+            <div class="cannedpop hidden" id="cannedPop"></div>
+            <button type="button" class="iconround" id="cannedBtn" onclick="toggleCannedPop()" data-i18n-title="t_canned" title="Respuestas rápidas">📋</button>
+          </div>
+          <input type="file" id="attachFile" accept="image/*,video/*" class="hidden" onchange="attachFileChosen(event)">
+          <button type="button" class="iconround" id="attachBtn" onclick="document.getElementById('attachFile').click()" data-i18n-title="t_attach" title="Enviar foto/vídeo">📎</button>
           <input id="composerInput" class="fake" style="border:1px solid var(--border);font-family:inherit" data-i18n-ph="composer_ph" placeholder="Escribe un mensaje de WhatsApp…" onkeydown="if(event.key==='Enter')sendMessage()">
-          <button class="send" onclick="sendMessage()" data-i18n="send">Enviar</button>
+          <button class="send" id="sendBtn" onclick="sendMessage()" data-i18n="send">Enviar</button>
         </div>
       </div>
     </div>
@@ -883,6 +914,14 @@ es: {
   th_contact:'Contacto', th_country:'País', th_status:'Estado', th_when:'Cuándo', th_title_notes:'Título / notas',
   th_amount:'Importe', th_method:'Método', th_date:'Fecha',
   search_conv:'Buscar conversación', composer_ph:'Escribe un mensaje de WhatsApp…', send:'Enviar',
+  t_canned:'Respuestas rápidas', t_attach:'Enviar foto/vídeo', canned_empty:'Sin respuestas rápidas guardadas',
+  edit_tpl:'Editar plantillas', m_canned:'Respuestas rápidas', m_canned_help:'Una por línea · formato', m_canned_fmt:'Título | texto',
+  al_media_big:'Archivo demasiado grande (máx 16 MB).', al_tpl:'No se pudo guardar.',
+  win_open_a:'🟢 Ventana de 24h abierta · cierra en ', win_closed:'🔴 Ventana de 24h cerrada — hace falta una plantilla para escribir',
+  win_closed_ph:'Ventana de 24h cerrada', win_never:'🔴 El cliente aún no ha escrito — no se puede enviar texto libre hasta que abra la conversación',
+  act_outreach:'💬 Iniciar conversación', act_reoutreach:'💬 Reenviar intro', outreach_ing:'⏳ Enviando…', outreach_ok:'✓ Intro enviada',
+  outreach_err:'No se pudo iniciar la conversación (¿falta configurar la plantilla de intro?).',
+  p_pause:'⏸ Pausar bot', p_resume:'▶ Reanudar bot',
   kanban_tab:'Kanban', table_tab:'Tabla', back:'Volver',
   contact_data:'Datos de contacto', interest:'Interés', activity:'Actividad', add_note:'+ Añadir nota',
   loading:'Cargando…', new_operator:'+ Nuevo operador', new_appt:'+ Nueva cita', new_payment:'+ Registrar pago',
@@ -991,6 +1030,14 @@ en: {
   th_contact:'Contact', th_country:'Country', th_status:'Status', th_when:'When', th_title_notes:'Title / notes',
   th_amount:'Amount', th_method:'Method', th_date:'Date',
   search_conv:'Search conversation', composer_ph:'Write a WhatsApp message…', send:'Send',
+  t_canned:'Quick replies', t_attach:'Send photo/video', canned_empty:'No quick replies saved',
+  edit_tpl:'Edit templates', m_canned:'Quick replies', m_canned_help:'One per line · format', m_canned_fmt:'Title | text',
+  al_media_big:'File too large (max 16MB).', al_tpl:"Couldn't save.",
+  win_open_a:'🟢 24h window open · closes in ', win_closed:'🔴 24h window closed — a template is required to write',
+  win_closed_ph:'24h window closed', win_never:"🔴 Customer hasn't messaged yet — free text isn't allowed until they start the conversation",
+  act_outreach:'💬 Start conversation', act_reoutreach:'💬 Resend intro', outreach_ing:'⏳ Sending…', outreach_ok:'✓ Intro sent',
+  outreach_err:"Could not start the conversation (is the intro template configured?).",
+  p_pause:'⏸ Pause bot', p_resume:'▶ Resume bot',
   kanban_tab:'Kanban', table_tab:'Table', back:'Back',
   contact_data:'Contact info', interest:'Interest', activity:'Activity', add_note:'+ Add note',
   loading:'Loading…', new_operator:'+ New operator', new_appt:'+ New appointment', new_payment:'+ Log payment',
@@ -1306,7 +1353,8 @@ async function renderThread(){
   const c = leads.find(l=>l.phone===curChatPhone);
   const box = document.getElementById('threadHd');
   const msgsBox = document.getElementById('threadMsgs');
-  if(!c){ box.innerHTML=''; msgsBox.innerHTML=''; return; }
+  closeCannedPop();
+  if(!c){ box.innerHTML=''; msgsBox.innerHTML=''; document.getElementById('winInfo').className='wininfo'; return; }
   box.innerHTML = `
     <span class="av" style="background:${hashColor(c.phone)}">${initials(c.name||c.phone)}</span>
     <div style="flex:1;min-width:0">
@@ -1314,7 +1362,10 @@ async function renderThread(){
         <span class="estpill"><span class="d" style="background:${STATUS_DOT[c.status]||CB}"></span>${STATUS_LABEL[c.status]}</span></div>
       <div class="meta">${tourLine(c)}</div>
     </div>
+    <button class="toolbtn ${c.paused?'on':''}" onclick="togglePauseFlow('${c.phone}')">${c.paused?t('p_resume'):t('p_pause')}</button>
+    <button class="toolbtn" id="outreachBtn" onclick="outreachFlow('${c.phone}')">${c.outreached?t('act_reoutreach'):t('act_outreach')}</button>
     <button class="btn dark" style="padding:8px 14px" onclick="openLead('${c.phone}')">${t('view_lead')}</button>`;
+  updateWindowUI(c);
   msgsBox.innerHTML = `<div class="daychip">${t('loading_conv')}</div>`;
   try{
     const r = await fetch('/admin/api/conv/'+encodeURIComponent(c.phone), { headers:{'X-Admin-Key':sessionKey} });
@@ -1325,6 +1376,114 @@ async function renderThread(){
     }).join('') || `<div class="daychip">${t('no_messages')}</div>`;
     msgsBox.scrollTop = msgsBox.scrollHeight;
   }catch(e){ msgsBox.innerHTML = `<div class="daychip">${t('conv_load_error')}</div>`; }
+}
+// -- ventana de 24h de WhatsApp: solo se puede texto libre dentro de ella --
+function updateWindowUI(c){
+  const el = document.getElementById('winInfo'), input = document.getElementById('composerInput'), btn = document.getElementById('sendBtn');
+  const last = c && c.lastInboundAt;
+  if(!last){
+    el.className = 'wininfo closed'; el.textContent = t('win_never');
+    input.disabled = true; btn.disabled = true; input.placeholder = t('win_closed_ph');
+    return;
+  }
+  const left = 24*3600000 - (Date.now() - last);
+  if(left > 0){
+    const h = Math.floor(left/3600000), m = Math.floor((left%3600000)/60000);
+    el.className = 'wininfo open'; el.textContent = t('win_open_a') + (h>0?h+'h ':'') + m + 'm';
+    input.disabled = false; btn.disabled = false; input.placeholder = t('composer_ph');
+  }else{
+    el.className = 'wininfo closed'; el.textContent = t('win_closed');
+    input.disabled = true; btn.disabled = true; input.placeholder = t('win_closed_ph');
+  }
+}
+async function togglePauseFlow(phone){
+  const c = leads.find(l=>l.phone===phone); if(!c) return;
+  const next = !c.paused;
+  c.paused = next; renderThread();
+  try{
+    const r = await fetch('/admin/api/pause', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, paused:next}) });
+    if(!r.ok) throw 0;
+  }catch(e){ c.paused = !next; renderThread(); showToast(t('err_status')); }
+}
+async function outreachFlow(phone){
+  const btn = document.getElementById('outreachBtn');
+  if(btn){ btn.disabled = true; btn.textContent = t('outreach_ing'); }
+  try{
+    const r = await fetch('/admin/api/outreach', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone}) });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'');
+    const c = leads.find(l=>l.phone===phone); if(c) c.outreached = true;
+    showToast(t('outreach_ok'), {type:'success'});
+    if(btn){ btn.disabled = false; btn.textContent = t('act_reoutreach'); }
+  }catch(e){
+    if(btn){ btn.disabled = false; btn.textContent = t('act_outreach'); }
+    showToast(t('outreach_err') + (e.message?(': '+e.message):''));
+  }
+}
+// -- respuestas rápidas (canned replies) --
+let canned = [];
+async function loadCanned(){
+  try{
+    const r = await fetch('/admin/api/canned', { headers:{'X-Admin-Key':sessionKey} });
+    canned = r.ok ? await r.json() : [];
+  }catch(e){ canned = []; }
+}
+function renderCannedPop(){
+  const pop = document.getElementById('cannedPop');
+  pop.innerHTML = (canned.length ? canned.map((c,i)=>`
+    <div class="ci" onclick="useCanned(${i})"><div class="ct">${(c.title||'').replace(/</g,'&lt;')}</div><div class="cx">${(c.text||'').replace(/</g,'&lt;')}</div></div>`).join('')
+    : `<div style="padding:14px;color:var(--muted);font-size:12.5px;text-align:center">${t('canned_empty')}</div>`)
+    + `<div class="cedit" onclick="openCannedEdit()">${t('edit_tpl')}</div>`;
+}
+function closeCannedPop(){ document.getElementById('cannedPop').classList.add('hidden'); }
+function toggleCannedPop(){
+  const pop = document.getElementById('cannedPop');
+  if(pop.classList.contains('hidden')){ renderCannedPop(); pop.classList.remove('hidden'); }
+  else pop.classList.add('hidden');
+}
+function useCanned(i){
+  const c = canned[i]; if(!c) return;
+  document.getElementById('composerInput').value = c.text || '';
+  closeCannedPop();
+  document.getElementById('composerInput').focus();
+}
+function openCannedEdit(){
+  closeCannedPop();
+  document.getElementById('cannedText').value = canned.map(c=>c.title+' | '+c.text).join('\n');
+  document.getElementById('cannedModal').classList.remove('hidden');
+}
+function closeCannedEdit(){ document.getElementById('cannedModal').classList.add('hidden'); }
+async function saveCanned(){
+  const lines = document.getElementById('cannedText').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const list = lines.map(l=>{ const i=l.indexOf('|'); return i<0 ? {title:l,text:l} : {title:l.slice(0,i).trim(), text:l.slice(i+1).trim()}; });
+  try{
+    const r = await fetch('/admin/api/canned', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({list}) });
+    if(!r.ok) throw 0;
+    canned = list;
+    closeCannedEdit();
+  }catch(e){ showToast(t('al_tpl')); }
+}
+// -- adjuntar foto/vídeo (envío manual, toma el control igual que un mensaje de texto) --
+async function attachFileChosen(ev){
+  const file = ev.target.files[0]; ev.target.value = '';
+  if(!file || !curChatPhone) return;
+  if(file.size > 16*1024*1024){ showToast(t('al_media_big')); return; }
+  const btn = document.getElementById('attachBtn');
+  btn.disabled = true;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try{
+      const r = await fetch('/admin/api/media/upload', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({dataUrl:reader.result}) });
+      const up = await r.json();
+      if(!r.ok) throw new Error(up.error||'');
+      const r2 = await fetch('/admin/api/send-media', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:curChatPhone, url:up.url, type:up.type}) });
+      if(!r2.ok) throw 0;
+      const c = leads.find(l=>l.phone===curChatPhone); if(c) c.paused = true;
+      await renderThread();
+    }catch(e){ showToast(t('send_error')); }
+    btn.disabled = false;
+  };
+  reader.readAsDataURL(file);
 }
 function selectChat(phone){ curChatPhone=phone; renderChats(); }
 async function sendMessage(){
@@ -2416,6 +2575,7 @@ function startApp(){
   paintSetupCard();
   notifItems = buildNotifItems();
   renderNotifs();
+  loadCanned();
   const storedWho = sessionStorage.getItem('botpanel_who');
   if(storedWho && OWNER_OPTS.includes(storedWho)){ whoAmI = storedWho; paintWho(); }
   else switchWho();
@@ -2455,6 +2615,10 @@ document.getElementById('loginEnter').addEventListener('click', async () => {
 });
 document.getElementById('loginPw').addEventListener('keydown', (e) => {
   if(e.key === 'Enter') document.getElementById('loginEnter').click();
+});
+document.addEventListener('click', e => {
+  const pop = document.getElementById('cannedPop'), btn = document.getElementById('cannedBtn');
+  if(pop && !pop.classList.contains('hidden') && !pop.contains(e.target) && e.target !== btn) pop.classList.add('hidden');
 });
 
 boot();
