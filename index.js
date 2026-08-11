@@ -3013,6 +3013,92 @@ app.get("/admin/api/overview", async (req, res) => {
   });
 });
 
+// ── Panel v2 (piloto de rediseño, 11-ago-2026): SOLO agregados, nunca un lead individual.
+// Reusa listLeads()/listDepartures()/depOccupancy()/paxPayment() ya existentes — no toca
+// ninguna ruta ni comportamiento previo. Gateado por el mismo adminAuth que el resto de /admin/api.
+function computeOverviewV2(leads, deps) {
+  const now = Date.now();
+  const byStatus = {};
+  const byChannel = {};
+  let newLast30d = 0, newPrev30d = 0, waitingOver24h = 0, overdueFollowups = 0;
+  const dailyNew = {};
+
+  for (const l of leads) {
+    if (l.archived) continue;
+    const status = l.status || "new";
+    const deal = parseInt(l.dealValue, 10) || 0;
+    byStatus[status] = byStatus[status] || { count: 0, sum: 0 };
+    byStatus[status].count++; byStatus[status].sum += deal;
+
+    const ch = (l.adSource || l.source === "meta-form") ? "Meta Lead Ads" : "WhatsApp orgánico";
+    byChannel[ch] = byChannel[ch] || { count: 0, sum: 0 };
+    byChannel[ch].count++;
+    if (status === "won") byChannel[ch].sum += deal;
+
+    if (l.createdAt) {
+      const ageDays = (now - l.createdAt) / 86400000;
+      if (ageDays >= 0 && ageDays <= 30) newLast30d++;
+      else if (ageDays > 30 && ageDays <= 60) newPrev30d++;
+      if (ageDays >= 0 && ageDays <= 60) {
+        const d = new Date(l.createdAt).toISOString().slice(0, 10);
+        dailyNew[d] = (dailyNew[d] || 0) + 1;
+      }
+    }
+    if (l.nextFollowUp) {
+      const due = new Date(l.nextFollowUp).getTime();
+      if (!isNaN(due) && due < now && !["won", "lost", "noshow"].includes(status)) overdueFollowups++;
+    }
+    if (l.waiting && l.lastInboundAt && (now - l.lastInboundAt) > 24 * 3600 * 1000) waitingOver24h++;
+  }
+
+  const wonCount = (byStatus.won && byStatus.won.count) || 0;
+  const lostCount = (byStatus.lost && byStatus.lost.count) || 0;
+  const closedCount = wonCount + lostCount;
+
+  const won = leads.filter((l) => l.status === "won" && !l.archived);
+  const byDep = new Map(deps.map((d) => [d.id, []]));
+  const unassignedWon = [];
+  for (const l of won) { const arr = l.departureId && byDep.get(l.departureId); (arr || unassignedWon).push(l); }
+  let collected = 0, travellers = 0, confirmedDepartures = 0;
+  const activeDeps = deps.filter((d) => d.state !== "cancelled");
+  for (const d of activeDeps) {
+    const roster = byDep.get(d.id) || [];
+    const occ = depOccupancy(d, roster);
+    collected += roster.reduce((a, r) => a + paxPayment(r).paid, 0);
+    travellers += occ.pax;
+    if (occ.occState === "confirmed" || occ.occState === "full") confirmedDepartures++;
+  }
+
+  return {
+    generatedAt: new Date(now).toISOString(),
+    totalActive: leads.filter((l) => !l.archived).length,
+    newLast30d, newPrev30d, waitingOver24h, overdueFollowups,
+    byStatus, byChannel,
+    conversionPct: closedCount ? Math.round(1000 * wonCount / closedCount) / 10 : 0,
+    wonCount, closedCount,
+    collected, departures: activeDeps.length, confirmedDepartures, travellers,
+    dailyNewLeads60d: Object.entries(dailyNew).sort(([a], [b]) => (a < b ? -1 : 1)),
+  };
+}
+
+app.get("/admin/api/overview-v2", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try {
+    const [leads, deps] = await Promise.all([listLeads(), listDepartures()]);
+    res.json(computeOverviewV2(leads, deps));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+const panelV2FileName = "panel-v2.html";
+const ADMIN_V2_HTML = fs.existsSync(panelV2FileName)
+  ? fs.readFileSync(panelV2FileName, "utf8")
+  : null;
+app.get("/admin/v2", (req, res) => {
+  if (!ADMIN_PASSWORD) return res.status(503).send("Panel no configurado: define ADMIN_PASSWORD en Railway.");
+  if (!ADMIN_V2_HTML) return res.status(503).send("Panel v2: falta panel-v2.html en el despliegue.");
+  res.type("html").send(ADMIN_V2_HTML);
+});
+
 // ── CRM: archivar / restaurar un lead (reversible; sale de las vistas) ──
 app.post("/admin/api/archive", async (req, res) => {
   if (!adminAuth(req, res)) return;
