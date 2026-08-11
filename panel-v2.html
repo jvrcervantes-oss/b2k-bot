@@ -248,6 +248,13 @@ table.leadstbl{width:100%;border-collapse:collapse}
     <div id="loginErr" style="color:var(--red);font-size:12.5px;margin-top:10px;min-height:14px"></div>
   </div>
 </div>
+<div id="whoGate" class="hidden" style="position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:50">
+  <div class="card" style="width:320px;padding:28px;text-align:center">
+    <div style="font-weight:600;font-size:16px;margin-bottom:4px">¿Quién eres?</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:18px">Para atribuir lo que crees o cambies desde aquí</div>
+    <div style="display:flex;flex-direction:column;gap:8px" id="whoOpts"></div>
+  </div>
+</div>
 <div class="app">
 
   <!-- ================= SIDEBAR ================= -->
@@ -286,15 +293,15 @@ table.leadstbl{width:100%;border-collapse:collapse}
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.6 2.6h3.2v10.8H2.6z"/><path d="M6.9 2.6h3.2v7.4H6.9z"/><path d="M11.2 2.6h3v4.8h-3z"/></svg>
         <span class="lbl">Leads</span>
       </div>
-      <div class="navitem">
+      <div class="navitem" data-view="operators">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2.8a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2z"/><path d="M3 13.4c.5-2.6 2.4-4 5-4s4.5 1.4 5 4"/></svg>
         <span class="lbl">Operadores B2B</span>
       </div>
-      <div class="navitem">
+      <div class="navitem" data-view="appts">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.8 3.8h10.4v9.4H2.8z"/><path d="M2.8 6.8h10.4"/><path d="M5.5 2.2v3M10.5 2.2v3"/></svg>
-        <span class="lbl">Citas</span><span class="badge">2</span>
+        <span class="lbl">Citas</span>
       </div>
-      <div class="navitem">
+      <div class="navitem" data-view="invoices">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 2.6h5.6l2.4 2.4v8.4H4z"/><path d="M6 8.2h4M6 10.6h4"/></svg>
         <span class="lbl">Facturas</span>
       </div>
@@ -302,11 +309,11 @@ table.leadstbl{width:100%;border-collapse:collapse}
 
     <div class="navlabel">Cuenta</div>
     <div class="navgroup">
-      <div class="navitem">
+      <div class="navitem" data-view="team">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2.8a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2z"/><path d="M3 13.4c.5-2.6 2.4-4 5-4s4.5 1.4 5 4"/></svg>
         <span class="lbl">Equipo</span>
       </div>
-      <div class="navitem">
+      <div class="navitem" data-view="settings">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 5.4a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2z"/><path d="M8 1.6v2M8 12.4v2M1.6 8h2M12.4 8h2"/></svg>
         <span class="lbl">Ajustes</span>
       </div>
@@ -328,9 +335,9 @@ table.leadstbl{width:100%;border-collapse:collapse}
     <div class="bottomnav">
       <div class="navitem"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 5.6a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8z"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6"/></svg><span>Apariencia</span></div>
       <div class="navitem"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2.6a5.4 5.4 0 1 1 0 10.8A5.4 5.4 0 0 1 8 2.6z"/><path d="M6.4 6.4c0-.9.7-1.6 1.6-1.6s1.6.6 1.6 1.5c0 1.1-1.6 1.3-1.6 2.5"/><path d="M8 11h.01"/></svg><span>Ayuda y soporte</span></div>
-      <div class="me">
-        <div class="av">M</div>
-        <div><div class="nm">Milad</div><div class="role">Plan y facturación</div></div>
+      <div class="me" onclick="switchWho()" style="cursor:pointer" title="Cambiar de usuario">
+        <div class="av" id="meAv">?</div>
+        <div><div class="nm" id="meName">&mdash;</div><div class="role">Cambiar de usuario</div></div>
         <span class="dots">&#8942;</span>
       </div>
     </div>
@@ -448,6 +455,81 @@ table.leadstbl{width:100%;border-collapse:collapse}
         <div class="card ldcard">
           <div class="tlhd"><span class="t">Actividad</span><span class="a">+ Añadir nota</span></div>
           <div class="timeline" id="ldTimeline"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---------- OPERADORES B2B ---------- -->
+    <div class="view hidden" id="vOperators">
+      <div style="padding:18px 28px 30px">
+        <div class="filters">
+          <span style="font-size:13px;color:var(--muted)" id="opsSummary">Cargando…</span>
+          <span style="flex:1"></span>
+          <button class="btn dark" onclick="newOperatorFlow()">+ Nuevo operador</button>
+        </div>
+        <div class="card tblcard">
+          <div class="tblhead" style="grid-template-columns:2fr 1.4fr 1fr 1fr 90px"><span>Empresa</span><span>Contacto</span><span>País</span><span>Estado</span><span></span></div>
+          <div id="opsTbl"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---------- CITAS ---------- -->
+    <div class="view hidden" id="vAppts">
+      <div style="padding:18px 28px 30px">
+        <div class="filters">
+          <span style="font-size:13px;color:var(--muted)" id="apptsSummary">Cargando…</span>
+          <span style="flex:1"></span>
+          <button class="btn dark" onclick="newApptFlow()">+ Nueva cita</button>
+        </div>
+        <div class="card tblcard">
+          <div class="tblhead" style="grid-template-columns:1.3fr 1.6fr 1.5fr 90px"><span>Cuándo</span><span>Lead</span><span>Título / notas</span><span></span></div>
+          <div id="apptsTbl"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---------- FACTURAS ---------- -->
+    <div class="view hidden" id="vInvoices">
+      <div style="padding:18px 28px 30px">
+        <div class="filters">
+          <span style="font-size:13px;color:var(--muted)" id="invSummary">Cargando…</span>
+          <span style="flex:1"></span>
+          <button class="btn dark" onclick="newPaymentFlow()">+ Registrar pago</button>
+        </div>
+        <div id="unmatchedWrap"></div>
+        <div class="sechd" style="margin-top:22px"><span class="t">Pagos recientes</span></div>
+        <div class="card tblcard">
+          <div class="tblhead" style="grid-template-columns:1.6fr 1fr 1fr 1fr 90px"><span>Lead</span><span>Importe</span><span>Método</span><span>Fecha</span><span></span></div>
+          <div id="payTbl"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---------- EQUIPO ---------- -->
+    <div class="view hidden" id="vTeam">
+      <div style="padding:18px 28px 30px">
+        <div class="sechd"><span class="t">Reparto de leads por persona</span><span class="a" style="cursor:default;color:var(--muted)">calculado de los leads ya cargados</span></div>
+        <div class="kpis" id="teamCards" style="grid-template-columns:repeat(3,1fr)"></div>
+      </div>
+    </div>
+
+    <!-- ---------- AJUSTES ---------- -->
+    <div class="view hidden" id="vSettings">
+      <div style="padding:18px 28px 30px;max-width:520px">
+        <div class="card" style="padding:20px;margin-bottom:16px">
+          <div style="font-weight:600;font-size:15px;margin-bottom:12px">Sesión</div>
+          <div class="ldrow" style="border-top:none"><span class="k">Conectado como</span><span class="v" id="setWho">&mdash;</span></div>
+          <div class="ldrow"><span class="k">Panel</span><span class="v">/admin/v2 (piloto)</span></div>
+          <div class="ldrow"><span class="k">Backend</span><span class="v">mismo que /admin</span></div>
+          <div style="display:flex;gap:10px;margin-top:16px">
+            <button class="btn" onclick="switchWho()">Cambiar de usuario</button>
+            <button class="btn" onclick="logoutV2()">Cerrar sesión</button>
+          </div>
+        </div>
+        <div class="card" style="padding:20px">
+          <div style="font-weight:600;font-size:15px;margin-bottom:8px">Sobre este piloto</div>
+          <div style="font-size:13.5px;color:var(--muted);line-height:1.5">Reskin de /admin con el lenguaje visual del dashboard de referencia. No añade lógica de escritura nueva: cada acción llama al mismo endpoint que ya usa /admin a diario. Para ajustes reales (WhatsApp, plantillas, variables de Railway) sigue siendo /admin o Railway directamente — aquí no se pueden tocar.</div>
         </div>
       </div>
     </div>
@@ -721,7 +803,7 @@ async function scheduleApptFlow(phone){
   const when = prompt('Fecha y hora de la cita (AAAA-MM-DDTHH:MM):', '');
   if(!when) return;
   try{
-    const r = await fetch('/admin/api/appts', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, name:l?.name||'', title:'Llamada', when}) });
+    const r = await fetch('/admin/api/appts', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, name:l?.name||'', title:'Llamada', when, closer:whoAmI}) });
     if(!r.ok) throw 0;
     alert('Cita creada.'); await refreshLeads(); openLead(phone);
   }catch(e){ alert('No se pudo crear la cita.'); }
@@ -735,13 +817,222 @@ async function newLeadFlow(){
   try{
     const r = await fetch('/admin/api/lead/create', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:digits}) });
     if(!r.ok) throw 0;
-    if(name) await fetch('/admin/api/lead', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:digits, name}) });
+    const fields = {}; if(name) fields.name = name; if(whoAmI) fields.owner = whoAmI;
+    if(Object.keys(fields).length) await fetch('/admin/api/lead', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:digits, ...fields}) });
     await refreshLeads(); renderKanban(); renderLeadsTbl(); openLead(digits);
   }catch(e){ alert('No se pudo crear el lead (¿ya existe?).'); }
 }
 async function refreshLeads(){
   const r = await fetch('/admin/api/leads', { headers:{'X-Admin-Key':sessionKey} });
   if(r.ok) leads = await r.json();
+}
+
+// ======================================================================
+// EQUIPO — 100% client-side sobre `leads` ya cargado, sin fetch nuevo.
+// Solo hay 2 personas reales hoy (mismas que /admin: Milad y Javier).
+// ======================================================================
+const OWNER_OPTS = ['Milad','Javier'];
+function renderTeam(){
+  const groups = {};
+  ['(sin asignar)', ...OWNER_OPTS].forEach(o=>groups[o]={total:0,won:0,pending:0});
+  leads.filter(l=>!l.archived).forEach(l=>{
+    const o = OWNER_OPTS.includes(l.owner) ? l.owner : '(sin asignar)';
+    groups[o].total++;
+    if(l.status==='won') groups[o].won++;
+    if(needsAttention(l)) groups[o].pending++;
+  });
+  document.getElementById('teamCards').innerHTML = Object.entries(groups).map(([name,g])=>`
+    <div class="card kpi">
+      <div class="hd"><span class="ic" style="background:${hashColor(name)}">${initials(name)}</span><b>${name}${name===whoAmI?' (tú)':''}</b></div>
+      <div class="bd">
+        <div class="val">${g.total}</div>
+        <div class="delta"><span class="vs" style="font-size:13px">${g.won} ganados · ${g.pending} pendientes</span></div>
+      </div>
+    </div>`).join('');
+}
+
+// ======================================================================
+// OPERADORES B2B — /admin/api/operators (agenda "ops", ya existente y en
+// uso desde /admin). CRUD real: mismo endpoint, sin lógica nueva.
+// ======================================================================
+let operators = [];
+async function loadOperators(){
+  document.getElementById('opsTbl').innerHTML = '';
+  const r = await fetch('/admin/api/operators', { headers:{'X-Admin-Key':sessionKey} });
+  operators = r.ok ? await r.json() : [];
+  renderOperators();
+}
+function renderOperators(){
+  const active = operators.filter(o=>!o.archived);
+  document.getElementById('opsSummary').textContent = active.length + ' operadores';
+  document.getElementById('opsTbl').innerHTML = active.map(o=>`
+    <div class="tblrow" style="grid-template-columns:2fr 1.4fr 1fr 1fr 90px">
+      <div class="leadid"><span class="av" style="background:${hashColor(o.company||o.id)}">${initials(o.company||'?')}</span>
+        <div><div class="nm" onclick="editOperatorFlow('${o.id}')">${o.company||'(sin nombre)'}</div><span class="st" style="font-size:12px;color:var(--muted)">${o.contact||''}</span></div></div>
+      <span class="wait">${o.email||o.phone||'—'}</span>
+      <span class="wait">${o.country||'—'}</span>
+      <span class="tourpill">${o.status||'nuevo'}</span>
+      <button class="actbtn" onclick="archiveOperatorFlow('${o.id}')">Archivar</button>
+    </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">Sin operadores todavía.</div>`;
+}
+async function newOperatorFlow(){
+  const company = prompt('Nombre de la empresa:',''); if(!company) return;
+  const contact = prompt('Persona de contacto (opcional):','') || '';
+  const email = prompt('Email (opcional):','') || '';
+  try{
+    const r = await fetch('/admin/api/operator', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({company,contact,email}) });
+    if(!r.ok) throw 0;
+    await loadOperators();
+  }catch(e){ alert('No se pudo crear el operador.'); }
+}
+async function editOperatorFlow(id){
+  const o = operators.find(x=>x.id===id); if(!o) return;
+  const status = prompt('Estado (nuevo / en conversación / activo / descartado):', o.status||'nuevo');
+  if(status==null) return;
+  try{
+    const r = await fetch('/admin/api/operator', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, status}) });
+    if(!r.ok) throw 0;
+    await loadOperators();
+  }catch(e){ alert('No se pudo actualizar.'); }
+}
+async function archiveOperatorFlow(id){
+  if(!confirm('¿Archivar este operador?')) return;
+  try{
+    const r = await fetch('/admin/api/operator/archive', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, archived:true}) });
+    if(!r.ok) throw 0;
+    await loadOperators();
+  }catch(e){ alert('No se pudo archivar.'); }
+}
+
+// ======================================================================
+// CITAS — /admin/api/appts (ya existente, sincroniza con Google Calendar
+// si está configurado en el servidor — eso no cambia aquí).
+// ======================================================================
+let appts = [];
+async function loadAppts(){
+  const r = await fetch('/admin/api/appts', { headers:{'X-Admin-Key':sessionKey} });
+  appts = r.ok ? await r.json() : [];
+  renderAppts();
+}
+function renderAppts(){
+  const upcoming = appts.slice().sort((a,b)=>new Date(a.when)-new Date(b.when));
+  document.getElementById('apptsSummary').textContent = upcoming.length + ' citas';
+  document.getElementById('apptsTbl').innerHTML = upcoming.map(a=>`
+    <div class="tblrow" style="grid-template-columns:1.3fr 1.6fr 1.5fr 90px">
+      <span class="wait">${a.when ? new Date(a.when).toLocaleString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '—'}</span>
+      <span class="wait">${a.name||''} ${a.phone?('+'+a.phone):''}</span>
+      <span class="wait">${a.title||'Cita'}${a.closer?(' · '+a.closer):''}</span>
+      <button class="actbtn" onclick="deleteApptFlow('${a.id}')">Borrar</button>
+    </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">Sin citas agendadas.</div>`;
+}
+async function newApptFlow(){
+  const phone = prompt('Teléfono del lead (solo dígitos, opcional si es interna):','') || '';
+  const name = prompt('Nombre para la cita:','') || '';
+  const when = prompt('Fecha y hora (AAAA-MM-DDTHH:MM):',''); if(!when) return;
+  try{
+    const r = await fetch('/admin/api/appts', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, name, title:'Llamada', when, closer:whoAmI}) });
+    if(!r.ok) throw 0;
+    await loadAppts();
+  }catch(e){ alert('No se pudo crear la cita.'); }
+}
+async function deleteApptFlow(id){
+  if(!confirm('¿Borrar esta cita?')) return;
+  try{
+    const r = await fetch('/admin/api/appts/'+id, { method:'DELETE', headers:{'X-Admin-Key':sessionKey} });
+    if(!r.ok) throw 0;
+    await loadAppts();
+  }catch(e){ alert('No se pudo borrar.'); }
+}
+
+// ======================================================================
+// FACTURAS — pagos de Stripe sin asignar (/admin/api/payments/unmatched)
+// + pagos ya registrados dentro de cada lead (leads[].payments, ya en
+// memoria, sin fetch nuevo). B2K no tiene generador de link de pago en
+// este backend (eso vive solo en la rama balibest) — aquí solo se
+// registra/asigna, igual que ya hace /admin.
+// ======================================================================
+async function loadInvoices(){
+  const r = await fetch('/admin/api/payments/unmatched', { headers:{'X-Admin-Key':sessionKey} });
+  const data = r.ok ? await r.json() : {payments:[]};
+  renderInvoices(data.payments||[]);
+}
+function renderInvoices(unmatched){
+  document.getElementById('unmatchedWrap').innerHTML = unmatched.length ? `
+    <div class="sechd"><span class="t">Pagos de Stripe sin asignar</span></div>
+    <div class="card tblcard" style="margin-bottom:8px">
+      <div class="tblhead" style="grid-template-columns:1.6fr 1fr 1fr 90px"><span>Origen</span><span>Importe</span><span>Fecha</span><span></span></div>
+      ${unmatched.map(p=>`
+        <div class="tblrow" style="grid-template-columns:1.6fr 1fr 1fr 90px">
+          <span class="wait">${p.email||p.ref||'Stripe'}</span>
+          <span class="val">${p.amount?fmt(p.amount):'—'} ${(p.currency||'').toUpperCase()}</span>
+          <span class="wait">${p.at?new Date(p.at).toLocaleDateString('es-ES'):'—'}</span>
+          <button class="actbtn" onclick="assignPaymentFlow(${p.idx})">Asignar</button>
+        </div>`).join('')}
+    </div>` : '';
+  const allPayments = leads.flatMap(l => (l.payments||[]).map(p => ({...p, leadName:l.name||l.phone, phone:l.phone})))
+    .sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,30);
+  document.getElementById('invSummary').textContent = allPayments.length + ' pagos recientes' + (unmatched.length?(' · '+unmatched.length+' sin asignar'):'');
+  document.getElementById('payTbl').innerHTML = allPayments.map(p=>`
+    <div class="tblrow" style="grid-template-columns:1.6fr 1fr 1fr 1fr 90px">
+      <span class="wait" style="cursor:pointer" onclick="openLead('${p.phone}')">${p.leadName}</span>
+      <span class="val">${fmt(p.amount||0)}</span>
+      <span class="wait">${(p.method||'—')}</span>
+      <span class="wait">${p.at?new Date(p.at).toLocaleDateString('es-ES'):'—'}</span>
+      <button class="actbtn" onclick="deletePaymentFlow('${p.phone}','${p.id}')">Borrar</button>
+    </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">Sin pagos registrados.</div>`;
+}
+async function newPaymentFlow(){
+  const phone = prompt('Teléfono del lead (solo dígitos):',''); if(!phone) return;
+  const amount = prompt('Importe:',''); if(!amount || isNaN(parseFloat(amount))) { alert('Importe inválido.'); return; }
+  const method = prompt('Método (stripe / wise / cash / other):','wise') || 'other';
+  try{
+    const r = await fetch('/admin/api/payment', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, amount:parseFloat(amount), method, kind:'other'}) });
+    if(!r.ok) throw 0;
+    await refreshLeads(); loadInvoices();
+  }catch(e){ alert('No se pudo registrar el pago.'); }
+}
+async function assignPaymentFlow(idx){
+  const phone = prompt('¿A qué teléfono asignar este pago? (solo dígitos):',''); if(!phone) return;
+  try{
+    const r = await fetch('/admin/api/payments/assign', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({idx, phone}) });
+    if(!r.ok) throw 0;
+    await refreshLeads(); loadInvoices();
+  }catch(e){ alert('No se pudo asignar.'); }
+}
+async function deletePaymentFlow(phone,id){
+  if(!confirm('¿Borrar este pago?')) return;
+  try{
+    const r = await fetch('/admin/api/payment/delete', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, id}) });
+    if(!r.ok) throw 0;
+    await refreshLeads(); loadInvoices();
+  }catch(e){ alert('No se pudo borrar.'); }
+}
+
+// ======================================================================
+// "¿Quién eres?" — no es una cuenta real, solo atribución local (mismas
+// 2 personas que ya usa /admin: OWNER_OPTS). Se guarda en sessionStorage,
+// separado de la clave del panel.
+// ======================================================================
+let whoAmI = '';
+function paintWho(){
+  document.getElementById('meName').textContent = whoAmI || 'Elegir';
+  document.getElementById('meAv').textContent = whoAmI ? initials(whoAmI) : '?';
+}
+function switchWho(){
+  sessionStorage.removeItem('botpanel_who');
+  document.getElementById('whoOpts').innerHTML = OWNER_OPTS.map(o=>`<button class="btn dark" style="justify-content:center" onclick="pickWho('${o}')">${o}</button>`).join('');
+  document.getElementById('whoGate').classList.remove('hidden');
+}
+function pickWho(name){
+  whoAmI = name;
+  sessionStorage.setItem('botpanel_who', name);
+  document.getElementById('whoGate').classList.add('hidden');
+  paintWho();
+}
+function logoutV2(){
+  sessionStorage.removeItem('botpanel_key');
+  sessionStorage.removeItem('botpanel_who');
+  location.reload();
 }
 
 // ================= hex-grid + dot-matrix charts (ported 1:1 from the reference algorithm, driven by REAL) =================
@@ -808,16 +1099,24 @@ function buildDots(){
 }
 
 // ================= view switching =================
-const titles = {overview:'Resumen', chats:'Conversaciones', leads:'Leads', lead:'Ficha de lead'};
+const ALL_VIEWS = ['overview','chats','leads','lead','operators','appts','invoices','team','settings'];
+const titles = {overview:'Resumen', chats:'Conversaciones', leads:'Leads', lead:'Ficha de lead',
+  operators:'Operadores B2B', appts:'Citas', invoices:'Facturas', team:'Equipo', settings:'Ajustes'};
+const loadedOnce = {};
 let prevView = 'overview';
 function go(view){
   if(document.getElementById('v'+view.charAt(0).toUpperCase()+view.slice(1)).id !== 'vLead') prevView = view;
-  ['overview','chats','leads','lead'].forEach(v=>{
+  ALL_VIEWS.forEach(v=>{
     document.getElementById('v'+v.charAt(0).toUpperCase()+v.slice(1)).classList.toggle('hidden', v!==view);
   });
   document.querySelectorAll('.navitem[data-view]').forEach(el=>el.classList.toggle('active', el.dataset.view===view));
   document.getElementById('viewTitle').textContent = titles[view];
   if(view==='chats') renderChats();
+  if(view==='operators' && !loadedOnce.operators){ loadedOnce.operators=true; loadOperators(); }
+  if(view==='appts' && !loadedOnce.appts){ loadedOnce.appts=true; loadAppts(); }
+  if(view==='invoices' && !loadedOnce.invoices){ loadedOnce.invoices=true; loadInvoices(); }
+  if(view==='team'){ renderTeam(); } // barato, siempre client-side sobre `leads` ya cargado
+  if(view==='settings'){ document.getElementById('setWho').textContent = whoAmI || '—'; }
 }
 function goBack(){ go(prevView==='lead'?'overview':prevView); }
 
@@ -851,6 +1150,9 @@ function startApp(){
   buildDots();
   renderLeadsTbl();
   renderKanban();
+  const storedWho = sessionStorage.getItem('botpanel_who');
+  if(storedWho && OWNER_OPTS.includes(storedWho)){ whoAmI = storedWho; paintWho(); }
+  else switchWho();
 }
 async function boot(){
   const k = getStoredKey();
