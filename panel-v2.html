@@ -403,6 +403,11 @@ textarea.nlinput{resize:vertical}
 .toast.info{border-left-color:var(--accent)}
 @keyframes toastIn{ from{opacity:0;transform:translateY(10px) scale(.97)} to{opacity:1;transform:translateY(0) scale(1)} }
 @keyframes toastOut{ from{opacity:1;transform:translateX(0)} to{opacity:0;transform:translateX(24px)} }
+
+/* ---------- modal pequeño de carga inicial (hasta que boot() termina) ---------- */
+.bootbox{max-width:180px;padding:26px 20px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center}
+.spinner{width:26px;height:26px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--accent);animation:spin .7s linear infinite}
+@keyframes spin{ to{transform:rotate(360deg)} }
 </style>
 </head>
 <body>
@@ -421,6 +426,12 @@ textarea.nlinput{resize:vertical}
     <div style="font-weight:600;font-size:16px;margin-bottom:4px" data-i18n="who_ttl">¿Quién eres?</div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:18px" data-i18n="who_sub">Para atribuir lo que crees o cambies desde aquí</div>
     <div style="display:flex;flex-direction:column;gap:8px" id="whoOpts"></div>
+  </div>
+</div>
+<div id="bootLoading" class="modalov hidden">
+  <div class="modalbox bootbox">
+    <div class="spinner"></div>
+    <div style="font-size:13px;font-weight:600;color:var(--muted)" data-i18n="loading">Cargando…</div>
   </div>
 </div>
 <div class="app">
@@ -2416,10 +2427,15 @@ function startApp(){
 async function boot(){
   const k = getStoredKey();
   if(k){
+    document.getElementById('bootLoading').classList.remove('hidden');
     try{ await loadReal(k); }
-    catch(e){ sessionStorage.removeItem('botpanel_key'); document.getElementById('loginGate').classList.remove('hidden'); return; }
+    catch(e){
+      document.getElementById('bootLoading').classList.add('hidden');
+      sessionStorage.removeItem('botpanel_key'); document.getElementById('loginGate').classList.remove('hidden'); return;
+    }
     document.getElementById('loginGate').classList.add('hidden');
     startApp();
+    document.getElementById('bootLoading').classList.add('hidden');
     return;
   }
   document.getElementById('loginGate').classList.remove('hidden');
@@ -2427,10 +2443,15 @@ async function boot(){
 document.getElementById('loginEnter').addEventListener('click', async () => {
   const k = document.getElementById('loginPw').value.trim();
   document.getElementById('loginErr').textContent = '';
+  document.getElementById('bootLoading').classList.remove('hidden');
   try{ await loadReal(k); }
-  catch(e){ document.getElementById('loginErr').textContent = 'Clave incorrecta.'; return; }
+  catch(e){
+    document.getElementById('bootLoading').classList.add('hidden');
+    document.getElementById('loginErr').textContent = 'Clave incorrecta.'; return;
+  }
   document.getElementById('loginGate').classList.add('hidden');
   startApp();
+  document.getElementById('bootLoading').classList.add('hidden');
 });
 document.getElementById('loginPw').addEventListener('keydown', (e) => {
   if(e.key === 'Enter') document.getElementById('loginEnter').click();
