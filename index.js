@@ -3078,6 +3078,10 @@ function computeOverviewV2(leads, deps) {
     wonCount, closedCount,
     collected, departures: activeDeps.length, confirmedDepartures, travellers,
     dailyNewLeads60d: Object.entries(dailyNew).sort(([a], [b]) => (a < b ? -1 : 1)),
+    // Solo booleanos de estado, nunca el valor de la credencial — la tarjeta de
+    // "termina la configuración" del panel v2 los usa para no pedir conectar
+    // algo que ya está conectado (hallazgo real: Calendar ya estaba puesto).
+    config: { calendarConfigured: !!(CALENDAR_ID && GOOGLE_SERVICE_ACCOUNT) },
   };
 }
 
