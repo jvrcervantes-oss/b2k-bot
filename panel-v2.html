@@ -357,6 +357,52 @@ textarea.nlinput{resize:vertical}
 .kancol.dragover .kancards{outline:2px dashed var(--accent);outline-offset:-4px;border-radius:10px}
 .kancard[draggable]{cursor:grab}
 .kancard .kstatus{width:100%;margin-top:9px;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:12px}
+
+/* ---------- microanimaciones (misma curva/duración que /admin: cubic-bezier(.2,.7,.3,1), .15-.2s) ---------- */
+.navitem,.btn,.iconbtn,.actbtn,.kancard,.addcard,.mediacard,.tblrow,.segmented .seg,.pager .pgbtns button,#sideToggleIcon{
+  transition:transform .16s cubic-bezier(.2,.7,.3,1),background .15s ease,border-color .15s ease,box-shadow .15s ease,color .15s ease;
+}
+.btn:hover,.iconbtn:hover,.actbtn:hover{transform:translateY(-1px)}
+.btn:active,.iconbtn:active,.actbtn:active{transform:translateY(0) scale(.97)}
+.navitem:active{transform:scale(.98)}
+.kancard:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.08)}
+.tblrow:hover{background:var(--card2)}
+.mediacard:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.08)}
+.mediacard img,.mediacard video{transition:transform .25s cubic-bezier(.2,.7,.3,1)}
+.mediacard:hover img,.mediacard:hover video{transform:scale(1.04)}
+
+/* ---------- flow-in: aparición escalonada al pintar listas ---------- */
+@media (prefers-reduced-motion: no-preference){
+  @keyframes flowIn{ from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+  .tblrow,.kancard,.mediacard,.depcard,.rosterrow{animation:flowIn .3s cubic-bezier(.2,.7,.3,1) both}
+  .tblrow:nth-child(2),.kancard:nth-child(2),.mediacard:nth-child(2),.depcard:nth-child(2),.rosterrow:nth-child(2){animation-delay:30ms}
+  .tblrow:nth-child(3),.kancard:nth-child(3),.mediacard:nth-child(3),.depcard:nth-child(3),.rosterrow:nth-child(3){animation-delay:60ms}
+  .tblrow:nth-child(4),.kancard:nth-child(4),.mediacard:nth-child(4),.depcard:nth-child(4),.rosterrow:nth-child(4){animation-delay:90ms}
+  .tblrow:nth-child(5),.kancard:nth-child(5),.mediacard:nth-child(5),.depcard:nth-child(5),.rosterrow:nth-child(5){animation-delay:120ms}
+  .tblrow:nth-child(6),.kancard:nth-child(6),.mediacard:nth-child(6),.depcard:nth-child(6),.rosterrow:nth-child(6){animation-delay:150ms}
+  .tblrow:nth-child(7),.kancard:nth-child(7),.mediacard:nth-child(7),.depcard:nth-child(7),.rosterrow:nth-child(7){animation-delay:180ms}
+  .tblrow:nth-child(n+8),.kancard:nth-child(n+8),.mediacard:nth-child(n+8),.depcard:nth-child(n+8),.rosterrow:nth-child(n+8){animation-delay:210ms}
+  .view{animation:flowIn .22s cubic-bezier(.2,.7,.3,1) both}
+}
+@media (prefers-reduced-motion: reduce){ *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important} }
+
+/* ---------- modal: entrada/salida ---------- */
+@keyframes modalBgIn{ from{opacity:0} to{opacity:1} }
+@keyframes modalBoxIn{ from{opacity:0;transform:translateY(10px) scale(.96)} to{opacity:1;transform:translateY(0) scale(1)} }
+.modalov{animation:modalBgIn .15s ease both}
+.modalov .modalbox{animation:modalBoxIn .2s cubic-bezier(.2,.7,.3,1) both}
+.modalov.out{animation:modalBgIn .15s ease reverse both}
+.modalov.out .modalbox{animation:modalBoxIn .15s ease reverse both}
+
+/* ---------- pop-ups: notificaciones flotantes (reemplazan showToast()) ---------- */
+.toastwrap{position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;gap:10px;z-index:400;max-width:340px}
+.toast{background:var(--card);border:1px solid var(--border);border-left:3px solid var(--border2);border-radius:12px;padding:12px 16px;font-size:13.5px;font-weight:500;line-height:1.4;box-shadow:0 14px 34px rgba(0,0,0,.18);cursor:pointer;animation:toastIn .25s cubic-bezier(.2,.7,.3,1) both}
+.toast.out{animation:toastOut .18s ease both}
+.toast.error{border-left-color:var(--red)}
+.toast.success{border-left-color:var(--green)}
+.toast.info{border-left-color:var(--accent)}
+@keyframes toastIn{ from{opacity:0;transform:translateY(10px) scale(.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+@keyframes toastOut{ from{opacity:1;transform:translateX(0)} to{opacity:0;transform:translateX(24px)} }
 </style>
 </head>
 <body>
@@ -1280,7 +1326,7 @@ async function sendMessage(){
     if(!r.ok) throw new Error('send failed');
     box.value = '';
     await renderThread();
-  }catch(e){ alert(t('send_error')); }
+  }catch(e){ showToast(t('send_error')); }
   box.disabled = false; box.focus();
 }
 
@@ -1325,7 +1371,7 @@ async function kApplyStatus(phone, st){
   try{
     const r = await fetch('/admin/api/status', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, status:st}) });
     if(!r.ok) throw 0;
-  }catch(e){ alert(t('err_status')); await refreshLeads(); renderKanban(); }
+  }catch(e){ showToast(t('err_status')); await refreshLeads(); renderKanban(); }
 }
 function kDrop(e){
   e.preventDefault(); e.currentTarget.classList.remove('dragover');
@@ -1418,7 +1464,7 @@ function askPrompt(message, defaultValue){
     const input = ov.querySelector('#modalInput');
     input.value = defaultValue==null ? '' : defaultValue;
     input.focus(); input.select();
-    const close = v => { ov.remove(); resolve(v); };
+    const close = v => { ov.classList.add('out'); setTimeout(()=>ov.remove(), 150); resolve(v); };
     ov.querySelector('#modalCancel').onclick = () => close(null);
     ov.querySelector('#modalOk').onclick = () => close(input.value);
     input.onkeydown = e => { if(e.key==='Enter') close(input.value); if(e.key==='Escape') close(null); };
@@ -1435,13 +1481,25 @@ function askConfirm(message, opts){
     </div>`;
     ov.querySelector('.modalmsg').textContent = message;
     document.body.appendChild(ov);
-    const close = v => { ov.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
+    const close = v => { ov.classList.add('out'); setTimeout(()=>ov.remove(), 150); document.removeEventListener('keydown', onKey); resolve(v); };
     const onKey = e => { if(e.key==='Escape') close(false); if(e.key==='Enter') close(true); };
     ov.querySelector('#modalCancel').onclick = () => close(false);
     ov.querySelector('#modalOk').onclick = () => close(true);
     document.addEventListener('keydown', onKey);
     ov.onclick = e => { if(e.target===ov) close(false); };
   });
+}
+function showToast(message, opts){
+  opts = opts || {};
+  let wrap = document.getElementById('toastWrap');
+  if(!wrap){ wrap = document.createElement('div'); wrap.id = 'toastWrap'; wrap.className = 'toastwrap'; document.body.appendChild(wrap); }
+  const el = document.createElement('div');
+  el.className = 'toast ' + (opts.type || 'error');
+  el.textContent = message;
+  const close = () => { el.classList.add('out'); setTimeout(()=>el.remove(), 180); };
+  el.onclick = close;
+  wrap.appendChild(el);
+  setTimeout(close, 4200);
 }
 
 // ================= paginación (norma del estudio) =================
@@ -1480,7 +1538,7 @@ async function markWonFlow(phone){
     const r = await fetch('/admin/api/status', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, status:'won'}) });
     if(!r.ok) throw 0;
     await refreshLeads(); openLead(phone); renderKanban();
-  }catch(e){ alert(t('err_status')); }
+  }catch(e){ showToast(t('err_status')); }
 }
 async function scheduleApptFlow(phone){
   const l = leads.find(x=>x.phone===phone);
@@ -1489,14 +1547,14 @@ async function scheduleApptFlow(phone){
   try{
     const r = await fetch('/admin/api/appts', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, name:l?.name||'', title:t('call_title'), when, closer:whoAmI}) });
     if(!r.ok) throw 0;
-    alert(t('appt_created')); await refreshLeads(); openLead(phone);
-  }catch(e){ alert(t('err_appt')); }
+    showToast(t('appt_created'), {type:'success'}); await refreshLeads(); openLead(phone);
+  }catch(e){ showToast(t('err_appt')); }
 }
 async function newLeadFlow(){
   const phone = await askPrompt(t('ask_phone_new'), '');
   if(!phone) return;
   const digits = phone.replace(/\D/g,'');
-  if(digits.length<8){ alert(t('invalid_phone')); return; }
+  if(digits.length<8){ showToast(t('invalid_phone')); return; }
   const name = await askPrompt(t('ask_name_opt'), '') || '';
   try{
     const r = await fetch('/admin/api/lead/create', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:digits}) });
@@ -1504,7 +1562,7 @@ async function newLeadFlow(){
     const fields = {}; if(name) fields.name = name; if(whoAmI) fields.owner = whoAmI;
     if(Object.keys(fields).length) await fetch('/admin/api/lead', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:digits, ...fields}) });
     await refreshLeads(); renderKanban(); renderLeadsTbl(); openLead(digits);
-  }catch(e){ alert(t('err_lead_create')); }
+  }catch(e){ showToast(t('err_lead_create')); }
 }
 async function refreshLeads(){
   const r = await fetch('/admin/api/leads', { headers:{'X-Admin-Key':sessionKey} });
@@ -1573,7 +1631,7 @@ async function newOperatorFlow(){
     const r = await fetch('/admin/api/operator', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({company,contact,email,db:opsDb}) });
     if(!r.ok) throw 0;
     await loadOperators();
-  }catch(e){ alert(t('err_operator_create')); }
+  }catch(e){ showToast(t('err_operator_create')); }
 }
 async function editOperatorFlow(id){
   const o = operators.find(x=>x.id===id); if(!o) return;
@@ -1583,7 +1641,7 @@ async function editOperatorFlow(id){
     const r = await fetch('/admin/api/operator', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, status, db:opsDb}) });
     if(!r.ok) throw 0;
     await loadOperators();
-  }catch(e){ alert(t('err_operator_update')); }
+  }catch(e){ showToast(t('err_operator_update')); }
 }
 async function archiveOperatorFlow(id){
   if(!await askConfirm(t('confirm_archive_op'))) return;
@@ -1591,7 +1649,7 @@ async function archiveOperatorFlow(id){
     const r = await fetch('/admin/api/operator/archive', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, archived:true, db:opsDb}) });
     if(!r.ok) throw 0;
     await loadOperators();
-  }catch(e){ alert(t('err_operator_archive')); }
+  }catch(e){ showToast(t('err_operator_archive')); }
 }
 async function deleteOperatorFlow(id){
   if(!await askConfirm(t('confirm_delete_op'), {danger:true})) return;
@@ -1599,7 +1657,7 @@ async function deleteOperatorFlow(id){
     const r = await fetch('/admin/api/operator/delete', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, db:opsDb}) });
     if(!r.ok) throw 0;
     await loadOperators();
-  }catch(e){ alert(t('err_operator_archive')); }
+  }catch(e){ showToast(t('err_operator_archive')); }
 }
 
 // ======================================================================
@@ -1697,7 +1755,7 @@ async function newApptFlow(){
     const r = await fetch('/admin/api/appts', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, name, title:t('call_title'), when, closer:whoAmI}) });
     if(!r.ok) throw 0;
     await loadAppts();
-  }catch(e){ alert(t('err_appt')); }
+  }catch(e){ showToast(t('err_appt')); }
 }
 async function deleteApptFlow(id){
   if(!await askConfirm(t('confirm_delete_appt'), {danger:true})) return;
@@ -1705,7 +1763,7 @@ async function deleteApptFlow(id){
     const r = await fetch('/admin/api/appts/'+id, { method:'DELETE', headers:{'X-Admin-Key':sessionKey} });
     if(!r.ok) throw 0;
     await loadAppts();
-  }catch(e){ alert(t('err_appt_delete')); }
+  }catch(e){ showToast(t('err_appt_delete')); }
 }
 
 // ======================================================================
@@ -1752,13 +1810,13 @@ function renderInvoices(){
 }
 async function newPaymentFlow(){
   const phone = await askPrompt(t('ask_phone_pay'),''); if(!phone) return;
-  const amount = await askPrompt(t('ask_amount'),''); if(!amount || isNaN(parseFloat(amount))) { alert(t('invalid_amount')); return; }
+  const amount = await askPrompt(t('ask_amount'),''); if(!amount || isNaN(parseFloat(amount))) { showToast(t('invalid_amount')); return; }
   const method = await askPrompt(t('ask_method'),'wise') || 'other';
   try{
     const r = await fetch('/admin/api/payment', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, amount:parseFloat(amount), method, kind:'other'}) });
     if(!r.ok) throw 0;
     await refreshLeads(); loadInvoices();
-  }catch(e){ alert(t('err_payment_create')); }
+  }catch(e){ showToast(t('err_payment_create')); }
 }
 async function assignPaymentFlow(idx){
   const phone = await askPrompt(t('ask_assign_phone'),''); if(!phone) return;
@@ -1766,7 +1824,7 @@ async function assignPaymentFlow(idx){
     const r = await fetch('/admin/api/payments/assign', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({idx, phone}) });
     if(!r.ok) throw 0;
     await refreshLeads(); loadInvoices();
-  }catch(e){ alert(t('err_payment_assign')); }
+  }catch(e){ showToast(t('err_payment_assign')); }
 }
 async function deletePaymentFlow(phone,id){
   if(!await askConfirm(t('confirm_delete_payment'), {danger:true})) return;
@@ -1774,7 +1832,7 @@ async function deletePaymentFlow(phone,id){
     const r = await fetch('/admin/api/payment/delete', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, id}) });
     if(!r.ok) throw 0;
     await refreshLeads(); loadInvoices();
-  }catch(e){ alert(t('err_payment_delete')); }
+  }catch(e){ showToast(t('err_payment_delete')); }
 }
 
 // ======================================================================
@@ -1840,25 +1898,25 @@ function renderDepartures(){
 }
 async function newDepartureFlow(){
   const date = await askPrompt(t('ask_dep_date'),''); if(!date) return;
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ alert(t('invalid_date')); return; }
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ showToast(t('invalid_date')); return; }
   const tour = await askPrompt(t('ask_dep_tour'),'') || '';
   const guided = await askConfirm(t('ask_dep_guided'));
   try{
     const r = await fetch('/admin/api/departure', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({date, tour, guided}) });
     if(!r.ok) throw 0;
     await loadDepartures();
-  }catch(e){ alert(t('err_departure')); }
+  }catch(e){ showToast(t('err_departure')); }
 }
 async function editDepartureFlow(id){
   const d = (depOverview.departures||[]).find(x=>x.id===id); if(!d) return;
   const date = await askPrompt(t('ask_dep_date'), d.date); if(date==null) return;
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ alert(t('invalid_date')); return; }
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ showToast(t('invalid_date')); return; }
   const capacity = await askPrompt(t('ask_dep_capacity'), d.capacity); if(capacity==null) return;
   try{
     const r = await fetch('/admin/api/departure', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, date, tour:d.tour, package:d.package, guided:d.guided, capacity:parseInt(capacity,10)||undefined, minPax:d.minPax, notes:d.notes}) });
     if(!r.ok) throw 0;
     await loadDepartures();
-  }catch(e){ alert(t('err_departure')); }
+  }catch(e){ showToast(t('err_departure')); }
 }
 async function deleteDepartureFlow(id){
   if(!await askConfirm(t('confirm_delete_dep'), {danger:true})) return;
@@ -1866,20 +1924,20 @@ async function deleteDepartureFlow(id){
     const r = await fetch('/admin/api/departure/delete', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id}) });
     if(!r.ok) throw 0;
     await loadDepartures();
-  }catch(e){ alert(t('err_departure_delete')); }
+  }catch(e){ showToast(t('err_departure_delete')); }
 }
 async function assignDepartureFlow(phone){
   const deps = (depOverview.departures||[]).filter(d=>d.occState!=='cancelled');
-  if(!deps.length){ alert(t('no_open_departures')); return; }
+  if(!deps.length){ showToast(t('no_open_departures')); return; }
   const list = deps.map(d=>d.date+' ('+d.pax+'/'+d.capacity+')').join('\n');
   const chosen = await askPrompt(t('ask_pick_departure')+'\n'+list, deps[0].date); if(!chosen) return;
   const match = deps.find(d=>d.date===chosen.trim());
-  if(!match){ alert(t('dep_not_found')); return; }
+  if(!match){ showToast(t('dep_not_found')); return; }
   try{
     const r = await fetch('/admin/api/departure/assign', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, departureId:match.id}) });
     if(!r.ok) throw 0;
     await refreshLeads(); await loadDepartures();
-  }catch(e){ alert(t('err_departure_assign')); }
+  }catch(e){ showToast(t('err_departure_assign')); }
 }
 async function unassignDepartureFlow(phone){
   if(!await askConfirm(t('confirm_unassign_dep'))) return;
@@ -1887,7 +1945,7 @@ async function unassignDepartureFlow(phone){
     const r = await fetch('/admin/api/departure/assign', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, departureId:''}) });
     if(!r.ok) throw 0;
     await refreshLeads(); await loadDepartures();
-  }catch(e){ alert(t('err_departure_assign')); }
+  }catch(e){ showToast(t('err_departure_assign')); }
 }
 
 // ======================================================================
@@ -1921,7 +1979,7 @@ function renderMedia(){
 function mediaFileChosen(ev){
   const file = ev.target.files[0]; ev.target.value='';
   if(!file) return;
-  if(file.size > 16*1024*1024){ alert(t('media_too_big')); return; }
+  if(file.size > 16*1024*1024){ showToast(t('media_too_big')); return; }
   const reader = new FileReader();
   reader.onload = async () => {
     try{
@@ -1936,7 +1994,7 @@ function mediaFileChosen(ev){
       if(!r2.ok) throw 0;
       mediaLib = await r2.json();
       renderMedia();
-    }catch(e){ alert(t('err_media_upload')); }
+    }catch(e){ showToast(t('err_media_upload')); }
   };
   reader.readAsDataURL(file);
 }
@@ -1950,7 +2008,7 @@ async function editMediaFlow(i){
     const r = await fetch('/admin/api/media', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({items:next}) });
     if(!r.ok) throw 0;
     mediaLib = await r.json(); renderMedia();
-  }catch(e){ alert(t('err_media_update')); }
+  }catch(e){ showToast(t('err_media_update')); }
 }
 async function deleteMediaFlow(i){
   if(!await askConfirm(t('confirm_delete_media'), {danger:true})) return;
@@ -1959,7 +2017,7 @@ async function deleteMediaFlow(i){
     const r = await fetch('/admin/api/media', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({items:next}) });
     if(!r.ok) throw 0;
     mediaLib = await r.json(); renderMedia();
-  }catch(e){ alert(t('err_media_update')); }
+  }catch(e){ showToast(t('err_media_update')); }
 }
 
 // ======================================================================
@@ -2014,38 +2072,38 @@ function nlPayload(){
 }
 async function sendNewsletterFlow(){
   const p = nlPayload();
-  if(!p.subject || !p.body){ alert(t('nl_need_subject_body')); return; }
+  if(!p.subject || !p.body){ showToast(t('nl_need_subject_body')); return; }
   if(!await askConfirm(t('nl_confirm_send'), {danger:true})) return;
   try{
     const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify(p) });
     const d = await r.json();
     if(!r.ok) throw new Error(d.error||'');
-    alert(t('nl_sent_result',{sent:d.sent,total:d.total}));
+    showToast(t('nl_sent_result',{sent:d.sent,total:d.total}), {type:'success'});
     await loadNewsletterView();
-  }catch(e){ alert(t('nl_send_error')+(e.message?(': '+e.message):'')); }
+  }catch(e){ showToast(t('nl_send_error')+(e.message?(': '+e.message):'')); }
 }
 async function testNewsletterFlow(){
   const p = nlPayload();
-  if(!p.subject || !p.body){ alert(t('nl_need_subject_body')); return; }
+  if(!p.subject || !p.body){ showToast(t('nl_need_subject_body')); return; }
   const testTo = await askPrompt(t('ask_test_email'),''); if(!testTo) return;
   try{
     const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({...p, testTo}) });
     const d = await r.json();
     if(!r.ok) throw new Error(d.error||'');
-    alert(t('nl_test_sent'));
-  }catch(e){ alert(t('nl_send_error')+(e.message?(': '+e.message):'')); }
+    showToast(t('nl_test_sent'), {type:'success'});
+  }catch(e){ showToast(t('nl_send_error')+(e.message?(': '+e.message):'')); }
 }
 async function scheduleNewsletterFlow(){
   const p = nlPayload();
-  if(!p.subject || !p.body){ alert(t('nl_need_subject_body')); return; }
+  if(!p.subject || !p.body){ showToast(t('nl_need_subject_body')); return; }
   const when = await askPrompt(t('ask_when'),''); if(!when) return;
   try{
     const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({...p, when}) });
     const d = await r.json();
     if(!r.ok) throw new Error(d.error||'');
-    alert(t('nl_scheduled_ok'));
+    showToast(t('nl_scheduled_ok'), {type:'success'});
     await loadNewsletterView();
-  }catch(e){ alert(t('nl_send_error')+(e.message?(': '+e.message):'')); }
+  }catch(e){ showToast(t('nl_send_error')+(e.message?(': '+e.message):'')); }
 }
 async function cancelScheduledFlow(id){
   if(!await askConfirm(t('nl_confirm_cancel'))) return;
@@ -2053,7 +2111,7 @@ async function cancelScheduledFlow(id){
     const r = await fetch('/admin/api/newsletter/cancel', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id}) });
     if(!r.ok) throw 0;
     await loadNewsletterView();
-  }catch(e){ alert(t('nl_send_error')); }
+  }catch(e){ showToast(t('nl_send_error')); }
 }
 async function addSubscriberFlow(){
   const email = await askPrompt(t('ask_subscriber_email'),''); if(!email) return;
@@ -2061,7 +2119,7 @@ async function addSubscriberFlow(){
     const r = await fetch('/admin/api/subscribers/add', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({email}) });
     if(!r.ok) throw 0;
     await loadNewsletterView();
-  }catch(e){ alert(t('nl_send_error')); }
+  }catch(e){ showToast(t('nl_send_error')); }
 }
 async function removeSubscriberFlow(email){
   if(!await askConfirm(t('confirm_delete_subscriber'), {danger:true})) return;
@@ -2069,7 +2127,7 @@ async function removeSubscriberFlow(email){
     const r = await fetch('/admin/api/subscribers/remove', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({email}) });
     if(!r.ok) throw 0;
     await loadNewsletterView();
-  }catch(e){ alert(t('nl_send_error')); }
+  }catch(e){ showToast(t('nl_send_error')); }
 }
 
 // ======================================================================
@@ -2159,7 +2217,7 @@ function dismissSetup(){
   localStorage.setItem('panelv2_setup_dismissed','1');
   document.getElementById('setupCard').classList.add('hidden');
 }
-function explainSetup(){ alert(t('setup_explain')); }
+function explainSetup(){ showToast(t('setup_explain'), {type:'info'}); }
 
 // ======================================================================
 // NOTIFICACIONES — 100% real, calculado de `leads` y `appts` ya cargados
