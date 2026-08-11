@@ -263,6 +263,19 @@ table.leadstbl{width:100%;border-collapse:collapse}
 .notifitem .ds{font-size:12px;color:var(--muted);margin-top:1px}
 .notifempty{padding:22px 14px;text-align:center;color:var(--muted);font-size:13px}
 
+/* ---------- calendario (Citas) ---------- */
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.calgrid-dow{margin-bottom:8px}
+.calgrid-dow span{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;text-align:center;padding:4px 0}
+.calday{min-height:88px;border:1px solid var(--border);border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:3px;overflow:hidden}
+.calday.out{background:var(--card2);opacity:.55}
+.calday.today{border-color:var(--accent);border-width:1.5px}
+.calday .dn{font-size:12px;font-weight:600;color:var(--muted)}
+.calday.today .dn{color:var(--accent-ink);font-weight:700}
+.calchip{background:var(--accent-soft);color:var(--accent-ink);border-radius:6px;padding:2px 6px;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.calchip:hover{filter:brightness(0.95)}
+.calmore{font-size:11px;color:var(--muted);cursor:pointer}
+
 /* ---------- idioma ---------- */
 .langbtn{display:flex;gap:2px;background:var(--card2);border-radius:8px;padding:2px;margin:2px 0 6px}
 .langbtn span{flex:1;text-align:center;padding:5px 0;font-size:12px;font-weight:600;color:var(--muted);border-radius:6px;cursor:pointer}
@@ -524,11 +537,20 @@ table.leadstbl{width:100%;border-collapse:collapse}
     <div class="view hidden" id="vAppts">
       <div style="padding:18px 28px 30px">
         <div class="filters">
-          <span style="font-size:13px;color:var(--muted)" id="apptsSummary" data-i18n="loading">Cargando…</span>
+          <button class="btn" onclick="calNav(-1)">&larr;</button>
+          <span style="font-weight:600;font-size:15px;min-width:150px" id="calLabel"></span>
+          <button class="btn" onclick="calNav(1)">&rarr;</button>
+          <button class="btn" onclick="calToday()" data-i18n="cal_today">Hoy</button>
           <span style="flex:1"></span>
+          <span style="font-size:13px;color:var(--muted)" id="apptsSummary" data-i18n="loading">Cargando…</span>
+          <div class="segmented" id="apptsViewSeg"><span class="seg on" data-i18n="cal_month" onclick="setApptsViewMode('cal')">Mes</span><span class="seg" data-i18n="cal_list" onclick="setApptsViewMode('list')">Lista</span></div>
           <button class="btn dark" onclick="newApptFlow()" data-i18n="new_appt">+ Nueva cita</button>
         </div>
-        <div class="card tblcard">
+        <div class="card" id="apptsCalWrap" style="padding:14px;overflow:hidden">
+          <div class="calgrid calgrid-dow" id="calDow"></div>
+          <div class="calgrid" id="calGrid"></div>
+        </div>
+        <div class="card tblcard hidden" id="apptsListWrap">
           <div class="tblhead" style="grid-template-columns:1.3fr 1.6fr 1.5fr 90px"><span data-i18n="th_when">Cuándo</span><span data-i18n="th_lead">Lead</span><span data-i18n="th_title_notes">Título / notas</span><span></span></div>
           <div id="apptsTbl"></div>
         </div>
@@ -629,6 +651,7 @@ es: {
   session:'Sesión', connected_as:'Conectado como', panel:'Panel', backend:'Backend', backend_val:'mismo que /admin',
   bn_switch:'Cambiar de usuario', logout:'Cerrar sesión', bn_appearance:'Apariencia', bn_help:'Ayuda y soporte',
   theme_light:'Claro', theme_dark:'Oscuro',
+  cal_today:'Hoy', cal_month:'Mes', cal_list:'Lista', cal_more:'+{n} más',
   about_pilot:'Sobre este piloto',
   about_pilot_desc:'Reskin de /admin con el lenguaje visual del dashboard de referencia. No añade lógica de escritura nueva: cada acción llama al mismo endpoint que ya usa /admin a diario. Para ajustes reales (WhatsApp, plantillas, variables de Railway) sigue siendo /admin o Railway directamente — aquí no se pueden tocar.',
   kpi_new_leads:'Leads nuevos (30d)', kpi_conversion:'Tasa de conversión', kpi_collected:'Ingresos cobrados',
@@ -700,6 +723,7 @@ en: {
   session:'Session', connected_as:'Signed in as', panel:'Panel', backend:'Backend', backend_val:'same as /admin',
   bn_switch:'Switch user', logout:'Sign out', bn_appearance:'Appearance', bn_help:'Help & support',
   theme_light:'Light', theme_dark:'Dark',
+  cal_today:'Today', cal_month:'Month', cal_list:'List', cal_more:'+{n} more',
   about_pilot:'About this pilot',
   about_pilot_desc:'A reskin of /admin using the reference dashboard\'s visual language. No new write logic: every action calls the same endpoint /admin already uses daily. For real settings (WhatsApp, templates, Railway variables) it\'s still /admin or Railway directly — those can\'t be touched from here.',
   kpi_new_leads:'New leads (30d)', kpi_conversion:'Conversion rate', kpi_collected:'Revenue collected',
@@ -1218,6 +1242,70 @@ function renderAppts(){
       <span class="wait">${a.title||t('call_title')}${a.closer?(' · '+a.closer):''}</span>
       <button class="actbtn" onclick="deleteApptFlow('${a.id}')">${t('delete')}</button>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('no_appts')}</div>`;
+  renderApptsCalendar();
+}
+
+// ======================================================================
+// CALENDARIO (Citas) — vista de mes sobre los mismos `appts` ya cargados
+// por loadAppts(), sin fetch propio. "Lista" (la de siempre) sigue al lado
+// como toggle, igual patron que Kanban/Tabla en Leads.
+// ======================================================================
+let apptsViewMode = 'cal';
+let calDate = new Date(); calDate.setDate(1);
+const DOW = { es:['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'], en:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] };
+function setApptsViewMode(mode){
+  apptsViewMode = mode;
+  document.querySelectorAll('#apptsViewSeg .seg').forEach((el,i)=>{
+    el.classList.toggle('on', (mode==='cal'&&i===0) || (mode==='list'&&i===1));
+  });
+  document.getElementById('apptsCalWrap').classList.toggle('hidden', mode!=='cal');
+  document.getElementById('apptsListWrap').classList.toggle('hidden', mode!=='list');
+}
+function calNav(delta){ calDate.setMonth(calDate.getMonth()+delta); renderApptsCalendar(); }
+function calToday(){ calDate = new Date(); calDate.setDate(1); renderApptsCalendar(); }
+function apptChipClick(id){
+  const a = appts.find(x=>x.id===id); if(!a) return;
+  if(a.phone) openLead(a.phone);
+}
+function renderApptsCalendar(){
+  const dowEl = document.getElementById('calDow');
+  if(!dowEl) return; // vista aun no montada (login/who-gate)
+  dowEl.innerHTML = DOW[LANG==='en'?'en':'es'].map(d=>`<span>${d}</span>`).join('');
+  document.getElementById('calLabel').textContent = calDate.toLocaleDateString(LANG==='es'?'es-ES':'en-US',{month:'long',year:'numeric'});
+
+  const year = calDate.getFullYear(), month = calDate.getMonth();
+  const firstDow = (new Date(year,month,1).getDay()+6)%7; // lunes=0
+  const daysInMonth = new Date(year,month+1,0).getDate();
+  const daysInPrev = new Date(year,month,0).getDate();
+  const todayStr = new Date().toDateString();
+
+  const byDay = {};
+  appts.forEach(a=>{
+    if(!a.when) return;
+    const d = new Date(a.when);
+    if(isNaN(d)) return;
+    const key = d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate();
+    (byDay[key]=byDay[key]||[]).push(a);
+  });
+
+  const cells = [];
+  for(let i=firstDow-1;i>=0;i--) cells.push({day:daysInPrev-i, out:true, y:month===0?year-1:year, m:month===0?11:month-1});
+  for(let d=1;d<=daysInMonth;d++) cells.push({day:d, out:false, y:year, m:month});
+  while(cells.length%7!==0 || cells.length<35) cells.push({day:cells.length-firstDow-daysInMonth+1, out:true, y:month===11?year+1:year, m:month===11?0:month+1});
+
+  document.getElementById('calGrid').innerHTML = cells.map(c=>{
+    const dt = new Date(c.y,c.m,c.day);
+    const key = c.y+'-'+c.m+'-'+c.day;
+    const isToday = !c.out && dt.toDateString()===todayStr;
+    const dayAppts = (byDay[key]||[]).sort((a,b)=>new Date(a.when)-new Date(b.when));
+    const shown = dayAppts.slice(0,3);
+    const rest = dayAppts.length-shown.length;
+    return `<div class="calday ${c.out?'out':''} ${isToday?'today':''}">
+      <div class="dn">${c.day}</div>
+      ${shown.map(a=>`<div class="calchip" onclick="apptChipClick('${a.id}')" title="${(a.name||a.title||'').replace(/"/g,'&quot;')}">${new Date(a.when).toLocaleTimeString(LANG==='es'?'es-ES':'en-US',{hour:'2-digit',minute:'2-digit'})} ${a.name||a.title||''}</div>`).join('')}
+      ${rest>0?`<div class="calmore" onclick="setApptsViewMode('list')">${t('cal_more',{n:rest})}</div>`:''}
+    </div>`;
+  }).join('');
 }
 async function newApptFlow(){
   const phone = prompt(t('ask_phone_appt_opt'),'') || '';
