@@ -317,6 +317,46 @@ textarea.nlinput{resize:vertical}
 .langbtn{display:flex;gap:2px;background:var(--card2);border-radius:8px;padding:2px;margin:2px 0 6px}
 .langbtn span{flex:1;text-align:center;padding:5px 0;font-size:12px;font-weight:600;color:var(--muted);border-radius:6px;cursor:pointer}
 .langbtn span.on{background:var(--card);color:var(--text)}
+
+/* ---------- scrollbars (acorde al diseño, mismo token en claro/oscuro) ---------- */
+*{scrollbar-width:thin;scrollbar-color:var(--border2) transparent}
+*::-webkit-scrollbar{width:9px;height:9px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px}
+*::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+*::-webkit-scrollbar-corner{background:transparent}
+
+/* ---------- sidebar colapsable ---------- */
+.side{transition:width .15s ease}
+.side.collapsed{width:72px;align-items:center}
+.side.collapsed .brand{justify-content:center;padding-left:0;padding-right:0}
+.side.collapsed .brand .name,.side.collapsed .brand .sub,.side.collapsed .navlabel,
+.side.collapsed .navitem .lbl,.side.collapsed .navitem .badge,
+.side.collapsed .me .nm,.side.collapsed .me .role,.side.collapsed .me .dots,#themeState{display:none}
+.side.collapsed .navitem,.side.collapsed .me{justify-content:center;width:100%}
+.side.collapsed #sideToggleIcon{transform:rotate(180deg)}
+
+/* ---------- modal estilizado (reemplaza await askPrompt()/await askConfirm() nativos) ---------- */
+.modalov{position:fixed;inset:0;background:rgba(10,10,8,.5);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px}
+.modalbox{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:22px;width:100%;max-width:400px;box-shadow:0 24px 60px rgba(0,0,0,.3)}
+.modalbox .modalmsg{font-size:14px;font-weight:500;line-height:1.5;white-space:pre-wrap;margin-bottom:14px}
+.modalbox .modalbtns{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.modalbox .modalbtns button{border-radius:10px;padding:9px 16px;font-size:13.5px;font-weight:600;border:none}
+.modalbox .modalbtns .ghost{background:var(--card2);border:1px solid var(--border);color:var(--text)}
+.modalbox .modalbtns .primary{background:var(--strong);color:var(--strong-ink)}
+.modalbox .modalbtns .danger{background:var(--red);color:#fff}
+
+/* ---------- paginación (norma del estudio, mismo patrón que /admin) ---------- */
+.pager{display:flex;align-items:center;gap:10px;padding:12px 16px;font-size:12.5px;color:var(--muted)}
+.pager .pgbtns{display:flex;align-items:center;gap:4px;margin-left:auto}
+.pager .pgbtns button{width:28px;height:28px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:12.5px;display:flex;align-items:center;justify-content:center}
+.pager .pgbtns button:disabled{opacity:.4;cursor:default}
+.pager .pgnum{padding:0 8px;font-weight:600;color:var(--text)}
+
+/* ---------- kanban: arrastrar entre columnas ---------- */
+.kancol.dragover .kancards{outline:2px dashed var(--accent);outline-offset:-4px;border-radius:10px}
+.kancard[draggable]{cursor:grab}
+.kancard .kstatus{width:100%;margin-top:9px;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:12px}
 </style>
 </head>
 <body>
@@ -348,11 +388,6 @@ textarea.nlinput{resize:vertical}
         <div class="sub">CRM BMA</div>
       </div>
     </div>
-    <div class="search">
-      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M7 2.8a4.2 4.2 0 1 1 0 8.4 4.2 4.2 0 0 1 0-8.4z"/><path d="M10.2 10.2L13.6 13.6"/></svg>
-      <span data-i18n="search">Buscar</span><span class="k">/</span>
-    </div>
-
     <div class="navlabel" data-i18n="nav_essentials">Esenciales</div>
     <div class="navgroup">
       <div class="navitem active" data-view="overview">
@@ -435,6 +470,7 @@ textarea.nlinput{resize:vertical}
     </div>
     <div class="bottomnav">
       <div class="navitem" onclick="toggleTheme()" style="cursor:pointer"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 5.6a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8z"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6"/></svg><span class="lbl" data-i18n="bn_appearance">Apariencia</span><span id="themeState" style="font-size:11.5px;color:var(--muted)"></span></div>
+      <div class="navitem" id="sideToggle" onclick="toggleSidebar()" style="cursor:pointer" data-i18n-title="bn_collapse" title="Colapsar menú"><svg id="sideToggleIcon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 2.6v10.8"/><path d="M9.5 5L6.8 8l2.7 3"/><path d="M13 5l-2.7 3 2.7 3"/></svg><span class="lbl" data-i18n="bn_collapse">Colapsar menú</span></div>
       <div class="me" onclick="switchWho()" style="cursor:pointer" data-i18n-title="bn_switch" title="Cambiar de usuario">
         <div class="av" id="meAv">?</div>
         <div><div class="nm" id="meName">&mdash;</div><div class="role" data-i18n="bn_switch">Cambiar de usuario</div></div>
@@ -545,6 +581,7 @@ textarea.nlinput{resize:vertical}
       <div class="card tblcard hidden" id="leadsTableWrap">
         <div class="tblhead"><span data-i18n="th_lead">Lead</span><span data-i18n="th_status">Estado</span><span data-i18n="th_interest">Interés</span><span data-i18n="th_value">Valor</span><span></span></div>
         <div id="leadsTableTbl"></div>
+        <div id="leadsTablePager"></div>
       </div>
     </div>
 
@@ -581,6 +618,7 @@ textarea.nlinput{resize:vertical}
         <div class="card tblcard">
           <div class="tblhead" style="grid-template-columns:2fr 1.4fr 1fr 1fr 90px"><span data-i18n="th_company">Empresa</span><span data-i18n="th_contact">Contacto</span><span data-i18n="th_country">País</span><span data-i18n="th_status">Estado</span><span></span></div>
           <div id="opsTbl"></div>
+          <div id="opsPager"></div>
         </div>
       </div>
     </div>
@@ -605,6 +643,7 @@ textarea.nlinput{resize:vertical}
         <div class="card tblcard hidden" id="apptsListWrap">
           <div class="tblhead" style="grid-template-columns:1.3fr 1.6fr 1.5fr 90px"><span data-i18n="th_when">Cuándo</span><span data-i18n="th_lead">Lead</span><span data-i18n="th_title_notes">Título / notas</span><span></span></div>
           <div id="apptsTbl"></div>
+          <div id="apptsPager"></div>
         </div>
       </div>
     </div>
@@ -622,6 +661,7 @@ textarea.nlinput{resize:vertical}
         <div class="card tblcard">
           <div class="tblhead" style="grid-template-columns:1.6fr 1fr 1fr 1fr 90px"><span data-i18n="th_lead">Lead</span><span data-i18n="th_amount">Importe</span><span data-i18n="th_method">Método</span><span data-i18n="th_date">Fecha</span><span></span></div>
           <div id="payTbl"></div>
+          <div id="payPager"></div>
         </div>
       </div>
     </div>
@@ -660,6 +700,7 @@ textarea.nlinput{resize:vertical}
         <div class="kpis" id="depKpis" style="grid-template-columns:repeat(6,1fr);margin-bottom:22px"></div>
         <div class="sechd"><span class="t" data-i18n="departures_hd">Salidas</span><button class="btn dark" onclick="newDepartureFlow()" data-i18n="new_departure">+ Nueva salida</button></div>
         <div id="depList" style="display:flex;flex-direction:column;gap:14px"></div>
+        <div id="depPager"></div>
         <div class="sechd" style="margin-top:24px"><span class="t" data-i18n="unassigned_hd">Ganados sin salida</span></div>
         <div class="card tblcard">
           <div class="tblhead" style="grid-template-columns:1.8fr 1.2fr 1fr 1fr 110px"><span data-i18n="th_lead">Lead</span><span data-i18n="th_interest">Interés</span><span data-i18n="th_value">Valor</span><span data-i18n="th_status">Estado</span><span></span></div>
@@ -678,6 +719,7 @@ textarea.nlinput{resize:vertical}
           <button class="btn dark" onclick="document.getElementById('mediaFileInput').click()" data-i18n="upload_media">+ Subir</button>
         </div>
         <div class="mediagrid" id="mediaGrid"></div>
+        <div id="mediaPager"></div>
       </div>
     </div>
 
@@ -707,16 +749,19 @@ textarea.nlinput{resize:vertical}
         <div class="card tblcard" style="margin-bottom:22px">
           <div class="tblhead" style="grid-template-columns:1.3fr 2fr 1fr 90px"><span data-i18n="th_when">Cuándo</span><span data-i18n="nl_subject">Asunto</span><span data-i18n="nl_scope">Alcance</span><span></span></div>
           <div id="nlScheduledTbl"></div>
+          <div id="nlSchedPager"></div>
         </div>
         <div class="sechd"><span class="t" data-i18n="nl_history_hd">Historial</span></div>
         <div class="card tblcard" style="margin-bottom:22px">
           <div class="tblhead" style="grid-template-columns:1.3fr 2fr 1fr 1fr"><span data-i18n="th_when">Cuándo</span><span data-i18n="nl_subject">Asunto</span><span data-i18n="nl_dataset">Audiencia</span><span data-i18n="nl_result">Resultado</span></div>
           <div id="nlHistoryTbl"></div>
+          <div id="nlHistPager"></div>
         </div>
         <div class="sechd"><span class="t" data-i18n="nl_subs_hd">Suscriptores web</span><button class="btn" onclick="addSubscriberFlow()" data-i18n="nl_subs_add">+ Añadir</button></div>
         <div class="card tblcard">
           <div class="tblhead" style="grid-template-columns:2fr 1fr 1fr 90px"><span data-i18n="th_email">Email</span><span data-i18n="nl_subs_source">Origen</span><span data-i18n="th_status">Estado</span><span></span></div>
           <div id="subsTbl"></div>
+          <div id="subsPager"></div>
         </div>
       </div>
     </div>
@@ -757,7 +802,7 @@ const I18N = {
 es: {
   login_sub:'Misma clave que /admin', login_ph:'Clave del panel', login_enter:'Entrar',
   who_ttl:'¿Quién eres?', who_sub:'Para atribuir lo que crees o cambies desde aquí',
-  search:'Buscar', nav_essentials:'Esenciales', nav_overview:'Resumen', nav_chats:'Conversaciones',
+  nav_essentials:'Esenciales', nav_overview:'Resumen', nav_chats:'Conversaciones',
   nav_daniel:'Daniel (agente IA)', nav_work:'Trabajo', nav_leads:'Leads', nav_operators:'Operadores B2B',
   nav_appts:'Citas', nav_invoices:'Facturas', nav_account:'Cuenta', nav_team:'Equipo', nav_settings:'Ajustes',
   nav_departures:'Salidas', nav_tao:'Travel Adv.', nav_media:'Fotos y vídeos', nav_newsletter:'Newsletter', nav_sim:'Simulador',
@@ -787,6 +832,7 @@ es: {
   recent_payments:'Pagos recientes', team_hd:'Reparto de leads por persona', team_sub:'calculado de los leads ya cargados',
   session:'Sesión', connected_as:'Conectado como', panel:'Panel', backend:'Backend', backend_val:'mismo que /admin',
   bn_switch:'Cambiar de usuario', logout:'Cerrar sesión', bn_appearance:'Apariencia',
+  bn_collapse:'Colapsar menú', bn_expand:'Expandir menú', of:'de', btn_cancel:'Cancelar', btn_ok:'Aceptar',
   theme_light:'Claro', theme_dark:'Oscuro',
   cal_today:'Hoy', cal_month:'Mes', cal_list:'Lista', cal_more:'+{n} más',
   about_pilot:'Sobre este piloto',
@@ -864,7 +910,7 @@ es: {
 en: {
   login_sub:'Same password as /admin', login_ph:'Panel password', login_enter:'Sign in',
   who_ttl:'Who are you?', who_sub:'To attribute what you create or change from here',
-  search:'Search', nav_essentials:'Essentials', nav_overview:'Overview', nav_chats:'Conversations',
+  nav_essentials:'Essentials', nav_overview:'Overview', nav_chats:'Conversations',
   nav_daniel:'Daniel (AI agent)', nav_work:'Work', nav_leads:'Leads', nav_operators:'B2B Operators',
   nav_appts:'Appointments', nav_invoices:'Invoices', nav_account:'Account', nav_team:'Team', nav_settings:'Settings',
   nav_departures:'Departures', nav_tao:'Travel Adv.', nav_media:'Photos & videos', nav_newsletter:'Newsletter', nav_sim:'Simulator',
@@ -894,6 +940,7 @@ en: {
   recent_payments:'Recent payments', team_hd:'Lead split by teammate', team_sub:'computed from already-loaded leads',
   session:'Session', connected_as:'Signed in as', panel:'Panel', backend:'Backend', backend_val:'same as /admin',
   bn_switch:'Switch user', logout:'Sign out', bn_appearance:'Appearance',
+  bn_collapse:'Collapse menu', bn_expand:'Expand menu', of:'of', btn_cancel:'Cancel', btn_ok:'OK',
   theme_light:'Light', theme_dark:'Dark',
   cal_today:'Today', cal_month:'Month', cal_list:'List', cal_more:'+{n} more',
   about_pilot:'About this pilot',
@@ -1022,6 +1069,23 @@ function toggleTheme(){
   applyTheme(theme);
 }
 applyTheme(theme);
+
+// ======================================================================
+// PANEL IZQUIERDO COLAPSABLE — persiste en localStorage, propia de v2
+// (el layout aquí es flex, no el grid de columnas fijas de /admin).
+// ======================================================================
+let sideCollapsed = localStorage.getItem('botpanel_v2_navcollapsed') === '1';
+function applySideCollapsed(v){
+  document.querySelector('.side').classList.toggle('collapsed', v);
+  const lbl = document.getElementById('sideToggle');
+  if(lbl) lbl.title = t(v ? 'bn_expand' : 'bn_collapse');
+}
+function toggleSidebar(){
+  sideCollapsed = !sideCollapsed;
+  localStorage.setItem('botpanel_v2_navcollapsed', sideCollapsed ? '1' : '0');
+  applySideCollapsed(sideCollapsed);
+}
+applySideCollapsed(sideCollapsed);
 applyStaticI18n();
 
 // ======================================================================
@@ -1220,8 +1284,9 @@ async function sendMessage(){
   box.disabled = false; box.focus();
 }
 
+const KAN_ORDER = ['new','quoted','won','lost','noshow'];
 function renderKanban(){
-  const order = ['new','quoted','won','lost','noshow'];
+  const order = KAN_ORDER;
   const inCol = (l,st) => st==='new' ? (!l.status || l.status==='new') : l.status===st;
   const cols = order.map(st=>({
     st, name: STATUS_LABEL[st], dot: STATUS_DOT[st],
@@ -1231,14 +1296,17 @@ function renderKanban(){
   document.getElementById('kanban').innerHTML = cols.map(col=>{
     const sum = col.cards.reduce((a,c)=>a+(parseInt(c.dealValue,10)||0),0);
     total += col.cards.length; sumAll += sum;
-    return `<div class="kancol">
+    return `<div class="kancol" data-status="${col.st}" ondragover="kOver(event)" ondragleave="kLeave(event)" ondrop="kDrop(event)">
       <div class="hd"><span class="dot" style="background:${col.dot}"></span><span class="nm">${col.name}</span><span class="cnt">${col.cards.length}</span><span class="sum">${fmt(sum)}</span></div>
       <div class="kancards">
         ${col.cards.map(cd=>`
-          <div class="kancard" onclick="openLead('${cd.phone}')">
+          <div class="kancard" draggable="true" data-phone="${cd.phone}" ondragstart="kDrag(event)" onclick="openLead('${cd.phone}')">
             <div class="nm">${cd.name||cd.phone}</div>
             <span class="tour">${tourLine(cd)}</span>
             <div class="foot"><span class="val">${cd.dealValue?fmt(parseInt(cd.dealValue,10)):'—'}</span><span class="meta">${waitStr(cd.updatedAt)}</span><span class="av" style="background:${hashColor(cd.phone)}">${initials(cd.name||cd.phone)}</span></div>
+            <select class="kstatus" onclick="event.stopPropagation()" onchange="kSetStatus(event,'${cd.phone}')">
+              ${KAN_ORDER.map(st=>`<option value="${st}" ${(cd.status||'new')===st?'selected':''}>${STATUS_LABEL[st]}</option>`).join('')}
+            </select>
           </div>`).join('')}
         <div class="addcard" onclick="newLeadFlow()">${t('add_lead')}</div>
       </div>
@@ -1246,6 +1314,26 @@ function renderKanban(){
   }).join('');
   document.getElementById('kanbanSummary').textContent = t('kanban_summary',{n:total, v:fmt(sumAll)});
 }
+// -- arrastrar entre columnas (desktop) + selector de estado (táctil/móvil) --
+let kDragPhone = null;
+function kDrag(e){ kDragPhone = e.currentTarget.getAttribute('data-phone'); if(e.dataTransfer) e.dataTransfer.effectAllowed='move'; }
+function kOver(e){ e.preventDefault(); e.currentTarget.classList.add('dragover'); }
+function kLeave(e){ e.currentTarget.classList.remove('dragover'); }
+async function kApplyStatus(phone, st){
+  const l = leads.find(x=>x.phone===phone); if(!l || (l.status||'new')===st) return;
+  l.status = st; renderKanban();
+  try{
+    const r = await fetch('/admin/api/status', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, status:st}) });
+    if(!r.ok) throw 0;
+  }catch(e){ alert(t('err_status')); await refreshLeads(); renderKanban(); }
+}
+function kDrop(e){
+  e.preventDefault(); e.currentTarget.classList.remove('dragover');
+  const st = e.currentTarget.getAttribute('data-status'), phone = kDragPhone; kDragPhone = null;
+  if(!phone) return;
+  kApplyStatus(phone, st);
+}
+function kSetStatus(e, phone){ e.stopPropagation(); kApplyStatus(phone, e.target.value); }
 
 let leadsViewMode = 'kanban';
 function setLeadsViewMode(mode){
@@ -1259,7 +1347,8 @@ function setLeadsViewMode(mode){
 }
 function renderLeadsTable(){
   const rows = leads.filter(l=>!l.archived).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
-  document.getElementById('leadsTableTbl').innerHTML = rows.map(l=>`
+  const p = paginate('leads', rows);
+  document.getElementById('leadsTableTbl').innerHTML = p.items.map(l=>`
     <div class="tblrow">
       <div class="leadid">
         <span class="av" style="background:${hashColor(l.phone)}">${initials(l.name||l.phone)}</span>
@@ -1270,6 +1359,7 @@ function renderLeadsTable(){
       <span class="val">${l.dealValue?fmt(parseInt(l.dealValue,10)):'—'}</span>
       <button class="actbtn" onclick="openLead('${l.phone}')">${t('see')}</button>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nothing_pending')}</div>`;
+  document.getElementById('leadsTablePager').innerHTML = pagerHtml('leads', p);
 }
 
 let curLead = null;
@@ -1313,8 +1403,79 @@ function renderLead(){
       <div class="tlbody"><div class="tltop"><span class="t">${HIST_LABEL[ev.type]||ev.type}</span><span class="tm">${fmtHistTime(ev.ts)}</span></div><div class="tldesc">${ev.notes||ev.title||''}</div></div>
     </div>`).join('') : `<div style="padding:8px 0;color:var(--muted);font-size:13px">${t('no_activity')}</div>`;
 }
+
+// ================= modales estilizados (reemplaza prompt()/confirm() nativos) =================
+function askPrompt(message, defaultValue){
+  return new Promise(resolve=>{
+    const ov = document.createElement('div'); ov.className = 'modalov';
+    ov.innerHTML = `<div class="modalbox">
+      <div class="modalmsg"></div>
+      <input class="nlinput" id="modalInput" type="text">
+      <div class="modalbtns"><button class="ghost" id="modalCancel">${t('btn_cancel')}</button><button class="primary" id="modalOk">${t('btn_ok')}</button></div>
+    </div>`;
+    ov.querySelector('.modalmsg').textContent = message;
+    document.body.appendChild(ov);
+    const input = ov.querySelector('#modalInput');
+    input.value = defaultValue==null ? '' : defaultValue;
+    input.focus(); input.select();
+    const close = v => { ov.remove(); resolve(v); };
+    ov.querySelector('#modalCancel').onclick = () => close(null);
+    ov.querySelector('#modalOk').onclick = () => close(input.value);
+    input.onkeydown = e => { if(e.key==='Enter') close(input.value); if(e.key==='Escape') close(null); };
+    ov.onclick = e => { if(e.target===ov) close(null); };
+  });
+}
+function askConfirm(message, opts){
+  opts = opts || {};
+  return new Promise(resolve=>{
+    const ov = document.createElement('div'); ov.className = 'modalov';
+    ov.innerHTML = `<div class="modalbox">
+      <div class="modalmsg"></div>
+      <div class="modalbtns"><button class="ghost" id="modalCancel">${t('btn_cancel')}</button><button class="${opts.danger?'danger':'primary'}" id="modalOk">${t('btn_ok')}</button></div>
+    </div>`;
+    ov.querySelector('.modalmsg').textContent = message;
+    document.body.appendChild(ov);
+    const close = v => { ov.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
+    const onKey = e => { if(e.key==='Escape') close(false); if(e.key==='Enter') close(true); };
+    ov.querySelector('#modalCancel').onclick = () => close(false);
+    ov.querySelector('#modalOk').onclick = () => close(true);
+    document.addEventListener('keydown', onKey);
+    ov.onclick = e => { if(e.target===ov) close(false); };
+  });
+}
+
+// ================= paginación (norma del estudio) =================
+const PAGE_SIZE = 12;
+const pageState = {};
+const PAGE_RENDER = {};
+function paginate(key, items, size){
+  size = size || PAGE_SIZE;
+  const total = items.length, pages = Math.max(1, Math.ceil(total/size));
+  let page = pageState[key] || 1;
+  if(page > pages) page = pages; if(page < 1) page = 1;
+  pageState[key] = page;
+  const start = (page-1)*size;
+  return { items: items.slice(start, start+size), page, pages, total, start };
+}
+function pagerHtml(key, p){
+  if(p.pages <= 1) return '';
+  return `<div class="pager"><span>${p.start+1}–${p.start+p.items.length} ${t('of')} ${p.total}</span><div class="pgbtns">
+    <button ${p.page<=1?'disabled':''} onclick="pageGo('${key}',1)">«</button>
+    <button ${p.page<=1?'disabled':''} onclick="pageGo('${key}',${p.page-1})">‹</button>
+    <span class="pgnum">${p.page} / ${p.pages}</span>
+    <button ${p.page>=p.pages?'disabled':''} onclick="pageGo('${key}',${p.page+1})">›</button>
+    <button ${p.page>=p.pages?'disabled':''} onclick="pageGo('${key}',${p.pages})">»</button>
+  </div></div>`;
+}
+function pageGo(key, n){ pageState[key] = n; if(PAGE_RENDER[key]) PAGE_RENDER[key](); }
+Object.assign(PAGE_RENDER, {
+  leads: ()=>renderLeadsTable(), ops: ()=>renderOperators(), appts: ()=>renderAppts(),
+  pay: ()=>renderInvoices(), dep: ()=>renderDepartures(), media: ()=>renderMedia(),
+  nlSched: ()=>renderNewsletter(), nlHist: ()=>renderNewsletter(), subs: ()=>renderNewsletter(),
+});
+
 async function markWonFlow(phone){
-  if(!confirm(t('confirm_won'))) return;
+  if(!await askConfirm(t('confirm_won'))) return;
   try{
     const r = await fetch('/admin/api/status', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, status:'won'}) });
     if(!r.ok) throw 0;
@@ -1323,7 +1484,7 @@ async function markWonFlow(phone){
 }
 async function scheduleApptFlow(phone){
   const l = leads.find(x=>x.phone===phone);
-  const when = prompt(t('ask_when'), '');
+  const when = await askPrompt(t('ask_when'), '');
   if(!when) return;
   try{
     const r = await fetch('/admin/api/appts', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, name:l?.name||'', title:t('call_title'), when, closer:whoAmI}) });
@@ -1332,11 +1493,11 @@ async function scheduleApptFlow(phone){
   }catch(e){ alert(t('err_appt')); }
 }
 async function newLeadFlow(){
-  const phone = prompt(t('ask_phone_new'), '');
+  const phone = await askPrompt(t('ask_phone_new'), '');
   if(!phone) return;
   const digits = phone.replace(/\D/g,'');
   if(digits.length<8){ alert(t('invalid_phone')); return; }
-  const name = prompt(t('ask_name_opt'), '') || '';
+  const name = await askPrompt(t('ask_name_opt'), '') || '';
   try{
     const r = await fetch('/admin/api/lead/create', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:digits}) });
     if(!r.ok) throw 0;
@@ -1389,7 +1550,8 @@ async function loadOperators(){
 function renderOperators(){
   const active = operators.filter(o=>!o.archived);
   document.getElementById('opsSummary').textContent = t('ops_count',{n:active.length});
-  document.getElementById('opsTbl').innerHTML = active.map(o=>`
+  const p = paginate('ops', active);
+  document.getElementById('opsTbl').innerHTML = p.items.map(o=>`
     <div class="tblrow" style="grid-template-columns:2fr 1.4fr 1fr 1fr 150px">
       <div class="leadid"><span class="av" style="background:${hashColor(o.company||o.id)}">${initials(o.company||'?')}</span>
         <div><div class="nm" onclick="editOperatorFlow('${o.id}')">${o.company||t('no_name')}</div><span class="st" style="font-size:12px;color:var(--muted)">${o.contact||''}</span></div></div>
@@ -1401,11 +1563,12 @@ function renderOperators(){
         <button class="actbtn" style="width:auto;padding:7px 10px" onclick="deleteOperatorFlow('${o.id}')">${t('delete')}</button>
       </div>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('no_operators')}</div>`;
+  document.getElementById('opsPager').innerHTML = pagerHtml('ops', p);
 }
 async function newOperatorFlow(){
-  const company = prompt(t('ask_company'),''); if(!company) return;
-  const contact = prompt(t('ask_contact_opt'),'') || '';
-  const email = prompt(t('ask_email_opt'),'') || '';
+  const company = await askPrompt(t('ask_company'),''); if(!company) return;
+  const contact = await askPrompt(t('ask_contact_opt'),'') || '';
+  const email = await askPrompt(t('ask_email_opt'),'') || '';
   try{
     const r = await fetch('/admin/api/operator', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({company,contact,email,db:opsDb}) });
     if(!r.ok) throw 0;
@@ -1414,7 +1577,7 @@ async function newOperatorFlow(){
 }
 async function editOperatorFlow(id){
   const o = operators.find(x=>x.id===id); if(!o) return;
-  const status = prompt(t('ask_op_status'), o.status||'nuevo');
+  const status = await askPrompt(t('ask_op_status'), o.status||'nuevo');
   if(status==null) return;
   try{
     const r = await fetch('/admin/api/operator', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, status, db:opsDb}) });
@@ -1423,7 +1586,7 @@ async function editOperatorFlow(id){
   }catch(e){ alert(t('err_operator_update')); }
 }
 async function archiveOperatorFlow(id){
-  if(!confirm(t('confirm_archive_op'))) return;
+  if(!await askConfirm(t('confirm_archive_op'))) return;
   try{
     const r = await fetch('/admin/api/operator/archive', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, archived:true, db:opsDb}) });
     if(!r.ok) throw 0;
@@ -1431,7 +1594,7 @@ async function archiveOperatorFlow(id){
   }catch(e){ alert(t('err_operator_archive')); }
 }
 async function deleteOperatorFlow(id){
-  if(!confirm(t('confirm_delete_op'))) return;
+  if(!await askConfirm(t('confirm_delete_op'), {danger:true})) return;
   try{
     const r = await fetch('/admin/api/operator/delete', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, db:opsDb}) });
     if(!r.ok) throw 0;
@@ -1452,13 +1615,15 @@ async function loadAppts(){
 function renderAppts(){
   const upcoming = appts.slice().sort((a,b)=>new Date(a.when)-new Date(b.when));
   document.getElementById('apptsSummary').textContent = t('appts_count',{n:upcoming.length});
-  document.getElementById('apptsTbl').innerHTML = upcoming.map(a=>`
+  const p = paginate('appts', upcoming);
+  document.getElementById('apptsTbl').innerHTML = p.items.map(a=>`
     <div class="tblrow" style="grid-template-columns:1.3fr 1.6fr 1.5fr 90px">
       <span class="wait">${a.when ? new Date(a.when).toLocaleString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '—'}</span>
       <span class="wait">${a.name||''} ${a.phone?('+'+a.phone):''}</span>
       <span class="wait">${a.title||t('call_title')}${a.closer?(' · '+a.closer):''}</span>
       <button class="actbtn" onclick="deleteApptFlow('${a.id}')">${t('delete')}</button>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('no_appts')}</div>`;
+  document.getElementById('apptsPager').innerHTML = pagerHtml('appts', p);
   renderApptsCalendar();
 }
 
@@ -1525,9 +1690,9 @@ function renderApptsCalendar(){
   }).join('');
 }
 async function newApptFlow(){
-  const phone = prompt(t('ask_phone_appt_opt'),'') || '';
-  const name = prompt(t('ask_appt_name'),'') || '';
-  const when = prompt(t('ask_when'),''); if(!when) return;
+  const phone = await askPrompt(t('ask_phone_appt_opt'),'') || '';
+  const name = await askPrompt(t('ask_appt_name'),'') || '';
+  const when = await askPrompt(t('ask_when'),''); if(!when) return;
   try{
     const r = await fetch('/admin/api/appts', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, name, title:t('call_title'), when, closer:whoAmI}) });
     if(!r.ok) throw 0;
@@ -1535,7 +1700,7 @@ async function newApptFlow(){
   }catch(e){ alert(t('err_appt')); }
 }
 async function deleteApptFlow(id){
-  if(!confirm(t('confirm_delete_appt'))) return;
+  if(!await askConfirm(t('confirm_delete_appt'), {danger:true})) return;
   try{
     const r = await fetch('/admin/api/appts/'+id, { method:'DELETE', headers:{'X-Admin-Key':sessionKey} });
     if(!r.ok) throw 0;
@@ -1550,12 +1715,15 @@ async function deleteApptFlow(id){
 // este backend (eso vive solo en la rama balibest) — aquí solo se
 // registra/asigna, igual que ya hace /admin.
 // ======================================================================
+let lastUnmatched = [];
 async function loadInvoices(){
   const r = await fetch('/admin/api/payments/unmatched', { headers:{'X-Admin-Key':sessionKey} });
   const data = r.ok ? await r.json() : {payments:[]};
-  renderInvoices(data.payments||[]);
+  lastUnmatched = data.payments||[];
+  renderInvoices();
 }
-function renderInvoices(unmatched){
+function renderInvoices(){
+  const unmatched = lastUnmatched;
   document.getElementById('unmatchedWrap').innerHTML = unmatched.length ? `
     <div class="sechd"><span class="t">${t('unmatched_hd')}</span></div>
     <div class="card tblcard" style="margin-bottom:8px">
@@ -1569,21 +1737,23 @@ function renderInvoices(unmatched){
         </div>`).join('')}
     </div>` : '';
   const allPayments = leads.flatMap(l => (l.payments||[]).map(p => ({...p, leadName:l.name||l.phone, phone:l.phone})))
-    .sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,30);
+    .sort((a,b)=>(b.at||0)-(a.at||0));
   document.getElementById('invSummary').textContent = t('invoices_count',{n:allPayments.length}) + (unmatched.length?t('invoices_count_unmatched',{n:unmatched.length}):'');
-  document.getElementById('payTbl').innerHTML = allPayments.map(p=>`
+  const p = paginate('pay', allPayments);
+  document.getElementById('payTbl').innerHTML = p.items.map(pm=>`
     <div class="tblrow" style="grid-template-columns:1.6fr 1fr 1fr 1fr 90px">
-      <span class="wait" style="cursor:pointer" onclick="openLead('${p.phone}')">${p.leadName}</span>
-      <span class="val">${fmt(p.amount||0)}</span>
-      <span class="wait">${(p.method||'—')}</span>
-      <span class="wait">${p.at?new Date(p.at).toLocaleDateString(LANG==='es'?'es-ES':'en-US'):'—'}</span>
-      <button class="actbtn" onclick="deletePaymentFlow('${p.phone}','${p.id}')">${t('delete')}</button>
+      <span class="wait" style="cursor:pointer" onclick="openLead('${pm.phone}')">${pm.leadName}</span>
+      <span class="val">${fmt(pm.amount||0)}</span>
+      <span class="wait">${(pm.method||'—')}</span>
+      <span class="wait">${pm.at?new Date(pm.at).toLocaleDateString(LANG==='es'?'es-ES':'en-US'):'—'}</span>
+      <button class="actbtn" onclick="deletePaymentFlow('${pm.phone}','${pm.id}')">${t('delete')}</button>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('no_payments')}</div>`;
+  document.getElementById('payPager').innerHTML = pagerHtml('pay', p);
 }
 async function newPaymentFlow(){
-  const phone = prompt(t('ask_phone_pay'),''); if(!phone) return;
-  const amount = prompt(t('ask_amount'),''); if(!amount || isNaN(parseFloat(amount))) { alert(t('invalid_amount')); return; }
-  const method = prompt(t('ask_method'),'wise') || 'other';
+  const phone = await askPrompt(t('ask_phone_pay'),''); if(!phone) return;
+  const amount = await askPrompt(t('ask_amount'),''); if(!amount || isNaN(parseFloat(amount))) { alert(t('invalid_amount')); return; }
+  const method = await askPrompt(t('ask_method'),'wise') || 'other';
   try{
     const r = await fetch('/admin/api/payment', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, amount:parseFloat(amount), method, kind:'other'}) });
     if(!r.ok) throw 0;
@@ -1591,7 +1761,7 @@ async function newPaymentFlow(){
   }catch(e){ alert(t('err_payment_create')); }
 }
 async function assignPaymentFlow(idx){
-  const phone = prompt(t('ask_assign_phone'),''); if(!phone) return;
+  const phone = await askPrompt(t('ask_assign_phone'),''); if(!phone) return;
   try{
     const r = await fetch('/admin/api/payments/assign', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({idx, phone}) });
     if(!r.ok) throw 0;
@@ -1599,7 +1769,7 @@ async function assignPaymentFlow(idx){
   }catch(e){ alert(t('err_payment_assign')); }
 }
 async function deletePaymentFlow(phone,id){
-  if(!confirm(t('confirm_delete_payment'))) return;
+  if(!await askConfirm(t('confirm_delete_payment'), {danger:true})) return;
   try{
     const r = await fetch('/admin/api/payment/delete', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, id}) });
     if(!r.ok) throw 0;
@@ -1630,7 +1800,8 @@ function renderDepartures(){
     <div class="card kpi"><div class="hd"><b>${label}</b></div><div class="bd"><div class="val" style="font-size:24px">${val}</div></div></div>`).join('');
 
   const deps = (depOverview.departures||[]).slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
-  document.getElementById('depList').innerHTML = deps.map(d=>`
+  const depPg = paginate('dep', deps, 6);
+  document.getElementById('depList').innerHTML = depPg.items.map(d=>`
     <div class="depcard">
       <div class="hd">
         <span class="ttl">${new Date(d.date).toLocaleDateString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'long',year:'numeric'})}</span>
@@ -1655,6 +1826,7 @@ function renderDepartures(){
           </div>`).join('') || `<div style="padding:14px 18px;color:var(--muted);font-size:13px">${t('dep_no_roster')}</div>`}
       </div>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('no_departures')}</div>`;
+  document.getElementById('depPager').innerHTML = pagerHtml('dep', depPg);
 
   const un = depOverview.unassigned||[];
   document.getElementById('depUnassignedTbl').innerHTML = un.map(r=>`
@@ -1667,10 +1839,10 @@ function renderDepartures(){
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('dep_none_unassigned')}</div>`;
 }
 async function newDepartureFlow(){
-  const date = prompt(t('ask_dep_date'),''); if(!date) return;
+  const date = await askPrompt(t('ask_dep_date'),''); if(!date) return;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ alert(t('invalid_date')); return; }
-  const tour = prompt(t('ask_dep_tour'),'') || '';
-  const guided = confirm(t('ask_dep_guided'));
+  const tour = await askPrompt(t('ask_dep_tour'),'') || '';
+  const guided = await askConfirm(t('ask_dep_guided'));
   try{
     const r = await fetch('/admin/api/departure', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({date, tour, guided}) });
     if(!r.ok) throw 0;
@@ -1679,9 +1851,9 @@ async function newDepartureFlow(){
 }
 async function editDepartureFlow(id){
   const d = (depOverview.departures||[]).find(x=>x.id===id); if(!d) return;
-  const date = prompt(t('ask_dep_date'), d.date); if(date==null) return;
+  const date = await askPrompt(t('ask_dep_date'), d.date); if(date==null) return;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ alert(t('invalid_date')); return; }
-  const capacity = prompt(t('ask_dep_capacity'), d.capacity); if(capacity==null) return;
+  const capacity = await askPrompt(t('ask_dep_capacity'), d.capacity); if(capacity==null) return;
   try{
     const r = await fetch('/admin/api/departure', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, date, tour:d.tour, package:d.package, guided:d.guided, capacity:parseInt(capacity,10)||undefined, minPax:d.minPax, notes:d.notes}) });
     if(!r.ok) throw 0;
@@ -1689,7 +1861,7 @@ async function editDepartureFlow(id){
   }catch(e){ alert(t('err_departure')); }
 }
 async function deleteDepartureFlow(id){
-  if(!confirm(t('confirm_delete_dep'))) return;
+  if(!await askConfirm(t('confirm_delete_dep'), {danger:true})) return;
   try{
     const r = await fetch('/admin/api/departure/delete', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id}) });
     if(!r.ok) throw 0;
@@ -1700,7 +1872,7 @@ async function assignDepartureFlow(phone){
   const deps = (depOverview.departures||[]).filter(d=>d.occState!=='cancelled');
   if(!deps.length){ alert(t('no_open_departures')); return; }
   const list = deps.map(d=>d.date+' ('+d.pax+'/'+d.capacity+')').join('\n');
-  const chosen = prompt(t('ask_pick_departure')+'\n'+list, deps[0].date); if(!chosen) return;
+  const chosen = await askPrompt(t('ask_pick_departure')+'\n'+list, deps[0].date); if(!chosen) return;
   const match = deps.find(d=>d.date===chosen.trim());
   if(!match){ alert(t('dep_not_found')); return; }
   try{
@@ -1710,7 +1882,7 @@ async function assignDepartureFlow(phone){
   }catch(e){ alert(t('err_departure_assign')); }
 }
 async function unassignDepartureFlow(phone){
-  if(!confirm(t('confirm_unassign_dep'))) return;
+  if(!await askConfirm(t('confirm_unassign_dep'))) return;
   try{
     const r = await fetch('/admin/api/departure/assign', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, departureId:''}) });
     if(!r.ok) throw 0;
@@ -1730,7 +1902,9 @@ async function loadMedia(){
 }
 function renderMedia(){
   document.getElementById('mediaSummary').textContent = t('media_count',{n:mediaLib.length});
-  document.getElementById('mediaGrid').innerHTML = mediaLib.map((m,i)=>`
+  const indexed = mediaLib.map((m,i)=>[m,i]);
+  const p = paginate('media', indexed);
+  document.getElementById('mediaGrid').innerHTML = p.items.map(([m,i])=>`
     <div class="mediacard">
       <div class="thumb">${m.type==='video'?`<video src="${m.url}" muted></video>`:`<img src="${m.url}" loading="lazy">`}</div>
       <div class="body">
@@ -1742,6 +1916,7 @@ function renderMedia(){
         <button class="actbtn" style="width:auto;padding:6px 10px;flex:1" onclick="deleteMediaFlow(${i})">${t('delete')}</button>
       </div>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px;grid-column:1/-1">${t('no_media')}</div>`;
+  document.getElementById('mediaPager').innerHTML = pagerHtml('media', p);
 }
 function mediaFileChosen(ev){
   const file = ev.target.files[0]; ev.target.value='';
@@ -1753,9 +1928,9 @@ function mediaFileChosen(ev){
       const r = await fetch('/admin/api/media/upload', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({dataUrl:reader.result}) });
       const up = await r.json();
       if(!r.ok) throw new Error(up.error||'');
-      const label = prompt(t('ask_media_label'),'') || up.id;
-      const caption = prompt(t('ask_media_caption'),'') || '';
-      const use = prompt(t('ask_media_use'),'') || '';
+      const label = await askPrompt(t('ask_media_label'),'') || up.id;
+      const caption = await askPrompt(t('ask_media_caption'),'') || '';
+      const use = await askPrompt(t('ask_media_use'),'') || '';
       const next = [...mediaLib, {id:up.id, label, type:up.type, url:up.url, caption, use}];
       const r2 = await fetch('/admin/api/media', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({items:next}) });
       if(!r2.ok) throw 0;
@@ -1767,9 +1942,9 @@ function mediaFileChosen(ev){
 }
 async function editMediaFlow(i){
   const m = mediaLib[i]; if(!m) return;
-  const label = prompt(t('ask_media_label'), m.label); if(label==null) return;
-  const caption = prompt(t('ask_media_caption'), m.caption||''); if(caption==null) return;
-  const use = prompt(t('ask_media_use'), m.use||''); if(use==null) return;
+  const label = await askPrompt(t('ask_media_label'), m.label); if(label==null) return;
+  const caption = await askPrompt(t('ask_media_caption'), m.caption||''); if(caption==null) return;
+  const use = await askPrompt(t('ask_media_use'), m.use||''); if(use==null) return;
   const next = mediaLib.map((x,j)=>j===i?{...x,label,caption,use}:x);
   try{
     const r = await fetch('/admin/api/media', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({items:next}) });
@@ -1778,7 +1953,7 @@ async function editMediaFlow(i){
   }catch(e){ alert(t('err_media_update')); }
 }
 async function deleteMediaFlow(i){
-  if(!confirm(t('confirm_delete_media'))) return;
+  if(!await askConfirm(t('confirm_delete_media'), {danger:true})) return;
   const next = mediaLib.filter((_,j)=>j!==i);
   try{
     const r = await fetch('/admin/api/media', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({items:next}) });
@@ -1804,29 +1979,35 @@ async function loadNewsletterView(){
   renderNewsletter();
 }
 function renderNewsletter(){
-  document.getElementById('nlScheduledTbl').innerHTML = nlScheduled.map(c=>`
+  const schedPg = paginate('nlSched', nlScheduled);
+  document.getElementById('nlScheduledTbl').innerHTML = schedPg.items.map(c=>`
     <div class="tblrow" style="grid-template-columns:1.3fr 2fr 1fr 90px">
       <span class="wait">${new Date(c.when).toLocaleString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
       <span class="wait">${c.subject}</span>
       <span class="wait">${c.scope==null?t('nl_scope_all'):c.scope}</span>
       <button class="actbtn" onclick="cancelScheduledFlow('${c.id}')">${t('nl_cancel')}</button>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nl_no_scheduled')}</div>`;
+  document.getElementById('nlSchedPager').innerHTML = pagerHtml('nlSched', schedPg);
 
-  document.getElementById('nlHistoryTbl').innerHTML = nlHistory.slice().sort((a,b)=>b.at-a.at).map(c=>`
+  const histPg = paginate('nlHist', nlHistory.slice().sort((a,b)=>b.at-a.at));
+  document.getElementById('nlHistoryTbl').innerHTML = histPg.items.map(c=>`
     <div class="tblrow" style="grid-template-columns:1.3fr 2fr 1fr 1fr">
       <span class="wait">${new Date(c.at).toLocaleDateString(LANG==='es'?'es-ES':'en-US')}</span>
       <span class="wait">${c.subject}</span>
       <span class="tourpill">${t('nl_ds_'+c.dataset)}</span>
       <span class="wait">${c.sent}/${c.total}${c.failed?(' · '+c.failed+' '+t('nl_failed')):''}</span>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nl_no_history')}</div>`;
+  document.getElementById('nlHistPager').innerHTML = pagerHtml('nlHist', histPg);
 
-  document.getElementById('subsTbl').innerHTML = subscribers.filter(s=>!s.archived).map(s=>`
+  const subsPg = paginate('subs', subscribers.filter(s=>!s.archived));
+  document.getElementById('subsTbl').innerHTML = subsPg.items.map(s=>`
     <div class="tblrow" style="grid-template-columns:2fr 1fr 1fr 90px">
       <span class="wait">${s.email}</span>
       <span class="wait">${s.source||'—'}</span>
       <span class="tourpill">${s.emailUnsub?t('nl_unsub'):t('nl_subscribed')}</span>
       <button class="actbtn" onclick="removeSubscriberFlow('${s.email}')">${t('delete')}</button>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nl_no_subs')}</div>`;
+  document.getElementById('subsPager').innerHTML = pagerHtml('subs', subsPg);
 }
 function nlPayload(){
   return { dataset: document.getElementById('nlDataset').value, subject: document.getElementById('nlSubject').value.trim(), body: document.getElementById('nlBody').value.trim() };
@@ -1834,7 +2015,7 @@ function nlPayload(){
 async function sendNewsletterFlow(){
   const p = nlPayload();
   if(!p.subject || !p.body){ alert(t('nl_need_subject_body')); return; }
-  if(!confirm(t('nl_confirm_send'))) return;
+  if(!await askConfirm(t('nl_confirm_send'), {danger:true})) return;
   try{
     const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify(p) });
     const d = await r.json();
@@ -1846,7 +2027,7 @@ async function sendNewsletterFlow(){
 async function testNewsletterFlow(){
   const p = nlPayload();
   if(!p.subject || !p.body){ alert(t('nl_need_subject_body')); return; }
-  const testTo = prompt(t('ask_test_email'),''); if(!testTo) return;
+  const testTo = await askPrompt(t('ask_test_email'),''); if(!testTo) return;
   try{
     const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({...p, testTo}) });
     const d = await r.json();
@@ -1857,7 +2038,7 @@ async function testNewsletterFlow(){
 async function scheduleNewsletterFlow(){
   const p = nlPayload();
   if(!p.subject || !p.body){ alert(t('nl_need_subject_body')); return; }
-  const when = prompt(t('ask_when'),''); if(!when) return;
+  const when = await askPrompt(t('ask_when'),''); if(!when) return;
   try{
     const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({...p, when}) });
     const d = await r.json();
@@ -1867,7 +2048,7 @@ async function scheduleNewsletterFlow(){
   }catch(e){ alert(t('nl_send_error')+(e.message?(': '+e.message):'')); }
 }
 async function cancelScheduledFlow(id){
-  if(!confirm(t('nl_confirm_cancel'))) return;
+  if(!await askConfirm(t('nl_confirm_cancel'))) return;
   try{
     const r = await fetch('/admin/api/newsletter/cancel', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id}) });
     if(!r.ok) throw 0;
@@ -1875,7 +2056,7 @@ async function cancelScheduledFlow(id){
   }catch(e){ alert(t('nl_send_error')); }
 }
 async function addSubscriberFlow(){
-  const email = prompt(t('ask_subscriber_email'),''); if(!email) return;
+  const email = await askPrompt(t('ask_subscriber_email'),''); if(!email) return;
   try{
     const r = await fetch('/admin/api/subscribers/add', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({email}) });
     if(!r.ok) throw 0;
@@ -1883,7 +2064,7 @@ async function addSubscriberFlow(){
   }catch(e){ alert(t('nl_send_error')); }
 }
 async function removeSubscriberFlow(email){
-  if(!confirm(t('confirm_delete_subscriber'))) return;
+  if(!await askConfirm(t('confirm_delete_subscriber'), {danger:true})) return;
   try{
     const r = await fetch('/admin/api/subscribers/remove', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({email}) });
     if(!r.ok) throw 0;
@@ -1919,7 +2100,7 @@ async function sendSimMessage(){
   box.disabled = false; box.focus();
 }
 async function resetSimFlow(){
-  if(!confirm(t('sim_confirm_reset'))) return;
+  if(!await askConfirm(t('sim_confirm_reset'))) return;
   try{
     await fetch('/admin/api/simulate/reset', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({session:simSessionName()}) });
   }catch(e){}
@@ -2106,7 +2287,7 @@ const titles = {overview:'Resumen', chats:'Conversaciones', leads:'Leads', lead:
 const loadedOnce = {};
 let opsDb = 'ops'; // 'ops' (Operadores B2B) | 'tao' (Travel Adventures Operators) -- misma vista, dos agendas
 let prevView = 'overview';
-function openOpsNav(db){ opsDb = db; loadedOnce.operators = false; go('operators'); }
+function openOpsNav(db){ opsDb = db; loadedOnce.operators = false; pageState.ops = 1; go('operators'); }
 function go(view){
   if(document.getElementById('v'+view.charAt(0).toUpperCase()+view.slice(1)).id !== 'vLead') prevView = view;
   ALL_VIEWS.forEach(v=>{
