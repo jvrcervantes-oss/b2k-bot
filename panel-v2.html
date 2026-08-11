@@ -385,10 +385,10 @@ table.leadstbl{width:100%;border-collapse:collapse}
     <div class="view" id="vOverview">
       <div class="filters">
         <button class="btn"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.8 3.8h10.4v9.4H2.8z"/><path d="M2.8 6.8h10.4"/><path d="M5.5 2.2v3M10.5 2.2v3"/></svg><span data-i18n="last30">Últimos 30 días</span></button>
-        <div class="segmented">
-          <span class="seg on" data-i18n="seg_all">Todos</span>
-          <span class="seg" data-i18n="seg_active">Activos</span>
-          <span class="seg" data-i18n-prepend="seg_needs">Requieren acción<span class="dot-red"></span></span>
+        <div class="segmented" id="ovFilterSeg">
+          <span class="seg on" data-i18n="seg_all" onclick="setOverviewFilter('all')">Todos</span>
+          <span class="seg" data-i18n="seg_active" onclick="setOverviewFilter('active')">Activos</span>
+          <span class="seg" data-i18n-prepend="seg_needs" onclick="setOverviewFilter('needs')">Requieren acción<span class="dot-red"></span></span>
         </div>
       </div>
 
@@ -458,11 +458,15 @@ table.leadstbl{width:100%;border-collapse:collapse}
     <div class="view hidden" id="vLeads">
       <div class="filters">
         <button class="btn"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.8 3.8h10.4v9.4H2.8z"/><path d="M2.8 6.8h10.4"/><path d="M5.5 2.2v3M10.5 2.2v3"/></svg><span data-i18n="last30">Últimos 30 días</span></button>
-        <div class="segmented"><span class="seg on" data-i18n="kanban_tab">Kanban</span><span class="seg" data-i18n="table_tab">Tabla</span></div>
+        <div class="segmented" id="leadsViewSeg"><span class="seg on" data-i18n="kanban_tab" onclick="setLeadsViewMode('kanban')">Kanban</span><span class="seg" data-i18n="table_tab" onclick="setLeadsViewMode('table')">Tabla</span></div>
         <span style="flex:1"></span>
         <span style="font-size:13px;color:var(--muted)" id="kanbanSummary"></span>
       </div>
       <div class="kanwrap" id="kanban"></div>
+      <div class="card tblcard hidden" id="leadsTableWrap">
+        <div class="tblhead"><span data-i18n="th_lead">Lead</span><span data-i18n="th_status">Estado</span><span data-i18n="th_interest">Interés</span><span data-i18n="th_value">Valor</span><span></span></div>
+        <div id="leadsTableTbl"></div>
+      </div>
     </div>
 
     <!-- ---------- FICHA ---------- -->
@@ -740,7 +744,7 @@ function setLang(lang){
   LANG = lang;
   localStorage.setItem('botpanel_lang', lang);
   applyStaticI18n();
-  if(REAL){ renderRealStats(); renderKpis(); renderChannels(); buildHex(); buildDots(); renderLeadsTbl(); renderKanban(); notifItems=buildNotifItems(); renderNotifs(); }
+  if(REAL){ renderRealStats(); renderKpis(); renderChannels(); buildHex(); buildDots(); renderLeadsTbl(); renderKanban(); if(leadsViewMode==='table') renderLeadsTable(); notifItems=buildNotifItems(); renderNotifs(); }
   if(document.getElementById('vChats') && !document.getElementById('vChats').classList.contains('hidden')) renderChats();
   if(curLead) renderLead();
   if(!document.getElementById('vOperators').classList.contains('hidden')) renderOperators();
@@ -856,15 +860,28 @@ function renderChannels(){
 function renderRealStats(){
   document.getElementById('statWaiting').textContent = String(REAL.waitingOver24h).padStart(2,'0');
   document.getElementById('statOverdue').textContent = String(REAL.overdueFollowups).padStart(2,'0');
-  document.getElementById('statActive').textContent = REAL.totalActive;
   document.getElementById('overdueMeta').textContent = t('overdue_meta',{n:REAL.totalActive});
   const total60 = REAL.dailyNewLeads60d.reduce((a,[,c])=>a+c,0);
   const days60 = REAL.dailyNewLeads60d.length;
   document.getElementById('dotBig').textContent = t('dot_new',{n:total60});
   document.getElementById('dotSub').textContent = t('dot_sub',{avg:(total60/60).toFixed(1), days:days60});
 }
+let overviewFilter = 'all';
+function setOverviewFilter(mode){
+  overviewFilter = mode;
+  document.querySelectorAll('#ovFilterSeg .seg').forEach((el,i)=>{
+    el.classList.toggle('on', (mode==='all'&&i===0) || (mode==='active'&&i===1) || (mode==='needs'&&i===2));
+  });
+  renderLeadsTbl();
+}
 function renderLeadsTbl(){
-  const attention = leads.filter(needsAttention)
+  // los 3 tabs son subconjuntos de "necesita atención" (mismo criterio que needsAttention):
+  // Todos = union, Activos = esperando respuesta del cliente, Requieren acción = seguimiento vencido.
+  const base = leads.filter(needsAttention);
+  const filtered = overviewFilter==='active' ? base.filter(l=>l.waiting)
+    : overviewFilter==='needs' ? base.filter(l=>!l.waiting)
+    : base;
+  const attention = filtered
     .sort((a,b)=>(a.lastInboundAt||0)-(b.lastInboundAt||0))
     .slice(0,8);
   document.getElementById('leadsTbl').innerHTML = attention.map(l=>`
@@ -959,6 +976,31 @@ function renderKanban(){
     </div>`;
   }).join('');
   document.getElementById('kanbanSummary').textContent = t('kanban_summary',{n:total, v:fmt(sumAll)});
+}
+
+let leadsViewMode = 'kanban';
+function setLeadsViewMode(mode){
+  leadsViewMode = mode;
+  document.querySelectorAll('#leadsViewSeg .seg').forEach((el,i)=>{
+    el.classList.toggle('on', (mode==='kanban'&&i===0) || (mode==='table'&&i===1));
+  });
+  document.getElementById('kanban').classList.toggle('hidden', mode!=='kanban');
+  document.getElementById('leadsTableWrap').classList.toggle('hidden', mode!=='table');
+  if(mode==='table') renderLeadsTable();
+}
+function renderLeadsTable(){
+  const rows = leads.filter(l=>!l.archived).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  document.getElementById('leadsTableTbl').innerHTML = rows.map(l=>`
+    <div class="tblrow">
+      <div class="leadid">
+        <span class="av" style="background:${hashColor(l.phone)}">${initials(l.name||l.phone)}</span>
+        <div><div class="nm" onclick="openLead('${l.phone}')">${l.name||l.phone}</div></div>
+      </div>
+      <span class="st"><span class="d" style="background:${STATUS_DOT[l.status]||CB}"></span>${STATUS_LABEL[l.status]}</span>
+      <span class="tourpill">${tourLine(l)}</span>
+      <span class="val">${l.dealValue?fmt(parseInt(l.dealValue,10)):'—'}</span>
+      <button class="actbtn" onclick="openLead('${l.phone}')">${t('see')}</button>
+    </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nothing_pending')}</div>`;
 }
 
 let curLead = null;
@@ -1451,19 +1493,28 @@ function startApp(){
   if(storedWho && OWNER_OPTS.includes(storedWho)){ whoAmI = storedWho; paintWho(); }
   else switchWho();
 }
+// startApp() corre FUERA de cualquier try/catch de autenticación a propósito: un bug de
+// render (ej. un id que ya no existe en el HTML) no debe reportarse como "clave incorrecta"
+// ni echar al usuario de vuelta al login con los datos ya cargados — eso pasó de verdad el
+// 11-ago y costó diagnosticar porque el error real quedaba enmascarado como fallo de auth.
 async function boot(){
   const k = getStoredKey();
   if(k){
-    try{ await loadReal(k); document.getElementById('loginGate').classList.add('hidden'); startApp(); return; }
-    catch(e){ sessionStorage.removeItem('botpanel_key'); }
+    try{ await loadReal(k); }
+    catch(e){ sessionStorage.removeItem('botpanel_key'); document.getElementById('loginGate').classList.remove('hidden'); return; }
+    document.getElementById('loginGate').classList.add('hidden');
+    startApp();
+    return;
   }
   document.getElementById('loginGate').classList.remove('hidden');
 }
 document.getElementById('loginEnter').addEventListener('click', async () => {
   const k = document.getElementById('loginPw').value.trim();
   document.getElementById('loginErr').textContent = '';
-  try{ await loadReal(k); document.getElementById('loginGate').classList.add('hidden'); startApp(); }
-  catch(e){ document.getElementById('loginErr').textContent = 'Clave incorrecta.'; }
+  try{ await loadReal(k); }
+  catch(e){ document.getElementById('loginErr').textContent = 'Clave incorrecta.'; return; }
+  document.getElementById('loginGate').classList.add('hidden');
+  startApp();
 });
 document.getElementById('loginPw').addEventListener('keydown', (e) => {
   if(e.key === 'Enter') document.getElementById('loginEnter').click();
