@@ -814,6 +814,7 @@
       <select id="opsPotF" class="ops-fsel" style="margin-left:auto"><option value="" data-i18n="ops_pot_all">◇ Potential</option><option value="Extra">Extra</option><option value="High">High</option><option value="Low">Low</option></select>
       <select id="opsTempF" class="ops-fsel"><option value="" data-i18n="ops_temp_all">🌡 Temp</option><option value="Hot">Hot</option><option value="Cold">Cold</option></select>
     </div>
+    <div class="db-bulk" id="opsBulk" style="display:none"></div>
     <div class="ops-scroll">
       <table>
         <thead><tr>
@@ -2686,8 +2687,29 @@
         + '<td class="chk" onclick="event.stopPropagation()"><button class="db-ghost" onclick="opsOpenModal(\''+o.id+'\')" title="✎">✎</button></td>'
         + '</tr>';
     }).join('');
+    renderOpsBulk();
   }
-  window.opsToggleSel=function(id,el){ if(el.checked) opsSel[opsDb][id]=true; else delete opsSel[opsDb][id]; };
+  // Barra de selección — misma pieza que dbBulk pero para Operadores/TAO. Sin esto, marcar
+  // checkboxes no daba ninguna señal visible ni forma de saltar a Newsletter con esa selección
+  // (a diferencia de la BD de leads, que ya la tenía) — reportado 11-ago-2026.
+  function opsSelectedIds(){ return Object.keys(opsSel[opsDb]).filter(function(id){return opsSel[opsDb][id];}); }
+  function renderOpsBulk(){
+    var sel=opsSelectedIds(), bar=document.getElementById('opsBulk');
+    if(!sel.length){ bar.style.display='none'; bar.innerHTML=''; return; }
+    bar.style.display='flex';
+    bar.innerHTML = '<b>'+sel.length+'</b> '+t('bulk_sel')
+      + '<button onclick="opsToNewsletter()">'+t('bulk_newsletter')+'</button>'
+      + '<button class="fclear" onclick="opsClearSel()">'+t('bulk_clear')+'</button>';
+  }
+  function opsClearSel(){ opsSel[opsDb]={}; renderOps(); }
+  function opsToNewsletter(){
+    var a=document.getElementById('app'); clearModes(a); a.classList.add('nlmode'); setNav('navNewsletter'); setUrl('/admin');
+    document.getElementById('nlDataset').value = opsDb==='tao' ? 'tao' : 'operators';
+    document.getElementById('nlScope').value='selected';
+    openNewsletter();
+  }
+  window.opsClearSel=opsClearSel; window.opsToNewsletter=opsToNewsletter;
+  window.opsToggleSel=function(id,el){ if(el.checked) opsSel[opsDb][id]=true; else delete opsSel[opsDb][id]; renderOpsBulk(); };
   window.opsSetStatus=function(id,status){ apiPost('operator',{db:opsDb,id:id,status:status}).then(function(){ loadOperators(); }); };
   document.getElementById('opsSelAll').onchange=function(e){
     var on=e.target.checked; opsFiltered().forEach(function(o){ if(on) opsSel[opsDb][o.id]=true; else delete opsSel[opsDb][o.id]; }); renderOps();
