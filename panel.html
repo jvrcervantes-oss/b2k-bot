@@ -1108,7 +1108,7 @@
       tab_active:'Activos', tab_won:'Ganados', tab_lost:'Perdidos', tab_noshow:'No-show', tab_archived:'Archivados', tab_all:'Todos',
       c_value:'Valor', c_owner:'Owner', c_followup:'Seguimiento', c_tags:'Tags',
       f_all_intent:'Toda intención', f_all_pkg:'Todo paquete', f_all_source:'Todo origen', f_all_country:'Todo país', f_all_tag:'Toda etiqueta', f_due:'Seguimiento vencido', f_clear:'Limpiar filtros',
-      bulk_sel:'seleccionados', bulk_status:'Cambiar estado…', bulk_owner:'Asignar owner…', bulk_tag:'+ Etiqueta', bulk_archive:'Archivar', bulk_restore:'Restaurar', bulk_export:'Exportar', bulk_delete:'Borrar', bulk_clear:'Quitar selección',
+      bulk_sel:'seleccionados', bulk_status:'Cambiar estado…', bulk_owner:'Asignar owner…', bulk_tag:'+ Etiqueta', bulk_archive:'Archivar', bulk_restore:'Restaurar', bulk_export:'Exportar', bulk_delete:'Borrar', bulk_clear:'Quitar selección', bulk_newsletter:'📧 Newsletter a estos',
       prompt_tag:'Nombre de la etiqueta:', cfm_delete:'¿Borrar este lead definitivamente? No se puede deshacer.', cfm_delete_n:'¿Borrar {n} leads definitivamente? No se puede deshacer.',
       act_archive:'Archivar', act_restore:'Restaurar', act_open:'Abrir conversación', act_delete:'Borrar',
       act_outreach:'💬 Iniciar conversación', act_reoutreach:'💬 Reenviar intro', bulk_outreach:'💬 Iniciar conv.',
@@ -1185,7 +1185,7 @@
       tab_active:'Active', tab_won:'Won', tab_lost:'Lost', tab_noshow:'No-show', tab_archived:'Archived', tab_all:'All',
       c_value:'Value', c_owner:'Owner', c_followup:'Follow-up', c_tags:'Tags',
       f_all_intent:'Any intent', f_all_pkg:'Any package', f_all_source:'Any source', f_all_country:'Any country', f_all_tag:'Any tag', f_due:'Follow-up due', f_clear:'Clear filters',
-      bulk_sel:'selected', bulk_status:'Set status…', bulk_owner:'Assign owner…', bulk_tag:'+ Tag', bulk_archive:'Archive', bulk_restore:'Restore', bulk_export:'Export', bulk_delete:'Delete', bulk_clear:'Clear selection',
+      bulk_sel:'selected', bulk_status:'Set status…', bulk_owner:'Assign owner…', bulk_tag:'+ Tag', bulk_archive:'Archive', bulk_restore:'Restore', bulk_export:'Export', bulk_delete:'Delete', bulk_clear:'Clear selection', bulk_newsletter:'📧 Newsletter to these',
       prompt_tag:'Tag name:', cfm_delete:'Delete this lead permanently? This cannot be undone.', cfm_delete_n:'Delete {n} leads permanently? This cannot be undone.',
       act_archive:'Archive', act_restore:'Restore', act_open:'Open conversation', act_delete:'Delete',
       act_outreach:'💬 Start conversation', act_reoutreach:'💬 Resend intro', bulk_outreach:'💬 Start conv.',
@@ -2440,6 +2440,7 @@
       + '<select onchange="bulkAct(\'owner\',this.value);this.value=\'\'"><option value="">'+t('bulk_owner')+'</option>'+owOpts+'</select>'
       + '<button onclick="bulkTag()">'+t('bulk_tag')+'</button>'
       + '<button onclick="bulkAct(\'outreach\')">'+t('bulk_outreach')+'</button>'
+      + '<button onclick="bulkToNewsletter()">'+t('bulk_newsletter')+'</button>'
       + (dbTab==='archived' ? '<button onclick="bulkAct(\'restore\')">'+t('bulk_restore')+'</button>' : '<button onclick="bulkAct(\'archive\')">'+t('bulk_archive')+'</button>')
       + '<button onclick="bulkExport()">'+t('bulk_export')+'</button>'
       + '<button class="danger" onclick="bulkAct(\'delete\')">'+t('bulk_delete')+'</button>'
@@ -2460,7 +2461,16 @@
   }
   function bulkTag(){ var tag=prompt(t('prompt_tag')); if(tag){ tag=tag.trim(); if(tag) bulkAct('tag',tag); } }
   function bulkExport(){ exportCsv(selectedPhones()); }
-  window.dbClearSel=dbClearSel; window.bulkAct=bulkAct; window.bulkTag=bulkTag; window.bulkExport=bulkExport;
+  // Puente BD→Newsletter: la selección (dbSelected) no se toca al cambiar de vista, solo hay
+  // que abrir la pestaña Newsletter con el desplegable "Seleccionados" ya puesto, en vez de
+  // esperar a que el usuario lo encuentre solo.
+  function bulkToNewsletter(){
+    var a=document.getElementById('app'); clearModes(a); a.classList.add('nlmode'); setNav('navNewsletter'); setUrl('/admin');
+    document.getElementById('nlDataset').value='leads';
+    document.getElementById('nlScope').value='selected';
+    openNewsletter();
+  }
+  window.dbClearSel=dbClearSel; window.bulkAct=bulkAct; window.bulkTag=bulkTag; window.bulkExport=bulkExport; window.bulkToNewsletter=bulkToNewsletter;
   function selRow(phone,on){ if(on) dbSelected[phone]=true; else delete dbSelected[phone]; renderBulk(); }
   function selAll(on){ var f=dbSorted(dbFiltered()), start=(dbPage-1)*DB_PAGE_SIZE; f.slice(start,start+DB_PAGE_SIZE).forEach(function(l){ if(on)dbSelected[l.phone]=true; else delete dbSelected[l.phone]; }); renderTable(); renderBulk(); }
   window.toggleSel=function(ph,el){ selRow(ph,el.checked); }; window.toggleSelAll=function(el){ selAll(el.checked); };
