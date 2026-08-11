@@ -276,6 +276,43 @@ table.leadstbl{width:100%;border-collapse:collapse}
 .calchip:hover{filter:brightness(0.95)}
 .calmore{font-size:11px;color:var(--muted);cursor:pointer}
 
+/* ---------- salidas ---------- */
+.depcard{background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.depcard .hd{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.depcard .hd .ttl{font-weight:600;font-size:15px}
+.depcard .hd .sub{font-size:12.5px;color:var(--muted)}
+.depcard .hd .sp{flex:1}
+.occpill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;border-radius:99px;padding:3px 10px}
+.occpill.forming{background:var(--card2);color:var(--muted)}
+.occpill.confirmed{background:var(--accent-soft);color:var(--accent-ink)}
+.occpill.full{background:rgba(30,127,79,.14);color:var(--green)}
+.occpill.cancelled{background:rgba(198,58,47,.14);color:var(--red)}
+.depcard .money{display:flex;gap:18px;padding:10px 18px;background:var(--card2);font-size:12.5px}
+.depcard .money b{color:var(--text)}
+.depcard .roster{padding:4px 0}
+.rosterrow{display:grid;grid-template-columns:1.8fr 1fr .8fr 90px;gap:10px;padding:9px 18px;align-items:center;font-size:13px;border-top:1px solid var(--border)}
+.rosterrow:first-of-type{border-top:none}
+.paypill{font-size:11px;font-weight:600;border-radius:6px;padding:2px 7px;display:inline-block}
+.paypill.paid{background:rgba(30,127,79,.14);color:var(--green)}
+.paypill.partial{background:var(--accent-soft);color:var(--accent-ink)}
+.paypill.unpaid,.paypill.unpriced{background:var(--card2);color:var(--muted)}
+
+/* ---------- media ---------- */
+.mediagrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+.mediacard{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.mediacard .thumb{aspect-ratio:4/3;background:var(--card2);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.mediacard .thumb img,.mediacard .thumb video{width:100%;height:100%;object-fit:cover}
+.mediacard .body{padding:10px 12px}
+.mediacard .lbl{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mediacard .cap{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mediacard .row{display:flex;gap:6px;padding:0 12px 12px}
+
+/* ---------- newsletter ---------- */
+.nlfield{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin:14px 0 5px}
+.nlfield:first-of-type{margin-top:0}
+.nlinput{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:10px;font-family:inherit;font-size:13.5px;background:var(--card);color:var(--text);box-sizing:border-box}
+textarea.nlinput{resize:vertical}
+
 /* ---------- idioma ---------- */
 .langbtn{display:flex;gap:2px;background:var(--card2);border-radius:8px;padding:2px;margin:2px 0 6px}
 .langbtn span{flex:1;text-align:center;padding:5px 0;font-size:12px;font-weight:600;color:var(--muted);border-radius:6px;cursor:pointer}
@@ -326,9 +363,9 @@ table.leadstbl{width:100%;border-collapse:collapse}
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.6 3.4h10.8v6.8H7.2L4.4 12.6v-2.4H2.6z"/></svg>
         <span class="lbl" data-i18n="nav_chats">Conversaciones</span>
       </div>
-      <div class="navitem">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2l1.3 4.7L14 8l-4.7 1.3L8 14l-1.3-4.7L2 8l4.7-1.3z"/></svg>
-        <span class="lbl" data-i18n="nav_daniel">Daniel (agente IA)</span>
+      <div class="navitem" data-view="sim">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M14 8c0 2.9-2.7 5.3-6 5.3-.7 0-1.4-.1-2-.3L2 14l.9-2.5C2.3 10.6 2 9.6 2 8.5 2 5.6 4.7 3.3 8 3.3s6 2.3 6 5.2z"/><path d="M5.3 8h.01M8 8h.01M10.7 8h.01"/></svg>
+        <span class="lbl" data-i18n="nav_sim">Simulador</span>
       </div>
     </div>
 
@@ -338,9 +375,17 @@ table.leadstbl{width:100%;border-collapse:collapse}
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.6 2.6h3.2v10.8H2.6z"/><path d="M6.9 2.6h3.2v7.4H6.9z"/><path d="M11.2 2.6h3v4.8h-3z"/></svg>
         <span class="lbl" data-i18n="nav_leads">Leads</span>
       </div>
-      <div class="navitem" data-view="operators">
+      <div class="navitem" data-view="departures">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.6 9.4h6.6l1.8-4.6a1 1 0 0 1 1.9.4v4.2h1.5a1 1 0 0 1 1 1v1.4h-11z"/><path d="M4.4 13.8a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4zM11.2 13.8a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4z"/></svg>
+        <span class="lbl" data-i18n="nav_departures">Salidas</span>
+      </div>
+      <div class="navitem" data-view="operators" data-db="ops">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2.8a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2z"/><path d="M3 13.4c.5-2.6 2.4-4 5-4s4.5 1.4 5 4"/></svg>
         <span class="lbl" data-i18n="nav_operators">Operadores B2B</span>
+      </div>
+      <div class="navitem" data-view="operators" data-db="tao">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.6 8h12.8M8 1.6a10.5 10.5 0 0 1 0 12.8M8 1.6a10.5 10.5 0 0 0 0 12.8"/><circle cx="8" cy="8" r="6.4"/></svg>
+        <span class="lbl" data-i18n="nav_tao">Travel Adv.</span>
       </div>
       <div class="navitem" data-view="appts">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.8 3.8h10.4v9.4H2.8z"/><path d="M2.8 6.8h10.4"/><path d="M5.5 2.2v3M10.5 2.2v3"/></svg>
@@ -349,6 +394,14 @@ table.leadstbl{width:100%;border-collapse:collapse}
       <div class="navitem" data-view="invoices">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 2.6h5.6l2.4 2.4v8.4H4z"/><path d="M6 8.2h4M6 10.6h4"/></svg>
         <span class="lbl" data-i18n="nav_invoices">Facturas</span>
+      </div>
+      <div class="navitem" data-view="media">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.6" y="2.6" width="10.8" height="10.8" rx="1.5"/><circle cx="6" cy="6" r="1.2"/><path d="M13.4 10.6L9.8 7l-6 6"/></svg>
+        <span class="lbl" data-i18n="nav_media">Fotos y vídeos</span>
+      </div>
+      <div class="navitem" data-view="newsletter">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.2" y="3.8" width="11.6" height="9" rx="1.2"/><path d="M2.6 4.6L8 9l5.4-4.4"/></svg>
+        <span class="lbl" data-i18n="nav_newsletter">Newsletter</span>
       </div>
     </div>
 
@@ -601,6 +654,90 @@ table.leadstbl{width:100%;border-collapse:collapse}
         </div>
       </div>
     </div>
+
+    <!-- ---------- SALIDAS (Departures) ---------- -->
+    <div class="view hidden" id="vDepartures">
+      <div style="padding:18px 28px 30px">
+        <div class="kpis" id="depKpis" style="grid-template-columns:repeat(6,1fr);margin-bottom:22px"></div>
+        <div class="sechd"><span class="t" data-i18n="departures_hd">Salidas</span><button class="btn dark" onclick="newDepartureFlow()" data-i18n="new_departure">+ Nueva salida</button></div>
+        <div id="depList" style="display:flex;flex-direction:column;gap:14px"></div>
+        <div class="sechd" style="margin-top:24px"><span class="t" data-i18n="unassigned_hd">Ganados sin salida</span></div>
+        <div class="card tblcard">
+          <div class="tblhead" style="grid-template-columns:1.8fr 1.2fr 1fr 1fr 110px"><span data-i18n="th_lead">Lead</span><span data-i18n="th_interest">Interés</span><span data-i18n="th_value">Valor</span><span data-i18n="th_status">Estado</span><span></span></div>
+          <div id="depUnassignedTbl"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---------- FOTOS Y VÍDEOS (Media) ---------- -->
+    <div class="view hidden" id="vMedia">
+      <div style="padding:18px 28px 30px">
+        <div class="filters">
+          <span style="font-size:13px;color:var(--muted)" id="mediaSummary" data-i18n="loading">Cargando…</span>
+          <span style="flex:1"></span>
+          <input type="file" id="mediaFileInput" accept="image/*,video/*" class="hidden" onchange="mediaFileChosen(event)">
+          <button class="btn dark" onclick="document.getElementById('mediaFileInput').click()" data-i18n="upload_media">+ Subir</button>
+        </div>
+        <div class="mediagrid" id="mediaGrid"></div>
+      </div>
+    </div>
+
+    <!-- ---------- NEWSLETTER ---------- -->
+    <div class="view hidden" id="vNewsletter">
+      <div style="padding:18px 28px 30px;max-width:720px">
+        <div class="card" style="padding:20px;margin-bottom:18px">
+          <div style="font-weight:600;font-size:15px;margin-bottom:14px" data-i18n="nl_compose">Redactar</div>
+          <label class="nlfield" data-i18n="nl_dataset">Enviar a</label>
+          <select id="nlDataset" class="nlinput">
+            <option value="leads" data-i18n="nl_ds_leads">Leads (WhatsApp)</option>
+            <option value="operators" data-i18n="nl_ds_operators">Operadores</option>
+            <option value="tao" data-i18n="nl_ds_tao">Travel Adv.</option>
+            <option value="subscribers" data-i18n="nl_ds_subscribers">Suscriptores web</option>
+          </select>
+          <label class="nlfield" data-i18n="nl_subject">Asunto</label>
+          <input id="nlSubject" class="nlinput" data-i18n-ph="nl_subject_ph" placeholder="Asunto del email">
+          <label class="nlfield" data-i18n="nl_body">Cuerpo (admite **negrita**, [[Botón|url]], ![alt](imagen))</label>
+          <textarea id="nlBody" class="nlinput" rows="7" data-i18n-ph="nl_body_ph" placeholder="Escribe el contenido…"></textarea>
+          <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+            <button class="btn" onclick="testNewsletterFlow()" data-i18n="nl_test">Enviar prueba</button>
+            <button class="btn" onclick="scheduleNewsletterFlow()" data-i18n="nl_schedule">Programar</button>
+            <button class="btn dark" onclick="sendNewsletterFlow()" data-i18n="nl_send_now">Enviar ahora</button>
+          </div>
+        </div>
+        <div class="sechd"><span class="t" data-i18n="nl_scheduled_hd">Programados</span></div>
+        <div class="card tblcard" style="margin-bottom:22px">
+          <div class="tblhead" style="grid-template-columns:1.3fr 2fr 1fr 90px"><span data-i18n="th_when">Cuándo</span><span data-i18n="nl_subject">Asunto</span><span data-i18n="nl_scope">Alcance</span><span></span></div>
+          <div id="nlScheduledTbl"></div>
+        </div>
+        <div class="sechd"><span class="t" data-i18n="nl_history_hd">Historial</span></div>
+        <div class="card tblcard" style="margin-bottom:22px">
+          <div class="tblhead" style="grid-template-columns:1.3fr 2fr 1fr 1fr"><span data-i18n="th_when">Cuándo</span><span data-i18n="nl_subject">Asunto</span><span data-i18n="nl_dataset">Audiencia</span><span data-i18n="nl_result">Resultado</span></div>
+          <div id="nlHistoryTbl"></div>
+        </div>
+        <div class="sechd"><span class="t" data-i18n="nl_subs_hd">Suscriptores web</span><button class="btn" onclick="addSubscriberFlow()" data-i18n="nl_subs_add">+ Añadir</button></div>
+        <div class="card tblcard">
+          <div class="tblhead" style="grid-template-columns:2fr 1fr 1fr 90px"><span data-i18n="th_email">Email</span><span data-i18n="nl_subs_source">Origen</span><span data-i18n="th_status">Estado</span><span></span></div>
+          <div id="subsTbl"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---------- SIMULADOR ---------- -->
+    <div class="view hidden" id="vSim">
+      <div style="display:flex;flex-direction:column;height:100%">
+        <div class="filters" style="padding:14px 28px 0">
+          <span style="font-size:13px;color:var(--muted)" data-i18n="sim_desc">Habla con Daniel en una conversación de prueba — no toca leads reales ni WhatsApp.</span>
+          <span style="flex:1"></span>
+          <input id="simSession" class="nlinput" style="width:160px;margin:0" value="v2test" data-i18n-ph="sim_session_ph" placeholder="sesión">
+          <button class="btn" onclick="resetSimFlow()" data-i18n="sim_reset">Reiniciar</button>
+        </div>
+        <div class="msgs" id="simMsgs" style="flex:1"></div>
+        <div class="composer">
+          <input id="simInput" class="fake" style="border:1px solid var(--border);font-family:inherit" data-i18n-ph="sim_ph" placeholder="Escribe como si fueras el cliente…" onkeydown="if(event.key==='Enter')sendSimMessage()">
+          <button class="send" onclick="sendSimMessage()" data-i18n="send">Enviar</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -624,6 +761,7 @@ es: {
   search:'Buscar', nav_essentials:'Esenciales', nav_overview:'Resumen', nav_chats:'Conversaciones',
   nav_daniel:'Daniel (agente IA)', nav_work:'Trabajo', nav_leads:'Leads', nav_operators:'Operadores B2B',
   nav_appts:'Citas', nav_invoices:'Facturas', nav_account:'Cuenta', nav_team:'Equipo', nav_settings:'Ajustes',
+  nav_departures:'Salidas', nav_tao:'Travel Adv.', nav_media:'Fotos y vídeos', nav_newsletter:'Newsletter', nav_sim:'Simulador',
   setup_action:'Conectar', setup_ttl:'Termina la configuración',
   setup_desc:'Conecta Google Calendar para sincronizar las citas que agenda Daniel.',
   setup_ok_ttl:'Calendar ya está conectado', setup_ok_desc:'Las citas que se agendan desde aquí ya se sincronizan solas.',
@@ -678,6 +816,40 @@ es: {
   ask_company:'Nombre de la empresa:', ask_contact_opt:'Persona de contacto (opcional):', ask_email_opt:'Email (opcional):',
   err_operator_create:'No se pudo crear el operador.', ask_op_status:'Estado (nuevo / en conversación / activo / descartado):',
   err_operator_update:'No se pudo actualizar.', confirm_archive_op:'¿Archivar este operador?', err_operator_archive:'No se pudo archivar.',
+  confirm_delete_op:'¿Borrar este operador para siempre? No se puede deshacer.',
+  edit:'Editar', th_email:'Email',
+  // -- salidas --
+  departures_hd:'Salidas', new_departure:'+ Nueva salida', unassigned_hd:'Ganados sin salida', no_departures:'Sin salidas todavía.',
+  dep_m_departures:'Salidas', dep_m_confirmed:'Confirmadas', dep_m_travellers:'Viajeros', dep_m_collected:'Cobrado', dep_m_pending:'Pendiente', dep_m_unassigned:'Sin asignar',
+  dep_guided_badge:'guiada', dep_state_forming:'formándose', dep_state_confirmed:'confirmada', dep_state_full:'completa', dep_state_cancelled:'cancelada',
+  dep_collected:'Cobrado', dep_pending:'Pendiente', dep_unpriced:'{n} sin precio', dep_remove:'Quitar', dep_no_roster:'Sin pasajeros todavía.',
+  dep_none_unassigned:'Ningún ganado sin asignar.', dep_not_found:'No encuentro esa salida — escribe la fecha tal cual sale en la lista.',
+  no_open_departures:'Crea una salida primero.', ask_pick_departure:'¿A qué salida? (escribe la fecha exacta)',
+  pay_paid:'Pagado', pay_partial:'Parcial', pay_unpaid:'Sin pagar', pay_unpriced:'Sin precio',
+  ask_dep_date:'Fecha de salida (AAAA-MM-DD):', ask_dep_tour:'Tour (opcional):', ask_dep_guided:'¿Es una salida guiada? (+$550/persona)',
+  ask_dep_capacity:'Plazas totales:', invalid_date:'Fecha inválida (usa AAAA-MM-DD).',
+  confirm_delete_dep:'¿Borrar esta salida? Los pasajeros NO se borran, quedan sin asignar.', confirm_unassign_dep:'¿Quitar a este cliente de la salida?',
+  err_departure:'No se pudo guardar la salida.', err_departure_delete:'No se pudo borrar.', err_departure_assign:'No se pudo actualizar la asignación.',
+  // -- media --
+  upload_media:'+ Subir', no_media:'Sin fotos ni vídeos todavía.', media_no_caption:'sin descripción',
+  media_count:'{n} archivos', media_too_big:'Máximo 16 MB.',
+  ask_media_label:'Etiqueta (la usa Daniel para elegir el archivo):', ask_media_caption:'Descripción (la ve el cliente):', ask_media_use:'¿Cuándo debe usarlo Daniel? (nota interna, nunca la ve el cliente)',
+  err_media_upload:'No se pudo subir el archivo.', err_media_update:'No se pudo guardar.', confirm_delete_media:'¿Borrar este archivo?',
+  // -- newsletter --
+  nl_compose:'Redactar', nl_dataset:'Enviar a', nl_ds_leads:'Leads (WhatsApp)', nl_ds_operators:'Operadores', nl_ds_tao:'Travel Adv.', nl_ds_subscribers:'Suscriptores web',
+  nl_subject:'Asunto', nl_subject_ph:'Asunto del email', nl_body:'Cuerpo (admite **negrita**, [[Botón|url]], ![alt](imagen))', nl_body_ph:'Escribe el contenido…',
+  nl_test:'Enviar prueba', nl_schedule:'Programar', nl_send_now:'Enviar ahora',
+  nl_scheduled_hd:'Programados', nl_scope:'Alcance', nl_scope_all:'Todos', nl_cancel:'Cancelar', nl_no_scheduled:'Nada programado.',
+  nl_history_hd:'Historial', nl_result:'Resultado', nl_failed:'fallidos', nl_no_history:'Sin envíos todavía.',
+  nl_subs_hd:'Suscriptores web', nl_subs_add:'+ Añadir', nl_subs_source:'Origen', nl_subscribed:'Suscrito', nl_unsub:'Dado de baja', nl_no_subs:'Sin suscriptores todavía.',
+  nl_need_subject_body:'Falta asunto o cuerpo (o elige una plantilla).', nl_confirm_send:'¿Enviar ya a toda la audiencia elegida?',
+  nl_sent_result:'Enviado: {sent} de {total}.', nl_send_error:'No se pudo completar la acción',
+  ask_test_email:'¿A qué email mando la prueba?', nl_test_sent:'Prueba enviada.',
+  nl_scheduled_ok:'Campaña programada.', nl_confirm_cancel:'¿Cancelar este envío programado?',
+  ask_subscriber_email:'Email a añadir:', confirm_delete_subscriber:'¿Quitar este suscriptor?',
+  // -- simulador --
+  sim_desc:'Habla con Daniel en una conversación de prueba — no toca leads reales ni WhatsApp.', sim_ph:'Escribe como si fueras el cliente…',
+  sim_session_ph:'sesión', sim_reset:'Reiniciar', sim_confirm_reset:'¿Reiniciar esta conversación de prueba?', sim_error:'Daniel no respondió — inténtalo otra vez.',
   ops_count:'{n} operadores', appts_count:'{n} citas', delete:'Borrar', no_appts:'Sin citas agendadas.',
   ask_phone_appt_opt:'Teléfono del lead (solo dígitos, opcional si es interna):', ask_appt_name:'Nombre para la cita:',
   confirm_delete_appt:'¿Borrar esta cita?', err_appt_delete:'No se pudo borrar.', call_title:'Llamada',
@@ -696,6 +868,7 @@ en: {
   search:'Search', nav_essentials:'Essentials', nav_overview:'Overview', nav_chats:'Conversations',
   nav_daniel:'Daniel (AI agent)', nav_work:'Work', nav_leads:'Leads', nav_operators:'B2B Operators',
   nav_appts:'Appointments', nav_invoices:'Invoices', nav_account:'Account', nav_team:'Team', nav_settings:'Settings',
+  nav_departures:'Departures', nav_tao:'Travel Adv.', nav_media:'Photos & videos', nav_newsletter:'Newsletter', nav_sim:'Simulator',
   setup_action:'Connect', setup_ttl:'Finish setup',
   setup_desc:'Connect Google Calendar to sync the appointments Daniel books.',
   setup_ok_ttl:'Calendar already connected', setup_ok_desc:'Appointments booked from here already sync automatically.',
@@ -750,6 +923,40 @@ en: {
   ask_company:'Company name:', ask_contact_opt:'Contact person (optional):', ask_email_opt:'Email (optional):',
   err_operator_create:'Could not create the operator.', ask_op_status:'Status (new / talking / active / dropped):',
   err_operator_update:'Could not update.', confirm_archive_op:'Archive this operator?', err_operator_archive:'Could not archive.',
+  confirm_delete_op:'Permanently delete this operator? This cannot be undone.',
+  edit:'Edit', th_email:'Email',
+  // -- departures --
+  departures_hd:'Departures', new_departure:'+ New departure', unassigned_hd:'Won with no departure', no_departures:'No departures yet.',
+  dep_m_departures:'Departures', dep_m_confirmed:'Confirmed', dep_m_travellers:'Travellers', dep_m_collected:'Collected', dep_m_pending:'Pending', dep_m_unassigned:'Unassigned',
+  dep_guided_badge:'guided', dep_state_forming:'forming', dep_state_confirmed:'confirmed', dep_state_full:'full', dep_state_cancelled:'cancelled',
+  dep_collected:'Collected', dep_pending:'Pending', dep_unpriced:'{n} unpriced', dep_remove:'Remove', dep_no_roster:'No passengers yet.',
+  dep_none_unassigned:'No won clients waiting.', dep_not_found:"Can't find that departure — type the date exactly as shown in the list.",
+  no_open_departures:'Create a departure first.', ask_pick_departure:'Which departure? (type the exact date)',
+  pay_paid:'Paid', pay_partial:'Partial', pay_unpaid:'Unpaid', pay_unpriced:'Unpriced',
+  ask_dep_date:'Departure date (YYYY-MM-DD):', ask_dep_tour:'Tour (optional):', ask_dep_guided:'Is this a guided departure? (+$550/person)',
+  ask_dep_capacity:'Total seats:', invalid_date:'Invalid date (use YYYY-MM-DD).',
+  confirm_delete_dep:'Delete this departure? Passengers are NOT deleted, they go back to unassigned.', confirm_unassign_dep:'Remove this client from the departure?',
+  err_departure:'Could not save the departure.', err_departure_delete:'Could not delete.', err_departure_assign:'Could not update the assignment.',
+  // -- media --
+  upload_media:'+ Upload', no_media:'No photos or videos yet.', media_no_caption:'no caption',
+  media_count:'{n} files', media_too_big:'16 MB max.',
+  ask_media_label:'Label (Daniel uses this to pick the file):', ask_media_caption:'Caption (the customer sees this):', ask_media_use:'When should Daniel use it? (internal note, never shown to the customer)',
+  err_media_upload:'Could not upload the file.', err_media_update:'Could not save.', confirm_delete_media:'Delete this file?',
+  // -- newsletter --
+  nl_compose:'Compose', nl_dataset:'Send to', nl_ds_leads:'Leads (WhatsApp)', nl_ds_operators:'Operators', nl_ds_tao:'Travel Adv.', nl_ds_subscribers:'Web subscribers',
+  nl_subject:'Subject', nl_subject_ph:'Email subject', nl_body:'Body (supports **bold**, [[Button|url]], ![alt](image))', nl_body_ph:'Write the content…',
+  nl_test:'Send test', nl_schedule:'Schedule', nl_send_now:'Send now',
+  nl_scheduled_hd:'Scheduled', nl_scope:'Scope', nl_scope_all:'Everyone', nl_cancel:'Cancel', nl_no_scheduled:'Nothing scheduled.',
+  nl_history_hd:'History', nl_result:'Result', nl_failed:'failed', nl_no_history:'No campaigns sent yet.',
+  nl_subs_hd:'Web subscribers', nl_subs_add:'+ Add', nl_subs_source:'Source', nl_subscribed:'Subscribed', nl_unsub:'Unsubscribed', nl_no_subs:'No subscribers yet.',
+  nl_need_subject_body:'Missing subject or body (or pick a template).', nl_confirm_send:'Send now to the whole chosen audience?',
+  nl_sent_result:'Sent: {sent} of {total}.', nl_send_error:'Could not complete the action',
+  ask_test_email:'Send the test to which email?', nl_test_sent:'Test sent.',
+  nl_scheduled_ok:'Campaign scheduled.', nl_confirm_cancel:'Cancel this scheduled send?',
+  ask_subscriber_email:'Email to add:', confirm_delete_subscriber:'Remove this subscriber?',
+  // -- simulator --
+  sim_desc:"Chat with Daniel in a test conversation — doesn't touch real leads or WhatsApp.", sim_ph:'Type as if you were the customer…',
+  sim_session_ph:'session', sim_reset:'Reset', sim_confirm_reset:'Reset this test conversation?', sim_error:"Daniel didn't reply — try again.",
   ops_count:'{n} operators', appts_count:'{n} appointments', delete:'Delete', no_appts:'No appointments booked.',
   ask_phone_appt_opt:'Lead phone (digits only, optional if internal):', ask_appt_name:'Name for the appointment:',
   confirm_delete_appt:'Delete this appointment?', err_appt_delete:'Could not delete.', call_title:'Call',
@@ -1176,7 +1383,7 @@ function renderTeam(){
 let operators = [];
 async function loadOperators(){
   document.getElementById('opsTbl').innerHTML = '';
-  const r = await fetch('/admin/api/operators', { headers:{'X-Admin-Key':sessionKey} });
+  const r = await fetch('/admin/api/operators?db='+opsDb, { headers:{'X-Admin-Key':sessionKey} });
   operators = r.ok ? await r.json() : [];
   renderOperators();
 }
@@ -1184,13 +1391,16 @@ function renderOperators(){
   const active = operators.filter(o=>!o.archived);
   document.getElementById('opsSummary').textContent = t('ops_count',{n:active.length});
   document.getElementById('opsTbl').innerHTML = active.map(o=>`
-    <div class="tblrow" style="grid-template-columns:2fr 1.4fr 1fr 1fr 90px">
+    <div class="tblrow" style="grid-template-columns:2fr 1.4fr 1fr 1fr 150px">
       <div class="leadid"><span class="av" style="background:${hashColor(o.company||o.id)}">${initials(o.company||'?')}</span>
         <div><div class="nm" onclick="editOperatorFlow('${o.id}')">${o.company||t('no_name')}</div><span class="st" style="font-size:12px;color:var(--muted)">${o.contact||''}</span></div></div>
       <span class="wait">${o.email||o.phone||'—'}</span>
       <span class="wait">${o.country||'—'}</span>
       <span class="tourpill">${o.status||'nuevo'}</span>
-      <button class="actbtn" onclick="archiveOperatorFlow('${o.id}')">${t('archive')}</button>
+      <div style="display:flex;gap:6px;justify-self:end">
+        <button class="actbtn" style="width:auto;padding:7px 10px" onclick="archiveOperatorFlow('${o.id}')">${t('archive')}</button>
+        <button class="actbtn" style="width:auto;padding:7px 10px" onclick="deleteOperatorFlow('${o.id}')">${t('delete')}</button>
+      </div>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('no_operators')}</div>`;
 }
 async function newOperatorFlow(){
@@ -1198,7 +1408,7 @@ async function newOperatorFlow(){
   const contact = prompt(t('ask_contact_opt'),'') || '';
   const email = prompt(t('ask_email_opt'),'') || '';
   try{
-    const r = await fetch('/admin/api/operator', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({company,contact,email}) });
+    const r = await fetch('/admin/api/operator', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({company,contact,email,db:opsDb}) });
     if(!r.ok) throw 0;
     await loadOperators();
   }catch(e){ alert(t('err_operator_create')); }
@@ -1208,7 +1418,7 @@ async function editOperatorFlow(id){
   const status = prompt(t('ask_op_status'), o.status||'nuevo');
   if(status==null) return;
   try{
-    const r = await fetch('/admin/api/operator', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, status}) });
+    const r = await fetch('/admin/api/operator', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, status, db:opsDb}) });
     if(!r.ok) throw 0;
     await loadOperators();
   }catch(e){ alert(t('err_operator_update')); }
@@ -1216,7 +1426,15 @@ async function editOperatorFlow(id){
 async function archiveOperatorFlow(id){
   if(!confirm(t('confirm_archive_op'))) return;
   try{
-    const r = await fetch('/admin/api/operator/archive', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, archived:true}) });
+    const r = await fetch('/admin/api/operator/archive', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, archived:true, db:opsDb}) });
+    if(!r.ok) throw 0;
+    await loadOperators();
+  }catch(e){ alert(t('err_operator_archive')); }
+}
+async function deleteOperatorFlow(id){
+  if(!confirm(t('confirm_delete_op'))) return;
+  try{
+    const r = await fetch('/admin/api/operator/delete', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, db:opsDb}) });
     if(!r.ok) throw 0;
     await loadOperators();
   }catch(e){ alert(t('err_operator_archive')); }
@@ -1391,6 +1609,326 @@ async function deletePaymentFlow(phone,id){
 }
 
 // ======================================================================
+// SALIDAS (Departures) — /admin/api/overview (roster+dinero real, ya
+// existente) + /admin/api/departure (crear/editar/borrar/asignar). Solo
+// entran leads en estado won; asignar es manual y deliberado.
+// ======================================================================
+let depOverview = null;
+async function loadDepartures(){
+  const r = await fetch('/admin/api/overview', { headers:{'X-Admin-Key':sessionKey} });
+  depOverview = r.ok ? await r.json() : {departures:[], unassigned:[], metrics:{}};
+  renderDepartures();
+}
+function renderDepartures(){
+  if(!depOverview) return;
+  const m = depOverview.metrics||{};
+  const kpiData = [
+    [t('dep_m_departures'), m.departures||0], [t('dep_m_confirmed'), m.confirmed||0],
+    [t('dep_m_travellers'), m.travellers||0], [t('dep_m_collected'), fmt(m.collected||0)],
+    [t('dep_m_pending'), fmt(m.pending||0)], [t('dep_m_unassigned'), m.unassigned||0],
+  ];
+  document.getElementById('depKpis').innerHTML = kpiData.map(([label,val])=>`
+    <div class="card kpi"><div class="hd"><b>${label}</b></div><div class="bd"><div class="val" style="font-size:24px">${val}</div></div></div>`).join('');
+
+  const deps = (depOverview.departures||[]).slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
+  document.getElementById('depList').innerHTML = deps.map(d=>`
+    <div class="depcard">
+      <div class="hd">
+        <span class="ttl">${new Date(d.date).toLocaleDateString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'long',year:'numeric'})}</span>
+        <span class="sub">${d.tour||''}${d.package?(' · '+d.package):''}${d.guided?(' · '+t('dep_guided_badge')):''}</span>
+        <span class="occpill ${d.occState}">${d.pax}/${d.capacity} · ${t('dep_state_'+d.occState)}</span>
+        <span class="sp"></span>
+        <button class="actbtn" style="width:auto;padding:7px 10px" onclick="editDepartureFlow('${d.id}')">${t('edit')}</button>
+        <button class="actbtn" style="width:auto;padding:7px 10px" onclick="deleteDepartureFlow('${d.id}')">${t('delete')}</button>
+      </div>
+      <div class="money">
+        <span>${t('dep_collected')}: <b>${fmt(d.collected||0)}</b></span>
+        <span>${t('dep_pending')}: <b>${fmt(d.pending||0)}</b></span>
+        ${d.unpriced?`<span>${t('dep_unpriced',{n:d.unpriced})}</span>`:''}
+      </div>
+      <div class="roster">
+        ${(d.roster||[]).map(r=>`
+          <div class="rosterrow">
+            <span onclick="openLead('${r.phone}')" style="cursor:pointer;font-weight:600">${r.name||r.phone}</span>
+            <span class="wait">${r.pax} pax</span>
+            <span class="paypill ${r.state}">${t('pay_'+r.state)}</span>
+            <button class="actbtn" style="width:auto;padding:6px 8px" onclick="unassignDepartureFlow('${r.phone}')">${t('dep_remove')}</button>
+          </div>`).join('') || `<div style="padding:14px 18px;color:var(--muted);font-size:13px">${t('dep_no_roster')}</div>`}
+      </div>
+    </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('no_departures')}</div>`;
+
+  const un = depOverview.unassigned||[];
+  document.getElementById('depUnassignedTbl').innerHTML = un.map(r=>`
+    <div class="tblrow" style="grid-template-columns:1.8fr 1.2fr 1fr 1fr 110px">
+      <span onclick="openLead('${r.phone}')" style="cursor:pointer;font-weight:600">${r.name||r.phone}</span>
+      <span class="wait">${r.pax} pax</span>
+      <span class="val">${fmt(r.paid||0)}/${fmt(r.expected||0)}</span>
+      <span class="paypill ${r.state}">${t('pay_'+r.state)}</span>
+      <button class="actbtn" onclick="assignDepartureFlow('${r.phone}')">${t('assign')}</button>
+    </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('dep_none_unassigned')}</div>`;
+}
+async function newDepartureFlow(){
+  const date = prompt(t('ask_dep_date'),''); if(!date) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ alert(t('invalid_date')); return; }
+  const tour = prompt(t('ask_dep_tour'),'') || '';
+  const guided = confirm(t('ask_dep_guided'));
+  try{
+    const r = await fetch('/admin/api/departure', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({date, tour, guided}) });
+    if(!r.ok) throw 0;
+    await loadDepartures();
+  }catch(e){ alert(t('err_departure')); }
+}
+async function editDepartureFlow(id){
+  const d = (depOverview.departures||[]).find(x=>x.id===id); if(!d) return;
+  const date = prompt(t('ask_dep_date'), d.date); if(date==null) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ alert(t('invalid_date')); return; }
+  const capacity = prompt(t('ask_dep_capacity'), d.capacity); if(capacity==null) return;
+  try{
+    const r = await fetch('/admin/api/departure', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, date, tour:d.tour, package:d.package, guided:d.guided, capacity:parseInt(capacity,10)||undefined, minPax:d.minPax, notes:d.notes}) });
+    if(!r.ok) throw 0;
+    await loadDepartures();
+  }catch(e){ alert(t('err_departure')); }
+}
+async function deleteDepartureFlow(id){
+  if(!confirm(t('confirm_delete_dep'))) return;
+  try{
+    const r = await fetch('/admin/api/departure/delete', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id}) });
+    if(!r.ok) throw 0;
+    await loadDepartures();
+  }catch(e){ alert(t('err_departure_delete')); }
+}
+async function assignDepartureFlow(phone){
+  const deps = (depOverview.departures||[]).filter(d=>d.occState!=='cancelled');
+  if(!deps.length){ alert(t('no_open_departures')); return; }
+  const list = deps.map(d=>d.date+' ('+d.pax+'/'+d.capacity+')').join('\n');
+  const chosen = prompt(t('ask_pick_departure')+'\n'+list, deps[0].date); if(!chosen) return;
+  const match = deps.find(d=>d.date===chosen.trim());
+  if(!match){ alert(t('dep_not_found')); return; }
+  try{
+    const r = await fetch('/admin/api/departure/assign', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, departureId:match.id}) });
+    if(!r.ok) throw 0;
+    await refreshLeads(); await loadDepartures();
+  }catch(e){ alert(t('err_departure_assign')); }
+}
+async function unassignDepartureFlow(phone){
+  if(!confirm(t('confirm_unassign_dep'))) return;
+  try{
+    const r = await fetch('/admin/api/departure/assign', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, departureId:''}) });
+    if(!r.ok) throw 0;
+    await refreshLeads(); await loadDepartures();
+  }catch(e){ alert(t('err_departure_assign')); }
+}
+
+// ======================================================================
+// FOTOS Y VÍDEOS (Media) — /admin/api/media (GET, POST full-replace) +
+// /admin/api/media/upload (sube el archivo, devuelve {id,url,type}).
+// ======================================================================
+let mediaLib = [];
+async function loadMedia(){
+  const r = await fetch('/admin/api/media', { headers:{'X-Admin-Key':sessionKey} });
+  mediaLib = r.ok ? await r.json() : [];
+  renderMedia();
+}
+function renderMedia(){
+  document.getElementById('mediaSummary').textContent = t('media_count',{n:mediaLib.length});
+  document.getElementById('mediaGrid').innerHTML = mediaLib.map((m,i)=>`
+    <div class="mediacard">
+      <div class="thumb">${m.type==='video'?`<video src="${m.url}" muted></video>`:`<img src="${m.url}" loading="lazy">`}</div>
+      <div class="body">
+        <div class="lbl">${m.label}</div>
+        <div class="cap">${m.caption||t('media_no_caption')}</div>
+      </div>
+      <div class="row">
+        <button class="actbtn" style="width:auto;padding:6px 10px;flex:1" onclick="editMediaFlow(${i})">${t('edit')}</button>
+        <button class="actbtn" style="width:auto;padding:6px 10px;flex:1" onclick="deleteMediaFlow(${i})">${t('delete')}</button>
+      </div>
+    </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px;grid-column:1/-1">${t('no_media')}</div>`;
+}
+function mediaFileChosen(ev){
+  const file = ev.target.files[0]; ev.target.value='';
+  if(!file) return;
+  if(file.size > 16*1024*1024){ alert(t('media_too_big')); return; }
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try{
+      const r = await fetch('/admin/api/media/upload', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({dataUrl:reader.result}) });
+      const up = await r.json();
+      if(!r.ok) throw new Error(up.error||'');
+      const label = prompt(t('ask_media_label'),'') || up.id;
+      const caption = prompt(t('ask_media_caption'),'') || '';
+      const use = prompt(t('ask_media_use'),'') || '';
+      const next = [...mediaLib, {id:up.id, label, type:up.type, url:up.url, caption, use}];
+      const r2 = await fetch('/admin/api/media', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({items:next}) });
+      if(!r2.ok) throw 0;
+      mediaLib = await r2.json();
+      renderMedia();
+    }catch(e){ alert(t('err_media_upload')); }
+  };
+  reader.readAsDataURL(file);
+}
+async function editMediaFlow(i){
+  const m = mediaLib[i]; if(!m) return;
+  const label = prompt(t('ask_media_label'), m.label); if(label==null) return;
+  const caption = prompt(t('ask_media_caption'), m.caption||''); if(caption==null) return;
+  const use = prompt(t('ask_media_use'), m.use||''); if(use==null) return;
+  const next = mediaLib.map((x,j)=>j===i?{...x,label,caption,use}:x);
+  try{
+    const r = await fetch('/admin/api/media', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({items:next}) });
+    if(!r.ok) throw 0;
+    mediaLib = await r.json(); renderMedia();
+  }catch(e){ alert(t('err_media_update')); }
+}
+async function deleteMediaFlow(i){
+  if(!confirm(t('confirm_delete_media'))) return;
+  const next = mediaLib.filter((_,j)=>j!==i);
+  try{
+    const r = await fetch('/admin/api/media', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({items:next}) });
+    if(!r.ok) throw 0;
+    mediaLib = await r.json(); renderMedia();
+  }catch(e){ alert(t('err_media_update')); }
+}
+
+// ======================================================================
+// NEWSLETTER — /admin/api/newsletter (enviar/programar) + /history +
+// /scheduled + /cancel, más /admin/api/subscribers (audiencia web).
+// ======================================================================
+let nlHistory = [], nlScheduled = [], subscribers = [];
+async function loadNewsletterView(){
+  const [h,s,sub] = await Promise.all([
+    fetch('/admin/api/newsletter/history', {headers:{'X-Admin-Key':sessionKey}}),
+    fetch('/admin/api/newsletter/scheduled', {headers:{'X-Admin-Key':sessionKey}}),
+    fetch('/admin/api/subscribers', {headers:{'X-Admin-Key':sessionKey}}),
+  ]);
+  nlHistory = h.ok ? await h.json() : [];
+  nlScheduled = s.ok ? await s.json() : [];
+  subscribers = sub.ok ? await sub.json() : [];
+  renderNewsletter();
+}
+function renderNewsletter(){
+  document.getElementById('nlScheduledTbl').innerHTML = nlScheduled.map(c=>`
+    <div class="tblrow" style="grid-template-columns:1.3fr 2fr 1fr 90px">
+      <span class="wait">${new Date(c.when).toLocaleString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
+      <span class="wait">${c.subject}</span>
+      <span class="wait">${c.scope==null?t('nl_scope_all'):c.scope}</span>
+      <button class="actbtn" onclick="cancelScheduledFlow('${c.id}')">${t('nl_cancel')}</button>
+    </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nl_no_scheduled')}</div>`;
+
+  document.getElementById('nlHistoryTbl').innerHTML = nlHistory.slice().sort((a,b)=>b.at-a.at).map(c=>`
+    <div class="tblrow" style="grid-template-columns:1.3fr 2fr 1fr 1fr">
+      <span class="wait">${new Date(c.at).toLocaleDateString(LANG==='es'?'es-ES':'en-US')}</span>
+      <span class="wait">${c.subject}</span>
+      <span class="tourpill">${t('nl_ds_'+c.dataset)}</span>
+      <span class="wait">${c.sent}/${c.total}${c.failed?(' · '+c.failed+' '+t('nl_failed')):''}</span>
+    </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nl_no_history')}</div>`;
+
+  document.getElementById('subsTbl').innerHTML = subscribers.filter(s=>!s.archived).map(s=>`
+    <div class="tblrow" style="grid-template-columns:2fr 1fr 1fr 90px">
+      <span class="wait">${s.email}</span>
+      <span class="wait">${s.source||'—'}</span>
+      <span class="tourpill">${s.emailUnsub?t('nl_unsub'):t('nl_subscribed')}</span>
+      <button class="actbtn" onclick="removeSubscriberFlow('${s.email}')">${t('delete')}</button>
+    </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nl_no_subs')}</div>`;
+}
+function nlPayload(){
+  return { dataset: document.getElementById('nlDataset').value, subject: document.getElementById('nlSubject').value.trim(), body: document.getElementById('nlBody').value.trim() };
+}
+async function sendNewsletterFlow(){
+  const p = nlPayload();
+  if(!p.subject || !p.body){ alert(t('nl_need_subject_body')); return; }
+  if(!confirm(t('nl_confirm_send'))) return;
+  try{
+    const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify(p) });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'');
+    alert(t('nl_sent_result',{sent:d.sent,total:d.total}));
+    await loadNewsletterView();
+  }catch(e){ alert(t('nl_send_error')+(e.message?(': '+e.message):'')); }
+}
+async function testNewsletterFlow(){
+  const p = nlPayload();
+  if(!p.subject || !p.body){ alert(t('nl_need_subject_body')); return; }
+  const testTo = prompt(t('ask_test_email'),''); if(!testTo) return;
+  try{
+    const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({...p, testTo}) });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'');
+    alert(t('nl_test_sent'));
+  }catch(e){ alert(t('nl_send_error')+(e.message?(': '+e.message):'')); }
+}
+async function scheduleNewsletterFlow(){
+  const p = nlPayload();
+  if(!p.subject || !p.body){ alert(t('nl_need_subject_body')); return; }
+  const when = prompt(t('ask_when'),''); if(!when) return;
+  try{
+    const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({...p, when}) });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'');
+    alert(t('nl_scheduled_ok'));
+    await loadNewsletterView();
+  }catch(e){ alert(t('nl_send_error')+(e.message?(': '+e.message):'')); }
+}
+async function cancelScheduledFlow(id){
+  if(!confirm(t('nl_confirm_cancel'))) return;
+  try{
+    const r = await fetch('/admin/api/newsletter/cancel', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id}) });
+    if(!r.ok) throw 0;
+    await loadNewsletterView();
+  }catch(e){ alert(t('nl_send_error')); }
+}
+async function addSubscriberFlow(){
+  const email = prompt(t('ask_subscriber_email'),''); if(!email) return;
+  try{
+    const r = await fetch('/admin/api/subscribers/add', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({email}) });
+    if(!r.ok) throw 0;
+    await loadNewsletterView();
+  }catch(e){ alert(t('nl_send_error')); }
+}
+async function removeSubscriberFlow(email){
+  if(!confirm(t('confirm_delete_subscriber'))) return;
+  try{
+    const r = await fetch('/admin/api/subscribers/remove', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({email}) });
+    if(!r.ok) throw 0;
+    await loadNewsletterView();
+  }catch(e){ alert(t('nl_send_error')); }
+}
+
+// ======================================================================
+// SIMULADOR — /admin/api/simulate (sandbox, no toca leads reales ni manda
+// WhatsApp) + /simulate/reset.
+// ======================================================================
+let simMsgs = [];
+function simSessionName(){ return (document.getElementById('simSession').value||'v2test').trim() || 'v2test'; }
+function renderSimMsgs(){
+  const box = document.getElementById('simMsgs');
+  box.innerHTML = `<div class="daychip">${simSessionName()}</div>` + simMsgs.map(m=>`
+    <div class="msgrow ${m.mine?'mine':''}"><div class="bubble ${m.mine?'mine':'other'}">${m.mine?'':'<div class="tag">Daniel</div>'}${(m.text||'').toString().replace(/</g,'&lt;')}</div></div>`).join('');
+  box.scrollTop = box.scrollHeight;
+}
+async function sendSimMessage(){
+  const box = document.getElementById('simInput');
+  const text = (box.value||'').trim(); if(!text) return;
+  simMsgs.push({mine:true, text});
+  renderSimMsgs();
+  box.value=''; box.disabled = true;
+  try{
+    const r = await fetch('/admin/api/simulate', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({session:simSessionName(), text}) });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'');
+    simMsgs.push({mine:false, text:d.reply});
+    renderSimMsgs();
+  }catch(e){ simMsgs.push({mine:false, text:'⚠ '+t('sim_error')}); renderSimMsgs(); }
+  box.disabled = false; box.focus();
+}
+async function resetSimFlow(){
+  if(!confirm(t('sim_confirm_reset'))) return;
+  try{
+    await fetch('/admin/api/simulate/reset', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({session:simSessionName()}) });
+  }catch(e){}
+  simMsgs = [];
+  renderSimMsgs();
+}
+
+// ======================================================================
 // "¿Quién eres?" — no es una cuenta real, solo atribución local (mismas
 // 2 personas que ya usa /admin: OWNER_OPTS). Se guarda en sessionStorage,
 // separado de la clave del panel.
@@ -1562,29 +2100,42 @@ function buildDots(){
 }
 
 // ================= view switching =================
-const ALL_VIEWS = ['overview','chats','leads','lead','operators','appts','invoices','team','settings'];
+const ALL_VIEWS = ['overview','chats','leads','lead','operators','appts','invoices','team','settings','departures','media','newsletter','sim'];
 const titles = {overview:'Resumen', chats:'Conversaciones', leads:'Leads', lead:'Ficha de lead',
-  operators:'Operadores B2B', appts:'Citas', invoices:'Facturas', team:'Equipo', settings:'Ajustes'};
+  operators:'Operadores B2B', appts:'Citas', invoices:'Facturas', team:'Equipo', settings:'Ajustes',
+  departures:'Salidas', media:'Fotos y vídeos', newsletter:'Newsletter', sim:'Simulador'};
 const loadedOnce = {};
+let opsDb = 'ops'; // 'ops' (Operadores B2B) | 'tao' (Travel Adventures Operators) -- misma vista, dos agendas
 let prevView = 'overview';
+function openOpsNav(db){ opsDb = db; loadedOnce.operators = false; go('operators'); }
 function go(view){
   if(document.getElementById('v'+view.charAt(0).toUpperCase()+view.slice(1)).id !== 'vLead') prevView = view;
   ALL_VIEWS.forEach(v=>{
     document.getElementById('v'+v.charAt(0).toUpperCase()+v.slice(1)).classList.toggle('hidden', v!==view);
   });
-  document.querySelectorAll('.navitem[data-view]').forEach(el=>el.classList.toggle('active', el.dataset.view===view));
-  document.getElementById('viewTitle').textContent = titles[view];
+  document.querySelectorAll('.navitem[data-view]').forEach(el=>{
+    const matches = el.dataset.view===view && (!el.dataset.db || el.dataset.db===opsDb);
+    el.classList.toggle('active', matches);
+  });
+  document.getElementById('viewTitle').textContent = view==='operators' ? (opsDb==='tao'?t('nav_tao'):t('nav_operators')) : titles[view];
   if(view==='chats') renderChats();
   if(view==='operators' && !loadedOnce.operators){ loadedOnce.operators=true; loadOperators(); }
   if(view==='appts' && !loadedOnce.appts){ loadedOnce.appts=true; loadAppts(); }
   if(view==='invoices' && !loadedOnce.invoices){ loadedOnce.invoices=true; loadInvoices(); }
+  if(view==='departures' && !loadedOnce.departures){ loadedOnce.departures=true; loadDepartures(); }
+  if(view==='media' && !loadedOnce.media){ loadedOnce.media=true; loadMedia(); }
+  if(view==='newsletter' && !loadedOnce.newsletter){ loadedOnce.newsletter=true; loadNewsletterView(); }
+  if(view==='sim' && !loadedOnce.sim){ loadedOnce.sim=true; renderSimMsgs(); }
   if(view==='team'){ renderTeam(); } // barato, siempre client-side sobre `leads` ya cargado
   if(view==='settings'){ document.getElementById('setWho').textContent = whoAmI || '—'; }
 }
 function goBack(){ go(prevView==='lead'?'overview':prevView); }
 
 document.querySelectorAll('.navitem[data-view]').forEach(el=>{
-  el.addEventListener('click', ()=>go(el.dataset.view));
+  el.addEventListener('click', ()=>{
+    if(el.dataset.view==='operators'){ openOpsNav(el.dataset.db||'ops'); return; }
+    go(el.dataset.view);
+  });
 });
 
 // ================= auth + live fetch =================
