@@ -695,6 +695,10 @@ textarea.nlinput{resize:vertical}
             <div class="hd" data-i18n="interest">Interés</div>
             <div class="body" id="ldInteres"></div>
           </div>
+          <div class="card ldcard">
+            <div class="tlhd"><span class="t" data-i18n="pay_hd">Pagos y factura</span><span class="a" onclick="openInvoice(curLead.phone)" data-i18n="pay_invoice">🧾 Factura / recibo</span></div>
+            <div class="body" id="ldPayments"></div>
+          </div>
         </div>
         <div class="card ldcard">
           <div class="tlhd"><span class="t" data-i18n="activity">Actividad</span><span class="a" data-i18n="add_note">+ Añadir nota</span></div>
@@ -971,6 +975,16 @@ es: {
   summary_err:'No se pudo generar el resumen.', summary_next:'Siguiente paso',
   next_send_quote:'Enviar cotización', next_confirm_date:'Confirmar fecha de viaje', next_follow_up:'Hacer seguimiento',
   next_escalate_human:'Escalar a una persona', next_wait_customer:'Esperar respuesta del cliente', next_none:'Sin acción sugerida',
+  pay_hd:'Pagos y factura', pay_invoice:'🧾 Factura / recibo', no_deals:'Sin ventas registradas todavía.',
+  pay_total:'Precio', pay_paid:'Pagado', pay_pending:'Pendiente', total:'Total',
+  pay_state_paid:'Pagado', pay_state_partial:'Pago parcial', pay_state_unpaid:'Pendiente de pago', pay_state_unpriced:'Sin precio cerrado',
+  m_wise:'Wise', m_cash:'Efectivo', m_stripe:'Stripe', m_other:'Otro',
+  k_deposit:'Depósito', k_balance:'Resto', k_other:'Otro',
+  c_amount:'Importe', btn_add_pay:'+ Añadir pago', al_pay_amount:'Pon un importe válido.', cfm_pay_delete:'¿Borrar este pago? No se puede deshacer.',
+  deal_won:'✅ Ganado', deal_lost:'❌ Perdido',
+  inv_title:'Recibo de pago', inv_client:'Cliente', inv_issued:'Emitido', inv_item:'Tour / paquete', inv_qty:'Personas',
+  inv_amount:'Importe', inv_total:'Total', inv_paid:'Pagado', inv_balance:'Saldo pendiente', inv_print:'Imprimir / Guardar como PDF',
+  inv_no_deal:'Sin venta cerrada todavía — el importe se pone en la ficha.', inv_payments:'Pagos recibidos', inv_no_pay:'Sin pagos registrados.', inv_method:'Método',
   confirm_won:'¿Marcar este lead como ganado?', err_status:'No se pudo actualizar el estado.',
   ask_when:'Fecha y hora de la cita (AAAA-MM-DDTHH:MM):', appt_created:'Cita creada.', err_appt:'No se pudo crear la cita.',
   ask_phone_new:'Teléfono del lead nuevo (con prefijo de país, solo dígitos):', invalid_phone:'Teléfono inválido.',
@@ -1097,6 +1111,16 @@ en: {
   summary_err:'Could not generate the summary.', summary_next:'Next step',
   next_send_quote:'Send quote', next_confirm_date:'Confirm travel date', next_follow_up:'Follow up',
   next_escalate_human:'Escalate to a person', next_wait_customer:'Wait for customer reply', next_none:'No action suggested',
+  pay_hd:'Payments and invoice', pay_invoice:'🧾 Invoice / receipt', no_deals:'No sales logged yet.',
+  pay_total:'Price', pay_paid:'Paid', pay_pending:'Pending', total:'Total',
+  pay_state_paid:'Paid', pay_state_partial:'Partially paid', pay_state_unpaid:'Payment pending', pay_state_unpriced:'No price set yet',
+  m_wise:'Wise', m_cash:'Cash', m_stripe:'Stripe', m_other:'Other',
+  k_deposit:'Deposit', k_balance:'Balance', k_other:'Other',
+  c_amount:'Amount', btn_add_pay:'+ Add payment', al_pay_amount:'Enter a valid amount.', cfm_pay_delete:'Delete this payment? This cannot be undone.',
+  deal_won:'✅ Won', deal_lost:'❌ Lost',
+  inv_title:'Payment receipt', inv_client:'Client', inv_issued:'Issued', inv_item:'Tour / package', inv_qty:'People',
+  inv_amount:'Amount', inv_total:'Total', inv_paid:'Paid', inv_balance:'Balance due', inv_print:'Print / Save as PDF',
+  inv_no_deal:'No closed sale yet — set the amount on the lead card.', inv_payments:'Payments received', inv_no_pay:'No payments logged.', inv_method:'Method',
   confirm_won:'Mark this lead as won?', err_status:'Could not update the status.',
   ask_when:'Appointment date and time (YYYY-MM-DDTHH:MM):', appt_created:'Appointment created.', err_appt:'Could not create the appointment.',
   ask_phone_new:'New lead phone (with country code, digits only):', invalid_phone:'Invalid phone.',
@@ -1681,6 +1705,131 @@ function renderLead(){
       <div class="tlbody"><div class="tltop"><span class="t">${TL_ICON[ev.type]||'•'} ${esc(HIST_LABEL[ev.type])}</span><span class="tm">${fmtHistTime(ev.ts)}</span></div><div class="tldesc">${tlDesc(ev)}</div></div>
     </div>`).join('') : `<div style="padding:8px 0;color:var(--muted);font-size:13px">${t('no_activity')}</div>`;
   loadLeadSummary(l.phone);
+  document.getElementById('ldPayments').innerHTML = renderPaymentsCard(l);
+}
+
+// ── Qué ha comprado / cuánto ha pagado / cuánto debe — mismo cálculo que `paxPayment()`
+// del servidor (index.js), aquí en cliente porque los datos (dealValue + payments[]) ya
+// están en el lead que tenemos cargado; no hace falta un endpoint nuevo para esto.
+function payTotals(l){
+  const expected = Math.max(0, parseInt(l.dealValue,10)||0);
+  const paid = (Array.isArray(l.payments)?l.payments:[]).reduce((a,p)=>a+(Number(p.amount)||0),0);
+  const pending = Math.max(0, expected-paid);
+  const state = !expected ? (paid>0?'partial':'unpriced') : paid>=expected ? 'paid' : (paid>0?'partial':'unpaid');
+  return {expected,paid,pending,state};
+}
+const DEAL_BADGE = {open:'🟡',won:'✅',lost:'❌'};
+function renderPaymentsCard(l){
+  const deals = (Array.isArray(l.deals)?l.deals:[]).slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const dealsHtml = deals.length ? deals.map(d=>{
+    const head = esc(d.tour||d.model||'—') + (d.package?' — '+esc(d.package):'');
+    const sub = (d.travelDate?esc(d.travelDate):'') + (d.dealValue?' · '+fmt(parseInt(d.dealValue,10)):'');
+    const actions = d.status==='open' ? `<div style="display:flex;gap:6px;margin-top:4px">
+        <button class="actbtn" style="width:auto;padding:5px 9px;font-size:12px" onclick="fichaDealAction('${d.id}','won')">${t('deal_won')}</button>
+        <button class="actbtn" style="width:auto;padding:5px 9px;font-size:12px" onclick="fichaDealAction('${d.id}','lost')">${t('deal_lost')}</button>
+      </div>` : '';
+    return `<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)"><span>${DEAL_BADGE[d.status]||'🗂️'}</span><div><div style="font-weight:600;font-size:13px">${head}</div><div style="font-size:12px;color:var(--muted)">${sub}</div>${actions}</div></div>`;
+  }).join('') : `<div style="color:var(--muted);font-size:13px;padding:2px 0 8px">${t('no_deals')}</div>`;
+  const pt = payTotals(l);
+  const ps = (Array.isArray(l.payments)?l.payments:[]).slice().sort((a,b)=>(a.at||0)-(b.at||0));
+  const paysHtml = ps.length ? ps.map(p=>`
+    <div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:12.5px">
+      <b>${fmt(p.amount||0)}</b><span style="color:var(--muted)">${esc(p.method||'')} · ${t('k_'+(p.kind||'other'))}</span>
+      <span style="color:var(--muted);margin-left:auto">${fmtHistTime(p.at)}</span>
+      <button class="actbtn" style="width:auto;padding:3px 8px;font-size:11px" onclick="fichaDelPayment('${p.id}')">${t('delete')}</button>
+    </div>`).join('') : `<div style="color:var(--muted);font-size:13px;padding:2px 0 8px">${t('no_payments')}</div>`;
+  return `
+    <div style="padding-bottom:6px">${dealsHtml}</div>
+    <div style="display:flex;gap:16px;padding:8px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin:6px 0">
+      <div><div style="font-size:11.5px;color:var(--muted)">${t('pay_total')}</div><div style="font-weight:700">${pt.expected?fmt(pt.expected):'—'}</div></div>
+      <div><div style="font-size:11.5px;color:var(--muted)">${t('pay_paid')}</div><div style="font-weight:700;color:${CG}">${fmt(pt.paid)}</div></div>
+      <div><div style="font-size:11.5px;color:var(--muted)">${t('pay_pending')}</div><div style="font-weight:700;color:${pt.pending>0?RED:CG}">${fmt(pt.pending)}</div></div>
+      <div style="align-self:center"><span class="stbadge" style="background:color-mix(in srgb, ${pt.state==='paid'?CG:pt.state==='partial'?CO:pt.state==='unpaid'?RED:GR} 18%, transparent);color:${pt.state==='paid'?CG:pt.state==='partial'?CO:pt.state==='unpaid'?RED:GR}">${t('pay_state_'+pt.state)}</span></div>
+    </div>
+    ${paysHtml}
+    <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+      <input id="payAmt" type="number" min="0" step="10" placeholder="${t('c_amount')}" style="width:100px;padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:var(--card);color:inherit">
+      <select id="payMethod" style="padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:var(--card);color:inherit"><option value="wise">${t('m_wise')}</option><option value="cash">${t('m_cash')}</option><option value="stripe">${t('m_stripe')}</option><option value="other">${t('m_other')}</option></select>
+      <select id="payKind" style="padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:var(--card);color:inherit"><option value="deposit">${t('k_deposit')}</option><option value="balance">${t('k_balance')}</option><option value="other">${t('k_other')}</option></select>
+      <button class="actbtn" style="width:auto;padding:7px 12px" onclick="fichaAddPayment()">${t('btn_add_pay')}</button>
+    </div>`;
+}
+async function fichaDealAction(dealId, status){
+  if(!curLead) return;
+  try{
+    const r = await fetch('/admin/api/deal', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:curLead.phone, dealId, status}) });
+    if(!r.ok) throw 0;
+    await refreshLeads(); openLead(curLead.phone); renderKanban();
+  }catch(e){ showToast(t('err_status')); }
+}
+async function fichaAddPayment(){
+  if(!curLead) return;
+  const amt = parseFloat(document.getElementById('payAmt').value);
+  if(!(amt>0)){ showToast(t('al_pay_amount')); return; }
+  const method = document.getElementById('payMethod').value;
+  const kind = document.getElementById('payKind').value;
+  try{
+    const r = await fetch('/admin/api/payment', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:curLead.phone, amount:amt, currency:'usd', method, kind}) });
+    if(!r.ok) throw 0;
+    await refreshLeads(); openLead(curLead.phone);
+  }catch(e){ showToast(t('err_payment_create')); }
+}
+async function fichaDelPayment(id){
+  if(!curLead) return;
+  if(!await askConfirm(t('cfm_pay_delete'))) return;
+  try{
+    const r = await fetch('/admin/api/payment/delete', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:curLead.phone, id}) });
+    if(!r.ok) throw 0;
+    await refreshLeads(); openLead(curLead.phone);
+  }catch(e){ showToast(t('err_payment_delete')); }
+}
+
+// ── Factura / recibo de pago: documento imprimible (ventana propia + window.print) ────────
+// No hay servicio de PDF desplegado para este bot — en vez de depender de uno, se genera un
+// documento HTML limpio y se imprime/"Guarda como PDF" desde el propio navegador. Es un RECIBO
+// de lo ya cobrado (dato real: deals + payments del lead), no una factura fiscal con NPWP/entidad
+// legal — eso exigiría datos que hoy no están confirmados para B2K.
+function openInvoice(phone){
+  const l = leads.find(x=>x.phone===phone); if(!l) return;
+  const deal = (Array.isArray(l.deals)?l.deals:[]).find(d=>d.status==='open') || (Array.isArray(l.deals)?l.deals:[])[0];
+  const pt = payTotals(l);
+  const pax = Math.max(1, (parseInt(l.riders,10)||0)+(parseInt(l.pillions,10)||0));
+  const ps = (Array.isArray(l.payments)?l.payments:[]).slice().sort((a,b)=>(a.at||0)-(b.at||0));
+  const dateFmt = ts => new Date(ts||Date.now()).toLocaleDateString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short',year:'numeric'});
+  const rows = ps.length ? ps.map(p=>`<tr><td>${dateFmt(p.at)}</td><td>${esc(p.method||'')}</td><td>${esc(t('k_'+(p.kind||'other')))}</td><td style="text-align:right">${fmt(p.amount||0)}</td></tr>`).join('')
+    : `<tr><td colspan="4" style="color:#888">${esc(t('inv_no_pay'))}</td></tr>`;
+  const itemLine = deal ? `${esc(deal.tour||deal.model||l.tour||'—')}${deal.package?' — '+esc(deal.package):''}` : (l.tour ? esc(l.tour) : esc(t('inv_no_deal')));
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(t('inv_title'))} — ${esc(l.name||l.phone)}</title>
+<style>
+  body{font-family:-apple-system,Segoe UI,Arial,sans-serif;color:#1a1a1a;max-width:640px;margin:40px auto;padding:0 20px}
+  h1{font-size:20px;margin:0 0 2px} .sub{color:#666;font-size:13px;margin-bottom:24px}
+  .row{display:flex;justify-content:space-between;font-size:13px;margin:4px 0}
+  table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}
+  th,td{padding:6px 4px;text-align:left;border-bottom:1px solid #e5e5e5}
+  .totals{margin-top:14px;font-size:14px} .totals .row b{font-size:16px}
+  .balance{color:${pt.pending>0?'#c0392b':'#1e7f4f'}}
+  .pbtn{margin-top:28px} .pbtn button{padding:8px 16px;font-size:13px;cursor:pointer}
+  @media print{.pbtn{display:none}}
+</style></head><body>
+  <h1>Bali Moto Adventures</h1>
+  <div class="sub">${esc(t('inv_title'))} · ${esc(t('inv_issued'))}: ${dateFmt(Date.now())}</div>
+  <div class="row"><span>${esc(t('inv_client'))}</span><b>${esc(l.name||l.phone)}</b></div>
+  <div class="row"><span>WhatsApp</span><span>+${esc(l.phone)}</span></div>
+  ${l.email?`<div class="row"><span>Email</span><span>${esc(l.email)}</span></div>`:''}
+  <table><thead><tr><th>${esc(t('inv_item'))}</th><th>${esc(t('inv_qty'))}</th><th style="text-align:right">${esc(t('inv_amount'))}</th></tr></thead>
+  <tbody><tr><td>${itemLine}${deal&&deal.travelDate?'<br><span style="color:#888;font-size:12px">'+esc(deal.travelDate)+'</span>':''}</td><td>${pax}</td><td style="text-align:right">${pt.expected?fmt(pt.expected):'—'}</td></tr></tbody></table>
+  <div style="margin-top:20px;font-weight:600;font-size:13px">${esc(t('inv_payments'))}</div>
+  <table><thead><tr><th>${esc(t('inv_issued'))}</th><th>${esc(t('inv_method'))}</th><th></th><th style="text-align:right">${esc(t('inv_amount'))}</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="totals">
+    <div class="row"><span>${esc(t('inv_total'))}</span><span>${pt.expected?fmt(pt.expected):'—'}</span></div>
+    <div class="row"><span>${esc(t('inv_paid'))}</span><span>${fmt(pt.paid)}</span></div>
+    <div class="row balance"><span><b>${esc(t('inv_balance'))}</b></span><b>${fmt(pt.pending)}</b></div>
+  </div>
+  <div class="pbtn"><button onclick="window.print()">${esc(t('inv_print'))}</button></div>
+</body></html>`;
+  const win = window.open('', '_blank');
+  if(!win){ showToast(t('err_status')); return; }
+  win.document.write(html); win.document.close();
 }
 
 // ── Resumen de conversación + siguiente paso (IA) ──────────────────────
@@ -2181,9 +2330,13 @@ async function newPaymentFlow(){
   }catch(e){ showToast(t('err_payment_create')); }
 }
 async function assignPaymentFlow(idx){
+  // Manda `ref` (id de la sesión de Stripe) cuando está disponible: el backend lo prefiere sobre
+  // `idx` porque la posición en la lista puede desincronizarse entre listar y asignar si entra
+  // o se asigna otro pago entre medias — mismo patrón ya validado en /admin (panel.html).
+  const item = lastUnmatched.find(p=>p.idx===idx);
   const phone = await askPrompt(t('ask_assign_phone'),''); if(!phone) return;
   try{
-    const r = await fetch('/admin/api/payments/assign', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({idx, phone}) });
+    const r = await fetch('/admin/api/payments/assign', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({idx, phone, ref: item && item.ref}) });
     if(!r.ok) throw 0;
     await refreshLeads(); loadInvoices();
   }catch(e){ showToast(t('err_payment_assign')); }
