@@ -1847,7 +1847,7 @@ async function loadLeadSummary(phone, force){
   loading.textContent = t('summary_loading');
   box.appendChild(loading);
   try{
-    const r = await fetch('/admin/api/lead-summary', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, force:!!force}) });
+    const r = await fetch('/admin/api/lead-summary', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, force:!!force, lang:LANG}) });
     const d = await r.json();
     if(!curLead || curLead.phone !== phone) return; // el usuario ya abrió otra ficha
     box.innerHTML = '';
