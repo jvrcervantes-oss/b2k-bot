@@ -140,6 +140,8 @@ table.leadstbl{width:100%;border-collapse:collapse}
 .leadid .st{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-top:2px}
 .leadid .st .d{width:7px;height:7px;border-radius:50%}
 .tourpill{justify-self:start;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:3px 9px;font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.stbadge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.stbadge .d{width:6px;height:6px;border-radius:50%;background:currentColor}
 .wait{font-size:13px;color:var(--muted)}
 .val{font-weight:600}
 .actbtn{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:7px 0;font-size:13px;font-weight:600;width:100px;justify-self:end}
@@ -573,7 +575,9 @@ textarea.nlinput{resize:vertical}
           <div id="notifList"></div>
         </div>
       </div>
-      <button class="btn"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 10V3"/><path d="M5.3 5.4L8 2.6l2.7 2.8"/><path d="M3 10.5V13h10v-2.5"/></svg><span data-i18n="export">Exportar</span></button>
+      <input type="file" id="topbarCsvFile" accept=".csv,text/csv" class="hidden" onchange="topbarImportFile(event)">
+      <button class="btn" onclick="document.getElementById('topbarCsvFile').click()"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 6v7"/><path d="M5.3 8.6L8 5.8l2.7 2.8"/><path d="M3 10.5V13h10v-2.5"/></svg><span data-i18n="import">Importar</span></button>
+      <button class="btn" onclick="topbarExport()"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 10V3"/><path d="M5.3 5.4L8 2.6l2.7 2.8"/><path d="M3 10.5V13h10v-2.5"/></svg><span data-i18n="export">Exportar</span></button>
       <button class="btn dark" onclick="newLeadFlow()" data-i18n="new_lead">+ Nuevo lead</button>
     </div>
 
@@ -677,6 +681,10 @@ textarea.nlinput{resize:vertical}
     <div class="view hidden" id="vLead">
       <div class="back" onclick="goBack()" data-i18n-arrow-l="back">← Volver</div>
       <div class="card ldhero" id="ldHero"></div>
+      <div class="card ldcard" style="margin-bottom:16px">
+        <div class="tlhd"><span class="t" data-i18n="summary_hd">Resumen y siguiente paso</span><span class="a" onclick="loadLeadSummary(curLead.phone,true)" data-i18n="summary_refresh">Actualizar resumen</span></div>
+        <div class="body" id="ldSummary"></div>
+      </div>
       <div class="ldgrid">
         <div class="ldcol">
           <div class="card ldcard">
@@ -881,6 +889,10 @@ const RED='var(--red)', GREEN='var(--green)';
 
 const fmt = n => '$' + n.toLocaleString('en-US');
 
+// Todo lo que viene de un lead o de una nota escrita a mano (nombre, tag, notas, resumen de IA)
+// se pinta con esto antes de entrar en un innerHTML — sin esto, ese texto es HTML ejecutable.
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
 // ======================================================================
 // I18N — mismo patrón que /admin/panel.html (I18N{es,en} + t(key) +
 // localStorage botpanel_lang, compartido con el panel real: cambiar el
@@ -901,7 +913,9 @@ es: {
   notif_hd:'Notificaciones', notif_empty:'Sin novedades ahora mismo.',
   notif_waiting:'esperando respuesta hace más de 24h', notif_overdue:'seguimiento vencido',
   notif_new_today:'nuevo hoy', notif_unmatched:'pago de Stripe sin asignar',
-  export:'Exportar', new_lead:'+ Nuevo lead',
+  export:'Exportar', import:'Importar', new_lead:'+ Nuevo lead',
+  err_no_rows:'No se encontraron filas válidas en el archivo.', err_import:'Error al importar el archivo.',
+  import_ok:'✓ {created} nuevos · {updated} actualizados',
   last30:'Últimos 30 días', seg_all:'Todos', seg_active:'Activos', seg_needs:'Requieren acción',
   waiting_hd:'Esperando respuesta', unit_leads:'leads', waiting_meta:'esperando respuesta hace >24 h — dato real',
   open_queue:'Abrir cola', overdue_hd:'Seguimientos vencidos', unit_tasks:'tareas',
@@ -949,6 +963,14 @@ es: {
   hist_created:'Lead creado', hist_imported:'Importado', hist_status:'Cambio de estado', hist_owner:'Propietario asignado',
   hist_appt:'Cita agendada', hist_note:'Nota añadida', hist_tag:'Etiqueta', hist_archived:'Archivado',
   hist_restored:'Restaurado', hist_enriched:'Enriquecido desde el chat', hist_payment:'Pago registrado', hist_outreach:'Contacto iniciado',
+  hist_payment_deleted:'Pago eliminado', hist_fu_reminded:'Aviso de seguimiento', hist_newsletter:'Newsletter enviado',
+  hist_deal_new:'Nueva venta abierta', hist_deal_archived:'Venta archivada', hist_deal_status:'Cambio de estado de venta',
+  hist_delivery_failed:'Envío no entregado', hist_departure_assigned:'Asignado a una salida', hist_departure_removed:'Quitado de la salida',
+  hist_email_sent:'Itinerario enviado por email', hist_email_failed:'Fallo al enviar email', hist_review_followup:'Recordatorio de reseña enviado',
+  summary_hd:'Resumen y siguiente paso', summary_refresh:'Actualizar resumen', summary_loading:'Generando…', summary_empty:'Sin conversación todavía para resumir.',
+  summary_err:'No se pudo generar el resumen.', summary_next:'Siguiente paso',
+  next_send_quote:'Enviar cotización', next_confirm_date:'Confirmar fecha de viaje', next_follow_up:'Hacer seguimiento',
+  next_escalate_human:'Escalar a una persona', next_wait_customer:'Esperar respuesta del cliente', next_none:'Sin acción sugerida',
   confirm_won:'¿Marcar este lead como ganado?', err_status:'No se pudo actualizar el estado.',
   ask_when:'Fecha y hora de la cita (AAAA-MM-DDTHH:MM):', appt_created:'Cita creada.', err_appt:'No se pudo crear la cita.',
   ask_phone_new:'Teléfono del lead nuevo (con prefijo de país, solo dígitos):', invalid_phone:'Teléfono inválido.',
@@ -1017,7 +1039,9 @@ en: {
   notif_hd:'Notifications', notif_empty:'Nothing new right now.',
   notif_waiting:'waiting over 24h', notif_overdue:'follow-up overdue',
   notif_new_today:'new today', notif_unmatched:'unassigned Stripe payment',
-  export:'Export', new_lead:'+ New lead',
+  export:'Export', import:'Import', new_lead:'+ New lead',
+  err_no_rows:'No valid rows found in the file.', err_import:'Error importing the file.',
+  import_ok:'✓ {created} new · {updated} updated',
   last30:'Last 30 days', seg_all:'All', seg_active:'Active', seg_needs:'Needs action',
   waiting_hd:'Waiting for reply', unit_leads:'leads', waiting_meta:'waiting for reply over 24h — real data',
   open_queue:'Open queue', overdue_hd:'Overdue follow-ups', unit_tasks:'tasks',
@@ -1065,6 +1089,14 @@ en: {
   hist_created:'Lead created', hist_imported:'Imported', hist_status:'Status change', hist_owner:'Owner assigned',
   hist_appt:'Appointment booked', hist_note:'Note added', hist_tag:'Tag', hist_archived:'Archived',
   hist_restored:'Restored', hist_enriched:'Enriched from chat', hist_payment:'Payment logged', hist_outreach:'Outreach sent',
+  hist_payment_deleted:'Payment deleted', hist_fu_reminded:'Follow-up reminder', hist_newsletter:'Newsletter sent',
+  hist_deal_new:'New deal opened', hist_deal_archived:'Deal archived', hist_deal_status:'Deal status change',
+  hist_delivery_failed:'Delivery failed', hist_departure_assigned:'Assigned to a departure', hist_departure_removed:'Removed from departure',
+  hist_email_sent:'Itinerary emailed', hist_email_failed:'Email failed', hist_review_followup:'Review reminder sent',
+  summary_hd:'Summary and next step', summary_refresh:'Refresh summary', summary_loading:'Generating…', summary_empty:'No conversation yet to summarize.',
+  summary_err:'Could not generate the summary.', summary_next:'Next step',
+  next_send_quote:'Send quote', next_confirm_date:'Confirm travel date', next_follow_up:'Follow up',
+  next_escalate_human:'Escalate to a person', next_wait_customer:'Wait for customer reply', next_none:'No action suggested',
   confirm_won:'Mark this lead as won?', err_status:'Could not update the status.',
   ask_when:'Appointment date and time (YYYY-MM-DDTHH:MM):', appt_created:'Appointment created.', err_appt:'Could not create the appointment.',
   ask_phone_new:'New lead phone (with country code, digits only):', invalid_phone:'Invalid phone.',
@@ -1250,6 +1282,12 @@ function initials(name){
 const STATUS_KEY = {'':'st_new', new:'st_new', quoted:'st_quoted', won:'st_won', lost:'st_lost', noshow:'st_noshow'};
 const STATUS_LABEL = new Proxy({}, { get: (_, status) => t(STATUS_KEY[status] || 'st_new') });
 const STATUS_DOT = {'':CB, new:CB, quoted:CO, won:CG, lost:'var(--red)', noshow:GR};
+// Pastilla con el color del estado de fondo (no solo el puntito) — mismo color de STATUS_DOT,
+// atenuado con color-mix para que el texto siga siendo legible en claro y en oscuro.
+function stBadge(status){
+  const c = STATUS_DOT[status] || CB;
+  return `<span class="stbadge" style="background:color-mix(in srgb, ${c} 18%, transparent);color:${c}"><span class="d" style="background:${c}"></span>${STATUS_LABEL[status]}</span>`;
+}
 function tourLine(l){
   const bits=[l.tour||'Bali–Komodo'];
   if(l.package) bits.push(l.package);
@@ -1359,7 +1397,7 @@ async function renderThread(){
     <span class="av" style="background:${hashColor(c.phone)}">${initials(c.name||c.phone)}</span>
     <div style="flex:1;min-width:0">
       <div style="display:flex;align-items:center;gap:9px"><span class="nm" onclick="openLead('${c.phone}')">${c.name||c.phone}</span>
-        <span class="estpill"><span class="d" style="background:${STATUS_DOT[c.status]||CB}"></span>${STATUS_LABEL[c.status]}</span></div>
+        ${stBadge(c.status)}</div>
       <div class="meta">${tourLine(c)}</div>
     </div>
     <button class="toolbtn ${c.paused?'on':''}" onclick="togglePauseFlow('${c.phone}')">${c.paused?t('p_resume'):t('p_pause')}</button>
@@ -1570,7 +1608,7 @@ function renderLeadsTable(){
         <span class="av" style="background:${hashColor(l.phone)}">${initials(l.name||l.phone)}</span>
         <div><div class="nm" onclick="openLead('${l.phone}')">${l.name||l.phone}</div></div>
       </div>
-      <span class="st"><span class="d" style="background:${STATUS_DOT[l.status]||CB}"></span>${STATUS_LABEL[l.status]}</span>
+      ${stBadge(l.status)}
       <span class="tourpill">${tourLine(l)}</span>
       <span class="val">${l.dealValue?fmt(parseInt(l.dealValue,10)):'—'}</span>
       <button class="actbtn" onclick="openLead('${l.phone}')">${t('see')}</button>
@@ -1586,8 +1624,32 @@ function openLead(phone){
   go('lead');
 }
 function fmtHistTime(ts){ return ts ? new Date(ts).toLocaleString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : ''; }
-const HIST_KEY = {created:'hist_created',imported:'hist_imported',status:'hist_status',owner:'hist_owner',appt:'hist_appt',note:'hist_note',tag:'hist_tag',archived:'hist_archived',restored:'hist_restored',enriched:'hist_enriched',payment:'hist_payment',outreach:'hist_outreach'};
-const HIST_LABEL = new Proxy({}, { get: (_, type) => HIST_KEY[type] ? t(HIST_KEY[type]) : undefined });
+const HIST_KEY = {created:'hist_created',imported:'hist_imported',status:'hist_status',owner:'hist_owner',appt:'hist_appt',note:'hist_note',tag:'hist_tag',archived:'hist_archived',restored:'hist_restored',enriched:'hist_enriched',payment:'hist_payment',payment_deleted:'hist_payment_deleted',outreach:'hist_outreach',fu_reminded:'hist_fu_reminded',newsletter:'hist_newsletter',deal_new:'hist_deal_new',deal_archived:'hist_deal_archived',deal_status:'hist_deal_status',delivery_failed:'hist_delivery_failed',departure_assigned:'hist_departure_assigned',departure_removed:'hist_departure_removed',email_sent:'hist_email_sent',email_failed:'hist_email_failed',review_followup:'hist_review_followup'};
+const HIST_LABEL = new Proxy({}, { get: (_, type) => HIST_KEY[type] ? t(HIST_KEY[type]) : type });
+// Icono + color fijos por tipo de evento — antes el punto de la actividad salía de hashColor(ev.type),
+// un color pseudo-aleatorio sin significado. Aquí "rojo" es siempre un fallo, "verde" un avance real.
+const TL_ICON = {created:'✨',imported:'⬆️',status:'🔁',owner:'👤',appt:'📞',note:'📝',tag:'🏷️',archived:'📦',restored:'♻️',enriched:'🔍',payment:'💰',payment_deleted:'💸',outreach:'💬',fu_reminded:'📅',newsletter:'📧',deal_new:'🆕',deal_archived:'🗂️',deal_status:'🔀',delivery_failed:'⛔',departure_assigned:'🛫',departure_removed:'🛫',email_sent:'📧',email_failed:'⛔',review_followup:'⭐'};
+const TL_COLOR = {created:CG,imported:CB,status:CB,owner:CV,appt:CV,note:GR,tag:CO,archived:GR,restored:CG,enriched:CO,payment:CG,payment_deleted:RED,outreach:CG,fu_reminded:CO,newsletter:CB,deal_new:CG,deal_archived:GR,deal_status:CB,delivery_failed:RED,departure_assigned:CB,departure_removed:GR,email_sent:CG,email_failed:RED,review_followup:CO};
+// Muchos eventos guardan su detalle en campos propios (from/to, model, code/detail…), no en
+// `notes`/`title` — antes de esto la línea de actividad se quedaba en blanco para casi todos.
+function tlDesc(ev){
+  switch(ev.type){
+    case 'status': return t('hist_status')+': '+esc(STATUS_LABEL[ev.to]||ev.to||'—');
+    case 'owner': return esc(ev.to||'—');
+    case 'appt': return esc(ev.title||'');
+    case 'tag': return esc(ev.to||'');
+    case 'delivery_failed': return '<b style="color:'+RED+'">('+esc(ev.code||'?')+')</b> '+esc(ev.detail||'');
+    case 'email_failed': return esc(ev.to||'')+(ev.error?' — '+esc(ev.error):'');
+    case 'email_sent': return esc(ev.to||'');
+    case 'deal_new': return esc(ev.model||'');
+    case 'deal_archived': return esc(ev.model||'');
+    case 'deal_status': return esc(ev.model||'')+' → '+esc(STATUS_LABEL[ev.to]||ev.to||'—');
+    case 'payment': return (ev.amount?fmt(parseInt(ev.amount,10)):'')+(ev.method?' · '+esc(ev.method):'');
+    case 'newsletter': return esc(ev.subject||'');
+    case 'departure_assigned': case 'departure_removed': return '';
+    default: return esc(ev.notes||'');
+  }
+}
 function renderLead(){
   const l = curLead;
   if(!l) return;
@@ -1596,7 +1658,7 @@ function renderLead(){
     <div style="flex:1;min-width:0">
       <div class="nm">${l.name||l.phone}</div>
       <div class="tags">
-        <span class="estpill"><span class="d" style="background:${STATUS_DOT[l.status]||CB}"></span>${STATUS_LABEL[l.status]}</span>
+        ${stBadge(l.status)}
         <span class="tourpill2">${tourLine(l)}</span>
         <span class="via">${t('via')} ${l.source||l.adSource||'WhatsApp'}</span>
       </div>
@@ -1615,9 +1677,38 @@ function renderLead(){
   const hist = (Array.isArray(l.history)?l.history:[]).slice().reverse().slice(0,10);
   document.getElementById('ldTimeline').innerHTML = hist.length ? hist.map((ev,i)=>`
     <div class="tlrow">
-      <div class="tlrail"><span class="d" style="background:${hashColor(ev.type)}"></span>${i<hist.length-1?'<span class="line"></span>':''}</div>
-      <div class="tlbody"><div class="tltop"><span class="t">${HIST_LABEL[ev.type]||ev.type}</span><span class="tm">${fmtHistTime(ev.ts)}</span></div><div class="tldesc">${ev.notes||ev.title||''}</div></div>
+      <div class="tlrail"><span class="d" style="background:${TL_COLOR[ev.type]||GR}"></span>${i<hist.length-1?'<span class="line"></span>':''}</div>
+      <div class="tlbody"><div class="tltop"><span class="t">${TL_ICON[ev.type]||'•'} ${esc(HIST_LABEL[ev.type])}</span><span class="tm">${fmtHistTime(ev.ts)}</span></div><div class="tldesc">${tlDesc(ev)}</div></div>
     </div>`).join('') : `<div style="padding:8px 0;color:var(--muted);font-size:13px">${t('no_activity')}</div>`;
+  loadLeadSummary(l.phone);
+}
+
+// ── Resumen de conversación + siguiente paso (IA) ──────────────────────
+// nextAction llega SIEMPRE como una de las claves de NEXT_ACTION_LABEL (el servidor la valida
+// contra esa misma lista antes de guardarla) — nunca es texto libre que el propio lead pudiera
+// intentar dictar a través del chat. El resumen se pinta con textContent, no innerHTML: aunque
+// el modelo devolviera HTML/script, no se ejecuta.
+const NEXT_ACTION_LABEL = {send_quote:'next_send_quote',confirm_date:'next_confirm_date',follow_up:'next_follow_up',escalate_human:'next_escalate_human',wait_customer:'next_wait_customer',none:'next_none'};
+async function loadLeadSummary(phone, force){
+  const box = document.getElementById('ldSummary');
+  if(!box) return;
+  box.innerHTML = '';
+  const loading = document.createElement('div');
+  loading.style.cssText = 'color:var(--muted);font-size:13px';
+  loading.textContent = t('summary_loading');
+  box.appendChild(loading);
+  try{
+    const r = await fetch('/admin/api/lead-summary', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, force:!!force}) });
+    const d = await r.json();
+    if(!curLead || curLead.phone !== phone) return; // el usuario ya abrió otra ficha
+    box.innerHTML = '';
+    if(!r.ok){ box.textContent = d.error === 'Todavía no hay conversación con este lead' ? t('summary_empty') : t('summary_err'); return; }
+    const p = document.createElement('div'); p.style.cssText = 'font-size:13.5px;line-height:1.5'; p.textContent = d.summary || t('summary_empty');
+    const nextKey = NEXT_ACTION_LABEL[d.nextAction] ? d.nextAction : 'none';
+    const chip = document.createElement('span'); chip.className = 'tourpill2'; chip.style.marginTop = '8px'; chip.style.display = 'inline-block';
+    chip.textContent = t('summary_next') + ': ' + t(NEXT_ACTION_LABEL[nextKey]);
+    box.appendChild(p); box.appendChild(chip);
+  }catch(e){ if(curLead && curLead.phone===phone){ box.innerHTML=''; box.textContent = t('summary_err'); } }
 }
 
 // ================= modales estilizados (reemplaza prompt()/confirm() nativos) =================
@@ -1737,6 +1828,107 @@ async function newLeadFlow(){
 async function refreshLeads(){
   const r = await fetch('/admin/api/leads', { headers:{'X-Admin-Key':sessionKey} });
   if(r.ok) leads = await r.json();
+}
+
+// ================= Exportar / Importar CSV (leads y operadores) =================
+// Mismo formato y mismos endpoints que ya usa /admin (panel.html) — aquí solo faltaba
+// cablearlos: el botón "Exportar" del topbar era decorativo y no había ninguna forma de
+// subir un CSV en este panel.
+function csvCell(s){ s = s==null ? '' : String(s); return '"'+s.replace(/"/g,'""')+'"'; }
+function downloadCsv(filename, lines){
+  const blob = new Blob(['﻿'+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+}
+const LEAD_CSV_COLS = [['phone','Teléfono'],['name','Nombre'],['email','Email'],['country','País'],['tour','Tour'],['package','Paquete'],['status','Estado'],['dealValue','Valor'],['travelDate','Fecha viaje'],['source','Origen'],['createdAt','Creado']];
+function exportLeadsCsv(){
+  const cols = LEAD_CSV_COLS;
+  const lines = [cols.map(c=>csvCell(c[1])).join(',')];
+  leads.filter(l=>!l.archived).forEach(l=>{
+    lines.push(cols.map(c=>{
+      if(c[0]==='phone') return csvCell('+'+l.phone);
+      if(c[0]==='status') return csvCell(STATUS_LABEL[l.status]);
+      if(c[0]==='createdAt') return csvCell(l.createdAt ? new Date(l.createdAt).toISOString() : '');
+      return csvCell(l[c[0]]);
+    }).join(','));
+  });
+  downloadCsv('leads_'+new Date().toISOString().slice(0,10)+'.csv', lines);
+}
+function exportOperatorsCsv(){
+  const cols = ['company','contact','email','phone','country','status','notes'];
+  const lines = [cols.map(c=>csvCell(c)).join(',')];
+  operators.forEach(o=>lines.push(cols.map(c=>csvCell(o[c])).join(',')));
+  downloadCsv((opsDb==='tao'?'travel_advisors_':'operadores_')+new Date().toISOString().slice(0,10)+'.csv', lines);
+}
+function topbarExport(){ if(curView==='operators') exportOperatorsCsv(); else exportLeadsCsv(); }
+
+// Import CSV de Meta Lead Ads: UTF-16, separado por tabuladores (formato real de su export).
+function parseMetaCsv(text){
+  if(text && text.charCodeAt(0)===0xFEFF) text = text.slice(1);
+  const lines = text.split(/\r?\n/).filter(l=>l.replace(/\t/g,'').trim().length);
+  if(lines.length<2) return [];
+  const cells = line => line.split('\t').map(c=>{ c=c.trim(); if(c.length>1 && c[0]==='"' && c[c.length-1]==='"') c=c.slice(1,-1); return c; });
+  const hdr = cells(lines[0]).map(h=>h.toLowerCase().replace(/[^a-z0-9_?]/g,''));
+  const idx = {}; hdr.forEach((h,i)=>idx[h]=i);
+  const col = (c,n) => { const i=idx[n]; return (i==null||i>=c.length) ? '' : (c[i]||''); };
+  const mappkg = v => { v=(v||'').toLowerCase(); if(v.indexOf('deluxe')>=0) return 'Deluxe'; if(v.indexOf('standard')>=0||v.indexOf('best_value')>=0) return 'Standard / best value'; return ''; };
+  const out = [];
+  for(let k=1;k<lines.length;k++){
+    const c = cells(lines[k]); const phone = (col(c,'whatsapp_number')||'').replace(/\D/g,'');
+    if(!phone) continue;
+    out.push({ whatsapp:phone, name:col(c,'full_name'), email:(col(c,'email')||'').toLowerCase(),
+      package: mappkg(col(c,'which_package_fits_you_best?')||col(c,'which_package_fits_you_best')),
+      tour:'Bali to Komodo', createdTime:col(c,'created_time'), source:col(c,'campaign_name') });
+  }
+  return out;
+}
+async function importLeadsFile(file){
+  const buf = new Uint8Array(await file.arrayBuffer());
+  let enc = 'utf-8';
+  if(buf[0]===0xFF && buf[1]===0xFE) enc='utf-16le'; else if(buf[0]===0xFE && buf[1]===0xFF) enc='utf-16be';
+  let text; try{ text = new TextDecoder(enc).decode(buf); }catch(e){ text = new TextDecoder('utf-8').decode(buf); }
+  let rows; try{ rows = parseMetaCsv(text); }catch(e){ rows = []; }
+  if(!rows.length){ showToast(t('err_no_rows')); return; }
+  try{
+    const r = await fetch('/admin/api/import', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({rows}) });
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error||'');
+    await refreshLeads(); renderKanban(); renderLeadsTbl(); if(leadsViewMode==='table') renderLeadsTable();
+    showToast(t('import_ok',{created:j.created||0,updated:j.updated||0}), {type:'success'});
+  }catch(e){ showToast(t('err_import')); }
+}
+
+// Import CSV genérico de operadores (no el formato Meta): company/contact/email/phone/country/notes.
+function opsParseCsv(text){
+  const rows=[]; let row=[], field='', inQ=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQ){ if(c==='"'){ if(text[i+1]==='"'){field+='"'; i++;} else inQ=false; } else field+=c; }
+    else { if(c==='"') inQ=true; else if(c===','||c===';'){row.push(field);field='';} else if(c==='\n'){row.push(field);rows.push(row);row=[];field='';} else if(c==='\r'){} else field+=c; }
+  }
+  if(field.length||row.length){row.push(field);rows.push(row);}
+  if(!rows.length) return [];
+  const headers = rows[0].map(h=>h.trim().toLowerCase());
+  return rows.slice(1).filter(r=>r.some(v=>v&&v.trim())).map(r=>{
+    const obj={}; headers.forEach((h,idx)=>obj[h]=r[idx]||''); return obj;
+  });
+}
+async function importOperatorsFile(file){
+  const text = await file.text();
+  let rows; try{ rows = opsParseCsv(text); }catch(e){ rows = []; }
+  if(!rows.length){ showToast(t('err_no_rows')); return; }
+  try{
+    const r = await fetch('/admin/api/import-operators', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({db:opsDb, rows}) });
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error||'');
+    await loadOperators();
+    showToast(t('import_ok',{created:j.created||0,updated:j.updated||0}), {type:'success'});
+  }catch(e){ showToast(t('err_import')); }
+}
+function topbarImportFile(e){
+  const file = e.target.files[0]; e.target.value = '';
+  if(!file) return;
+  if(curView==='operators') importOperatorsFile(file); else importLeadsFile(file);
 }
 
 // ======================================================================
@@ -2515,8 +2707,10 @@ const titles = {overview:'Resumen', chats:'Conversaciones', leads:'Leads', lead:
 const loadedOnce = {};
 let opsDb = 'ops'; // 'ops' (Operadores B2B) | 'tao' (Travel Adventures Operators) -- misma vista, dos agendas
 let prevView = 'overview';
+let curView = 'overview'; // para que Exportar/Importar del topbar sepan sobre qué dataset actuar
 function openOpsNav(db){ opsDb = db; loadedOnce.operators = false; pageState.ops = 1; go('operators'); }
 function go(view){
+  curView = view;
   if(document.getElementById('v'+view.charAt(0).toUpperCase()+view.slice(1)).id !== 'vLead') prevView = view;
   ALL_VIEWS.forEach(v=>{
     document.getElementById('v'+v.charAt(0).toUpperCase()+v.slice(1)).classList.toggle('hidden', v!==view);
