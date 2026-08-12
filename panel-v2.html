@@ -183,6 +183,22 @@ table.leadstbl{width:100%;border-collapse:collapse}
 .composer{display:flex;gap:10px;padding:14px 20px;border-top:1px solid var(--border)}
 .composer .fake{flex:1;display:flex;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:10px 14px;color:var(--muted);font-size:13.5px}
 .composer .send{background:var(--strong);color:var(--strong-ink);border:none;border-radius:12px;padding:0 20px;font-size:13.5px;font-weight:600}
+.composer input:disabled,.composer button:disabled{opacity:.5;cursor:not-allowed}
+.composer .iconround{width:40px;height:40px;flex-shrink:0;border-radius:50%;background:var(--card);border:1px solid var(--border);color:var(--icon);display:flex;align-items:center;justify-content:center;font-size:16px}
+.composer .cannedwrap{position:relative}
+.cannedpop{position:absolute;bottom:52px;left:0;width:280px;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.18);max-height:280px;overflow-y:auto;z-index:20}
+.cannedpop .ci{padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer}
+.cannedpop .ci:hover{background:var(--card2)}
+.cannedpop .ci .ct{font-weight:600;font-size:13px}
+.cannedpop .ci .cx{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.cannedpop .cedit{padding:11px 14px;text-align:center;font-size:12.5px;font-weight:600;color:var(--accent-ink);cursor:pointer}
+.cannedpop .cedit:hover{background:var(--card2)}
+.wininfo{font-size:12px;font-weight:500;padding:8px 20px;border-top:1px solid var(--border);display:none;align-items:center;gap:6px}
+.wininfo.open{display:flex;color:var(--green);background:rgba(30,127,79,.1)}
+.wininfo.closed{display:flex;color:var(--red);background:rgba(198,58,47,.1)}
+.threadhd .toolbtn{border:1px solid var(--border);background:var(--card);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;flex-shrink:0}
+.threadhd .toolbtn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
+.threadhd .toolbtn:disabled{opacity:.6;cursor:default}
 
 /* ---------- kanban ---------- */
 #vLeads{padding:18px 28px 30px;overflow:auto}
@@ -317,6 +333,97 @@ textarea.nlinput{resize:vertical}
 .langbtn{display:flex;gap:2px;background:var(--card2);border-radius:8px;padding:2px;margin:2px 0 6px}
 .langbtn span{flex:1;text-align:center;padding:5px 0;font-size:12px;font-weight:600;color:var(--muted);border-radius:6px;cursor:pointer}
 .langbtn span.on{background:var(--card);color:var(--text)}
+
+/* ---------- scrollbars (acorde al diseño, mismo token en claro/oscuro) ---------- */
+*{scrollbar-width:thin;scrollbar-color:var(--border2) transparent}
+*::-webkit-scrollbar{width:9px;height:9px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px}
+*::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+*::-webkit-scrollbar-corner{background:transparent}
+
+/* ---------- sidebar colapsable ---------- */
+.side{transition:width .15s ease}
+.side.collapsed{width:72px;align-items:center}
+.side.collapsed .brand{justify-content:center;padding-left:0;padding-right:0}
+.side.collapsed .brand .name,.side.collapsed .brand .sub,.side.collapsed .navlabel,
+.side.collapsed .navitem .lbl,.side.collapsed .navitem .badge,
+.side.collapsed .me .nm,.side.collapsed .me .role,.side.collapsed .me .dots,#themeState{display:none}
+.side.collapsed .navitem,.side.collapsed .me{justify-content:center;width:100%}
+.side.collapsed #sideToggleIcon{transform:rotate(180deg)}
+
+/* ---------- modal estilizado (reemplaza await askPrompt()/await askConfirm() nativos) ---------- */
+.modalov{position:fixed;inset:0;background:rgba(10,10,8,.5);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px}
+.modalbox{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:22px;width:100%;max-width:400px;box-shadow:0 24px 60px rgba(0,0,0,.3)}
+.modalbox .modalmsg{font-size:14px;font-weight:500;line-height:1.5;white-space:pre-wrap;margin-bottom:14px}
+.modalbox .modalbtns{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.modalbox .modalbtns button{border-radius:10px;padding:9px 16px;font-size:13.5px;font-weight:600;border:none}
+.modalbox .modalbtns .ghost{background:var(--card2);border:1px solid var(--border);color:var(--text)}
+.modalbox .modalbtns .primary{background:var(--strong);color:var(--strong-ink)}
+.modalbox .modalbtns .danger{background:var(--red);color:#fff}
+
+/* ---------- paginación (norma del estudio, mismo patrón que /admin) ---------- */
+.pager{display:flex;align-items:center;gap:10px;padding:12px 16px;font-size:12.5px;color:var(--muted)}
+.pager .pgbtns{display:flex;align-items:center;gap:4px;margin-left:auto}
+.pager .pgbtns button{width:28px;height:28px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:12.5px;display:flex;align-items:center;justify-content:center}
+.pager .pgbtns button:disabled{opacity:.4;cursor:default}
+.pager .pgnum{padding:0 8px;font-weight:600;color:var(--text)}
+
+/* ---------- kanban: arrastrar entre columnas ---------- */
+.kancol.dragover .kancards{outline:2px dashed var(--accent);outline-offset:-4px;border-radius:10px}
+.kancard[draggable]{cursor:grab}
+.kancard .kstatus{width:100%;margin-top:9px;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:12px}
+
+/* ---------- microanimaciones (misma curva/duración que /admin: cubic-bezier(.2,.7,.3,1), .15-.2s) ---------- */
+.navitem,.btn,.iconbtn,.actbtn,.kancard,.addcard,.mediacard,.tblrow,.segmented .seg,.pager .pgbtns button,#sideToggleIcon{
+  transition:transform .16s cubic-bezier(.2,.7,.3,1),background .15s ease,border-color .15s ease,box-shadow .15s ease,color .15s ease;
+}
+.btn:hover,.iconbtn:hover,.actbtn:hover{transform:translateY(-1px)}
+.btn:active,.iconbtn:active,.actbtn:active{transform:translateY(0) scale(.97)}
+.navitem:active{transform:scale(.98)}
+.kancard:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.08)}
+.tblrow:hover{background:var(--card2)}
+.mediacard:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.08)}
+.mediacard img,.mediacard video{transition:transform .25s cubic-bezier(.2,.7,.3,1)}
+.mediacard:hover img,.mediacard:hover video{transform:scale(1.04)}
+
+/* ---------- flow-in: aparición escalonada al pintar listas ---------- */
+@media (prefers-reduced-motion: no-preference){
+  @keyframes flowIn{ from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+  .tblrow,.kancard,.mediacard,.depcard,.rosterrow{animation:flowIn .3s cubic-bezier(.2,.7,.3,1) both}
+  .tblrow:nth-child(2),.kancard:nth-child(2),.mediacard:nth-child(2),.depcard:nth-child(2),.rosterrow:nth-child(2){animation-delay:30ms}
+  .tblrow:nth-child(3),.kancard:nth-child(3),.mediacard:nth-child(3),.depcard:nth-child(3),.rosterrow:nth-child(3){animation-delay:60ms}
+  .tblrow:nth-child(4),.kancard:nth-child(4),.mediacard:nth-child(4),.depcard:nth-child(4),.rosterrow:nth-child(4){animation-delay:90ms}
+  .tblrow:nth-child(5),.kancard:nth-child(5),.mediacard:nth-child(5),.depcard:nth-child(5),.rosterrow:nth-child(5){animation-delay:120ms}
+  .tblrow:nth-child(6),.kancard:nth-child(6),.mediacard:nth-child(6),.depcard:nth-child(6),.rosterrow:nth-child(6){animation-delay:150ms}
+  .tblrow:nth-child(7),.kancard:nth-child(7),.mediacard:nth-child(7),.depcard:nth-child(7),.rosterrow:nth-child(7){animation-delay:180ms}
+  .tblrow:nth-child(n+8),.kancard:nth-child(n+8),.mediacard:nth-child(n+8),.depcard:nth-child(n+8),.rosterrow:nth-child(n+8){animation-delay:210ms}
+  .view{animation:flowIn .22s cubic-bezier(.2,.7,.3,1) both}
+}
+@media (prefers-reduced-motion: reduce){ *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important} }
+
+/* ---------- modal: entrada/salida ---------- */
+@keyframes modalBgIn{ from{opacity:0} to{opacity:1} }
+@keyframes modalBoxIn{ from{opacity:0;transform:translateY(10px) scale(.96)} to{opacity:1;transform:translateY(0) scale(1)} }
+.modalov{animation:modalBgIn .15s ease both}
+.modalov .modalbox{animation:modalBoxIn .2s cubic-bezier(.2,.7,.3,1) both}
+.modalov.out{animation:modalBgIn .15s ease reverse both}
+.modalov.out .modalbox{animation:modalBoxIn .15s ease reverse both}
+
+/* ---------- pop-ups: notificaciones flotantes (reemplazan showToast()) ---------- */
+.toastwrap{position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;gap:10px;z-index:400;max-width:340px}
+.toast{background:var(--card);border:1px solid var(--border);border-left:3px solid var(--border2);border-radius:12px;padding:12px 16px;font-size:13.5px;font-weight:500;line-height:1.4;box-shadow:0 14px 34px rgba(0,0,0,.18);cursor:pointer;animation:toastIn .25s cubic-bezier(.2,.7,.3,1) both}
+.toast.out{animation:toastOut .18s ease both}
+.toast.error{border-left-color:var(--red)}
+.toast.success{border-left-color:var(--green)}
+.toast.info{border-left-color:var(--accent)}
+@keyframes toastIn{ from{opacity:0;transform:translateY(10px) scale(.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+@keyframes toastOut{ from{opacity:1;transform:translateX(0)} to{opacity:0;transform:translateX(24px)} }
+
+/* ---------- modal pequeño de carga inicial (hasta que boot() termina) ---------- */
+.bootbox{max-width:180px;padding:26px 20px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center}
+.spinner{width:26px;height:26px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--accent);animation:spin .7s linear infinite}
+@keyframes spin{ to{transform:rotate(360deg)} }
 </style>
 </head>
 <body>
@@ -337,6 +444,20 @@ textarea.nlinput{resize:vertical}
     <div style="display:flex;flex-direction:column;gap:8px" id="whoOpts"></div>
   </div>
 </div>
+<div id="bootLoading" class="modalov hidden">
+  <div class="modalbox bootbox">
+    <div class="spinner"></div>
+    <div style="font-size:13px;font-weight:600;color:var(--muted)" data-i18n="loading">Cargando…</div>
+  </div>
+</div>
+<div id="cannedModal" class="modalov hidden">
+  <div class="modalbox" style="max-width:460px">
+    <div style="font-weight:600;font-size:15px;margin-bottom:4px" data-i18n="m_canned">Respuestas rápidas</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px"><span data-i18n="m_canned_help">Una por línea · formato</span> <b data-i18n="m_canned_fmt">Título | texto</b></div>
+    <textarea id="cannedText" class="nlinput" rows="10"></textarea>
+    <div class="modalbtns"><button class="ghost" onclick="closeCannedEdit()" data-i18n="btn_cancel">Cancelar</button><button class="primary" onclick="saveCanned()" data-i18n="btn_ok">Aceptar</button></div>
+  </div>
+</div>
 <div class="app">
 
   <!-- ================= SIDEBAR ================= -->
@@ -348,11 +469,6 @@ textarea.nlinput{resize:vertical}
         <div class="sub">CRM BMA</div>
       </div>
     </div>
-    <div class="search">
-      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M7 2.8a4.2 4.2 0 1 1 0 8.4 4.2 4.2 0 0 1 0-8.4z"/><path d="M10.2 10.2L13.6 13.6"/></svg>
-      <span data-i18n="search">Buscar</span><span class="k">/</span>
-    </div>
-
     <div class="navlabel" data-i18n="nav_essentials">Esenciales</div>
     <div class="navgroup">
       <div class="navitem active" data-view="overview">
@@ -435,6 +551,7 @@ textarea.nlinput{resize:vertical}
     </div>
     <div class="bottomnav">
       <div class="navitem" onclick="toggleTheme()" style="cursor:pointer"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 5.6a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8z"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6"/></svg><span class="lbl" data-i18n="bn_appearance">Apariencia</span><span id="themeState" style="font-size:11.5px;color:var(--muted)"></span></div>
+      <div class="navitem" id="sideToggle" onclick="toggleSidebar()" style="cursor:pointer" data-i18n-title="bn_collapse" title="Colapsar menú"><svg id="sideToggleIcon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 2.6v10.8"/><path d="M9.5 5L6.8 8l2.7 3"/><path d="M13 5l-2.7 3 2.7 3"/></svg><span class="lbl" data-i18n="bn_collapse">Colapsar menú</span></div>
       <div class="me" onclick="switchWho()" style="cursor:pointer" data-i18n-title="bn_switch" title="Cambiar de usuario">
         <div class="av" id="meAv">?</div>
         <div><div class="nm" id="meName">&mdash;</div><div class="role" data-i18n="bn_switch">Cambiar de usuario</div></div>
@@ -526,9 +643,16 @@ textarea.nlinput{resize:vertical}
       <div class="thread">
         <div class="threadhd" id="threadHd"></div>
         <div class="msgs" id="threadMsgs"></div>
+        <div class="wininfo" id="winInfo"></div>
         <div class="composer">
+          <div class="cannedwrap">
+            <div class="cannedpop hidden" id="cannedPop"></div>
+            <button type="button" class="iconround" id="cannedBtn" onclick="toggleCannedPop()" data-i18n-title="t_canned" title="Respuestas rápidas">📋</button>
+          </div>
+          <input type="file" id="attachFile" accept="image/*,video/*" class="hidden" onchange="attachFileChosen(event)">
+          <button type="button" class="iconround" id="attachBtn" onclick="document.getElementById('attachFile').click()" data-i18n-title="t_attach" title="Enviar foto/vídeo">📎</button>
           <input id="composerInput" class="fake" style="border:1px solid var(--border);font-family:inherit" data-i18n-ph="composer_ph" placeholder="Escribe un mensaje de WhatsApp…" onkeydown="if(event.key==='Enter')sendMessage()">
-          <button class="send" onclick="sendMessage()" data-i18n="send">Enviar</button>
+          <button class="send" id="sendBtn" onclick="sendMessage()" data-i18n="send">Enviar</button>
         </div>
       </div>
     </div>
@@ -545,6 +669,7 @@ textarea.nlinput{resize:vertical}
       <div class="card tblcard hidden" id="leadsTableWrap">
         <div class="tblhead"><span data-i18n="th_lead">Lead</span><span data-i18n="th_status">Estado</span><span data-i18n="th_interest">Interés</span><span data-i18n="th_value">Valor</span><span></span></div>
         <div id="leadsTableTbl"></div>
+        <div id="leadsTablePager"></div>
       </div>
     </div>
 
@@ -581,6 +706,7 @@ textarea.nlinput{resize:vertical}
         <div class="card tblcard">
           <div class="tblhead" style="grid-template-columns:2fr 1.4fr 1fr 1fr 90px"><span data-i18n="th_company">Empresa</span><span data-i18n="th_contact">Contacto</span><span data-i18n="th_country">País</span><span data-i18n="th_status">Estado</span><span></span></div>
           <div id="opsTbl"></div>
+          <div id="opsPager"></div>
         </div>
       </div>
     </div>
@@ -605,6 +731,7 @@ textarea.nlinput{resize:vertical}
         <div class="card tblcard hidden" id="apptsListWrap">
           <div class="tblhead" style="grid-template-columns:1.3fr 1.6fr 1.5fr 90px"><span data-i18n="th_when">Cuándo</span><span data-i18n="th_lead">Lead</span><span data-i18n="th_title_notes">Título / notas</span><span></span></div>
           <div id="apptsTbl"></div>
+          <div id="apptsPager"></div>
         </div>
       </div>
     </div>
@@ -622,6 +749,7 @@ textarea.nlinput{resize:vertical}
         <div class="card tblcard">
           <div class="tblhead" style="grid-template-columns:1.6fr 1fr 1fr 1fr 90px"><span data-i18n="th_lead">Lead</span><span data-i18n="th_amount">Importe</span><span data-i18n="th_method">Método</span><span data-i18n="th_date">Fecha</span><span></span></div>
           <div id="payTbl"></div>
+          <div id="payPager"></div>
         </div>
       </div>
     </div>
@@ -660,6 +788,7 @@ textarea.nlinput{resize:vertical}
         <div class="kpis" id="depKpis" style="grid-template-columns:repeat(6,1fr);margin-bottom:22px"></div>
         <div class="sechd"><span class="t" data-i18n="departures_hd">Salidas</span><button class="btn dark" onclick="newDepartureFlow()" data-i18n="new_departure">+ Nueva salida</button></div>
         <div id="depList" style="display:flex;flex-direction:column;gap:14px"></div>
+        <div id="depPager"></div>
         <div class="sechd" style="margin-top:24px"><span class="t" data-i18n="unassigned_hd">Ganados sin salida</span></div>
         <div class="card tblcard">
           <div class="tblhead" style="grid-template-columns:1.8fr 1.2fr 1fr 1fr 110px"><span data-i18n="th_lead">Lead</span><span data-i18n="th_interest">Interés</span><span data-i18n="th_value">Valor</span><span data-i18n="th_status">Estado</span><span></span></div>
@@ -678,6 +807,7 @@ textarea.nlinput{resize:vertical}
           <button class="btn dark" onclick="document.getElementById('mediaFileInput').click()" data-i18n="upload_media">+ Subir</button>
         </div>
         <div class="mediagrid" id="mediaGrid"></div>
+        <div id="mediaPager"></div>
       </div>
     </div>
 
@@ -707,16 +837,19 @@ textarea.nlinput{resize:vertical}
         <div class="card tblcard" style="margin-bottom:22px">
           <div class="tblhead" style="grid-template-columns:1.3fr 2fr 1fr 90px"><span data-i18n="th_when">Cuándo</span><span data-i18n="nl_subject">Asunto</span><span data-i18n="nl_scope">Alcance</span><span></span></div>
           <div id="nlScheduledTbl"></div>
+          <div id="nlSchedPager"></div>
         </div>
         <div class="sechd"><span class="t" data-i18n="nl_history_hd">Historial</span></div>
         <div class="card tblcard" style="margin-bottom:22px">
           <div class="tblhead" style="grid-template-columns:1.3fr 2fr 1fr 1fr"><span data-i18n="th_when">Cuándo</span><span data-i18n="nl_subject">Asunto</span><span data-i18n="nl_dataset">Audiencia</span><span data-i18n="nl_result">Resultado</span></div>
           <div id="nlHistoryTbl"></div>
+          <div id="nlHistPager"></div>
         </div>
         <div class="sechd"><span class="t" data-i18n="nl_subs_hd">Suscriptores web</span><button class="btn" onclick="addSubscriberFlow()" data-i18n="nl_subs_add">+ Añadir</button></div>
         <div class="card tblcard">
           <div class="tblhead" style="grid-template-columns:2fr 1fr 1fr 90px"><span data-i18n="th_email">Email</span><span data-i18n="nl_subs_source">Origen</span><span data-i18n="th_status">Estado</span><span></span></div>
           <div id="subsTbl"></div>
+          <div id="subsPager"></div>
         </div>
       </div>
     </div>
@@ -757,7 +890,7 @@ const I18N = {
 es: {
   login_sub:'Misma clave que /admin', login_ph:'Clave del panel', login_enter:'Entrar',
   who_ttl:'¿Quién eres?', who_sub:'Para atribuir lo que crees o cambies desde aquí',
-  search:'Buscar', nav_essentials:'Esenciales', nav_overview:'Resumen', nav_chats:'Conversaciones',
+  nav_essentials:'Esenciales', nav_overview:'Resumen', nav_chats:'Conversaciones',
   nav_daniel:'Daniel (agente IA)', nav_work:'Trabajo', nav_leads:'Leads', nav_operators:'Operadores B2B',
   nav_appts:'Citas', nav_invoices:'Facturas', nav_account:'Cuenta', nav_team:'Equipo', nav_settings:'Ajustes',
   nav_departures:'Salidas', nav_tao:'Travel Adv.', nav_media:'Fotos y vídeos', nav_newsletter:'Newsletter', nav_sim:'Simulador',
@@ -781,12 +914,21 @@ es: {
   th_contact:'Contacto', th_country:'País', th_status:'Estado', th_when:'Cuándo', th_title_notes:'Título / notas',
   th_amount:'Importe', th_method:'Método', th_date:'Fecha',
   search_conv:'Buscar conversación', composer_ph:'Escribe un mensaje de WhatsApp…', send:'Enviar',
+  t_canned:'Respuestas rápidas', t_attach:'Enviar foto/vídeo', canned_empty:'Sin respuestas rápidas guardadas',
+  edit_tpl:'Editar plantillas', m_canned:'Respuestas rápidas', m_canned_help:'Una por línea · formato', m_canned_fmt:'Título | texto',
+  al_media_big:'Archivo demasiado grande (máx 16 MB).', al_tpl:'No se pudo guardar.',
+  win_open_a:'🟢 Ventana de 24h abierta · cierra en ', win_closed:'🔴 Ventana de 24h cerrada — hace falta una plantilla para escribir',
+  win_closed_ph:'Ventana de 24h cerrada', win_never:'🔴 El cliente aún no ha escrito — no se puede enviar texto libre hasta que abra la conversación',
+  act_outreach:'💬 Iniciar conversación', act_reoutreach:'💬 Reenviar intro', outreach_ing:'⏳ Enviando…', outreach_ok:'✓ Intro enviada',
+  outreach_err:'No se pudo iniciar la conversación (¿falta configurar la plantilla de intro?).',
+  p_pause:'⏸ Pausar bot', p_resume:'▶ Reanudar bot',
   kanban_tab:'Kanban', table_tab:'Tabla', back:'Volver',
   contact_data:'Datos de contacto', interest:'Interés', activity:'Actividad', add_note:'+ Añadir nota',
   loading:'Cargando…', new_operator:'+ Nuevo operador', new_appt:'+ Nueva cita', new_payment:'+ Registrar pago',
   recent_payments:'Pagos recientes', team_hd:'Reparto de leads por persona', team_sub:'calculado de los leads ya cargados',
   session:'Sesión', connected_as:'Conectado como', panel:'Panel', backend:'Backend', backend_val:'mismo que /admin',
   bn_switch:'Cambiar de usuario', logout:'Cerrar sesión', bn_appearance:'Apariencia',
+  bn_collapse:'Colapsar menú', bn_expand:'Expandir menú', of:'de', btn_cancel:'Cancelar', btn_ok:'Aceptar',
   theme_light:'Claro', theme_dark:'Oscuro',
   cal_today:'Hoy', cal_month:'Mes', cal_list:'Lista', cal_more:'+{n} más',
   about_pilot:'Sobre este piloto',
@@ -864,7 +1006,7 @@ es: {
 en: {
   login_sub:'Same password as /admin', login_ph:'Panel password', login_enter:'Sign in',
   who_ttl:'Who are you?', who_sub:'To attribute what you create or change from here',
-  search:'Search', nav_essentials:'Essentials', nav_overview:'Overview', nav_chats:'Conversations',
+  nav_essentials:'Essentials', nav_overview:'Overview', nav_chats:'Conversations',
   nav_daniel:'Daniel (AI agent)', nav_work:'Work', nav_leads:'Leads', nav_operators:'B2B Operators',
   nav_appts:'Appointments', nav_invoices:'Invoices', nav_account:'Account', nav_team:'Team', nav_settings:'Settings',
   nav_departures:'Departures', nav_tao:'Travel Adv.', nav_media:'Photos & videos', nav_newsletter:'Newsletter', nav_sim:'Simulator',
@@ -888,12 +1030,21 @@ en: {
   th_contact:'Contact', th_country:'Country', th_status:'Status', th_when:'When', th_title_notes:'Title / notes',
   th_amount:'Amount', th_method:'Method', th_date:'Date',
   search_conv:'Search conversation', composer_ph:'Write a WhatsApp message…', send:'Send',
+  t_canned:'Quick replies', t_attach:'Send photo/video', canned_empty:'No quick replies saved',
+  edit_tpl:'Edit templates', m_canned:'Quick replies', m_canned_help:'One per line · format', m_canned_fmt:'Title | text',
+  al_media_big:'File too large (max 16MB).', al_tpl:"Couldn't save.",
+  win_open_a:'🟢 24h window open · closes in ', win_closed:'🔴 24h window closed — a template is required to write',
+  win_closed_ph:'24h window closed', win_never:"🔴 Customer hasn't messaged yet — free text isn't allowed until they start the conversation",
+  act_outreach:'💬 Start conversation', act_reoutreach:'💬 Resend intro', outreach_ing:'⏳ Sending…', outreach_ok:'✓ Intro sent',
+  outreach_err:"Could not start the conversation (is the intro template configured?).",
+  p_pause:'⏸ Pause bot', p_resume:'▶ Resume bot',
   kanban_tab:'Kanban', table_tab:'Table', back:'Back',
   contact_data:'Contact info', interest:'Interest', activity:'Activity', add_note:'+ Add note',
   loading:'Loading…', new_operator:'+ New operator', new_appt:'+ New appointment', new_payment:'+ Log payment',
   recent_payments:'Recent payments', team_hd:'Lead split by teammate', team_sub:'computed from already-loaded leads',
   session:'Session', connected_as:'Signed in as', panel:'Panel', backend:'Backend', backend_val:'same as /admin',
   bn_switch:'Switch user', logout:'Sign out', bn_appearance:'Appearance',
+  bn_collapse:'Collapse menu', bn_expand:'Expand menu', of:'of', btn_cancel:'Cancel', btn_ok:'OK',
   theme_light:'Light', theme_dark:'Dark',
   cal_today:'Today', cal_month:'Month', cal_list:'List', cal_more:'+{n} more',
   about_pilot:'About this pilot',
@@ -1022,6 +1173,23 @@ function toggleTheme(){
   applyTheme(theme);
 }
 applyTheme(theme);
+
+// ======================================================================
+// PANEL IZQUIERDO COLAPSABLE — persiste en localStorage, propia de v2
+// (el layout aquí es flex, no el grid de columnas fijas de /admin).
+// ======================================================================
+let sideCollapsed = localStorage.getItem('botpanel_v2_navcollapsed') === '1';
+function applySideCollapsed(v){
+  document.querySelector('.side').classList.toggle('collapsed', v);
+  const lbl = document.getElementById('sideToggle');
+  if(lbl) lbl.title = t(v ? 'bn_expand' : 'bn_collapse');
+}
+function toggleSidebar(){
+  sideCollapsed = !sideCollapsed;
+  localStorage.setItem('botpanel_v2_navcollapsed', sideCollapsed ? '1' : '0');
+  applySideCollapsed(sideCollapsed);
+}
+applySideCollapsed(sideCollapsed);
 applyStaticI18n();
 
 // ======================================================================
@@ -1185,7 +1353,8 @@ async function renderThread(){
   const c = leads.find(l=>l.phone===curChatPhone);
   const box = document.getElementById('threadHd');
   const msgsBox = document.getElementById('threadMsgs');
-  if(!c){ box.innerHTML=''; msgsBox.innerHTML=''; return; }
+  closeCannedPop();
+  if(!c){ box.innerHTML=''; msgsBox.innerHTML=''; document.getElementById('winInfo').className='wininfo'; return; }
   box.innerHTML = `
     <span class="av" style="background:${hashColor(c.phone)}">${initials(c.name||c.phone)}</span>
     <div style="flex:1;min-width:0">
@@ -1193,7 +1362,10 @@ async function renderThread(){
         <span class="estpill"><span class="d" style="background:${STATUS_DOT[c.status]||CB}"></span>${STATUS_LABEL[c.status]}</span></div>
       <div class="meta">${tourLine(c)}</div>
     </div>
+    <button class="toolbtn ${c.paused?'on':''}" onclick="togglePauseFlow('${c.phone}')">${c.paused?t('p_resume'):t('p_pause')}</button>
+    <button class="toolbtn" id="outreachBtn" onclick="outreachFlow('${c.phone}')">${c.outreached?t('act_reoutreach'):t('act_outreach')}</button>
     <button class="btn dark" style="padding:8px 14px" onclick="openLead('${c.phone}')">${t('view_lead')}</button>`;
+  updateWindowUI(c);
   msgsBox.innerHTML = `<div class="daychip">${t('loading_conv')}</div>`;
   try{
     const r = await fetch('/admin/api/conv/'+encodeURIComponent(c.phone), { headers:{'X-Admin-Key':sessionKey} });
@@ -1204,6 +1376,114 @@ async function renderThread(){
     }).join('') || `<div class="daychip">${t('no_messages')}</div>`;
     msgsBox.scrollTop = msgsBox.scrollHeight;
   }catch(e){ msgsBox.innerHTML = `<div class="daychip">${t('conv_load_error')}</div>`; }
+}
+// -- ventana de 24h de WhatsApp: solo se puede texto libre dentro de ella --
+function updateWindowUI(c){
+  const el = document.getElementById('winInfo'), input = document.getElementById('composerInput'), btn = document.getElementById('sendBtn');
+  const last = c && c.lastInboundAt;
+  if(!last){
+    el.className = 'wininfo closed'; el.textContent = t('win_never');
+    input.disabled = true; btn.disabled = true; input.placeholder = t('win_closed_ph');
+    return;
+  }
+  const left = 24*3600000 - (Date.now() - last);
+  if(left > 0){
+    const h = Math.floor(left/3600000), m = Math.floor((left%3600000)/60000);
+    el.className = 'wininfo open'; el.textContent = t('win_open_a') + (h>0?h+'h ':'') + m + 'm';
+    input.disabled = false; btn.disabled = false; input.placeholder = t('composer_ph');
+  }else{
+    el.className = 'wininfo closed'; el.textContent = t('win_closed');
+    input.disabled = true; btn.disabled = true; input.placeholder = t('win_closed_ph');
+  }
+}
+async function togglePauseFlow(phone){
+  const c = leads.find(l=>l.phone===phone); if(!c) return;
+  const next = !c.paused;
+  c.paused = next; renderThread();
+  try{
+    const r = await fetch('/admin/api/pause', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, paused:next}) });
+    if(!r.ok) throw 0;
+  }catch(e){ c.paused = !next; renderThread(); showToast(t('err_status')); }
+}
+async function outreachFlow(phone){
+  const btn = document.getElementById('outreachBtn');
+  if(btn){ btn.disabled = true; btn.textContent = t('outreach_ing'); }
+  try{
+    const r = await fetch('/admin/api/outreach', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone}) });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'');
+    const c = leads.find(l=>l.phone===phone); if(c) c.outreached = true;
+    showToast(t('outreach_ok'), {type:'success'});
+    if(btn){ btn.disabled = false; btn.textContent = t('act_reoutreach'); }
+  }catch(e){
+    if(btn){ btn.disabled = false; btn.textContent = t('act_outreach'); }
+    showToast(t('outreach_err') + (e.message?(': '+e.message):''));
+  }
+}
+// -- respuestas rápidas (canned replies) --
+let canned = [];
+async function loadCanned(){
+  try{
+    const r = await fetch('/admin/api/canned', { headers:{'X-Admin-Key':sessionKey} });
+    canned = r.ok ? await r.json() : [];
+  }catch(e){ canned = []; }
+}
+function renderCannedPop(){
+  const pop = document.getElementById('cannedPop');
+  pop.innerHTML = (canned.length ? canned.map((c,i)=>`
+    <div class="ci" onclick="useCanned(${i})"><div class="ct">${(c.title||'').replace(/</g,'&lt;')}</div><div class="cx">${(c.text||'').replace(/</g,'&lt;')}</div></div>`).join('')
+    : `<div style="padding:14px;color:var(--muted);font-size:12.5px;text-align:center">${t('canned_empty')}</div>`)
+    + `<div class="cedit" onclick="openCannedEdit()">${t('edit_tpl')}</div>`;
+}
+function closeCannedPop(){ document.getElementById('cannedPop').classList.add('hidden'); }
+function toggleCannedPop(){
+  const pop = document.getElementById('cannedPop');
+  if(pop.classList.contains('hidden')){ renderCannedPop(); pop.classList.remove('hidden'); }
+  else pop.classList.add('hidden');
+}
+function useCanned(i){
+  const c = canned[i]; if(!c) return;
+  document.getElementById('composerInput').value = c.text || '';
+  closeCannedPop();
+  document.getElementById('composerInput').focus();
+}
+function openCannedEdit(){
+  closeCannedPop();
+  document.getElementById('cannedText').value = canned.map(c=>c.title+' | '+c.text).join('\n');
+  document.getElementById('cannedModal').classList.remove('hidden');
+}
+function closeCannedEdit(){ document.getElementById('cannedModal').classList.add('hidden'); }
+async function saveCanned(){
+  const lines = document.getElementById('cannedText').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const list = lines.map(l=>{ const i=l.indexOf('|'); return i<0 ? {title:l,text:l} : {title:l.slice(0,i).trim(), text:l.slice(i+1).trim()}; });
+  try{
+    const r = await fetch('/admin/api/canned', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({list}) });
+    if(!r.ok) throw 0;
+    canned = list;
+    closeCannedEdit();
+  }catch(e){ showToast(t('al_tpl')); }
+}
+// -- adjuntar foto/vídeo (envío manual, toma el control igual que un mensaje de texto) --
+async function attachFileChosen(ev){
+  const file = ev.target.files[0]; ev.target.value = '';
+  if(!file || !curChatPhone) return;
+  if(file.size > 16*1024*1024){ showToast(t('al_media_big')); return; }
+  const btn = document.getElementById('attachBtn');
+  btn.disabled = true;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try{
+      const r = await fetch('/admin/api/media/upload', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({dataUrl:reader.result}) });
+      const up = await r.json();
+      if(!r.ok) throw new Error(up.error||'');
+      const r2 = await fetch('/admin/api/send-media', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:curChatPhone, url:up.url, type:up.type}) });
+      if(!r2.ok) throw 0;
+      const c = leads.find(l=>l.phone===curChatPhone); if(c) c.paused = true;
+      await renderThread();
+    }catch(e){ showToast(t('send_error')); }
+    btn.disabled = false;
+  };
+  reader.readAsDataURL(file);
 }
 function selectChat(phone){ curChatPhone=phone; renderChats(); }
 async function sendMessage(){
@@ -1216,12 +1496,13 @@ async function sendMessage(){
     if(!r.ok) throw new Error('send failed');
     box.value = '';
     await renderThread();
-  }catch(e){ alert(t('send_error')); }
+  }catch(e){ showToast(t('send_error')); }
   box.disabled = false; box.focus();
 }
 
+const KAN_ORDER = ['new','quoted','won','lost','noshow'];
 function renderKanban(){
-  const order = ['new','quoted','won','lost','noshow'];
+  const order = KAN_ORDER;
   const inCol = (l,st) => st==='new' ? (!l.status || l.status==='new') : l.status===st;
   const cols = order.map(st=>({
     st, name: STATUS_LABEL[st], dot: STATUS_DOT[st],
@@ -1231,14 +1512,17 @@ function renderKanban(){
   document.getElementById('kanban').innerHTML = cols.map(col=>{
     const sum = col.cards.reduce((a,c)=>a+(parseInt(c.dealValue,10)||0),0);
     total += col.cards.length; sumAll += sum;
-    return `<div class="kancol">
+    return `<div class="kancol" data-status="${col.st}" ondragover="kOver(event)" ondragleave="kLeave(event)" ondrop="kDrop(event)">
       <div class="hd"><span class="dot" style="background:${col.dot}"></span><span class="nm">${col.name}</span><span class="cnt">${col.cards.length}</span><span class="sum">${fmt(sum)}</span></div>
       <div class="kancards">
         ${col.cards.map(cd=>`
-          <div class="kancard" onclick="openLead('${cd.phone}')">
+          <div class="kancard" draggable="true" data-phone="${cd.phone}" ondragstart="kDrag(event)" onclick="openLead('${cd.phone}')">
             <div class="nm">${cd.name||cd.phone}</div>
             <span class="tour">${tourLine(cd)}</span>
             <div class="foot"><span class="val">${cd.dealValue?fmt(parseInt(cd.dealValue,10)):'—'}</span><span class="meta">${waitStr(cd.updatedAt)}</span><span class="av" style="background:${hashColor(cd.phone)}">${initials(cd.name||cd.phone)}</span></div>
+            <select class="kstatus" onclick="event.stopPropagation()" onchange="kSetStatus(event,'${cd.phone}')">
+              ${KAN_ORDER.map(st=>`<option value="${st}" ${(cd.status||'new')===st?'selected':''}>${STATUS_LABEL[st]}</option>`).join('')}
+            </select>
           </div>`).join('')}
         <div class="addcard" onclick="newLeadFlow()">${t('add_lead')}</div>
       </div>
@@ -1246,6 +1530,26 @@ function renderKanban(){
   }).join('');
   document.getElementById('kanbanSummary').textContent = t('kanban_summary',{n:total, v:fmt(sumAll)});
 }
+// -- arrastrar entre columnas (desktop) + selector de estado (táctil/móvil) --
+let kDragPhone = null;
+function kDrag(e){ kDragPhone = e.currentTarget.getAttribute('data-phone'); if(e.dataTransfer) e.dataTransfer.effectAllowed='move'; }
+function kOver(e){ e.preventDefault(); e.currentTarget.classList.add('dragover'); }
+function kLeave(e){ e.currentTarget.classList.remove('dragover'); }
+async function kApplyStatus(phone, st){
+  const l = leads.find(x=>x.phone===phone); if(!l || (l.status||'new')===st) return;
+  l.status = st; renderKanban();
+  try{
+    const r = await fetch('/admin/api/status', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, status:st}) });
+    if(!r.ok) throw 0;
+  }catch(e){ showToast(t('err_status')); await refreshLeads(); renderKanban(); }
+}
+function kDrop(e){
+  e.preventDefault(); e.currentTarget.classList.remove('dragover');
+  const st = e.currentTarget.getAttribute('data-status'), phone = kDragPhone; kDragPhone = null;
+  if(!phone) return;
+  kApplyStatus(phone, st);
+}
+function kSetStatus(e, phone){ e.stopPropagation(); kApplyStatus(phone, e.target.value); }
 
 let leadsViewMode = 'kanban';
 function setLeadsViewMode(mode){
@@ -1259,7 +1563,8 @@ function setLeadsViewMode(mode){
 }
 function renderLeadsTable(){
   const rows = leads.filter(l=>!l.archived).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
-  document.getElementById('leadsTableTbl').innerHTML = rows.map(l=>`
+  const p = paginate('leads', rows);
+  document.getElementById('leadsTableTbl').innerHTML = p.items.map(l=>`
     <div class="tblrow">
       <div class="leadid">
         <span class="av" style="background:${hashColor(l.phone)}">${initials(l.name||l.phone)}</span>
@@ -1270,6 +1575,7 @@ function renderLeadsTable(){
       <span class="val">${l.dealValue?fmt(parseInt(l.dealValue,10)):'—'}</span>
       <button class="actbtn" onclick="openLead('${l.phone}')">${t('see')}</button>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nothing_pending')}</div>`;
+  document.getElementById('leadsTablePager').innerHTML = pagerHtml('leads', p);
 }
 
 let curLead = null;
@@ -1313,37 +1619,120 @@ function renderLead(){
       <div class="tlbody"><div class="tltop"><span class="t">${HIST_LABEL[ev.type]||ev.type}</span><span class="tm">${fmtHistTime(ev.ts)}</span></div><div class="tldesc">${ev.notes||ev.title||''}</div></div>
     </div>`).join('') : `<div style="padding:8px 0;color:var(--muted);font-size:13px">${t('no_activity')}</div>`;
 }
+
+// ================= modales estilizados (reemplaza prompt()/confirm() nativos) =================
+function askPrompt(message, defaultValue){
+  return new Promise(resolve=>{
+    const ov = document.createElement('div'); ov.className = 'modalov';
+    ov.innerHTML = `<div class="modalbox">
+      <div class="modalmsg"></div>
+      <input class="nlinput" id="modalInput" type="text">
+      <div class="modalbtns"><button class="ghost" id="modalCancel">${t('btn_cancel')}</button><button class="primary" id="modalOk">${t('btn_ok')}</button></div>
+    </div>`;
+    ov.querySelector('.modalmsg').textContent = message;
+    document.body.appendChild(ov);
+    const input = ov.querySelector('#modalInput');
+    input.value = defaultValue==null ? '' : defaultValue;
+    input.focus(); input.select();
+    const close = v => { ov.classList.add('out'); setTimeout(()=>ov.remove(), 150); resolve(v); };
+    ov.querySelector('#modalCancel').onclick = () => close(null);
+    ov.querySelector('#modalOk').onclick = () => close(input.value);
+    input.onkeydown = e => { if(e.key==='Enter') close(input.value); if(e.key==='Escape') close(null); };
+    ov.onclick = e => { if(e.target===ov) close(null); };
+  });
+}
+function askConfirm(message, opts){
+  opts = opts || {};
+  return new Promise(resolve=>{
+    const ov = document.createElement('div'); ov.className = 'modalov';
+    ov.innerHTML = `<div class="modalbox">
+      <div class="modalmsg"></div>
+      <div class="modalbtns"><button class="ghost" id="modalCancel">${t('btn_cancel')}</button><button class="${opts.danger?'danger':'primary'}" id="modalOk">${t('btn_ok')}</button></div>
+    </div>`;
+    ov.querySelector('.modalmsg').textContent = message;
+    document.body.appendChild(ov);
+    const close = v => { ov.classList.add('out'); setTimeout(()=>ov.remove(), 150); document.removeEventListener('keydown', onKey); resolve(v); };
+    const onKey = e => { if(e.key==='Escape') close(false); if(e.key==='Enter') close(true); };
+    ov.querySelector('#modalCancel').onclick = () => close(false);
+    ov.querySelector('#modalOk').onclick = () => close(true);
+    document.addEventListener('keydown', onKey);
+    ov.onclick = e => { if(e.target===ov) close(false); };
+  });
+}
+function showToast(message, opts){
+  opts = opts || {};
+  let wrap = document.getElementById('toastWrap');
+  if(!wrap){ wrap = document.createElement('div'); wrap.id = 'toastWrap'; wrap.className = 'toastwrap'; document.body.appendChild(wrap); }
+  const el = document.createElement('div');
+  el.className = 'toast ' + (opts.type || 'error');
+  el.textContent = message;
+  const close = () => { el.classList.add('out'); setTimeout(()=>el.remove(), 180); };
+  el.onclick = close;
+  wrap.appendChild(el);
+  setTimeout(close, 4200);
+}
+
+// ================= paginación (norma del estudio) =================
+const PAGE_SIZE = 12;
+const pageState = {};
+const PAGE_RENDER = {};
+function paginate(key, items, size){
+  size = size || PAGE_SIZE;
+  const total = items.length, pages = Math.max(1, Math.ceil(total/size));
+  let page = pageState[key] || 1;
+  if(page > pages) page = pages; if(page < 1) page = 1;
+  pageState[key] = page;
+  const start = (page-1)*size;
+  return { items: items.slice(start, start+size), page, pages, total, start };
+}
+function pagerHtml(key, p){
+  if(p.pages <= 1) return '';
+  return `<div class="pager"><span>${p.start+1}–${p.start+p.items.length} ${t('of')} ${p.total}</span><div class="pgbtns">
+    <button ${p.page<=1?'disabled':''} onclick="pageGo('${key}',1)">«</button>
+    <button ${p.page<=1?'disabled':''} onclick="pageGo('${key}',${p.page-1})">‹</button>
+    <span class="pgnum">${p.page} / ${p.pages}</span>
+    <button ${p.page>=p.pages?'disabled':''} onclick="pageGo('${key}',${p.page+1})">›</button>
+    <button ${p.page>=p.pages?'disabled':''} onclick="pageGo('${key}',${p.pages})">»</button>
+  </div></div>`;
+}
+function pageGo(key, n){ pageState[key] = n; if(PAGE_RENDER[key]) PAGE_RENDER[key](); }
+Object.assign(PAGE_RENDER, {
+  leads: ()=>renderLeadsTable(), ops: ()=>renderOperators(), appts: ()=>renderAppts(),
+  pay: ()=>renderInvoices(), dep: ()=>renderDepartures(), media: ()=>renderMedia(),
+  nlSched: ()=>renderNewsletter(), nlHist: ()=>renderNewsletter(), subs: ()=>renderNewsletter(),
+});
+
 async function markWonFlow(phone){
-  if(!confirm(t('confirm_won'))) return;
+  if(!await askConfirm(t('confirm_won'))) return;
   try{
     const r = await fetch('/admin/api/status', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, status:'won'}) });
     if(!r.ok) throw 0;
     await refreshLeads(); openLead(phone); renderKanban();
-  }catch(e){ alert(t('err_status')); }
+  }catch(e){ showToast(t('err_status')); }
 }
 async function scheduleApptFlow(phone){
   const l = leads.find(x=>x.phone===phone);
-  const when = prompt(t('ask_when'), '');
+  const when = await askPrompt(t('ask_when'), '');
   if(!when) return;
   try{
     const r = await fetch('/admin/api/appts', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, name:l?.name||'', title:t('call_title'), when, closer:whoAmI}) });
     if(!r.ok) throw 0;
-    alert(t('appt_created')); await refreshLeads(); openLead(phone);
-  }catch(e){ alert(t('err_appt')); }
+    showToast(t('appt_created'), {type:'success'}); await refreshLeads(); openLead(phone);
+  }catch(e){ showToast(t('err_appt')); }
 }
 async function newLeadFlow(){
-  const phone = prompt(t('ask_phone_new'), '');
+  const phone = await askPrompt(t('ask_phone_new'), '');
   if(!phone) return;
   const digits = phone.replace(/\D/g,'');
-  if(digits.length<8){ alert(t('invalid_phone')); return; }
-  const name = prompt(t('ask_name_opt'), '') || '';
+  if(digits.length<8){ showToast(t('invalid_phone')); return; }
+  const name = await askPrompt(t('ask_name_opt'), '') || '';
   try{
     const r = await fetch('/admin/api/lead/create', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:digits}) });
     if(!r.ok) throw 0;
     const fields = {}; if(name) fields.name = name; if(whoAmI) fields.owner = whoAmI;
     if(Object.keys(fields).length) await fetch('/admin/api/lead', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:digits, ...fields}) });
     await refreshLeads(); renderKanban(); renderLeadsTbl(); openLead(digits);
-  }catch(e){ alert(t('err_lead_create')); }
+  }catch(e){ showToast(t('err_lead_create')); }
 }
 async function refreshLeads(){
   const r = await fetch('/admin/api/leads', { headers:{'X-Admin-Key':sessionKey} });
@@ -1389,7 +1778,8 @@ async function loadOperators(){
 function renderOperators(){
   const active = operators.filter(o=>!o.archived);
   document.getElementById('opsSummary').textContent = t('ops_count',{n:active.length});
-  document.getElementById('opsTbl').innerHTML = active.map(o=>`
+  const p = paginate('ops', active);
+  document.getElementById('opsTbl').innerHTML = p.items.map(o=>`
     <div class="tblrow" style="grid-template-columns:2fr 1.4fr 1fr 1fr 150px">
       <div class="leadid"><span class="av" style="background:${hashColor(o.company||o.id)}">${initials(o.company||'?')}</span>
         <div><div class="nm" onclick="editOperatorFlow('${o.id}')">${o.company||t('no_name')}</div><span class="st" style="font-size:12px;color:var(--muted)">${o.contact||''}</span></div></div>
@@ -1401,42 +1791,43 @@ function renderOperators(){
         <button class="actbtn" style="width:auto;padding:7px 10px" onclick="deleteOperatorFlow('${o.id}')">${t('delete')}</button>
       </div>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('no_operators')}</div>`;
+  document.getElementById('opsPager').innerHTML = pagerHtml('ops', p);
 }
 async function newOperatorFlow(){
-  const company = prompt(t('ask_company'),''); if(!company) return;
-  const contact = prompt(t('ask_contact_opt'),'') || '';
-  const email = prompt(t('ask_email_opt'),'') || '';
+  const company = await askPrompt(t('ask_company'),''); if(!company) return;
+  const contact = await askPrompt(t('ask_contact_opt'),'') || '';
+  const email = await askPrompt(t('ask_email_opt'),'') || '';
   try{
     const r = await fetch('/admin/api/operator', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({company,contact,email,db:opsDb}) });
     if(!r.ok) throw 0;
     await loadOperators();
-  }catch(e){ alert(t('err_operator_create')); }
+  }catch(e){ showToast(t('err_operator_create')); }
 }
 async function editOperatorFlow(id){
   const o = operators.find(x=>x.id===id); if(!o) return;
-  const status = prompt(t('ask_op_status'), o.status||'nuevo');
+  const status = await askPrompt(t('ask_op_status'), o.status||'nuevo');
   if(status==null) return;
   try{
     const r = await fetch('/admin/api/operator', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, status, db:opsDb}) });
     if(!r.ok) throw 0;
     await loadOperators();
-  }catch(e){ alert(t('err_operator_update')); }
+  }catch(e){ showToast(t('err_operator_update')); }
 }
 async function archiveOperatorFlow(id){
-  if(!confirm(t('confirm_archive_op'))) return;
+  if(!await askConfirm(t('confirm_archive_op'))) return;
   try{
     const r = await fetch('/admin/api/operator/archive', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, archived:true, db:opsDb}) });
     if(!r.ok) throw 0;
     await loadOperators();
-  }catch(e){ alert(t('err_operator_archive')); }
+  }catch(e){ showToast(t('err_operator_archive')); }
 }
 async function deleteOperatorFlow(id){
-  if(!confirm(t('confirm_delete_op'))) return;
+  if(!await askConfirm(t('confirm_delete_op'), {danger:true})) return;
   try{
     const r = await fetch('/admin/api/operator/delete', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, db:opsDb}) });
     if(!r.ok) throw 0;
     await loadOperators();
-  }catch(e){ alert(t('err_operator_archive')); }
+  }catch(e){ showToast(t('err_operator_archive')); }
 }
 
 // ======================================================================
@@ -1452,13 +1843,15 @@ async function loadAppts(){
 function renderAppts(){
   const upcoming = appts.slice().sort((a,b)=>new Date(a.when)-new Date(b.when));
   document.getElementById('apptsSummary').textContent = t('appts_count',{n:upcoming.length});
-  document.getElementById('apptsTbl').innerHTML = upcoming.map(a=>`
+  const p = paginate('appts', upcoming);
+  document.getElementById('apptsTbl').innerHTML = p.items.map(a=>`
     <div class="tblrow" style="grid-template-columns:1.3fr 1.6fr 1.5fr 90px">
       <span class="wait">${a.when ? new Date(a.when).toLocaleString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '—'}</span>
       <span class="wait">${a.name||''} ${a.phone?('+'+a.phone):''}</span>
       <span class="wait">${a.title||t('call_title')}${a.closer?(' · '+a.closer):''}</span>
       <button class="actbtn" onclick="deleteApptFlow('${a.id}')">${t('delete')}</button>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('no_appts')}</div>`;
+  document.getElementById('apptsPager').innerHTML = pagerHtml('appts', p);
   renderApptsCalendar();
 }
 
@@ -1525,22 +1918,22 @@ function renderApptsCalendar(){
   }).join('');
 }
 async function newApptFlow(){
-  const phone = prompt(t('ask_phone_appt_opt'),'') || '';
-  const name = prompt(t('ask_appt_name'),'') || '';
-  const when = prompt(t('ask_when'),''); if(!when) return;
+  const phone = await askPrompt(t('ask_phone_appt_opt'),'') || '';
+  const name = await askPrompt(t('ask_appt_name'),'') || '';
+  const when = await askPrompt(t('ask_when'),''); if(!when) return;
   try{
     const r = await fetch('/admin/api/appts', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, name, title:t('call_title'), when, closer:whoAmI}) });
     if(!r.ok) throw 0;
     await loadAppts();
-  }catch(e){ alert(t('err_appt')); }
+  }catch(e){ showToast(t('err_appt')); }
 }
 async function deleteApptFlow(id){
-  if(!confirm(t('confirm_delete_appt'))) return;
+  if(!await askConfirm(t('confirm_delete_appt'), {danger:true})) return;
   try{
     const r = await fetch('/admin/api/appts/'+id, { method:'DELETE', headers:{'X-Admin-Key':sessionKey} });
     if(!r.ok) throw 0;
     await loadAppts();
-  }catch(e){ alert(t('err_appt_delete')); }
+  }catch(e){ showToast(t('err_appt_delete')); }
 }
 
 // ======================================================================
@@ -1550,12 +1943,15 @@ async function deleteApptFlow(id){
 // este backend (eso vive solo en la rama balibest) — aquí solo se
 // registra/asigna, igual que ya hace /admin.
 // ======================================================================
+let lastUnmatched = [];
 async function loadInvoices(){
   const r = await fetch('/admin/api/payments/unmatched', { headers:{'X-Admin-Key':sessionKey} });
   const data = r.ok ? await r.json() : {payments:[]};
-  renderInvoices(data.payments||[]);
+  lastUnmatched = data.payments||[];
+  renderInvoices();
 }
-function renderInvoices(unmatched){
+function renderInvoices(){
+  const unmatched = lastUnmatched;
   document.getElementById('unmatchedWrap').innerHTML = unmatched.length ? `
     <div class="sechd"><span class="t">${t('unmatched_hd')}</span></div>
     <div class="card tblcard" style="margin-bottom:8px">
@@ -1569,42 +1965,44 @@ function renderInvoices(unmatched){
         </div>`).join('')}
     </div>` : '';
   const allPayments = leads.flatMap(l => (l.payments||[]).map(p => ({...p, leadName:l.name||l.phone, phone:l.phone})))
-    .sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,30);
+    .sort((a,b)=>(b.at||0)-(a.at||0));
   document.getElementById('invSummary').textContent = t('invoices_count',{n:allPayments.length}) + (unmatched.length?t('invoices_count_unmatched',{n:unmatched.length}):'');
-  document.getElementById('payTbl').innerHTML = allPayments.map(p=>`
+  const p = paginate('pay', allPayments);
+  document.getElementById('payTbl').innerHTML = p.items.map(pm=>`
     <div class="tblrow" style="grid-template-columns:1.6fr 1fr 1fr 1fr 90px">
-      <span class="wait" style="cursor:pointer" onclick="openLead('${p.phone}')">${p.leadName}</span>
-      <span class="val">${fmt(p.amount||0)}</span>
-      <span class="wait">${(p.method||'—')}</span>
-      <span class="wait">${p.at?new Date(p.at).toLocaleDateString(LANG==='es'?'es-ES':'en-US'):'—'}</span>
-      <button class="actbtn" onclick="deletePaymentFlow('${p.phone}','${p.id}')">${t('delete')}</button>
+      <span class="wait" style="cursor:pointer" onclick="openLead('${pm.phone}')">${pm.leadName}</span>
+      <span class="val">${fmt(pm.amount||0)}</span>
+      <span class="wait">${(pm.method||'—')}</span>
+      <span class="wait">${pm.at?new Date(pm.at).toLocaleDateString(LANG==='es'?'es-ES':'en-US'):'—'}</span>
+      <button class="actbtn" onclick="deletePaymentFlow('${pm.phone}','${pm.id}')">${t('delete')}</button>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('no_payments')}</div>`;
+  document.getElementById('payPager').innerHTML = pagerHtml('pay', p);
 }
 async function newPaymentFlow(){
-  const phone = prompt(t('ask_phone_pay'),''); if(!phone) return;
-  const amount = prompt(t('ask_amount'),''); if(!amount || isNaN(parseFloat(amount))) { alert(t('invalid_amount')); return; }
-  const method = prompt(t('ask_method'),'wise') || 'other';
+  const phone = await askPrompt(t('ask_phone_pay'),''); if(!phone) return;
+  const amount = await askPrompt(t('ask_amount'),''); if(!amount || isNaN(parseFloat(amount))) { showToast(t('invalid_amount')); return; }
+  const method = await askPrompt(t('ask_method'),'wise') || 'other';
   try{
     const r = await fetch('/admin/api/payment', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, amount:parseFloat(amount), method, kind:'other'}) });
     if(!r.ok) throw 0;
     await refreshLeads(); loadInvoices();
-  }catch(e){ alert(t('err_payment_create')); }
+  }catch(e){ showToast(t('err_payment_create')); }
 }
 async function assignPaymentFlow(idx){
-  const phone = prompt(t('ask_assign_phone'),''); if(!phone) return;
+  const phone = await askPrompt(t('ask_assign_phone'),''); if(!phone) return;
   try{
     const r = await fetch('/admin/api/payments/assign', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({idx, phone}) });
     if(!r.ok) throw 0;
     await refreshLeads(); loadInvoices();
-  }catch(e){ alert(t('err_payment_assign')); }
+  }catch(e){ showToast(t('err_payment_assign')); }
 }
 async function deletePaymentFlow(phone,id){
-  if(!confirm(t('confirm_delete_payment'))) return;
+  if(!await askConfirm(t('confirm_delete_payment'), {danger:true})) return;
   try{
     const r = await fetch('/admin/api/payment/delete', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, id}) });
     if(!r.ok) throw 0;
     await refreshLeads(); loadInvoices();
-  }catch(e){ alert(t('err_payment_delete')); }
+  }catch(e){ showToast(t('err_payment_delete')); }
 }
 
 // ======================================================================
@@ -1630,7 +2028,8 @@ function renderDepartures(){
     <div class="card kpi"><div class="hd"><b>${label}</b></div><div class="bd"><div class="val" style="font-size:24px">${val}</div></div></div>`).join('');
 
   const deps = (depOverview.departures||[]).slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
-  document.getElementById('depList').innerHTML = deps.map(d=>`
+  const depPg = paginate('dep', deps, 6);
+  document.getElementById('depList').innerHTML = depPg.items.map(d=>`
     <div class="depcard">
       <div class="hd">
         <span class="ttl">${new Date(d.date).toLocaleDateString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'long',year:'numeric'})}</span>
@@ -1655,6 +2054,7 @@ function renderDepartures(){
           </div>`).join('') || `<div style="padding:14px 18px;color:var(--muted);font-size:13px">${t('dep_no_roster')}</div>`}
       </div>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('no_departures')}</div>`;
+  document.getElementById('depPager').innerHTML = pagerHtml('dep', depPg);
 
   const un = depOverview.unassigned||[];
   document.getElementById('depUnassignedTbl').innerHTML = un.map(r=>`
@@ -1667,55 +2067,55 @@ function renderDepartures(){
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('dep_none_unassigned')}</div>`;
 }
 async function newDepartureFlow(){
-  const date = prompt(t('ask_dep_date'),''); if(!date) return;
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ alert(t('invalid_date')); return; }
-  const tour = prompt(t('ask_dep_tour'),'') || '';
-  const guided = confirm(t('ask_dep_guided'));
+  const date = await askPrompt(t('ask_dep_date'),''); if(!date) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ showToast(t('invalid_date')); return; }
+  const tour = await askPrompt(t('ask_dep_tour'),'') || '';
+  const guided = await askConfirm(t('ask_dep_guided'));
   try{
     const r = await fetch('/admin/api/departure', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({date, tour, guided}) });
     if(!r.ok) throw 0;
     await loadDepartures();
-  }catch(e){ alert(t('err_departure')); }
+  }catch(e){ showToast(t('err_departure')); }
 }
 async function editDepartureFlow(id){
   const d = (depOverview.departures||[]).find(x=>x.id===id); if(!d) return;
-  const date = prompt(t('ask_dep_date'), d.date); if(date==null) return;
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ alert(t('invalid_date')); return; }
-  const capacity = prompt(t('ask_dep_capacity'), d.capacity); if(capacity==null) return;
+  const date = await askPrompt(t('ask_dep_date'), d.date); if(date==null) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ showToast(t('invalid_date')); return; }
+  const capacity = await askPrompt(t('ask_dep_capacity'), d.capacity); if(capacity==null) return;
   try{
     const r = await fetch('/admin/api/departure', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, date, tour:d.tour, package:d.package, guided:d.guided, capacity:parseInt(capacity,10)||undefined, minPax:d.minPax, notes:d.notes}) });
     if(!r.ok) throw 0;
     await loadDepartures();
-  }catch(e){ alert(t('err_departure')); }
+  }catch(e){ showToast(t('err_departure')); }
 }
 async function deleteDepartureFlow(id){
-  if(!confirm(t('confirm_delete_dep'))) return;
+  if(!await askConfirm(t('confirm_delete_dep'), {danger:true})) return;
   try{
     const r = await fetch('/admin/api/departure/delete', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id}) });
     if(!r.ok) throw 0;
     await loadDepartures();
-  }catch(e){ alert(t('err_departure_delete')); }
+  }catch(e){ showToast(t('err_departure_delete')); }
 }
 async function assignDepartureFlow(phone){
   const deps = (depOverview.departures||[]).filter(d=>d.occState!=='cancelled');
-  if(!deps.length){ alert(t('no_open_departures')); return; }
+  if(!deps.length){ showToast(t('no_open_departures')); return; }
   const list = deps.map(d=>d.date+' ('+d.pax+'/'+d.capacity+')').join('\n');
-  const chosen = prompt(t('ask_pick_departure')+'\n'+list, deps[0].date); if(!chosen) return;
+  const chosen = await askPrompt(t('ask_pick_departure')+'\n'+list, deps[0].date); if(!chosen) return;
   const match = deps.find(d=>d.date===chosen.trim());
-  if(!match){ alert(t('dep_not_found')); return; }
+  if(!match){ showToast(t('dep_not_found')); return; }
   try{
     const r = await fetch('/admin/api/departure/assign', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, departureId:match.id}) });
     if(!r.ok) throw 0;
     await refreshLeads(); await loadDepartures();
-  }catch(e){ alert(t('err_departure_assign')); }
+  }catch(e){ showToast(t('err_departure_assign')); }
 }
 async function unassignDepartureFlow(phone){
-  if(!confirm(t('confirm_unassign_dep'))) return;
+  if(!await askConfirm(t('confirm_unassign_dep'))) return;
   try{
     const r = await fetch('/admin/api/departure/assign', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, departureId:''}) });
     if(!r.ok) throw 0;
     await refreshLeads(); await loadDepartures();
-  }catch(e){ alert(t('err_departure_assign')); }
+  }catch(e){ showToast(t('err_departure_assign')); }
 }
 
 // ======================================================================
@@ -1730,7 +2130,9 @@ async function loadMedia(){
 }
 function renderMedia(){
   document.getElementById('mediaSummary').textContent = t('media_count',{n:mediaLib.length});
-  document.getElementById('mediaGrid').innerHTML = mediaLib.map((m,i)=>`
+  const indexed = mediaLib.map((m,i)=>[m,i]);
+  const p = paginate('media', indexed);
+  document.getElementById('mediaGrid').innerHTML = p.items.map(([m,i])=>`
     <div class="mediacard">
       <div class="thumb">${m.type==='video'?`<video src="${m.url}" muted></video>`:`<img src="${m.url}" loading="lazy">`}</div>
       <div class="body">
@@ -1742,49 +2144,50 @@ function renderMedia(){
         <button class="actbtn" style="width:auto;padding:6px 10px;flex:1" onclick="deleteMediaFlow(${i})">${t('delete')}</button>
       </div>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px;grid-column:1/-1">${t('no_media')}</div>`;
+  document.getElementById('mediaPager').innerHTML = pagerHtml('media', p);
 }
 function mediaFileChosen(ev){
   const file = ev.target.files[0]; ev.target.value='';
   if(!file) return;
-  if(file.size > 16*1024*1024){ alert(t('media_too_big')); return; }
+  if(file.size > 16*1024*1024){ showToast(t('media_too_big')); return; }
   const reader = new FileReader();
   reader.onload = async () => {
     try{
       const r = await fetch('/admin/api/media/upload', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({dataUrl:reader.result}) });
       const up = await r.json();
       if(!r.ok) throw new Error(up.error||'');
-      const label = prompt(t('ask_media_label'),'') || up.id;
-      const caption = prompt(t('ask_media_caption'),'') || '';
-      const use = prompt(t('ask_media_use'),'') || '';
+      const label = await askPrompt(t('ask_media_label'),'') || up.id;
+      const caption = await askPrompt(t('ask_media_caption'),'') || '';
+      const use = await askPrompt(t('ask_media_use'),'') || '';
       const next = [...mediaLib, {id:up.id, label, type:up.type, url:up.url, caption, use}];
       const r2 = await fetch('/admin/api/media', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({items:next}) });
       if(!r2.ok) throw 0;
       mediaLib = await r2.json();
       renderMedia();
-    }catch(e){ alert(t('err_media_upload')); }
+    }catch(e){ showToast(t('err_media_upload')); }
   };
   reader.readAsDataURL(file);
 }
 async function editMediaFlow(i){
   const m = mediaLib[i]; if(!m) return;
-  const label = prompt(t('ask_media_label'), m.label); if(label==null) return;
-  const caption = prompt(t('ask_media_caption'), m.caption||''); if(caption==null) return;
-  const use = prompt(t('ask_media_use'), m.use||''); if(use==null) return;
+  const label = await askPrompt(t('ask_media_label'), m.label); if(label==null) return;
+  const caption = await askPrompt(t('ask_media_caption'), m.caption||''); if(caption==null) return;
+  const use = await askPrompt(t('ask_media_use'), m.use||''); if(use==null) return;
   const next = mediaLib.map((x,j)=>j===i?{...x,label,caption,use}:x);
   try{
     const r = await fetch('/admin/api/media', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({items:next}) });
     if(!r.ok) throw 0;
     mediaLib = await r.json(); renderMedia();
-  }catch(e){ alert(t('err_media_update')); }
+  }catch(e){ showToast(t('err_media_update')); }
 }
 async function deleteMediaFlow(i){
-  if(!confirm(t('confirm_delete_media'))) return;
+  if(!await askConfirm(t('confirm_delete_media'), {danger:true})) return;
   const next = mediaLib.filter((_,j)=>j!==i);
   try{
     const r = await fetch('/admin/api/media', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({items:next}) });
     if(!r.ok) throw 0;
     mediaLib = await r.json(); renderMedia();
-  }catch(e){ alert(t('err_media_update')); }
+  }catch(e){ showToast(t('err_media_update')); }
 }
 
 // ======================================================================
@@ -1804,91 +2207,97 @@ async function loadNewsletterView(){
   renderNewsletter();
 }
 function renderNewsletter(){
-  document.getElementById('nlScheduledTbl').innerHTML = nlScheduled.map(c=>`
+  const schedPg = paginate('nlSched', nlScheduled);
+  document.getElementById('nlScheduledTbl').innerHTML = schedPg.items.map(c=>`
     <div class="tblrow" style="grid-template-columns:1.3fr 2fr 1fr 90px">
       <span class="wait">${new Date(c.when).toLocaleString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
       <span class="wait">${c.subject}</span>
       <span class="wait">${c.scope==null?t('nl_scope_all'):c.scope}</span>
       <button class="actbtn" onclick="cancelScheduledFlow('${c.id}')">${t('nl_cancel')}</button>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nl_no_scheduled')}</div>`;
+  document.getElementById('nlSchedPager').innerHTML = pagerHtml('nlSched', schedPg);
 
-  document.getElementById('nlHistoryTbl').innerHTML = nlHistory.slice().sort((a,b)=>b.at-a.at).map(c=>`
+  const histPg = paginate('nlHist', nlHistory.slice().sort((a,b)=>b.at-a.at));
+  document.getElementById('nlHistoryTbl').innerHTML = histPg.items.map(c=>`
     <div class="tblrow" style="grid-template-columns:1.3fr 2fr 1fr 1fr">
       <span class="wait">${new Date(c.at).toLocaleDateString(LANG==='es'?'es-ES':'en-US')}</span>
       <span class="wait">${c.subject}</span>
       <span class="tourpill">${t('nl_ds_'+c.dataset)}</span>
       <span class="wait">${c.sent}/${c.total}${c.failed?(' · '+c.failed+' '+t('nl_failed')):''}</span>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nl_no_history')}</div>`;
+  document.getElementById('nlHistPager').innerHTML = pagerHtml('nlHist', histPg);
 
-  document.getElementById('subsTbl').innerHTML = subscribers.filter(s=>!s.archived).map(s=>`
+  const subsPg = paginate('subs', subscribers.filter(s=>!s.archived));
+  document.getElementById('subsTbl').innerHTML = subsPg.items.map(s=>`
     <div class="tblrow" style="grid-template-columns:2fr 1fr 1fr 90px">
       <span class="wait">${s.email}</span>
       <span class="wait">${s.source||'—'}</span>
       <span class="tourpill">${s.emailUnsub?t('nl_unsub'):t('nl_subscribed')}</span>
       <button class="actbtn" onclick="removeSubscriberFlow('${s.email}')">${t('delete')}</button>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nl_no_subs')}</div>`;
+  document.getElementById('subsPager').innerHTML = pagerHtml('subs', subsPg);
 }
 function nlPayload(){
   return { dataset: document.getElementById('nlDataset').value, subject: document.getElementById('nlSubject').value.trim(), body: document.getElementById('nlBody').value.trim() };
 }
 async function sendNewsletterFlow(){
   const p = nlPayload();
-  if(!p.subject || !p.body){ alert(t('nl_need_subject_body')); return; }
-  if(!confirm(t('nl_confirm_send'))) return;
+  if(!p.subject || !p.body){ showToast(t('nl_need_subject_body')); return; }
+  if(!await askConfirm(t('nl_confirm_send'), {danger:true})) return;
   try{
     const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify(p) });
     const d = await r.json();
     if(!r.ok) throw new Error(d.error||'');
-    alert(t('nl_sent_result',{sent:d.sent,total:d.total}));
+    showToast(t('nl_sent_result',{sent:d.sent,total:d.total}), {type:'success'});
     await loadNewsletterView();
-  }catch(e){ alert(t('nl_send_error')+(e.message?(': '+e.message):'')); }
+  }catch(e){ showToast(t('nl_send_error')+(e.message?(': '+e.message):'')); }
 }
 async function testNewsletterFlow(){
   const p = nlPayload();
-  if(!p.subject || !p.body){ alert(t('nl_need_subject_body')); return; }
-  const testTo = prompt(t('ask_test_email'),''); if(!testTo) return;
+  if(!p.subject || !p.body){ showToast(t('nl_need_subject_body')); return; }
+  const testTo = await askPrompt(t('ask_test_email'),''); if(!testTo) return;
   try{
     const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({...p, testTo}) });
     const d = await r.json();
     if(!r.ok) throw new Error(d.error||'');
-    alert(t('nl_test_sent'));
-  }catch(e){ alert(t('nl_send_error')+(e.message?(': '+e.message):'')); }
+    showToast(t('nl_test_sent'), {type:'success'});
+  }catch(e){ showToast(t('nl_send_error')+(e.message?(': '+e.message):'')); }
 }
 async function scheduleNewsletterFlow(){
   const p = nlPayload();
-  if(!p.subject || !p.body){ alert(t('nl_need_subject_body')); return; }
-  const when = prompt(t('ask_when'),''); if(!when) return;
+  if(!p.subject || !p.body){ showToast(t('nl_need_subject_body')); return; }
+  const when = await askPrompt(t('ask_when'),''); if(!when) return;
   try{
     const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({...p, when}) });
     const d = await r.json();
     if(!r.ok) throw new Error(d.error||'');
-    alert(t('nl_scheduled_ok'));
+    showToast(t('nl_scheduled_ok'), {type:'success'});
     await loadNewsletterView();
-  }catch(e){ alert(t('nl_send_error')+(e.message?(': '+e.message):'')); }
+  }catch(e){ showToast(t('nl_send_error')+(e.message?(': '+e.message):'')); }
 }
 async function cancelScheduledFlow(id){
-  if(!confirm(t('nl_confirm_cancel'))) return;
+  if(!await askConfirm(t('nl_confirm_cancel'))) return;
   try{
     const r = await fetch('/admin/api/newsletter/cancel', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id}) });
     if(!r.ok) throw 0;
     await loadNewsletterView();
-  }catch(e){ alert(t('nl_send_error')); }
+  }catch(e){ showToast(t('nl_send_error')); }
 }
 async function addSubscriberFlow(){
-  const email = prompt(t('ask_subscriber_email'),''); if(!email) return;
+  const email = await askPrompt(t('ask_subscriber_email'),''); if(!email) return;
   try{
     const r = await fetch('/admin/api/subscribers/add', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({email}) });
     if(!r.ok) throw 0;
     await loadNewsletterView();
-  }catch(e){ alert(t('nl_send_error')); }
+  }catch(e){ showToast(t('nl_send_error')); }
 }
 async function removeSubscriberFlow(email){
-  if(!confirm(t('confirm_delete_subscriber'))) return;
+  if(!await askConfirm(t('confirm_delete_subscriber'), {danger:true})) return;
   try{
     const r = await fetch('/admin/api/subscribers/remove', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({email}) });
     if(!r.ok) throw 0;
     await loadNewsletterView();
-  }catch(e){ alert(t('nl_send_error')); }
+  }catch(e){ showToast(t('nl_send_error')); }
 }
 
 // ======================================================================
@@ -1919,7 +2328,7 @@ async function sendSimMessage(){
   box.disabled = false; box.focus();
 }
 async function resetSimFlow(){
-  if(!confirm(t('sim_confirm_reset'))) return;
+  if(!await askConfirm(t('sim_confirm_reset'))) return;
   try{
     await fetch('/admin/api/simulate/reset', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({session:simSessionName()}) });
   }catch(e){}
@@ -1978,7 +2387,7 @@ function dismissSetup(){
   localStorage.setItem('panelv2_setup_dismissed','1');
   document.getElementById('setupCard').classList.add('hidden');
 }
-function explainSetup(){ alert(t('setup_explain')); }
+function explainSetup(){ showToast(t('setup_explain'), {type:'info'}); }
 
 // ======================================================================
 // NOTIFICACIONES — 100% real, calculado de `leads` y `appts` ya cargados
@@ -2106,7 +2515,7 @@ const titles = {overview:'Resumen', chats:'Conversaciones', leads:'Leads', lead:
 const loadedOnce = {};
 let opsDb = 'ops'; // 'ops' (Operadores B2B) | 'tao' (Travel Adventures Operators) -- misma vista, dos agendas
 let prevView = 'overview';
-function openOpsNav(db){ opsDb = db; loadedOnce.operators = false; go('operators'); }
+function openOpsNav(db){ opsDb = db; loadedOnce.operators = false; pageState.ops = 1; go('operators'); }
 function go(view){
   if(document.getElementById('v'+view.charAt(0).toUpperCase()+view.slice(1)).id !== 'vLead') prevView = view;
   ALL_VIEWS.forEach(v=>{
@@ -2166,6 +2575,7 @@ function startApp(){
   paintSetupCard();
   notifItems = buildNotifItems();
   renderNotifs();
+  loadCanned();
   const storedWho = sessionStorage.getItem('botpanel_who');
   if(storedWho && OWNER_OPTS.includes(storedWho)){ whoAmI = storedWho; paintWho(); }
   else switchWho();
@@ -2177,10 +2587,15 @@ function startApp(){
 async function boot(){
   const k = getStoredKey();
   if(k){
+    document.getElementById('bootLoading').classList.remove('hidden');
     try{ await loadReal(k); }
-    catch(e){ sessionStorage.removeItem('botpanel_key'); document.getElementById('loginGate').classList.remove('hidden'); return; }
+    catch(e){
+      document.getElementById('bootLoading').classList.add('hidden');
+      sessionStorage.removeItem('botpanel_key'); document.getElementById('loginGate').classList.remove('hidden'); return;
+    }
     document.getElementById('loginGate').classList.add('hidden');
     startApp();
+    document.getElementById('bootLoading').classList.add('hidden');
     return;
   }
   document.getElementById('loginGate').classList.remove('hidden');
@@ -2188,13 +2603,22 @@ async function boot(){
 document.getElementById('loginEnter').addEventListener('click', async () => {
   const k = document.getElementById('loginPw').value.trim();
   document.getElementById('loginErr').textContent = '';
+  document.getElementById('bootLoading').classList.remove('hidden');
   try{ await loadReal(k); }
-  catch(e){ document.getElementById('loginErr').textContent = 'Clave incorrecta.'; return; }
+  catch(e){
+    document.getElementById('bootLoading').classList.add('hidden');
+    document.getElementById('loginErr').textContent = 'Clave incorrecta.'; return;
+  }
   document.getElementById('loginGate').classList.add('hidden');
   startApp();
+  document.getElementById('bootLoading').classList.add('hidden');
 });
 document.getElementById('loginPw').addEventListener('keydown', (e) => {
   if(e.key === 'Enter') document.getElementById('loginEnter').click();
+});
+document.addEventListener('click', e => {
+  const pop = document.getElementById('cannedPop'), btn = document.getElementById('cannedBtn');
+  if(pop && !pop.classList.contains('hidden') && !pop.contains(e.target) && e.target !== btn) pop.classList.add('hidden');
 });
 
 boot();
