@@ -58,6 +58,8 @@ const {
   INTRO_TEMPLATE_VARS,
   TELEGRAM_BOT_TOKEN,      // vigilante: aviso de novedades urgentes fuera de WhatsApp
   TELEGRAM_CHAT_ID,
+  META_ADS_TOKEN,          // usuario de sistema "B2K Bot" — mismo token que private/b2k_api.env, con ads_management/ads_read
+  META_AD_ACCOUNT_ID,      // act_2241705709954661 ("B2K Ads") — la vieja (362434062973510) no es accesible por API, ver contexto/proyecto_b2k.md
   CRM_SHEET_SYNC,
   BREVO_API_KEY,           // newsletter por email (proveedor Brevo). Sin esto, el envío está desactivado.
   MAIL_FROM,               // "Bali Moto Adventures <newsletter@balimotoadventures.com>" (dominio verificado en Brevo)
@@ -1284,6 +1286,56 @@ async function vigilanteTick() {
   }
 }
 setInterval(vigilanteTick, 30 * 60000);
+
+// ─── GUARDARRAÍL DE ADS: pausa lo que sangra dinero, nunca lanza ni sube presupuesto ──
+// Decidido con el owner (24-ago-2026): pausa un anuncio si lleva gastado ≥3× el coste/lead
+// objetivo (~6€ histórico de B2K → 18€) sin UN SOLO lead en la ventana. Autónomo porque
+// PROTEGE dinero (parar una fuga) — lanzar campaña o subir presupuesto no es algo que este
+// bot sepa hacer, así que esa mitad de la regla ("eso sí para siempre") se cumple por
+// omisión: no existe código aquí que pueda hacerlo.
+// Dedup gratis: al pausar, `effective_status` deja de ser ACTIVE y el propio filtro de la
+// consulta lo excluye de la siguiente pasada — sin necesitar una marca aparte en Redis.
+// Meta solo da el gasto por DÍA (no por hora) en este endpoint, así que la "ventana de 48h"
+// es en la práctica "hoy + ayer" — aproximación aceptada, el umbral ya es conservador.
+const ADS_MIN_SPEND_NO_RESULTS = 18; // EUR — 3× ~6€/lead objetivo de B2K
+const ADS_WINDOW_DAYS = 2;
+function countAdLeadActions(actions) {
+  if (!Array.isArray(actions)) return 0;
+  // Cubre tanto Lead Ads (action_type "lead") como Click-to-WhatsApp ("...messaging_conversation_started...").
+  // Verificar contra el primer insight real en cuanto haya campañas migradas a META_AD_ACCOUNT_ID.
+  return actions
+    .filter((a) => /lead|messaging_conversation_started/i.test(a.action_type || ""))
+    .reduce((sum, a) => sum + (parseInt(a.value, 10) || 0), 0);
+}
+async function adsGuardTick() {
+  if (!META_ADS_TOKEN || !META_AD_ACCOUNT_ID) return; // sin cuenta conectada, inerte
+  try {
+    const until = new Date();
+    const since = new Date(until.getTime() - ADS_WINDOW_DAYS * 86400000);
+    const fmt = (d) => d.toISOString().slice(0, 10);
+    const { data } = await axios.get(`https://graph.facebook.com/v21.0/${META_AD_ACCOUNT_ID}/ads`, {
+      params: {
+        access_token: META_ADS_TOKEN,
+        filtering: JSON.stringify([{ field: "effective_status", operator: "IN", value: ["ACTIVE"] }]),
+        fields: `id,name,campaign{name},insights.time_range({"since":"${fmt(since)}","until":"${fmt(until)}"}){spend,actions}`,
+        limit: 200,
+      },
+    });
+    for (const ad of data.data || []) {
+      const insight = ad.insights?.data?.[0];
+      const spend = parseFloat(insight?.spend || "0");
+      if (spend < ADS_MIN_SPEND_NO_RESULTS) continue;
+      const leads = countAdLeadActions(insight?.actions);
+      if (leads > 0) continue;
+      await axios.post(`https://graph.facebook.com/v21.0/${ad.id}`, null, { params: { access_token: META_ADS_TOKEN, status: "PAUSED" } });
+      await notifyTelegram(`🛑 ${PROJECT_NAME} — anuncio pausado, gasto sin resultados\n"${ad.name}" (${ad.campaign?.name || "sin campaña"})\nGastado: €${spend.toFixed(2)} · 0 leads en los últimos ${ADS_WINDOW_DAYS} días\n\nSi crees que fue un error, reactívalo en Ads Manager.`);
+      console.log(`[${PROJECT_NAME}] adsGuard: pausado ${ad.id} (${ad.name}) — €${spend.toFixed(2)} sin resultados`);
+    }
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] adsGuardTick error: ${e.response?.data ? JSON.stringify(e.response.data) : e.message}`);
+  }
+}
+setInterval(adsGuardTick, 60 * 60000); // el gasto no cambia tan rápido como una conversación
 
 // ─── RECORDATORIOS DE SEGUIMIENTO MANUAL ───────────────────────────
 // Cuando un lead llega a su fecha "Próximo seguimiento" (nextFollowUp), avisa al OWNER
