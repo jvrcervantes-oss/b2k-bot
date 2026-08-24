@@ -429,6 +429,7 @@ textarea.nlinput{resize:vertical}
 </style>
 </head>
 <body>
+<div id="waBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#b91c1c;color:#fff;font:600 13px/1.45 system-ui,sans-serif;padding:10px 18px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.3)"></div>
 <div id="loginGate" class="hidden" style="position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:50">
   <div class="card" style="width:320px;padding:28px;text-align:center">
     <div style="width:40px;height:40px;border-radius:10px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;margin:0 auto 14px">B</div>
@@ -986,6 +987,7 @@ es: {
   inv_amount:'Importe', inv_total:'Total', inv_paid:'Pagado', inv_balance:'Saldo pendiente', inv_print:'Imprimir / Guardar como PDF',
   inv_no_deal:'Sin venta cerrada todavía — el importe se pone en la ficha.', inv_payments:'Pagos recibidos', inv_no_pay:'Sin pagos registrados.', inv_method:'Método',
   confirm_won:'¿Marcar este lead como ganado?', err_status:'No se pudo actualizar el estado.',
+  wa_blocked:'⛔ Cuenta de WhatsApp bloqueada (code {code}): no sale NINGUNA plantilla — outreach, avisos al owner y recordatorios rebotan. Se arregla en el billing hub de Meta.',
   ask_when:'Fecha y hora de la cita (AAAA-MM-DDTHH:MM):', appt_created:'Cita creada.', err_appt:'No se pudo crear la cita.',
   ask_phone_new:'Teléfono del lead nuevo (con prefijo de país, solo dígitos):', invalid_phone:'Teléfono inválido.',
   ask_name_opt:'Nombre (opcional):', err_lead_create:'No se pudo crear el lead (¿ya existe?).',
@@ -1122,6 +1124,7 @@ en: {
   inv_amount:'Amount', inv_total:'Total', inv_paid:'Paid', inv_balance:'Balance due', inv_print:'Print / Save as PDF',
   inv_no_deal:'No closed sale yet — set the amount on the lead card.', inv_payments:'Payments received', inv_no_pay:'No payments logged.', inv_method:'Method',
   confirm_won:'Mark this lead as won?', err_status:'Could not update the status.',
+  wa_blocked:'⛔ WhatsApp account blocked (code {code}): NO template goes out — outreach, owner alerts and reminders all bounce. Fix it in Meta\'s billing hub.',
   ask_when:'Appointment date and time (YYYY-MM-DDTHH:MM):', appt_created:'Appointment created.', err_appt:'Could not create the appointment.',
   ask_phone_new:'New lead phone (with country code, digits only):', invalid_phone:'Invalid phone.',
   ask_name_opt:'Name (optional):', err_lead_create:'Could not create the lead (already exists?).',
@@ -1977,6 +1980,18 @@ async function newLeadFlow(){
 async function refreshLeads(){
   const r = await fetch('/admin/api/leads', { headers:{'X-Admin-Key':sessionKey} });
   if(r.ok) leads = await r.json();
+}
+// Cuenta bloqueada (billing/suspensión): mientras lo esté, ninguna plantilla sale. El aviso
+// va arriba del todo porque el fallo llega por webhook DESPUÉS del "✓ enviado" del botón.
+async function loadWaStatus(){
+  try{
+    const r = await fetch('/admin/api/wa-status', { headers:{'X-Admin-Key':sessionKey} });
+    const s = await r.json();
+    const el = document.getElementById('waBanner'), b = s && s.blocked;
+    if(!el) return;
+    el.style.display = b ? 'block' : 'none';
+    if(b) el.textContent = t('wa_blocked', {code:b.code}) + ' · ' + (b.detail||'');
+  }catch(e){ /* best-effort */ }
 }
 
 // ================= Exportar / Importar CSV (leads y operadores) =================
@@ -2923,6 +2938,8 @@ function startApp(){
   notifItems = buildNotifItems();
   renderNotifs();
   loadCanned();
+  loadWaStatus();
+  setInterval(loadWaStatus, 10000);
   const storedWho = sessionStorage.getItem('botpanel_who');
   if(storedWho && OWNER_OPTS.includes(storedWho)){ whoAmI = storedWho; paintWho(); }
   else switchWho();
