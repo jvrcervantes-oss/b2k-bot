@@ -50,6 +50,8 @@ const {
   FOLLOWUP_MAX,
   FOLLOWUP_SCHEDULE,
   FOLLOWUP_TEMPLATE_VARS,
+  URGENT_TEMPLATE_NAME,    // igual que FOLLOWUP_TEMPLATE_NAME pero para intent interested/booking (lead caliente)
+  URGENT_TEMPLATE_LANG,
   REVIEW_TEMPLATE_NAME,    // "dijiste que te lo mirabas" — 1er toque el día que vence nextFollowUp
   REVIEW2_TEMPLATE_NAME,   // re-follow-up, REVIEW_GAP_DAYS después si sigue callado
   REVIEW_TEMPLATE_LANG,
@@ -1231,6 +1233,7 @@ setInterval(reminderTick, 5 * 60000); // revisar cada 5 minutos
 // Cuando el cliente responde, resetFollowup() reinicia la cadencia y el bot retoma la venta.
 const FOLLOWUP_SKIP_INTENT = new Set(["escalate"]);          // pregunta pendiente del owner
 const FOLLOWUP_SKIP_STATUS = new Set(["won", "lost", "noshow"]); // ya cerrado
+const HOT_INTENTS = new Set(["interested", "booking"]);       // lead caliente → plantilla más directa
 async function followupTick() {
   try {
     if (!FOLLOWUP_TEMPLATE_NAME) return; // sin plantilla aprobada no se puede contactar fuera de 24h
@@ -1257,10 +1260,15 @@ async function followupTick() {
       if (sent >= maxN) continue;                          // tope de intentos alcanzado
       const dueH = schedule[sent] != null ? schedule[sent] : schedule[schedule.length - 1];
       if (coldH < dueH) continue;                          // aún no toca el siguiente intento
-      const params = nVars >= 1 ? [firstNameOf(l)] : [];
-      await sendWhatsAppTemplate(l.phone, FOLLOWUP_TEMPLATE_NAME, FOLLOWUP_TEMPLATE_LANG, params);
+      // Lead caliente (ya mostró interés real o quiso reservar) → plantilla más directa, mismo
+      // calendario y contador que el genérico. Sin URGENT_TEMPLATE_NAME cae al de siempre.
+      const isHot = HOT_INTENTS.has(l.intent) && URGENT_TEMPLATE_NAME;
+      const tplName = isHot ? URGENT_TEMPLATE_NAME : FOLLOWUP_TEMPLATE_NAME;
+      const tplLang = isHot ? (URGENT_TEMPLATE_LANG || FOLLOWUP_TEMPLATE_LANG) : FOLLOWUP_TEMPLATE_LANG;
+      const params = isHot ? [firstNameOf(l), reviewSubject(l)] : (nVars >= 1 ? [firstNameOf(l)] : []);
+      await sendWhatsAppTemplate(l.phone, tplName, tplLang, params);
       await setFollowupCount(l.phone, sent + 1);
-      console.log(`[${PROJECT_NAME}] Follow-up ${sent + 1}/${maxN} enviado a ${l.phone} (frío ${coldH.toFixed(0)}h)`);
+      console.log(`[${PROJECT_NAME}] Follow-up ${isHot ? "urgente" : ""} ${sent + 1}/${maxN} enviado a ${l.phone} (frío ${coldH.toFixed(0)}h)`);
     }
   } catch (e) {
     console.error(`[${PROJECT_NAME}] followupTick error: ${e.message}`);
