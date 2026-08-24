@@ -37,9 +37,6 @@ const {
   STRIPE_SUCCESS_URL,
   STRIPE_CANCEL_URL,
   ADMIN_PASSWORD,
-  ALERT_TEMPLATE_NAME,
-  ALERT_TEMPLATE_LANG,
-  ALERT_TEMPLATE_VARS,
   CALENDAR_ID,
   CALENDAR_TZ,
   REMINDER_LEAD_MIN,
@@ -117,7 +114,6 @@ const CONTEXT = fs.existsSync(contextFileName)
 // eran 7 y el bot podía mandar un recordatorio del día 25 sin memoria de la charla.
 const CONV_TTL = 30 * 24 * 60 * 60;
 const fallbackMemory = {};
-const fallbackEscQueue = [];
 let redisClient = null;
 
 try {
@@ -158,25 +154,6 @@ async function saveConversation(phone, messages) {
   } else {
     fallbackMemory[phone] = trimmed;
   }
-}
-
-async function escPush(customerPhone, customerName, question) {
-  const entry = JSON.stringify({ customerPhone, customerName, question });
-  if (redisClient) {
-    await redisClient.lPush("esc_queue", entry);
-  } else {
-    fallbackEscQueue.unshift(entry);
-  }
-  return entry; // string exacto encolado → permite lRem selectivo si el owner responde citando
-}
-
-async function escPop() {
-  if (redisClient) {
-    const raw = await redisClient.rPop("esc_queue");
-    return raw ? JSON.parse(raw) : null;
-  }
-  const raw = fallbackEscQueue.pop();
-  return raw ? JSON.parse(raw) : null;
 }
 
 // ─── ÍNDICE DE LEADS (para el panel web) ──────────────────────────
@@ -1330,7 +1307,7 @@ async function followUpReminderTick() {
       // Una vez cuando vence la fecha, y otra al agotarse la cadena: si no, el owner se
       // queda con el "espera su respuesta" del primer día y nadie retoma nunca al lead.
       const agotada = sentNow === REVIEW2_TEMPLATE_NAME;
-      if (OWNER_PHONE && (l.fuReminded !== fu || agotada)) {
+      if (l.fuReminded !== fu || agotada) {
         const who = l.name || ("+" + l.phone);
         const extra = [l.package, l.owner ? "· " + l.owner : ""].filter(Boolean).join(" ");
         const cola = agotada
@@ -1338,7 +1315,6 @@ async function followUpReminderTick() {
           : sentNow
             ? `\n\n🤖 Acabo de escribirle yo. Dale margen antes de insistir; si no contesta le mando un último toque en ${parseFloat(REVIEW_GAP_DAYS) || 4} días.`
             : elegible ? "\n\n🤖 Yo ya agoté mis intentos con este. Te toca." : "\n\nToca contactarle 👇";
-        await sendWhatsApp(OWNER_PHONE, `📅 ${PROJECT_NAME} — Seguimiento pendiente\n\n*${who}* ${extra}\nTel: +${l.phone}\nVencía: ${fu}${cola}`);
         await notifyTelegram(`📅 ${PROJECT_NAME} — Seguimiento pendiente\n${who} ${extra}\nTel: +${l.phone}\nVencía: ${fu}${cola}`);
         await updateLeadFields(l.phone, { fuReminded: fu });
         await logEvent(l.phone, "fu_reminded", { date: fu, agotada: agotada || undefined });
@@ -2039,28 +2015,13 @@ async function notifyTelegram(text) {
   }
 }
 
-// Avisa al owner. Usa plantilla si está configurada; si no, texto libre (solo llega si su ventana 24h está abierta).
+// Avisa al owner por Telegram — WhatsApp se retiró como canal de aviso (nunca funcionó de fiar:
+// dependía de la ventana de 24h o de una plantilla aprobada). Telegram no tiene esa limitación.
 async function notifyOwner(kind, lead) {
   const label = kind === "booking" ? "🔔 LEAD CALIENTE — quiere reservar" : "🟡 Nuevo cliente interesado";
   const who = lead.name || lead.phone;
   const msg = lead.lastMessage || "";
   await notifyTelegram(`${label} — ${PROJECT_NAME}\n${who}\nÚltimo mensaje: "${msg}"`);
-  if (!OWNER_PHONE) return;
-
-  if (ALERT_TEMPLATE_NAME) {
-    const vars = ALERT_TEMPLATE_VARS != null ? parseInt(ALERT_TEMPLATE_VARS) : 2;
-    let params = [];
-    if (vars === 1) params = [`${label}: ${who} — "${msg}"`];
-    else if (vars === 2) params = [who, msg];
-    else if (vars >= 3) params = [label, who, msg];
-    await sendWhatsAppTemplate(OWNER_PHONE, ALERT_TEMPLATE_NAME, ALERT_TEMPLATE_LANG, params);
-  } else {
-    // Fallback: texto libre (puede fallar si el owner no escribió al bot en las últimas 24h)
-    await sendWhatsApp(
-      OWNER_PHONE,
-      `${label} — ${PROJECT_NAME}\n\n${who}\nÚltimo mensaje: "${msg}"\n\n(Configura ALERT_TEMPLATE_NAME para recibir esto siempre.)`
-    );
-  }
 }
 
 function normalizePhone(p) {
@@ -2250,33 +2211,9 @@ app.post("/webhook", async (req, res) => {
       return; // owner mandó media: nada que reenviar
     }
 
-    // ── Mensaje del dueño: reenviar al cliente pendiente ──────────
-    if (isOwner(from)) {
-      // Si el owner responde CITANDO el aviso de escalación (reply de WhatsApp), se enruta a ESE
-      // cliente en concreto — con varias escalaciones abiertas ya no va a ciegas al más antiguo.
-      let pending = null;
-      const ctxId = message.context && message.context.id;
-      if (ctxId && redisClient) {
-        const raw = await redisClient.get(`escmap:${ctxId}`);
-        if (raw) {
-          pending = JSON.parse(raw);
-          await redisClient.lRem("esc_queue", 1, raw); // quitarla de la cola para no reenviarla doble
-          await redisClient.del(`escmap:${ctxId}`);
-          console.log(`[${PROJECT_NAME}] Owner respondió citando → enrutado exacto a ${pending.customerName || pending.customerPhone}`);
-        }
-      }
-      if (!pending) pending = await escPop();
-      if (pending) {
-        console.log(`[${PROJECT_NAME}] Owner respondió escalación → reenviando a ${pending.customerName || pending.customerPhone}`);
-        await sendWhatsApp(
-          pending.customerPhone,
-          text
-        );
-      } else {
-        console.log(`[${PROJECT_NAME}] Mensaje del owner pero no hay escalaciones pendientes`);
-      }
-      return;
-    }
+    // El owner ya no opera por WhatsApp (solo Telegram + panel) — si aun así escribe a este
+    // número, no se le trata como cliente ni se reenvía nada.
+    if (isOwner(from)) return;
 
     // ── Mensaje normal del cliente ────────────────────────────────
     const history = await getConversation(from);
@@ -2422,7 +2359,6 @@ app.post("/webhook", async (req, res) => {
       if (!r.ok) {
         console.error(`[${PROJECT_NAME}] [EMAIL] no enviado a ${emailMatch[1]}: ${r.error}`);
         await notifyTelegram(`⚠️ ${PROJECT_NAME} — no pude mandar el itinerario a ${emailMatch[1]} (${profileName || from}). Motivo: ${r.error}`);
-        if (OWNER_PHONE) await sendWhatsApp(OWNER_PHONE, `⚠️ ${PROJECT_NAME} — no pude mandar el itinerario a ${emailMatch[1]} (${profileName || from}). Motivo: ${r.error}`);
       }
     }
 
@@ -2458,26 +2394,12 @@ app.post("/webhook", async (req, res) => {
         console.log(`[${PROJECT_NAME}] Cita agendada por el bot: ${appt.when} — ${appt.title} (${from})`);
         // Avisar al owner en el momento para que llame (el panel/calendario es el respaldo)
         await notifyTelegram(`📞 ${PROJECT_NAME} — LLAMADA AGENDADA\n${profileName || from} — Tel: ${from}\nCuándo: ${appt.when}\n${appt.title}`);
-        if (OWNER_PHONE) {
-          await sendWhatsApp(
-            OWNER_PHONE,
-            `📞 ${PROJECT_NAME} — LLAMADA AGENDADA\n\n*${profileName || from}*\nTel: ${from}\nCuándo: ${appt.when}\n${appt.title}\n\nLlámale por WhatsApp a esa hora.`
-          );
-        }
       } catch (e) { console.error(`[${PROJECT_NAME}] Error creando cita:`, e.message); }
     }
 
-    // ── Escalación: notificar al dueño en silencio ────────────────
-    if (intent === "escalate" && OWNER_PHONE) {
-      const entry = await escPush(from, profileName, text);
-      await notifyTelegram(`❓ ${PROJECT_NAME} — pregunta sin respuesta\n${profileName || from}: "${text}"\n\n(Responde por WhatsApp para reenviárselo — aquí es solo aviso.)`);
-      const rNotif = await sendWhatsAppResult(
-        OWNER_PHONE,
-        `❓ ${PROJECT_NAME} — pregunta sin respuesta\n\n*${profileName || from}* pregunta:\n"${text}"\n\nResponde CITANDO este mensaje (mantén pulsado → Responder) y se lo reenviaré.`
-      );
-      // Mapa wamid→escalación: si el owner responde citando, se enruta a este cliente exacto.
-      if (rNotif.ok && rNotif.id && redisClient) await redisClient.setEx(`escmap:${rNotif.id}`, 7 * 86400, entry);
-      if (!rNotif.ok) console.error(`[${PROJECT_NAME}] Error enviando escalación al owner: ${rNotif.error}`);
+    // ── Escalación: avisar al owner por Telegram (responde al lead desde el panel) ──
+    if (intent === "escalate") {
+      await notifyTelegram(`❓ ${PROJECT_NAME} — pregunta sin respuesta\n${profileName || from}: "${text}"`);
       console.log(`[${PROJECT_NAME}] Escalación registrada — ${profileName || from}: "${text.slice(0, 60)}"`);
     }
 
