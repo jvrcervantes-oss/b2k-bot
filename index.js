@@ -2568,6 +2568,14 @@ app.get("/admin/api/wa-status", async (req, res) => {
   try { res.json({ blocked: await getWaBlocked() }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Limpiar a mano el aviso de cuenta bloqueada (ej. tras resolver el pago en Meta): normalmente
+// se cura sola con el próximo `delivered`/`read`, o por TTL a las 6h — esto es solo para no
+// esperar cuando ya se sabe que el problema de fondo está resuelto.
+app.post("/admin/api/wa-status/clear", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try { await clearWaBlocked(); res.json({ ok: true }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Enriquecer un lead: extrae de su conversación los datos que falten en la ficha.
 app.post("/admin/api/enrich", async (req, res) => {
   if (!adminAuth(req, res)) return;
