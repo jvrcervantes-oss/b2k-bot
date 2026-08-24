@@ -59,6 +59,8 @@ const {
   INTRO_TEMPLATE_NAME,
   INTRO_TEMPLATE_LANG,
   INTRO_TEMPLATE_VARS,
+  TELEGRAM_BOT_TOKEN,      // vigilante: aviso de novedades urgentes fuera de WhatsApp
+  TELEGRAM_CHAT_ID,
   CRM_SHEET_SYNC,
   BREVO_API_KEY,           // newsletter por email (proveedor Brevo). Sin esto, el envío está desactivado.
   MAIL_FROM,               // "Bali Moto Adventures <newsletter@balimotoadventures.com>" (dominio verificado en Brevo)
@@ -1337,6 +1339,7 @@ async function followUpReminderTick() {
             ? `\n\n🤖 Acabo de escribirle yo. Dale margen antes de insistir; si no contesta le mando un último toque en ${parseFloat(REVIEW_GAP_DAYS) || 4} días.`
             : elegible ? "\n\n🤖 Yo ya agoté mis intentos con este. Te toca." : "\n\nToca contactarle 👇";
         await sendWhatsApp(OWNER_PHONE, `📅 ${PROJECT_NAME} — Seguimiento pendiente\n\n*${who}* ${extra}\nTel: +${l.phone}\nVencía: ${fu}${cola}`);
+        await notifyTelegram(`📅 ${PROJECT_NAME} — Seguimiento pendiente\n${who} ${extra}\nTel: +${l.phone}\nVencía: ${fu}${cola}`);
         await updateLeadFields(l.phone, { fuReminded: fu });
         await logEvent(l.phone, "fu_reminded", { date: fu, agotada: agotada || undefined });
         console.log(`[${PROJECT_NAME}] Recordatorio de seguimiento (owner) para ${l.phone} — vencía ${fu}${agotada ? " (cadena agotada)" : ""}`);
@@ -2024,12 +2027,25 @@ async function sendIntro(phone) {
   return { ok: true };
 }
 
+// Canal de aviso independiente de WhatsApp — no depende de plantillas ni de la ventana de 24h,
+// así que sigue funcionando incluso si la cuenta de WhatsApp está bloqueada (justo cuando más
+// hace falta enterarse). Best-effort: un fallo aquí nunca debe tumbar el flujo que lo llama.
+async function notifyTelegram(text) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
+  try {
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, { chat_id: TELEGRAM_CHAT_ID, text });
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] Error notificando a Telegram: ${e.message}`);
+  }
+}
+
 // Avisa al owner. Usa plantilla si está configurada; si no, texto libre (solo llega si su ventana 24h está abierta).
 async function notifyOwner(kind, lead) {
-  if (!OWNER_PHONE) return;
   const label = kind === "booking" ? "🔔 LEAD CALIENTE — quiere reservar" : "🟡 Nuevo cliente interesado";
   const who = lead.name || lead.phone;
   const msg = lead.lastMessage || "";
+  await notifyTelegram(`${label} — ${PROJECT_NAME}\n${who}\nÚltimo mensaje: "${msg}"`);
+  if (!OWNER_PHONE) return;
 
   if (ALERT_TEMPLATE_NAME) {
     const vars = ALERT_TEMPLATE_VARS != null ? parseInt(ALERT_TEMPLATE_VARS) : 2;
@@ -2146,7 +2162,12 @@ app.post("/webhook", async (req, res) => {
         if (c.action !== "fail") continue;                               // sent = ruido
         const detail = c.detail;
         console.error(`[${PROJECT_NAME}] ENTREGA FALLIDA a ${st.recipient_id} — code ${c.code ?? "?"}: ${detail} (wamid ${st.id})`);
-        if (c.accountBlock) await setWaBlocked(c.code, detail);
+        if (c.accountBlock) {
+          await setWaBlocked(c.code, detail);
+          // El único aviso de este fallo, hasta ahora, era el banner del panel — si nadie lo
+          // mira, ninguna plantilla sale (outreach, avisos, recordatorios) y no se entera nadie.
+          await notifyTelegram(`⛔ ${PROJECT_NAME} — cuenta de WhatsApp bloqueada (code ${c.code}): NO sale ninguna plantilla hasta resolverlo.\n${detail}`);
+        }
         // Panel: solo si ya es lead conocido (no crear ficha para el owner ni desconocidos)
         if (!isOwner(st.recipient_id)) {
           const lead = await findLeadLoose(st.recipient_id); // el recipient_id de Meta no siempre es la clave del lead
@@ -2400,6 +2421,7 @@ app.post("/webhook", async (req, res) => {
       const r = await sendTripEmail(from, emailMatch[1].trim());
       if (!r.ok) {
         console.error(`[${PROJECT_NAME}] [EMAIL] no enviado a ${emailMatch[1]}: ${r.error}`);
+        await notifyTelegram(`⚠️ ${PROJECT_NAME} — no pude mandar el itinerario a ${emailMatch[1]} (${profileName || from}). Motivo: ${r.error}`);
         if (OWNER_PHONE) await sendWhatsApp(OWNER_PHONE, `⚠️ ${PROJECT_NAME} — no pude mandar el itinerario a ${emailMatch[1]} (${profileName || from}). Motivo: ${r.error}`);
       }
     }
@@ -2435,6 +2457,7 @@ app.post("/webhook", async (req, res) => {
         const appt = await createAppt({ phone: from, name: profileName, when: apptMatch[1].trim(), title: apptMatch[2].trim() });
         console.log(`[${PROJECT_NAME}] Cita agendada por el bot: ${appt.when} — ${appt.title} (${from})`);
         // Avisar al owner en el momento para que llame (el panel/calendario es el respaldo)
+        await notifyTelegram(`📞 ${PROJECT_NAME} — LLAMADA AGENDADA\n${profileName || from} — Tel: ${from}\nCuándo: ${appt.when}\n${appt.title}`);
         if (OWNER_PHONE) {
           await sendWhatsApp(
             OWNER_PHONE,
@@ -2447,6 +2470,7 @@ app.post("/webhook", async (req, res) => {
     // ── Escalación: notificar al dueño en silencio ────────────────
     if (intent === "escalate" && OWNER_PHONE) {
       const entry = await escPush(from, profileName, text);
+      await notifyTelegram(`❓ ${PROJECT_NAME} — pregunta sin respuesta\n${profileName || from}: "${text}"\n\n(Responde por WhatsApp para reenviárselo — aquí es solo aviso.)`);
       const rNotif = await sendWhatsAppResult(
         OWNER_PHONE,
         `❓ ${PROJECT_NAME} — pregunta sin respuesta\n\n*${profileName || from}* pregunta:\n"${text}"\n\nResponde CITANDO este mensaje (mantén pulsado → Responder) y se lo reenviaré.`
