@@ -1,0 +1,21 @@
+#!/bin/sh
+# ── Aviso de sesión en paralelo (24-ago-2026) ────────────────────────────────
+# El estudio se edita desde 2 operadores (Windows + Mac) y a menudo varias
+# sesiones de Claude Code a la vez sobre el mismo repo. Sin esto, la primera
+# señal de colisión era un commit mal atribuido o un fichero "perdido" — ya
+# documentado 6+ veces en memoria (feedback_sesiones_claude_paralelas_mismo_repo,
+# feedback_shared_repo_branch_collision). Solo avisa, nunca bloquea: un
+# commit real no debe pararse por esto.
+rama=$(git branch --show-current 2>/dev/null)
+if [ -n "$rama" ]; then
+  git fetch --quiet origin "$rama" 2>/dev/null || true
+  upstream="origin/$rama"
+  if git rev-parse --verify --quiet "$upstream" >/dev/null 2>&1; then
+    detras=$(git rev-list --count "HEAD..$upstream" 2>/dev/null || echo 0)
+    if [ "$detras" -gt 0 ] 2>/dev/null; then
+      echo "[pre-commit] AVISO: '$rama' va $detras commit(s) por detras de $upstream"
+      echo "[pre-commit]        Puede haber otra sesion trabajando aqui — revisa 'git log $upstream' antes de seguir."
+    fi
+  fi
+  echo "[pre-commit] rama activa: $rama"
+fi
