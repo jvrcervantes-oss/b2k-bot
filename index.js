@@ -4061,9 +4061,34 @@ app.post("/onboarding/exchange", async (req, res) => {
   try {
     // 1) code → token de negocio. Ese token NO se persiste: solo se usa aquí para suscribir la app.
     // El bot sigue mensajeando con el System User token del negocio del cliente (WHATSAPP_TOKEN).
-    const { data: tok } = await axios.get(`${api}/oauth/access_token`, {
-      params: { client_id: META_APP_ID, client_secret: META_APP_SECRET, code },
-    });
+    //
+    // 28-ago: subcode 36008 volvió a aparecer con los permisos YA aprobados (is_live=true), así que
+    // la conclusión del 10-ago ("el redirect_uri no importa") quedó medida a ciegas, con el bloqueo
+    // de permisos tapando cualquier otra variable — no se puede seguir dando por buena. Se prueban
+    // 3 variantes del canje en orden y se loguean todas: sin redirect_uri (el que ya se usaba),
+    // con el redirect_uri registrado en el dashboard, y con cadena vacía (variante del quirk del
+    // JS SDK que ata el code a la URL de la página aunque el flujo sea popup). La primera que
+    // funcione es la buena — nunca se reintenta un code ya usado, cada variante es un code distinto.
+    const ONBOARD_URL = "https://b2k-bot-production-5498.up.railway.app/onboarding";
+    const variantes = [
+      { nombre: "sin redirect_uri", params: { client_id: META_APP_ID, client_secret: META_APP_SECRET, code } },
+      { nombre: "redirect_uri registrado", params: { client_id: META_APP_ID, client_secret: META_APP_SECRET, code, redirect_uri: ONBOARD_URL } },
+      { nombre: "redirect_uri vacío", params: { client_id: META_APP_ID, client_secret: META_APP_SECRET, code, redirect_uri: "" } },
+    ];
+    let tok, ultimoError;
+    for (const v of variantes) {
+      try {
+        const r = await axios.get(`${api}/oauth/access_token`, { params: v.params });
+        tok = r.data;
+        console.log(`[${PROJECT_NAME}] Embedded Signup — canje OK con variante "${v.nombre}"`);
+        break;
+      } catch (err) {
+        const metaErr = err.response?.data?.error;
+        ultimoError = err;
+        console.error(`[${PROJECT_NAME}] Embedded Signup — variante "${v.nombre}" falló: ${metaErr?.message || err.message} — code=${metaErr?.code} subcode=${metaErr?.error_subcode} fbtrace_id=${metaErr?.fbtrace_id}`);
+      }
+    }
+    if (!tok) throw ultimoError;
     const businessToken = tok?.access_token;
     if (!businessToken) return res.status(502).json({ error: "Meta no devolvió token en el canje" });
     const auth = { headers: { Authorization: `Bearer ${businessToken}` } };
