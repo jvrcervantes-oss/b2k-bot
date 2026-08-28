@@ -4046,7 +4046,10 @@ app.post("/onboarding/exchange", async (req, res) => {
   // Diagnóstico 10-ago: de dónde viene la llamada, para saber si el navegador de Dion abre /onboarding
   // en un webview in-app (WhatsApp/Instagram) que degrada FB.login() a redirect y ata el code a una
   // redirect_uri real de página, en vez del popup normal. Nunca loguea el code ni el token.
-  console.log(`[${PROJECT_NAME}] Embedded Signup intento — referer: ${req.get("referer") || "(ninguno)"} · UA: ${req.get("user-agent") || "(ninguno)"}`);
+  // 28-ago: sessionWabaId solo llega si el postMessage WA_EMBEDDED_SIGNUP del asistente real disparó
+  // (ver listener en onboarding.html) — si falta en un intento fallido, el asistente de Coexistence
+  // ni siquiera llegó a correr (p.ej. reautorización de un permiso viejo que se salta el wizard).
+  console.log(`[${PROJECT_NAME}] Embedded Signup intento — referer: ${req.get("referer") || "(ninguno)"} · UA: ${req.get("user-agent") || "(ninguno)"} · waba_id de sesión: ${req.body?.waba_id ? "presente" : "AUSENTE"}`);
 
   // El cliente acepta las implicaciones ANTES de conectar (secciones 1-10 de onboarding.html:
   // pérdida de WhatsApp for Windows, difusiones off, coste por mensaje, 6 meses de histórico al
