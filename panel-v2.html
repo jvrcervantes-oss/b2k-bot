@@ -853,10 +853,22 @@ textarea.nlinput{resize:vertical}
             <option value="tao" data-i18n="nl_ds_tao">Travel Adv.</option>
             <option value="subscribers" data-i18n="nl_ds_subscribers">Suscriptores web</option>
           </select>
-          <label class="nlfield" data-i18n="nl_subject">Asunto</label>
-          <input id="nlSubject" class="nlinput" data-i18n-ph="nl_subject_ph" placeholder="Asunto del email">
-          <label class="nlfield" data-i18n="nl_body">Cuerpo (admite **negrita**, [[Botón|url]], ![alt](imagen))</label>
-          <textarea id="nlBody" class="nlinput" rows="7" data-i18n-ph="nl_body_ph" placeholder="Escribe el contenido…"></textarea>
+          <label class="nlfield" data-i18n="nl_mode">Contenido del email</label>
+          <select id="nlMode" class="nlinput" onchange="nlApplyMode()">
+            <option value="compose" data-i18n="nl_mode_compose">Escribirlo aquí</option>
+            <option value="brevo" data-i18n="nl_mode_brevo">Usar una plantilla de Brevo</option>
+          </select>
+          <div id="nlBrevoWrap" class="hidden">
+            <label class="nlfield" data-i18n="nl_template">Plantilla de Brevo</label>
+            <select id="nlTemplate" class="nlinput"></select>
+            <div style="font-size:12px;color:var(--muted);margin:-6px 0 10px" data-i18n="nl_template_hint">Solo aparecen las plantillas transaccionales activas de Brevo. Personaliza con {{params.name}}; añade {{params.unsub}} en el pie para la baja.</div>
+          </div>
+          <div id="nlComposeWrap">
+            <label class="nlfield" data-i18n="nl_subject">Asunto</label>
+            <input id="nlSubject" class="nlinput" data-i18n-ph="nl_subject_ph" placeholder="Asunto del email">
+            <label class="nlfield" data-i18n="nl_body">Cuerpo (admite **negrita**, [[Botón|url]], ![alt](imagen))</label>
+            <textarea id="nlBody" class="nlinput" rows="7" data-i18n-ph="nl_body_ph" placeholder="Escribe el contenido…"></textarea>
+          </div>
           <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
             <button class="btn" onclick="testNewsletterFlow()" data-i18n="nl_test">Enviar prueba</button>
             <button class="btn" onclick="scheduleNewsletterFlow()" data-i18n="nl_schedule">Programar</button>
@@ -1035,6 +1047,9 @@ es: {
   // -- newsletter --
   nl_compose:'Redactar', nl_dataset:'Enviar a', nl_ds_leads:'Leads (WhatsApp)', nl_ds_operators:'Operadores', nl_ds_tao:'Travel Adv.', nl_ds_subscribers:'Suscriptores web',
   nl_subject:'Asunto', nl_subject_ph:'Asunto del email', nl_body:'Cuerpo (admite **negrita**, [[Botón|url]], ![alt](imagen))', nl_body_ph:'Escribe el contenido…',
+  nl_mode:'Contenido del email', nl_mode_compose:'Escribirlo aquí', nl_mode_brevo:'Usar una plantilla de Brevo',
+  nl_template:'Plantilla de Brevo', nl_template_hint:'Solo aparecen las plantillas transaccionales activas de Brevo. Personaliza con {{params.name}}; añade {{params.unsub}} en el pie para la baja.',
+  nl_no_templates:'No hay plantillas transaccionales en Brevo (créala en Brevo → Transactional → Templates)', nl_pick_template:'Elige una plantilla de Brevo.',
   nl_test:'Enviar prueba', nl_schedule:'Programar', nl_send_now:'Enviar ahora',
   nl_scheduled_hd:'Programados', nl_scope:'Alcance', nl_scope_all:'Todos', nl_cancel:'Cancelar', nl_no_scheduled:'Nada programado.',
   nl_history_hd:'Historial', nl_result:'Resultado', nl_failed:'fallidos', nl_no_history:'Sin envíos todavía.',
@@ -1173,6 +1188,9 @@ en: {
   // -- newsletter --
   nl_compose:'Compose', nl_dataset:'Send to', nl_ds_leads:'Leads (WhatsApp)', nl_ds_operators:'Operators', nl_ds_tao:'Travel Adv.', nl_ds_subscribers:'Web subscribers',
   nl_subject:'Subject', nl_subject_ph:'Email subject', nl_body:'Body (supports **bold**, [[Button|url]], ![alt](image))', nl_body_ph:'Write the content…',
+  nl_mode:'Email content', nl_mode_compose:'Write it here', nl_mode_brevo:'Use a Brevo template',
+  nl_template:'Brevo template', nl_template_hint:'Only Brevo active transactional templates show up. Personalize with {{params.name}}; add {{params.unsub}} in the footer for opt-out.',
+  nl_no_templates:'No transactional templates in Brevo (create one in Brevo → Transactional → Templates)', nl_pick_template:'Pick a Brevo template.',
   nl_test:'Send test', nl_schedule:'Schedule', nl_send_now:'Send now',
   nl_scheduled_hd:'Scheduled', nl_scope:'Scope', nl_scope_all:'Everyone', nl_cancel:'Cancel', nl_no_scheduled:'Nothing scheduled.',
   nl_history_hd:'History', nl_result:'Result', nl_failed:'failed', nl_no_history:'No campaigns sent yet.',
@@ -2678,12 +2696,37 @@ function renderNewsletter(){
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nl_no_subs')}</div>`;
   document.getElementById('subsPager').innerHTML = pagerHtml('subs', subsPg);
 }
-function nlPayload(){
-  return { dataset: document.getElementById('nlDataset').value, subject: document.getElementById('nlSubject').value.trim(), body: document.getElementById('nlBody').value.trim() };
+let nlTemplatesLoaded = false;
+function nlApplyMode(){
+  const brevo = document.getElementById('nlMode').value==='brevo';
+  document.getElementById('nlBrevoWrap').classList.toggle('hidden', !brevo);
+  document.getElementById('nlComposeWrap').classList.toggle('hidden', brevo);
+  if(brevo && !nlTemplatesLoaded) nlLoadTemplates();
 }
+async function nlLoadTemplates(){
+  const sel = document.getElementById('nlTemplate');
+  sel.innerHTML = '<option value="">…</option>';
+  try{
+    const r = await fetch('/admin/api/brevo-templates', {headers:{'X-Admin-Key':sessionKey}});
+    const list = r.ok ? await r.json() : [];
+    nlTemplatesLoaded = true;
+    sel.innerHTML = Array.isArray(list) && list.length
+      ? list.map(tp=>`<option value="${tp.id}">${esc(tp.name)}${tp.subject?(' — '+esc(tp.subject)):''}</option>`).join('')
+      : `<option value="">${t('nl_no_templates')}</option>`;
+  }catch(e){ sel.innerHTML = `<option value="">${t('nl_no_templates')}</option>`; }
+}
+function nlPayload(){
+  const dataset = document.getElementById('nlDataset').value;
+  if(document.getElementById('nlMode').value==='brevo'){
+    const templateId = document.getElementById('nlTemplate').value;
+    return /^\d+$/.test(templateId) ? { dataset, templateId } : { dataset };
+  }
+  return { dataset, subject: document.getElementById('nlSubject').value.trim(), body: document.getElementById('nlBody').value.trim() };
+}
+function nlHasContent(p){ return p.templateId!=null || !!(p.subject && p.body); }
 async function sendNewsletterFlow(){
   const p = nlPayload();
-  if(!p.subject || !p.body){ showToast(t('nl_need_subject_body')); return; }
+  if(!nlHasContent(p)){ showToast(t(document.getElementById('nlMode').value==='brevo'?'nl_pick_template':'nl_need_subject_body')); return; }
   if(!await askConfirm(t('nl_confirm_send'), {danger:true})) return;
   try{
     const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify(p) });
@@ -2695,7 +2738,7 @@ async function sendNewsletterFlow(){
 }
 async function testNewsletterFlow(){
   const p = nlPayload();
-  if(!p.subject || !p.body){ showToast(t('nl_need_subject_body')); return; }
+  if(!nlHasContent(p)){ showToast(t(document.getElementById('nlMode').value==='brevo'?'nl_pick_template':'nl_need_subject_body')); return; }
   const testTo = await askPrompt(t('ask_test_email'),''); if(!testTo) return;
   try{
     const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({...p, testTo}) });
@@ -2706,7 +2749,7 @@ async function testNewsletterFlow(){
 }
 async function scheduleNewsletterFlow(){
   const p = nlPayload();
-  if(!p.subject || !p.body){ showToast(t('nl_need_subject_body')); return; }
+  if(!nlHasContent(p)){ showToast(t(document.getElementById('nlMode').value==='brevo'?'nl_pick_template':'nl_need_subject_body')); return; }
   const when = await askPrompt(t('ask_when'),''); if(!when) return;
   try{
     const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({...p, when}) });
