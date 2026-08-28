@@ -43,6 +43,8 @@ button{font-family:inherit;cursor:pointer}
 .brand .sub{font-size:12px;color:var(--muted)}
 .search{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 10px;color:var(--muted);margin-bottom:14px}
 .search span.k{margin-left:auto;border:1px solid var(--border);border-radius:5px;padding:0 6px;font-size:11px;background:var(--bg)}
+.search input.searchinput{flex:1;border:none;background:transparent;color:var(--text);font-family:inherit;font-size:13.5px;outline:none}
+.search input.searchinput::placeholder{color:var(--muted)}
 .navlabel{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:14px 10px 4px}
 .navlabel:first-of-type{padding-top:6px}
 .navgroup{display:flex;flex-direction:column;gap:2px}
@@ -657,7 +659,7 @@ textarea.nlinput{resize:vertical}
     <!-- ---------- CHATS ---------- -->
     <div class="view hidden" id="vChats">
       <div class="chatlist">
-        <div class="searchwrap"><div class="search"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M7 2.8a4.2 4.2 0 1 1 0 8.4 4.2 4.2 0 0 1 0-8.4z"/><path d="M10.2 10.2L13.6 13.6"/></svg><span data-i18n="search_conv">Buscar conversación</span></div></div>
+        <div class="searchwrap"><div class="search"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M7 2.8a4.2 4.2 0 1 1 0 8.4 4.2 4.2 0 0 1 0-8.4z"/><path d="M10.2 10.2L13.6 13.6"/></svg><input type="text" id="chatSearch" class="searchinput" data-i18n-ph="search_conv" placeholder="Buscar conversación" oninput="renderChats()"></div></div>
         <div class="items" id="chatItems"></div>
       </div>
       <div class="thread">
@@ -1005,7 +1007,7 @@ es: {
   kpi_travellers:'{p} viajeros en {d} salidas', kpi_breakdown:'{n} nuevos · {q} cotizados · {w} ganados',
   st_new:'Nuevo', st_quoted:'Cotizado', st_won:'Ganado', st_lost:'Perdido', st_noshow:'No-show',
   wait_min:'hace {n} min', wait_h:'hace {n} h', wait_d:'hace {n} d',
-  lead_waiting:'Esperando respuesta', lead_overdue:'Seguimiento vencido', see:'Ver', nothing_pending:'Nada pendiente ahora mismo.',
+  lead_waiting:'Esperando respuesta', lead_overdue:'Seguimiento vencido', see:'Ver', nothing_pending:'Nada pendiente ahora mismo.', no_chat_results:'Sin conversaciones que coincidan.',
   add_lead:'+ Añadir lead', kanban_summary:'{n} leads · {v} en juego',
   loading_conv:'Cargando conversación real…', no_messages:'Sin mensajes todavía', conv_load_error:'No se pudo cargar la conversación',
   send_error:'No se pudo enviar el mensaje.', view_lead:'Ver ficha',
@@ -1021,6 +1023,7 @@ es: {
   hist_delivery_failed:'Envío no entregado', hist_departure_assigned:'Asignado a una salida', hist_departure_removed:'Quitado de la salida',
   hist_email_sent:'Itinerario enviado por email', hist_email_failed:'Fallo al enviar email', hist_review_followup:'Recordatorio de reseña enviado',
   hist_auto_followup:'Seguimiento automático', hist_auto_followup_n:'Intento automático {n}',
+  page_lead:'Ficha de lead', csv_name:'Nombre', csv_package:'Paquete', csv_travel_date:'Fecha viaje',
   summary_hd:'Resumen y siguiente paso', summary_refresh:'Actualizar resumen', summary_loading:'Generando…', summary_empty:'Sin conversación todavía para resumir.',
   summary_err:'No se pudo generar el resumen.', summary_next:'Siguiente paso',
   next_send_quote:'Enviar cotización', next_confirm_date:'Confirmar fecha de viaje', next_follow_up:'Hacer seguimiento',
@@ -1149,7 +1152,7 @@ en: {
   kpi_travellers:'{p} travellers across {d} departures', kpi_breakdown:'{n} new · {q} quoted · {w} won',
   st_new:'New', st_quoted:'Quoted', st_won:'Won', st_lost:'Lost', st_noshow:'No-show',
   wait_min:'{n} min ago', wait_h:'{n} h ago', wait_d:'{n} d ago',
-  lead_waiting:'Waiting for reply', lead_overdue:'Follow-up overdue', see:'View', nothing_pending:'Nothing pending right now.',
+  lead_waiting:'Waiting for reply', lead_overdue:'Follow-up overdue', see:'View', nothing_pending:'Nothing pending right now.', no_chat_results:'No matching conversations.',
   add_lead:'+ Add lead', kanban_summary:'{n} leads · {v} in play',
   loading_conv:'Loading real conversation…', no_messages:'No messages yet', conv_load_error:'Could not load the conversation',
   send_error:'Could not send the message.', view_lead:'View lead',
@@ -1165,6 +1168,7 @@ en: {
   hist_delivery_failed:'Delivery failed', hist_departure_assigned:'Assigned to a departure', hist_departure_removed:'Removed from departure',
   hist_email_sent:'Itinerary emailed', hist_email_failed:'Email failed', hist_review_followup:'Review reminder sent',
   hist_auto_followup:'Automatic follow-up', hist_auto_followup_n:'Automatic attempt {n}',
+  page_lead:'Lead profile', csv_name:'Name', csv_package:'Package', csv_travel_date:'Travel date',
   summary_hd:'Summary and next step', summary_refresh:'Refresh summary', summary_loading:'Generating…', summary_empty:'No conversation yet to summarize.',
   summary_err:'Could not generate the summary.', summary_next:'Next step',
   next_send_quote:'Send quote', next_confirm_date:'Confirm travel date', next_follow_up:'Follow up',
@@ -1261,6 +1265,7 @@ function setLang(lang){
   LANG = lang;
   localStorage.setItem('botpanel_lang', lang);
   applyStaticI18n();
+  document.getElementById('viewTitle').textContent = curView==='operators' ? (opsDb==='tao'?t('nav_tao'):t('nav_operators')) : t(VIEW_TITLE_KEY[curView]||curView);
   if(REAL){ renderRealStats(); renderKpis(); renderChannels(); buildHex(); buildDots(); renderLeadsTbl(); renderKanban(); if(leadsViewMode==='table') renderLeadsTable(); notifItems=buildNotifItems(); renderNotifs(); }
   if(document.getElementById('vChats') && !document.getElementById('vChats').classList.contains('hidden')) renderChats();
   if(curLead) renderLead();
@@ -1460,7 +1465,10 @@ function renderLeadsTbl(){
 }
 let curChatPhone = null;
 function renderChats(){
-  const sorted = leads.filter(l=>!l.archived).sort((a,b)=>(b.lastInboundAt||b.updatedAt||0)-(a.lastInboundAt||a.updatedAt||0)).slice(0,40);
+  const q = (document.getElementById('chatSearch')?.value || '').trim().toLowerCase();
+  let base = leads.filter(l=>!l.archived);
+  if(q) base = base.filter(l => (l.name||'').toLowerCase().includes(q) || (l.phone||'').includes(q) || tourLine(l).toLowerCase().includes(q));
+  const sorted = base.sort((a,b)=>(b.lastInboundAt||b.updatedAt||0)-(a.lastInboundAt||a.updatedAt||0)).slice(0,40);
   if(!curChatPhone && sorted.length) curChatPhone = sorted[0].phone;
   const list = document.getElementById('chatItems');
   list.innerHTML = sorted.map(c=>`
@@ -1470,7 +1478,7 @@ function renderChats(){
         <div class="l1"><span class="nm">${c.name||c.phone}</span><span class="tm">${waitStr(c.lastInboundAt||c.updatedAt)}</span></div>
         <div class="l2"><span class="last">${tourLine(c)}</span>${c.waiting?`<span class="unread">1</span>`:''}</div>
       </div>
-    </div>`).join('');
+    </div>`).join('' ) || `<div style="padding:20px;color:var(--muted);font-size:13.5px;text-align:center">${t('no_chat_results')}</div>`;
   renderThread();
 }
 async function renderThread(){
@@ -1713,7 +1721,7 @@ function openLead(phone){
   renderLead();
   go('lead');
 }
-function fmtHistTime(ts){ return ts ? new Date(ts).toLocaleString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : ''; }
+function fmtHistTime(ts){ return ts ? new Date(ts).toLocaleString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : ''; }
 const HIST_KEY = {created:'hist_created',imported:'hist_imported',status:'hist_status',owner:'hist_owner',appt:'hist_appt',note:'hist_note',tag:'hist_tag',archived:'hist_archived',restored:'hist_restored',enriched:'hist_enriched',payment:'hist_payment',payment_deleted:'hist_payment_deleted',outreach:'hist_outreach',fu_reminded:'hist_fu_reminded',newsletter:'hist_newsletter',deal_new:'hist_deal_new',deal_archived:'hist_deal_archived',deal_status:'hist_deal_status',delivery_failed:'hist_delivery_failed',departure_assigned:'hist_departure_assigned',departure_removed:'hist_departure_removed',email_sent:'hist_email_sent',email_failed:'hist_email_failed',review_followup:'hist_review_followup',auto_followup:'hist_auto_followup'};
 const HIST_LABEL = new Proxy({}, { get: (_, type) => HIST_KEY[type] ? t(HIST_KEY[type]) : type });
 // Icono + color fijos por tipo de evento — antes el punto de la actividad salía de hashColor(ev.type),
@@ -2126,9 +2134,11 @@ function downloadCsv(filename, lines){
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
 }
-const LEAD_CSV_COLS = [['phone','Teléfono'],['name','Nombre'],['email','Email'],['country','País'],['tour','Tour'],['package','Paquete'],['status','Estado'],['dealValue','Valor'],['travelDate','Fecha viaje'],['source','Origen'],['createdAt','Creado']];
+// Cabeceras calculadas al exportar (no una lista fija) para que el CSV salga en el idioma
+// del panel en ese momento, en vez de en español siempre.
+const leadCsvCols = () => [['phone',t('f_phone')],['name',t('csv_name')],['email',t('f_email')],['country',t('f_country')],['tour','Tour'],['package',t('csv_package')],['status',t('th_status')],['dealValue',t('th_value')],['travelDate',t('csv_travel_date')],['source',t('f_origin')],['createdAt',t('f_created')]];
 function exportLeadsCsv(){
-  const cols = LEAD_CSV_COLS;
+  const cols = leadCsvCols();
   const lines = [cols.map(c=>csvCell(c[1])).join(',')];
   leads.filter(l=>!l.archived).forEach(l=>{
     lines.push(cols.map(c=>{
@@ -3045,7 +3055,7 @@ function buildDots(){
       els+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${on?2.3:1.15}" fill="${on?'var(--accent)':'var(--chart-dot-off)'}"/>`;
     }
   });
-  const fmtD = d => d.toLocaleDateString('es-ES',{day:'numeric',month:'short'});
+  const fmtD = d => d.toLocaleDateString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short'});
   [[0,'start'],[0.33,'middle'],[0.66,'middle'],[1,'end']].forEach(([f,an])=>{
     const idx = Math.min(days-1, Math.round(f*(days-1)));
     const x = PL+idx*xs+xs/2;
@@ -3056,9 +3066,11 @@ function buildDots(){
 
 // ================= view switching =================
 const ALL_VIEWS = ['overview','chats','leads','lead','operators','appts','invoices','team','settings','departures','media','newsletter','sim','wtpl'];
-const titles = {overview:'Resumen', chats:'Conversaciones', leads:'Meta Leads', lead:'Ficha de lead',
-  operators:'Operadores B2B', appts:'Citas', invoices:'Facturas', team:'Equipo', settings:'Ajustes',
-  departures:'Salidas', media:'Fotos y vídeos', newsletter:'Newsletter', sim:'Simulador', wtpl:'Plantillas WhatsApp'};
+// Antes esto era un objeto de textos fijos en español -- el título de arriba nunca cambiaba
+// al pasar el panel a inglés. Ahora son claves de I18N, iguales que el resto del panel.
+const VIEW_TITLE_KEY = {overview:'nav_overview', chats:'nav_chats', leads:'nav_leads', lead:'page_lead',
+  appts:'nav_appts', invoices:'nav_invoices', team:'nav_team', settings:'nav_settings',
+  departures:'nav_departures', media:'nav_media', newsletter:'nav_newsletter', sim:'nav_sim', wtpl:'nav_wtpl'};
 const loadedOnce = {};
 let opsDb = 'ops'; // 'ops' (Operadores B2B) | 'tao' (Travel Adventures Operators) -- misma vista, dos agendas
 let prevView = 'overview';
@@ -3074,7 +3086,7 @@ function go(view){
     const matches = el.dataset.view===view && (!el.dataset.db || el.dataset.db===opsDb);
     el.classList.toggle('active', matches);
   });
-  document.getElementById('viewTitle').textContent = view==='operators' ? (opsDb==='tao'?t('nav_tao'):t('nav_operators')) : titles[view];
+  document.getElementById('viewTitle').textContent = view==='operators' ? (opsDb==='tao'?t('nav_tao'):t('nav_operators')) : t(VIEW_TITLE_KEY[view]||view);
   if(view==='chats') renderChats();
   if(view==='operators' && !loadedOnce.operators){ loadedOnce.operators=true; loadOperators(); }
   if(view==='appts' && !loadedOnce.appts){ loadedOnce.appts=true; loadAppts(); }
