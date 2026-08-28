@@ -3203,6 +3203,14 @@ app.get("/admin/v2", (req, res) => {
   if (!ADMIN_V2_HTML) return res.status(503).send("Panel v2: falta panel-v2.html en el despliegue.");
   res.type("html").send(ADMIN_V2_HTML);
 });
+// URLs dedicadas por vista (/admin/v2/leads, /admin/v2/leads/<phone>, /admin/v2/operators/tao...):
+// sirven el mismo panel, la propia página abre la vista correcta al leer su URL (mismo patrón que
+// /admin/db y /admin/dash en el panel v1).
+app.get("/admin/v2/*", (req, res) => {
+  if (!ADMIN_PASSWORD) return res.status(503).send("Panel no configurado: define ADMIN_PASSWORD en Railway.");
+  if (!ADMIN_V2_HTML) return res.status(503).send("Panel v2: falta panel-v2.html en el despliegue.");
+  res.type("html").send(ADMIN_V2_HTML);
+});
 
 // ── CRM: archivar / restaurar un lead (reversible; sale de las vistas) ──
 app.post("/admin/api/archive", async (req, res) => {

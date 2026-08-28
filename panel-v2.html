@@ -693,9 +693,15 @@ textarea.nlinput{resize:vertical}
     <div class="view hidden" id="vLead">
       <div class="back" onclick="goBack()" data-i18n-arrow-l="back">← Volver</div>
       <div class="card ldhero" id="ldHero"></div>
-      <div class="card ldcard" style="margin-bottom:16px">
-        <div class="tlhd"><span class="t" data-i18n="summary_hd">Resumen y siguiente paso</span><span class="a" onclick="loadLeadSummary(curLead.phone,true)" data-i18n="summary_refresh">Actualizar resumen</span></div>
-        <div class="body" id="ldSummary"></div>
+      <div class="ldgrid" style="margin-bottom:16px">
+        <div class="card ldcard">
+          <div class="tlhd"><span class="t" data-i18n="summary_hd">Resumen y siguiente paso</span><span class="a" onclick="loadLeadSummary(curLead.phone,true)" data-i18n="summary_refresh">Actualizar resumen</span></div>
+          <div class="body" id="ldSummary"></div>
+        </div>
+        <div class="card ldcard">
+          <div class="hd" data-i18n="notes_hd">Notas</div>
+          <div class="body" id="ldNotes"></div>
+        </div>
       </div>
       <div class="ldgrid">
         <div class="ldcol">
@@ -710,10 +716,6 @@ textarea.nlinput{resize:vertical}
           <div class="card ldcard">
             <div class="tlhd"><span class="t" data-i18n="pay_hd">Pagos y factura</span><span class="a" onclick="openInvoice(curLead.phone)" data-i18n="pay_invoice">🧾 Factura / recibo</span></div>
             <div class="body" id="ldPayments"></div>
-          </div>
-          <div class="card ldcard">
-            <div class="hd" data-i18n="notes_hd">Notas</div>
-            <div class="body" id="ldNotes"></div>
           </div>
         </div>
         <div class="card ldcard">
@@ -2978,8 +2980,27 @@ function go(view){
   if(view==='sim' && !loadedOnce.sim){ loadedOnce.sim=true; renderSimMsgs(); }
   if(view==='team'){ renderTeam(); } // barato, siempre client-side sobre `leads` ya cargado
   if(view==='settings'){ document.getElementById('setWho').textContent = whoAmI || '—'; }
+  setUrl(viewPath(view));
 }
 function goBack(){ go(prevView==='lead'?'overview':prevView); }
+// ── URL como miga de pan: cada vista deja su rastro en la barra de dirección (mismo patrón
+// que /admin/db y /admin/dash en el panel v1), con replaceState -- no crea historial de "atrás"
+// del navegador a propósito, solo refleja dónde estás.
+function viewPath(view){
+  if(view==='lead') return curLead ? '/admin/v2/leads/'+encodeURIComponent(curLead.phone) : '/admin/v2/leads';
+  if(view==='operators') return '/admin/v2/operators/'+opsDb;
+  return '/admin/v2/'+view;
+}
+function setUrl(p){ try{ history.replaceState(null,'',p); }catch(e){} }
+function openFromUrl(){
+  const parts = location.pathname.replace(/^\/admin\/v2\/?/,'').split('/').filter(Boolean);
+  if(!parts.length) return; // raíz -> Resumen, ya es el default
+  const [seg, sub] = parts;
+  if(seg==='leads' && sub){ const l = leads.find(x=>x.phone===sub); if(l){ openLead(sub); return; } go('leads'); return; }
+  if(seg==='operators'){ openOpsNav(sub==='tao'?'tao':'ops'); return; }
+  if(seg==='lead') return; // nunca se genera solo -- URL a mano, se ignora
+  if(ALL_VIEWS.includes(seg)) go(seg);
+}
 
 document.querySelectorAll('.navitem[data-view]').forEach(el=>{
   el.addEventListener('click', ()=>{
@@ -3023,6 +3044,7 @@ function startApp(){
   const storedWho = sessionStorage.getItem('botpanel_who');
   if(storedWho && OWNER_OPTS.includes(storedWho)){ whoAmI = storedWho; paintWho(); }
   else switchWho();
+  openFromUrl(); // si se entró por una URL de vista concreta (recarga, enlace directo, "atrás"), abrirla
 }
 // startApp() corre FUERA de cualquier try/catch de autenticación a propósito: un bug de
 // render (ej. un id que ya no existe en el HTML) no debe reportarse como "clave incorrecta"
