@@ -211,7 +211,7 @@ table.leadstbl{width:100%;border-collapse:collapse}
 .kancol .hd .nm{font-weight:600;font-size:14px}
 .kancol .hd .cnt{background:var(--card2);border-radius:7px;padding:1px 7px;font-size:12px;font-weight:600;color:var(--muted)}
 .kancol .hd .sum{font-size:12.5px;color:var(--muted);font-weight:500;margin-left:auto}
-.kancards{display:flex;flex-direction:column;gap:10px}
+.kancards{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 280px);overflow-y:auto;padding-right:4px}
 .kancard{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 14px;cursor:pointer}
 .kancard:hover{border-color:var(--border2)}
 .kancard .nm{font-weight:600;font-size:14px}
@@ -711,9 +711,13 @@ textarea.nlinput{resize:vertical}
             <div class="tlhd"><span class="t" data-i18n="pay_hd">Pagos y factura</span><span class="a" onclick="openInvoice(curLead.phone)" data-i18n="pay_invoice">🧾 Factura / recibo</span></div>
             <div class="body" id="ldPayments"></div>
           </div>
+          <div class="card ldcard">
+            <div class="hd" data-i18n="notes_hd">Notas</div>
+            <div class="body" id="ldNotes"></div>
+          </div>
         </div>
         <div class="card ldcard">
-          <div class="tlhd"><span class="t" data-i18n="activity">Actividad</span><span class="a" onclick="fichaAddNote()" data-i18n="add_note">+ Añadir nota</span></div>
+          <div class="tlhd"><span class="t" data-i18n="activity">Actividad</span></div>
           <div class="timeline" id="ldTimeline"></div>
         </div>
       </div>
@@ -954,7 +958,7 @@ es: {
   p_pause:'⏸ Pausar bot', p_resume:'▶ Reanudar bot',
   kanban_tab:'Kanban', table_tab:'Tabla', back:'Volver',
   contact_data:'Datos de contacto', interest:'Interés', activity:'Actividad', add_note:'+ Añadir nota',
-  ask_note:'Nota interna (no la ve el cliente):',
+  ask_note:'Nota interna (no la ve el cliente):', notes_hd:'Notas', no_notes:'Sin notas todavía.', edit_note:'Editar nota',
   loading:'Cargando…', new_operator:'+ Nuevo operador', new_appt:'+ Nueva cita', new_payment:'+ Registrar pago',
   recent_payments:'Pagos recientes', team_hd:'Reparto de leads por persona', team_sub:'calculado de los leads ya cargados',
   session:'Sesión', connected_as:'Conectado como', panel:'Panel', backend:'Backend', backend_val:'mismo que /admin',
@@ -1092,7 +1096,7 @@ en: {
   p_pause:'⏸ Pause bot', p_resume:'▶ Resume bot',
   kanban_tab:'Kanban', table_tab:'Table', back:'Back',
   contact_data:'Contact info', interest:'Interest', activity:'Activity', add_note:'+ Add note',
-  ask_note:'Internal note (the client never sees this):',
+  ask_note:'Internal note (the client never sees this):', notes_hd:'Notes', no_notes:'No notes yet.', edit_note:'Edit note',
   loading:'Loading…', new_operator:'+ New operator', new_appt:'+ New appointment', new_payment:'+ Log payment',
   recent_payments:'Recent payments', team_hd:'Lead split by teammate', team_sub:'computed from already-loaded leads',
   session:'Session', connected_as:'Signed in as', panel:'Panel', backend:'Backend', backend_val:'same as /admin',
@@ -1726,6 +1730,14 @@ function renderLead(){
     </div>`).join('') : `<div style="padding:8px 0;color:var(--muted);font-size:13px">${t('no_activity')}</div>`;
   loadLeadSummary(l.phone);
   document.getElementById('ldPayments').innerHTML = renderPaymentsCard(l);
+  document.getElementById('ldNotes').innerHTML = renderNotesCard(l);
+}
+function renderNotesCard(l){
+  const has = !!(l.notes && l.notes.trim());
+  const body = has
+    ? `<div style="white-space:pre-wrap;font-size:13.5px;line-height:1.5;padding:2px 0 12px">${esc(l.notes)}</div>`
+    : `<div style="color:var(--muted);font-size:13px;padding:2px 0 12px">${t('no_notes')}</div>`;
+  return `${body}<button class="btn dark" onclick="fichaAddNote()" style="width:100%;justify-content:center">${has ? t('edit_note') : t('add_note')}</button>`;
 }
 
 // ── Qué ha comprado / cuánto ha pagado / cuánto debe — mismo cálculo que `paxPayment()`
@@ -1784,9 +1796,8 @@ async function fichaDealAction(dealId, status){
 }
 async function fichaAddNote(){
   if(!curLead) return;
-  const text = await askNote(t('ask_note'));
+  const text = await askNote(t('ask_note'), curLead.notes||'');
   if(text==null) return;
-  if(!text.trim()) return;
   try{
     const r = await fetch('/admin/api/note', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:curLead.phone, notes:text.trim()}) });
     if(!r.ok) throw 0;
@@ -1912,7 +1923,7 @@ function askPrompt(message, defaultValue){
     ov.onclick = e => { if(e.target===ov) close(null); };
   });
 }
-function askNote(message){
+function askNote(message, defaultValue){
   return new Promise(resolve=>{
     const ov = document.createElement('div'); ov.className = 'modalov';
     ov.innerHTML = `<div class="modalbox">
@@ -1923,7 +1934,8 @@ function askNote(message){
     ov.querySelector('.modalmsg').textContent = message;
     document.body.appendChild(ov);
     const input = ov.querySelector('#modalInput');
-    input.focus();
+    input.value = defaultValue==null ? '' : defaultValue;
+    input.focus(); input.select();
     const close = v => { ov.classList.add('out'); setTimeout(()=>ov.remove(), 150); resolve(v); };
     ov.querySelector('#modalCancel').onclick = () => close(null);
     ov.querySelector('#modalOk').onclick = () => close(input.value);
