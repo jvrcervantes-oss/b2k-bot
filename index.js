@@ -19,6 +19,7 @@ const {
   WHATSAPP_TOKEN,
   WHATSAPP_PHONE_ID,
   WHATSAPP_VERIFY_TOKEN,
+  WABA_ID,                 // WhatsApp Business Account (distinto del phone ID) -- solo para leer message_templates
   META_APP_SECRET,         // App Secret de la app de Meta — activa la verificación X-Hub-Signature-256 de los POST del webhook
   SUBSCRIBE_TOKEN,         // token propio (NO la admin key) para el alta pública de suscriptores desde subscribe.php
   ANTHROPIC_API_KEY,
@@ -3550,6 +3551,24 @@ app.get("/admin/api/brevo-templates", async (req, res) => {
     const r = await axios.get("https://api.brevo.com/v3/smtp/templates?templateStatus=true&limit=200&sort=desc",
       { headers: { "api-key": (BREVO_API_KEY || "").trim(), accept: "application/json" }, timeout: 15000 });
     res.json((r.data.templates || []).map((t) => ({ id: t.id, name: t.name, subject: t.subject })));
+  } catch (e) {
+    res.status(502).json({ error: e.response?.data ? JSON.stringify(e.response.data) : e.message });
+  }
+});
+
+// Plantillas de WhatsApp (Meta), solo lectura -- las crea/edita Meta Business Manager, aquí solo
+// se listan para ver qué hay de alta y su estado real (approved/pending/rejected).
+app.get("/admin/api/wa-templates", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  if (!WABA_ID || !WHATSAPP_TOKEN) return res.status(400).json({ error: "Falta WABA_ID o WHATSAPP_TOKEN en Railway." });
+  try {
+    const r = await axios.get(`https://graph.facebook.com/v21.0/${WABA_ID}/message_templates?limit=100`,
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, timeout: 15000 });
+    const list = (r.data.data || []).map((tpl) => ({
+      id: tpl.id, name: tpl.name, language: tpl.language, category: tpl.category, status: tpl.status,
+      body: (tpl.components || []).find((c) => c.type === "BODY")?.text || "",
+    }));
+    res.json(list);
   } catch (e) {
     res.status(502).json({ error: e.response?.data ? JSON.stringify(e.response.data) : e.message });
   }

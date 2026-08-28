@@ -533,6 +533,10 @@ textarea.nlinput{resize:vertical}
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M14 8c0 2.9-2.7 5.3-6 5.3-.7 0-1.4-.1-2-.3L2 14l.9-2.5C2.3 10.6 2 9.6 2 8.5 2 5.6 4.7 3.3 8 3.3s6 2.3 6 5.2z"/><path d="M5.3 8h.01M8 8h.01M10.7 8h.01"/></svg>
         <span class="lbl" data-i18n="nav_sim">Simulador</span>
       </div>
+      <div class="navitem" data-view="wtpl">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.6 3.4h10.8v6.8H7.2L4.4 12.6v-2.4H2.6z"/><path d="M5.3 6.6l1.3 1.3 2.4-2.6"/></svg>
+        <span class="lbl" data-i18n="nav_wtpl">Plantillas WhatsApp</span>
+      </div>
     </div>
 
     <div class="navlabel" data-i18n="nav_account">Cuenta</div>
@@ -912,6 +916,18 @@ textarea.nlinput{resize:vertical}
         </div>
       </div>
     </div>
+
+    <!-- ---------- PLANTILLAS WHATSAPP (Meta, solo lectura) ---------- -->
+    <div class="view hidden" id="vWtpl">
+      <div style="padding:18px 28px 30px">
+        <div class="filters">
+          <span style="font-size:13px;color:var(--muted)" data-i18n="wtpl_help">Plantillas de mensaje de Meta para este número — se crean y aprueban en Meta Business Manager, aquí solo se listan.</span>
+          <span style="flex:1"></span>
+          <span style="font-size:13px;color:var(--muted)" id="wtplSummary" data-i18n="loading">Cargando…</span>
+        </div>
+        <div id="wtplList" style="display:flex;flex-direction:column;gap:10px"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -939,7 +955,9 @@ es: {
   nav_essentials:'Esenciales', nav_overview:'Resumen', nav_chats:'Conversaciones',
   nav_daniel:'Daniel (agente IA)', nav_b2c:'B2C', nav_b2b:'B2B', nav_bot:'BOT', nav_leads:'Meta Leads', nav_operators:'Operadores B2B',
   nav_appts:'Citas', nav_invoices:'Facturas', nav_account:'Cuenta', nav_team:'Equipo', nav_settings:'Ajustes',
-  nav_departures:'Salidas', nav_tao:'Travel Adv.', nav_media:'Fotos y vídeos', nav_newsletter:'Newsletter', nav_sim:'Simulador',
+  nav_departures:'Salidas', nav_tao:'Travel Adv.', nav_media:'Fotos y vídeos', nav_newsletter:'Newsletter', nav_sim:'Simulador', nav_wtpl:'Plantillas WhatsApp',
+  wtpl_help:'Plantillas de mensaje de Meta para este número — se crean y aprueban en Meta Business Manager, aquí solo se listan.',
+  wtpl_count:'{n} plantillas', wtpl_empty:'Sin plantillas, o no se pudieron cargar (revisa WABA_ID / WHATSAPP_TOKEN en Railway).',
   setup_action:'Conectar', setup_ttl:'Termina la configuración',
   setup_desc:'Conecta Google Calendar para sincronizar las citas que agenda Daniel.',
   setup_ok_ttl:'Calendar ya está conectado', setup_ok_desc:'Las citas que se agendan desde aquí ya se sincronizan solas.',
@@ -1080,7 +1098,9 @@ en: {
   nav_essentials:'Essentials', nav_overview:'Overview', nav_chats:'Conversations',
   nav_daniel:'Daniel (AI agent)', nav_b2c:'B2C', nav_b2b:'B2B', nav_bot:'BOT', nav_leads:'Meta Leads', nav_operators:'B2B Operators',
   nav_appts:'Appointments', nav_invoices:'Invoices', nav_account:'Account', nav_team:'Team', nav_settings:'Settings',
-  nav_departures:'Departures', nav_tao:'Travel Adv.', nav_media:'Photos & videos', nav_newsletter:'Newsletter', nav_sim:'Simulator',
+  nav_departures:'Departures', nav_tao:'Travel Adv.', nav_media:'Photos & videos', nav_newsletter:'Newsletter', nav_sim:'Simulator', nav_wtpl:'WhatsApp Templates',
+  wtpl_help:'Meta message templates for this number — created and approved in Meta Business Manager, listed here read-only.',
+  wtpl_count:'{n} templates', wtpl_empty:'No templates, or they could not be loaded (check WABA_ID / WHATSAPP_TOKEN on Railway).',
   setup_action:'Connect', setup_ttl:'Finish setup',
   setup_desc:'Connect Google Calendar to sync the appointments Daniel books.',
   setup_ok_ttl:'Calendar already connected', setup_ok_desc:'Appointments booked from here already sync automatically.',
@@ -2759,6 +2779,32 @@ async function scheduleNewsletterFlow(){
     await loadNewsletterView();
   }catch(e){ showToast(t('nl_send_error')+(e.message?(': '+e.message):'')); }
 }
+// ── Plantillas de WhatsApp (Meta) -- solo lectura, se crean/editan en Business Manager ──
+let waTemplates = [];
+const WTPL_STATUS_COLOR = { APPROVED:CG, PENDING:CO, IN_APPEAL:CO, REJECTED:RED, PAUSED:GR, DISABLED:GR };
+async function loadWaTemplates(){
+  document.getElementById('wtplSummary').textContent = t('loading');
+  try{
+    const r = await fetch('/admin/api/wa-templates', {headers:{'X-Admin-Key':sessionKey}});
+    waTemplates = r.ok ? await r.json() : [];
+  }catch(e){ waTemplates = []; }
+  renderWaTemplates();
+}
+function renderWaTemplates(){
+  document.getElementById('wtplSummary').textContent = t('wtpl_count',{n:waTemplates.length});
+  document.getElementById('wtplList').innerHTML = waTemplates.length ? waTemplates.map(tp=>{
+    const color = WTPL_STATUS_COLOR[tp.status] || GR;
+    return `<div class="card ldcard" style="padding:14px 18px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <b style="font-size:14px">${esc(tp.name)}</b>
+        <span class="stbadge" style="background:color-mix(in srgb, ${color} 18%, transparent);color:${color}">${esc(tp.status||'—')}</span>
+        <span class="tourpill">${esc(tp.category||'—')}</span>
+        <span style="font-size:12px;color:var(--muted)">${esc(tp.language||'—')}</span>
+      </div>
+      <div style="font-size:13px;color:var(--text);margin-top:8px;line-height:1.5">${esc(tp.body||'')}</div>
+    </div>`;
+  }).join('') : `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('wtpl_empty')}</div>`;
+}
 async function cancelScheduledFlow(id){
   if(!await askConfirm(t('nl_confirm_cancel'))) return;
   try{
@@ -3006,10 +3052,10 @@ function buildDots(){
 }
 
 // ================= view switching =================
-const ALL_VIEWS = ['overview','chats','leads','lead','operators','appts','invoices','team','settings','departures','media','newsletter','sim'];
+const ALL_VIEWS = ['overview','chats','leads','lead','operators','appts','invoices','team','settings','departures','media','newsletter','sim','wtpl'];
 const titles = {overview:'Resumen', chats:'Conversaciones', leads:'Meta Leads', lead:'Ficha de lead',
   operators:'Operadores B2B', appts:'Citas', invoices:'Facturas', team:'Equipo', settings:'Ajustes',
-  departures:'Salidas', media:'Fotos y vídeos', newsletter:'Newsletter', sim:'Simulador'};
+  departures:'Salidas', media:'Fotos y vídeos', newsletter:'Newsletter', sim:'Simulador', wtpl:'Plantillas WhatsApp'};
 const loadedOnce = {};
 let opsDb = 'ops'; // 'ops' (Operadores B2B) | 'tao' (Travel Adventures Operators) -- misma vista, dos agendas
 let prevView = 'overview';
@@ -3034,6 +3080,7 @@ function go(view){
   if(view==='media' && !loadedOnce.media){ loadedOnce.media=true; loadMedia(); }
   if(view==='newsletter' && !loadedOnce.newsletter){ loadedOnce.newsletter=true; loadNewsletterView(); }
   if(view==='sim' && !loadedOnce.sim){ loadedOnce.sim=true; renderSimMsgs(); }
+  if(view==='wtpl' && !loadedOnce.wtpl){ loadedOnce.wtpl=true; loadWaTemplates(); }
   if(view==='team'){ renderTeam(); } // barato, siempre client-side sobre `leads` ya cargado
   if(view==='settings'){ document.getElementById('setWho').textContent = whoAmI || '—'; }
   setUrl(viewPath(view));
