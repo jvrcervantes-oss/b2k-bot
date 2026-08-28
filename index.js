@@ -47,6 +47,8 @@ const {
   BBM_API_URL,             // base del ERP del cliente (https://bbm-erp.vercel.app) — pushInquiryToERP
   BBM_API_KEY,             // key bbmk_ (read+inquiry) del ERP — el bot registra leads como Inquiry (Phase 1)
   ADMIN_PASSWORD,
+  TELEGRAM_BOT_TOKEN,      // vigilante compartido del estudio (mismo bot/chat que B2K) — aviso fuera de WhatsApp
+  TELEGRAM_CHAT_ID,
   ALERT_TEMPLATE_NAME,
   ALERT_TEMPLATE_LANG,
   ALERT_TEMPLATE_VARS,
@@ -1272,6 +1274,7 @@ async function followUpReminderTick() {
       const who = l.name || ("+" + l.phone);
       const extra = [l.package, l.owner ? "· " + l.owner : ""].filter(Boolean).join(" ");
       await sendWhatsApp(OWNER_PHONE, `📅 ${PROJECT_NAME} — Seguimiento pendiente\n\n*${who}* ${extra}\nTel: +${l.phone}\nVencía: ${fu}\n\nToca contactarle 👇`);
+      await notifyTelegram(`📅 Seguimiento pendiente\n${who} ${extra}\nTel: +${l.phone}\nVencía: ${fu}`);
       await updateLeadFields(l.phone, { fuReminded: fu });
       await logEvent(l.phone, "fu_reminded", { date: fu });
       console.log(`[${PROJECT_NAME}] Recordatorio de seguimiento (owner) para ${l.phone} — vencía ${fu}`);
@@ -2264,12 +2267,25 @@ async function sendIntro(phone) {
 }
 
 // Avisa al owner. Usa plantilla si está configurada; si no, texto libre (solo llega si su ventana 24h está abierta).
+// Canal de aviso compartido del estudio (mismo bot/chat de Telegram que ya usa B2K) — no depende
+// de plantillas de Meta ni de la ventana de 24h de WhatsApp, así que sigue funcionando aunque
+// ALERT_TEMPLATE_NAME no esté puesta. Best-effort: un fallo aquí nunca tumba el flujo que lo llama.
+async function notifyTelegram(text) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
+  try {
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, { chat_id: TELEGRAM_CHAT_ID, text: `🏍️ [${PROJECT_NAME}] ${text}` });
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] Error notificando a Telegram: ${e.message}`);
+  }
+}
+
 async function notifyOwner(kind, lead) {
-  if (!OWNER_PHONE) return;
   const label = kind === "booking" ? "🔔 LEAD CALIENTE — quiere reservar" : "🟡 Nuevo cliente interesado";
   const who = lead.name || lead.phone;
   const msg = lead.lastMessage || "";
+  await notifyTelegram(`${label}\n${who}\nÚltimo mensaje: "${msg}"`);
 
+  if (!OWNER_PHONE) return;
   if (ALERT_TEMPLATE_NAME) {
     const vars = ALERT_TEMPLATE_VARS != null ? parseInt(ALERT_TEMPLATE_VARS) : 2;
     let params = [];
@@ -2417,7 +2433,7 @@ async function markLeadPaid(phone, provider, amountIDR, receiptUrl) {
     console.error(`[${PROJECT_NAME}] No se pudo confirmar el pago al cliente ${phone}: ${rCust.error}`);
   }
 
-  if (OWNER_PHONE) {
+  {
     // El cliente (Dion, 22-jul) decidió crear las reservas A MANO en su ERP: el bot cobra pero no
     // hace booking. Este aviso es, por tanto, el traspaso al equipo — así que lleva TODO lo que
     // necesitan para teclear la reserva sin ir a buscarlo al panel: moto, fechas, entrega y seguro.
@@ -2429,13 +2445,12 @@ async function markLeadPaid(phone, provider, amountIDR, receiptUrl) {
       d.deliveryLocation && `Entrega: ${d.deliveryLocation}`,
       d.insuranceTier && `Seguro: ${d.insuranceTier}`,
     ].filter(Boolean).join("\n") : "";
-    await sendWhatsApp(
-      OWNER_PHONE,
-      `💰 ${PROJECT_NAME} — PAGO RECIBIDO (${provider === "xendit" ? "Xendit" : "Stripe"})\n\n*${(lead && lead.name) || phone}*\nTel: +${phone}\nImporte: ${Math.round(amountIDR).toLocaleString("id-ID")} IDR`
+    const textoPago = `💰 PAGO RECIBIDO (${provider === "xendit" ? "Xendit" : "Stripe"})\n\n*${(lead && lead.name) || phone}*\nTel: +${phone}\nImporte: ${Math.round(amountIDR).toLocaleString("id-ID")} IDR`
       + (detalle ? `\n\n${detalle}` : "")
       + `\n\nMarcado como Ganado en el CRM automáticamente.`
-      + (BOT_VERTICAL === "rental" ? `\n⚠️ Falta crear la reserva en el ERP (el bot no la crea).` : "")
-    );
+      + (BOT_VERTICAL === "rental" ? `\n⚠️ Falta crear la reserva en el ERP (el bot no la crea).` : "");
+    await notifyTelegram(textoPago);
+    if (OWNER_PHONE) await sendWhatsApp(OWNER_PHONE, `${textoPago.replace("💰 PAGO", `💰 ${PROJECT_NAME} — PAGO`)}`);
   }
 }
 
