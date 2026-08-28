@@ -995,7 +995,7 @@ es: {
   next_send_quote:'Enviar cotización', next_confirm_date:'Confirmar fecha de viaje', next_follow_up:'Hacer seguimiento',
   next_escalate_human:'Escalar a una persona', next_wait_customer:'Esperar respuesta del cliente', next_none:'Sin acción sugerida',
   pay_hd:'Pagos y factura', pay_invoice:'🧾 Factura / recibo', no_deals:'Sin ventas registradas todavía.',
-  pay_total:'Precio', pay_paid:'Pagado', pay_pending:'Pendiente', total:'Total',
+  pay_total:'Precio', pay_paid:'Pagado', pay_pending:'Pendiente', total:'Total', pay_total_ph:'Precio total', save:'Guardar',
   pay_state_paid:'Pagado', pay_state_partial:'Pago parcial', pay_state_unpaid:'Pendiente de pago', pay_state_unpriced:'Sin precio cerrado',
   m_wise:'Wise', m_cash:'Efectivo', m_stripe:'Stripe', m_other:'Otro',
   k_deposit:'Depósito', k_balance:'Resto', k_other:'Otro',
@@ -1133,7 +1133,7 @@ en: {
   next_send_quote:'Send quote', next_confirm_date:'Confirm travel date', next_follow_up:'Follow up',
   next_escalate_human:'Escalate to a person', next_wait_customer:'Wait for customer reply', next_none:'No action suggested',
   pay_hd:'Payments and invoice', pay_invoice:'🧾 Invoice / receipt', no_deals:'No sales logged yet.',
-  pay_total:'Price', pay_paid:'Paid', pay_pending:'Pending', total:'Total',
+  pay_total:'Price', pay_paid:'Paid', pay_pending:'Pending', total:'Total', pay_total_ph:'Total price', save:'Save',
   pay_state_paid:'Paid', pay_state_partial:'Partially paid', pay_state_unpaid:'Payment pending', pay_state_unpriced:'No price set yet',
   m_wise:'Wise', m_cash:'Cash', m_stripe:'Stripe', m_other:'Other',
   k_deposit:'Deposit', k_balance:'Balance', k_other:'Other',
@@ -1775,7 +1775,10 @@ function renderPaymentsCard(l){
   return `
     <div style="padding-bottom:6px">${dealsHtml}</div>
     <div style="display:flex;gap:16px;padding:8px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin:6px 0">
-      <div><div style="font-size:11.5px;color:var(--muted)">${t('pay_total')}</div><div style="font-weight:700">${pt.expected?fmt(pt.expected):'—'}</div></div>
+      <div><div style="font-size:11.5px;color:var(--muted)">${t('pay_total')}</div><div style="display:flex;gap:4px;align-items:center">
+        <input id="dealValueInput" type="number" min="0" step="10" value="${l.dealValue?parseInt(l.dealValue,10):''}" placeholder="${t('pay_total_ph')}" style="width:88px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:inherit;font-weight:700;font-size:13px">
+        <button class="actbtn" style="width:auto;padding:3px 8px;font-size:11px" onclick="fichaSetDealValue()">${t('save')}</button>
+      </div></div>
       <div><div style="font-size:11.5px;color:var(--muted)">${t('pay_paid')}</div><div style="font-weight:700;color:${CG}">${fmt(pt.paid)}</div></div>
       <div><div style="font-size:11.5px;color:var(--muted)">${t('pay_pending')}</div><div style="font-weight:700;color:${pt.pending>0?RED:CG}">${fmt(pt.pending)}</div></div>
       <div style="align-self:center"><span class="stbadge" style="background:color-mix(in srgb, ${pt.state==='paid'?CG:pt.state==='partial'?CO:pt.state==='unpaid'?RED:GR} 18%, transparent);color:${pt.state==='paid'?CG:pt.state==='partial'?CO:pt.state==='unpaid'?RED:GR}">${t('pay_state_'+pt.state)}</span></div>
@@ -1787,6 +1790,16 @@ function renderPaymentsCard(l){
       <select id="payKind" style="padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:var(--card);color:inherit"><option value="deposit">${t('k_deposit')}</option><option value="balance">${t('k_balance')}</option><option value="other">${t('k_other')}</option></select>
       <button class="actbtn" style="width:auto;padding:7px 12px" onclick="fichaAddPayment()">${t('btn_add_pay')}</button>
     </div>`;
+}
+async function fichaSetDealValue(){
+  if(!curLead) return;
+  const raw = document.getElementById('dealValueInput').value;
+  const n = parseInt(String(raw).replace(/\D/g,''),10);
+  try{
+    const r = await fetch('/admin/api/lead', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:curLead.phone, dealValue: isNaN(n)?0:n}) });
+    if(!r.ok) throw 0;
+    await refreshLeads(); openLead(curLead.phone); renderKanban();
+  }catch(e){ showToast(t('err_status')); }
 }
 async function fichaDealAction(dealId, status){
   if(!curLead) return;
