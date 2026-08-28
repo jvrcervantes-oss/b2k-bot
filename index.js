@@ -2825,7 +2825,7 @@ app.post("/admin/api/note", async (req, res) => {
   if (!phone) return res.status(400).json({ error: "phone requerido" });
   await setNotes(phone, notes || "");
   writeLeadToSheet(phone, { notes: notes || "" }); // best-effort, no bloquea la respuesta
-  logEvent(phone, "note");
+  logEvent(phone, "note", { notes: notes || "" }); // el texto viaja en el evento para que el timeline lo muestre
   res.json({ ok: true });
 });
 

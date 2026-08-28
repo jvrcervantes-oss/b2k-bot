@@ -370,6 +370,9 @@ textarea.nlinput{resize:vertical}
 .pager .pgbtns button{width:28px;height:28px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:12.5px;display:flex;align-items:center;justify-content:center}
 .pager .pgbtns button:disabled{opacity:.4;cursor:default}
 .pager .pgnum{padding:0 8px;font-weight:600;color:var(--text)}
+.kancol .pager{flex-wrap:wrap;padding:8px 2px 2px;gap:6px}
+.kancol .pager .pgbtns{margin-left:0}
+.kancol .pager button{width:24px;height:24px}
 
 /* ---------- kanban: arrastrar entre columnas ---------- */
 .kancol.dragover .kancards{outline:2px dashed var(--accent);outline-offset:-4px;border-radius:10px}
@@ -702,7 +705,7 @@ textarea.nlinput{resize:vertical}
           </div>
         </div>
         <div class="card ldcard">
-          <div class="tlhd"><span class="t" data-i18n="activity">Actividad</span><span class="a" data-i18n="add_note">+ Añadir nota</span></div>
+          <div class="tlhd"><span class="t" data-i18n="activity">Actividad</span><span class="a" onclick="fichaAddNote()" data-i18n="add_note">+ Añadir nota</span></div>
           <div class="timeline" id="ldTimeline"></div>
         </div>
       </div>
@@ -943,6 +946,7 @@ es: {
   p_pause:'⏸ Pausar bot', p_resume:'▶ Reanudar bot',
   kanban_tab:'Kanban', table_tab:'Tabla', back:'Volver',
   contact_data:'Datos de contacto', interest:'Interés', activity:'Actividad', add_note:'+ Añadir nota',
+  ask_note:'Nota interna (no la ve el cliente):',
   loading:'Cargando…', new_operator:'+ Nuevo operador', new_appt:'+ Nueva cita', new_payment:'+ Registrar pago',
   recent_payments:'Pagos recientes', team_hd:'Reparto de leads por persona', team_sub:'calculado de los leads ya cargados',
   session:'Sesión', connected_as:'Conectado como', panel:'Panel', backend:'Backend', backend_val:'mismo que /admin',
@@ -1080,6 +1084,7 @@ en: {
   p_pause:'⏸ Pause bot', p_resume:'▶ Resume bot',
   kanban_tab:'Kanban', table_tab:'Table', back:'Back',
   contact_data:'Contact info', interest:'Interest', activity:'Activity', add_note:'+ Add note',
+  ask_note:'Internal note (the client never sees this):',
   loading:'Loading…', new_operator:'+ New operator', new_appt:'+ New appointment', new_payment:'+ Log payment',
   recent_payments:'Recent payments', team_hd:'Lead split by teammate', team_sub:'computed from already-loaded leads',
   session:'Session', connected_as:'Signed in as', panel:'Panel', backend:'Backend', backend_val:'same as /admin',
@@ -1566,21 +1571,24 @@ async function sendMessage(){
 }
 
 const KAN_ORDER = ['new','quoted','won','lost','noshow'];
+const KAN_PAGE_SIZE = 10;
 function renderKanban(){
   const order = KAN_ORDER;
   const inCol = (l,st) => st==='new' ? (!l.status || l.status==='new') : l.status===st;
   const cols = order.map(st=>({
     st, name: STATUS_LABEL[st], dot: STATUS_DOT[st],
-    cards: leads.filter(l=>!l.archived && inCol(l,st))
+    cards: leads.filter(l=>!l.archived && inCol(l,st)).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0))
   }));
   let total=0, sumAll=0;
   document.getElementById('kanban').innerHTML = cols.map(col=>{
     const sum = col.cards.reduce((a,c)=>a+(parseInt(c.dealValue,10)||0),0);
     total += col.cards.length; sumAll += sum;
+    const pkey = 'kan_'+col.st;
+    const p = paginate(pkey, col.cards, KAN_PAGE_SIZE);
     return `<div class="kancol" data-status="${col.st}" ondragover="kOver(event)" ondragleave="kLeave(event)" ondrop="kDrop(event)">
       <div class="hd"><span class="dot" style="background:${col.dot}"></span><span class="nm">${col.name}</span><span class="cnt">${col.cards.length}</span><span class="sum">${fmt(sum)}</span></div>
       <div class="kancards">
-        ${col.cards.map(cd=>`
+        ${p.items.map(cd=>`
           <div class="kancard" draggable="true" data-phone="${cd.phone}" ondragstart="kDrag(event)" onclick="openLead('${cd.phone}')">
             <div class="nm">${cd.name||cd.phone}</div>
             <span class="tour">${tourLine(cd)}</span>
@@ -1591,6 +1599,7 @@ function renderKanban(){
           </div>`).join('')}
         <div class="addcard" onclick="newLeadFlow()">${t('add_lead')}</div>
       </div>
+      ${pagerHtml(pkey, p)}
     </div>`;
   }).join('');
   document.getElementById('kanbanSummary').textContent = t('kanban_summary',{n:total, v:fmt(sumAll)});
@@ -1765,6 +1774,17 @@ async function fichaDealAction(dealId, status){
     await refreshLeads(); openLead(curLead.phone); renderKanban();
   }catch(e){ showToast(t('err_status')); }
 }
+async function fichaAddNote(){
+  if(!curLead) return;
+  const text = await askNote(t('ask_note'));
+  if(text==null) return;
+  if(!text.trim()) return;
+  try{
+    const r = await fetch('/admin/api/note', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:curLead.phone, notes:text.trim()}) });
+    if(!r.ok) throw 0;
+    await refreshLeads(); openLead(curLead.phone);
+  }catch(e){ showToast(t('err_status')); }
+}
 async function fichaAddPayment(){
   if(!curLead) return;
   const amt = parseFloat(document.getElementById('payAmt').value);
@@ -1884,6 +1904,25 @@ function askPrompt(message, defaultValue){
     ov.onclick = e => { if(e.target===ov) close(null); };
   });
 }
+function askNote(message){
+  return new Promise(resolve=>{
+    const ov = document.createElement('div'); ov.className = 'modalov';
+    ov.innerHTML = `<div class="modalbox">
+      <div class="modalmsg"></div>
+      <textarea class="nlinput" id="modalInput" rows="4"></textarea>
+      <div class="modalbtns"><button class="ghost" id="modalCancel">${t('btn_cancel')}</button><button class="primary" id="modalOk">${t('btn_ok')}</button></div>
+    </div>`;
+    ov.querySelector('.modalmsg').textContent = message;
+    document.body.appendChild(ov);
+    const input = ov.querySelector('#modalInput');
+    input.focus();
+    const close = v => { ov.classList.add('out'); setTimeout(()=>ov.remove(), 150); resolve(v); };
+    ov.querySelector('#modalCancel').onclick = () => close(null);
+    ov.querySelector('#modalOk').onclick = () => close(input.value);
+    input.onkeydown = e => { if(e.key==='Escape') close(null); if(e.key==='Enter' && (e.metaKey||e.ctrlKey)) close(input.value); };
+    ov.onclick = e => { if(e.target===ov) close(null); };
+  });
+}
 function askConfirm(message, opts){
   opts = opts || {};
   return new Promise(resolve=>{
@@ -1944,6 +1983,7 @@ Object.assign(PAGE_RENDER, {
   pay: ()=>renderInvoices(), dep: ()=>renderDepartures(), media: ()=>renderMedia(),
   nlSched: ()=>renderNewsletter(), nlHist: ()=>renderNewsletter(), subs: ()=>renderNewsletter(),
 });
+KAN_ORDER.forEach(st=>{ PAGE_RENDER['kan_'+st] = ()=>renderKanban(); });
 
 async function markWonFlow(phone){
   if(!await askConfirm(t('confirm_won'))) return;
