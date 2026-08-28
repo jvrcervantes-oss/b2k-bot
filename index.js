@@ -1250,6 +1250,10 @@ async function followupTick() {
       const params = isHot ? [firstNameOf(l), reviewSubject(l)] : (nVars >= 1 ? [firstNameOf(l)] : []);
       await sendWhatsAppTemplate(l.phone, tplName, tplLang, params);
       await setFollowupCount(l.phone, sent + 1);
+      // Este tick nunca dejaba rastro en la ficha -- desde el panel no había forma de saber si el
+      // seguimiento automático se había disparado o no (a diferencia de fu_reminded/review_followup,
+      // que sí quedan en el timeline). Sin esto, "¿hace follow-up el bot?" no se podía responder mirando la ficha.
+      await logEvent(l.phone, "auto_followup", { n: sent + 1, hot: isHot, template: tplName });
       console.log(`[${PROJECT_NAME}] Follow-up ${isHot ? "urgente" : ""} ${sent + 1}/${maxN} enviado a ${l.phone} (frío ${coldH.toFixed(0)}h)`);
     }
   } catch (e) {

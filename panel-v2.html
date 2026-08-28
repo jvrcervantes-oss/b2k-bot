@@ -1020,6 +1020,7 @@ es: {
   hist_deal_new:'Nueva venta abierta', hist_deal_archived:'Venta archivada', hist_deal_status:'Cambio de estado de venta',
   hist_delivery_failed:'Envío no entregado', hist_departure_assigned:'Asignado a una salida', hist_departure_removed:'Quitado de la salida',
   hist_email_sent:'Itinerario enviado por email', hist_email_failed:'Fallo al enviar email', hist_review_followup:'Recordatorio de reseña enviado',
+  hist_auto_followup:'Seguimiento automático', hist_auto_followup_n:'Intento automático {n}',
   summary_hd:'Resumen y siguiente paso', summary_refresh:'Actualizar resumen', summary_loading:'Generando…', summary_empty:'Sin conversación todavía para resumir.',
   summary_err:'No se pudo generar el resumen.', summary_next:'Siguiente paso',
   next_send_quote:'Enviar cotización', next_confirm_date:'Confirmar fecha de viaje', next_follow_up:'Hacer seguimiento',
@@ -1163,6 +1164,7 @@ en: {
   hist_deal_new:'New deal opened', hist_deal_archived:'Deal archived', hist_deal_status:'Deal status change',
   hist_delivery_failed:'Delivery failed', hist_departure_assigned:'Assigned to a departure', hist_departure_removed:'Removed from departure',
   hist_email_sent:'Itinerary emailed', hist_email_failed:'Email failed', hist_review_followup:'Review reminder sent',
+  hist_auto_followup:'Automatic follow-up', hist_auto_followup_n:'Automatic attempt {n}',
   summary_hd:'Summary and next step', summary_refresh:'Refresh summary', summary_loading:'Generating…', summary_empty:'No conversation yet to summarize.',
   summary_err:'Could not generate the summary.', summary_next:'Next step',
   next_send_quote:'Send quote', next_confirm_date:'Confirm travel date', next_follow_up:'Follow up',
@@ -1712,12 +1714,12 @@ function openLead(phone){
   go('lead');
 }
 function fmtHistTime(ts){ return ts ? new Date(ts).toLocaleString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : ''; }
-const HIST_KEY = {created:'hist_created',imported:'hist_imported',status:'hist_status',owner:'hist_owner',appt:'hist_appt',note:'hist_note',tag:'hist_tag',archived:'hist_archived',restored:'hist_restored',enriched:'hist_enriched',payment:'hist_payment',payment_deleted:'hist_payment_deleted',outreach:'hist_outreach',fu_reminded:'hist_fu_reminded',newsletter:'hist_newsletter',deal_new:'hist_deal_new',deal_archived:'hist_deal_archived',deal_status:'hist_deal_status',delivery_failed:'hist_delivery_failed',departure_assigned:'hist_departure_assigned',departure_removed:'hist_departure_removed',email_sent:'hist_email_sent',email_failed:'hist_email_failed',review_followup:'hist_review_followup'};
+const HIST_KEY = {created:'hist_created',imported:'hist_imported',status:'hist_status',owner:'hist_owner',appt:'hist_appt',note:'hist_note',tag:'hist_tag',archived:'hist_archived',restored:'hist_restored',enriched:'hist_enriched',payment:'hist_payment',payment_deleted:'hist_payment_deleted',outreach:'hist_outreach',fu_reminded:'hist_fu_reminded',newsletter:'hist_newsletter',deal_new:'hist_deal_new',deal_archived:'hist_deal_archived',deal_status:'hist_deal_status',delivery_failed:'hist_delivery_failed',departure_assigned:'hist_departure_assigned',departure_removed:'hist_departure_removed',email_sent:'hist_email_sent',email_failed:'hist_email_failed',review_followup:'hist_review_followup',auto_followup:'hist_auto_followup'};
 const HIST_LABEL = new Proxy({}, { get: (_, type) => HIST_KEY[type] ? t(HIST_KEY[type]) : type });
 // Icono + color fijos por tipo de evento — antes el punto de la actividad salía de hashColor(ev.type),
 // un color pseudo-aleatorio sin significado. Aquí "rojo" es siempre un fallo, "verde" un avance real.
-const TL_ICON = {created:'✨',imported:'⬆️',status:'🔁',owner:'👤',appt:'📞',note:'📝',tag:'🏷️',archived:'📦',restored:'♻️',enriched:'🔍',payment:'💰',payment_deleted:'💸',outreach:'💬',fu_reminded:'📅',newsletter:'📧',deal_new:'🆕',deal_archived:'🗂️',deal_status:'🔀',delivery_failed:'⛔',departure_assigned:'🛫',departure_removed:'🛫',email_sent:'📧',email_failed:'⛔',review_followup:'⭐'};
-const TL_COLOR = {created:CG,imported:CB,status:CB,owner:CV,appt:CV,note:GR,tag:CO,archived:GR,restored:CG,enriched:CO,payment:CG,payment_deleted:RED,outreach:CG,fu_reminded:CO,newsletter:CB,deal_new:CG,deal_archived:GR,deal_status:CB,delivery_failed:RED,departure_assigned:CB,departure_removed:GR,email_sent:CG,email_failed:RED,review_followup:CO};
+const TL_ICON = {created:'✨',imported:'⬆️',status:'🔁',owner:'👤',appt:'📞',note:'📝',tag:'🏷️',archived:'📦',restored:'♻️',enriched:'🔍',payment:'💰',payment_deleted:'💸',outreach:'💬',fu_reminded:'📅',newsletter:'📧',deal_new:'🆕',deal_archived:'🗂️',deal_status:'🔀',delivery_failed:'⛔',departure_assigned:'🛫',departure_removed:'🛫',email_sent:'📧',email_failed:'⛔',review_followup:'⭐',auto_followup:'🤖'};
+const TL_COLOR = {created:CG,imported:CB,status:CB,owner:CV,appt:CV,note:GR,tag:CO,archived:GR,restored:CG,enriched:CO,payment:CG,payment_deleted:RED,outreach:CG,fu_reminded:CO,newsletter:CB,deal_new:CG,deal_archived:GR,deal_status:CB,delivery_failed:RED,departure_assigned:CB,departure_removed:GR,email_sent:CG,email_failed:RED,review_followup:CO,auto_followup:CO};
 // Muchos eventos guardan su detalle en campos propios (from/to, model, code/detail…), no en
 // `notes`/`title` — antes de esto la línea de actividad se quedaba en blanco para casi todos.
 function tlDesc(ev){
@@ -1734,6 +1736,7 @@ function tlDesc(ev){
     case 'deal_status': return esc(ev.model||'')+' → '+esc(STATUS_LABEL[ev.to]||ev.to||'—');
     case 'payment': return (ev.amount?fmt(parseInt(ev.amount,10)):'')+(ev.method?' · '+esc(ev.method):'');
     case 'newsletter': return esc(ev.subject||'');
+    case 'auto_followup': return t('hist_auto_followup_n',{n:ev.n||1})+(ev.hot?' 🔥':'');
     case 'departure_assigned': case 'departure_removed': return '';
     default: return esc(ev.notes||'');
   }
