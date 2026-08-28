@@ -1991,7 +1991,13 @@ async function loadWaStatus(){
     if(!el) return;
     el.style.display = b ? 'block' : 'none';
     if(b) el.textContent = t('wa_blocked', {code:b.code}) + ' · ' + (b.detail||'');
-  }catch(e){ /* best-effort */ }
+  }catch(e){
+    /* MUDO A PROPOSITO, pero con limite: si no se puede leer el estado, lo que NO se
+       puede hacer es dejar el banner diciendo que todo va bien. Se deja como estaba
+       (oculto solo si ya lo estaba) y no se afirma nada. La lectura falla junto con el
+       resto del panel — misma clave de sesion—, asi que un aviso propio aqui seria el
+       segundo de dos. */
+  }
 }
 
 // ================= Exportar / Importar CSV (leads y operadores) =================
@@ -2689,9 +2695,18 @@ async function sendSimMessage(){
 }
 async function resetSimFlow(){
   if(!await askConfirm(t('sim_confirm_reset'))) return;
+  /* NO se calla: si el reset del servidor falla y aqui se vacia la transcripcion igual,
+     el simulador ensena una conversacion nueva mientras el bot sigue a mitad del flujo
+     anterior. Es exactamente la familia de fallo ya pagada ("el simulador QA mentia"):
+     una herramienta de prueba que no dice la verdad es peor que no tenerla. */
   try{
-    await fetch('/admin/api/simulate/reset', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({session:simSessionName()}) });
-  }catch(e){}
+    const r = await fetch('/admin/api/simulate/reset', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({session:simSessionName()}) });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+  }catch(e){
+    simMsgs.push({mine:false, text:'⚠ '+t('sim_error')});
+    renderSimMsgs();
+    return;                       // la sesion del servidor sigue viva: no se finge lo contrario
+  }
   simMsgs = [];
   renderSimMsgs();
 }
@@ -2797,7 +2812,12 @@ async function toggleNotifs(ev){
     });
     notifItems.sort((a,b)=>b.at-a.at);
     renderNotifs();
-  }catch(e){ /* best-effort, el panel ya muestra lo que hay */ }
+  }catch(e){
+    /* MUDO A PROPOSITO: esto SUMA avisos a una lista que ya se ha pintado con lo demas.
+       Si la llamada falla, faltan los pagos sin casar en la campanita — no se pierde
+       ningun pago: siguen en Facturas, que es donde se concilian. Cortar el resto de
+       notificaciones por esto seria cambiar un hueco por una pantalla vacia. */
+  }
 }
 document.addEventListener('click', (e)=>{
   const wrap = document.querySelector('.notifwrap');
