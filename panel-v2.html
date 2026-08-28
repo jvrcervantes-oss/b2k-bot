@@ -140,6 +140,8 @@ table.leadstbl{width:100%;border-collapse:collapse}
 .leadid .st{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-top:2px}
 .leadid .st .d{width:7px;height:7px;border-radius:50%}
 .tourpill{justify-self:start;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:3px 9px;font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.stbadge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.stbadge .d{width:6px;height:6px;border-radius:50%;background:currentColor}
 .wait{font-size:13px;color:var(--muted)}
 .val{font-weight:600}
 .actbtn{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:7px 0;font-size:13px;font-weight:600;width:100px;justify-self:end}
@@ -427,6 +429,7 @@ textarea.nlinput{resize:vertical}
 </style>
 </head>
 <body>
+<div id="waBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#b91c1c;color:#fff;font:600 13px/1.45 system-ui,sans-serif;padding:10px 18px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.3)"></div>
 <div id="loginGate" class="hidden" style="position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:50">
   <div class="card" style="width:320px;padding:28px;text-align:center">
     <div style="width:40px;height:40px;border-radius:10px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;margin:0 auto 14px">B</div>
@@ -573,7 +576,9 @@ textarea.nlinput{resize:vertical}
           <div id="notifList"></div>
         </div>
       </div>
-      <button class="btn"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 10V3"/><path d="M5.3 5.4L8 2.6l2.7 2.8"/><path d="M3 10.5V13h10v-2.5"/></svg><span data-i18n="export">Exportar</span></button>
+      <input type="file" id="topbarCsvFile" accept=".csv,text/csv" class="hidden" onchange="topbarImportFile(event)">
+      <button class="btn" onclick="document.getElementById('topbarCsvFile').click()"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 6v7"/><path d="M5.3 8.6L8 5.8l2.7 2.8"/><path d="M3 10.5V13h10v-2.5"/></svg><span data-i18n="import">Importar</span></button>
+      <button class="btn" onclick="topbarExport()"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 10V3"/><path d="M5.3 5.4L8 2.6l2.7 2.8"/><path d="M3 10.5V13h10v-2.5"/></svg><span data-i18n="export">Exportar</span></button>
       <button class="btn dark" onclick="newLeadFlow()" data-i18n="new_lead">+ Nuevo lead</button>
     </div>
 
@@ -677,6 +682,10 @@ textarea.nlinput{resize:vertical}
     <div class="view hidden" id="vLead">
       <div class="back" onclick="goBack()" data-i18n-arrow-l="back">← Volver</div>
       <div class="card ldhero" id="ldHero"></div>
+      <div class="card ldcard" style="margin-bottom:16px">
+        <div class="tlhd"><span class="t" data-i18n="summary_hd">Resumen y siguiente paso</span><span class="a" onclick="loadLeadSummary(curLead.phone,true)" data-i18n="summary_refresh">Actualizar resumen</span></div>
+        <div class="body" id="ldSummary"></div>
+      </div>
       <div class="ldgrid">
         <div class="ldcol">
           <div class="card ldcard">
@@ -686,6 +695,10 @@ textarea.nlinput{resize:vertical}
           <div class="card ldcard interest">
             <div class="hd" data-i18n="interest">Interés</div>
             <div class="body" id="ldInteres"></div>
+          </div>
+          <div class="card ldcard">
+            <div class="tlhd"><span class="t" data-i18n="pay_hd">Pagos y factura</span><span class="a" onclick="openInvoice(curLead.phone)" data-i18n="pay_invoice">🧾 Factura / recibo</span></div>
+            <div class="body" id="ldPayments"></div>
           </div>
         </div>
         <div class="card ldcard">
@@ -881,6 +894,10 @@ const RED='var(--red)', GREEN='var(--green)';
 
 const fmt = n => '$' + n.toLocaleString('en-US');
 
+// Todo lo que viene de un lead o de una nota escrita a mano (nombre, tag, notas, resumen de IA)
+// se pinta con esto antes de entrar en un innerHTML — sin esto, ese texto es HTML ejecutable.
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
 // ======================================================================
 // I18N — mismo patrón que /admin/panel.html (I18N{es,en} + t(key) +
 // localStorage botpanel_lang, compartido con el panel real: cambiar el
@@ -901,7 +918,9 @@ es: {
   notif_hd:'Notificaciones', notif_empty:'Sin novedades ahora mismo.',
   notif_waiting:'esperando respuesta hace más de 24h', notif_overdue:'seguimiento vencido',
   notif_new_today:'nuevo hoy', notif_unmatched:'pago de Stripe sin asignar',
-  export:'Exportar', new_lead:'+ Nuevo lead',
+  export:'Exportar', import:'Importar', new_lead:'+ Nuevo lead',
+  err_no_rows:'No se encontraron filas válidas en el archivo.', err_import:'Error al importar el archivo.',
+  import_ok:'✓ {created} nuevos · {updated} actualizados',
   last30:'Últimos 30 días', seg_all:'Todos', seg_active:'Activos', seg_needs:'Requieren acción',
   waiting_hd:'Esperando respuesta', unit_leads:'leads', waiting_meta:'esperando respuesta hace >24 h — dato real',
   open_queue:'Abrir cola', overdue_hd:'Seguimientos vencidos', unit_tasks:'tareas',
@@ -915,7 +934,7 @@ es: {
   th_amount:'Importe', th_method:'Método', th_date:'Fecha',
   search_conv:'Buscar conversación', composer_ph:'Escribe un mensaje de WhatsApp…', send:'Enviar',
   t_canned:'Respuestas rápidas', t_attach:'Enviar foto/vídeo', canned_empty:'Sin respuestas rápidas guardadas',
-  edit_tpl:'Editar plantillas', m_canned:'Respuestas rápidas', m_canned_help:'Una por línea · formato', m_canned_fmt:'Título | texto',
+  edit_tpl:'Editar respuestas rápidas', m_canned:'Respuestas rápidas', m_canned_help:'Una por línea · formato', m_canned_fmt:'Título | texto',
   al_media_big:'Archivo demasiado grande (máx 16 MB).', al_tpl:'No se pudo guardar.',
   win_open_a:'🟢 Ventana de 24h abierta · cierra en ', win_closed:'🔴 Ventana de 24h cerrada — hace falta una plantilla para escribir',
   win_closed_ph:'Ventana de 24h cerrada', win_never:'🔴 El cliente aún no ha escrito — no se puede enviar texto libre hasta que abra la conversación',
@@ -949,7 +968,26 @@ es: {
   hist_created:'Lead creado', hist_imported:'Importado', hist_status:'Cambio de estado', hist_owner:'Propietario asignado',
   hist_appt:'Cita agendada', hist_note:'Nota añadida', hist_tag:'Etiqueta', hist_archived:'Archivado',
   hist_restored:'Restaurado', hist_enriched:'Enriquecido desde el chat', hist_payment:'Pago registrado', hist_outreach:'Contacto iniciado',
+  hist_payment_deleted:'Pago eliminado', hist_fu_reminded:'Aviso de seguimiento', hist_newsletter:'Newsletter enviado',
+  hist_deal_new:'Nueva venta abierta', hist_deal_archived:'Venta archivada', hist_deal_status:'Cambio de estado de venta',
+  hist_delivery_failed:'Envío no entregado', hist_departure_assigned:'Asignado a una salida', hist_departure_removed:'Quitado de la salida',
+  hist_email_sent:'Itinerario enviado por email', hist_email_failed:'Fallo al enviar email', hist_review_followup:'Recordatorio de reseña enviado',
+  summary_hd:'Resumen y siguiente paso', summary_refresh:'Actualizar resumen', summary_loading:'Generando…', summary_empty:'Sin conversación todavía para resumir.',
+  summary_err:'No se pudo generar el resumen.', summary_next:'Siguiente paso',
+  next_send_quote:'Enviar cotización', next_confirm_date:'Confirmar fecha de viaje', next_follow_up:'Hacer seguimiento',
+  next_escalate_human:'Escalar a una persona', next_wait_customer:'Esperar respuesta del cliente', next_none:'Sin acción sugerida',
+  pay_hd:'Pagos y factura', pay_invoice:'🧾 Factura / recibo', no_deals:'Sin ventas registradas todavía.',
+  pay_total:'Precio', pay_paid:'Pagado', pay_pending:'Pendiente', total:'Total',
+  pay_state_paid:'Pagado', pay_state_partial:'Pago parcial', pay_state_unpaid:'Pendiente de pago', pay_state_unpriced:'Sin precio cerrado',
+  m_wise:'Wise', m_cash:'Efectivo', m_stripe:'Stripe', m_other:'Otro',
+  k_deposit:'Depósito', k_balance:'Resto', k_other:'Otro',
+  c_amount:'Importe', btn_add_pay:'+ Añadir pago', al_pay_amount:'Pon un importe válido.', cfm_pay_delete:'¿Borrar este pago? No se puede deshacer.',
+  deal_won:'✅ Ganado', deal_lost:'❌ Perdido',
+  inv_title:'Recibo de pago', inv_client:'Cliente', inv_issued:'Emitido', inv_item:'Tour / paquete', inv_qty:'Personas',
+  inv_amount:'Importe', inv_total:'Total', inv_paid:'Pagado', inv_balance:'Saldo pendiente', inv_print:'Imprimir / Guardar como PDF',
+  inv_no_deal:'Sin venta cerrada todavía — el importe se pone en la ficha.', inv_payments:'Pagos recibidos', inv_no_pay:'Sin pagos registrados.', inv_method:'Método',
   confirm_won:'¿Marcar este lead como ganado?', err_status:'No se pudo actualizar el estado.',
+  wa_blocked:'⛔ Cuenta de WhatsApp bloqueada (code {code}): no sale NINGUNA plantilla — outreach, avisos al owner y recordatorios rebotan. Se arregla en el billing hub de Meta.',
   ask_when:'Fecha y hora de la cita (AAAA-MM-DDTHH:MM):', appt_created:'Cita creada.', err_appt:'No se pudo crear la cita.',
   ask_phone_new:'Teléfono del lead nuevo (con prefijo de país, solo dígitos):', invalid_phone:'Teléfono inválido.',
   ask_name_opt:'Nombre (opcional):', err_lead_create:'No se pudo crear el lead (¿ya existe?).',
@@ -1017,7 +1055,9 @@ en: {
   notif_hd:'Notifications', notif_empty:'Nothing new right now.',
   notif_waiting:'waiting over 24h', notif_overdue:'follow-up overdue',
   notif_new_today:'new today', notif_unmatched:'unassigned Stripe payment',
-  export:'Export', new_lead:'+ New lead',
+  export:'Export', import:'Import', new_lead:'+ New lead',
+  err_no_rows:'No valid rows found in the file.', err_import:'Error importing the file.',
+  import_ok:'✓ {created} new · {updated} updated',
   last30:'Last 30 days', seg_all:'All', seg_active:'Active', seg_needs:'Needs action',
   waiting_hd:'Waiting for reply', unit_leads:'leads', waiting_meta:'waiting for reply over 24h — real data',
   open_queue:'Open queue', overdue_hd:'Overdue follow-ups', unit_tasks:'tasks',
@@ -1031,7 +1071,7 @@ en: {
   th_amount:'Amount', th_method:'Method', th_date:'Date',
   search_conv:'Search conversation', composer_ph:'Write a WhatsApp message…', send:'Send',
   t_canned:'Quick replies', t_attach:'Send photo/video', canned_empty:'No quick replies saved',
-  edit_tpl:'Edit templates', m_canned:'Quick replies', m_canned_help:'One per line · format', m_canned_fmt:'Title | text',
+  edit_tpl:'Edit quick replies', m_canned:'Quick replies', m_canned_help:'One per line · format', m_canned_fmt:'Title | text',
   al_media_big:'File too large (max 16MB).', al_tpl:"Couldn't save.",
   win_open_a:'🟢 24h window open · closes in ', win_closed:'🔴 24h window closed — a template is required to write',
   win_closed_ph:'24h window closed', win_never:"🔴 Customer hasn't messaged yet — free text isn't allowed until they start the conversation",
@@ -1065,7 +1105,26 @@ en: {
   hist_created:'Lead created', hist_imported:'Imported', hist_status:'Status change', hist_owner:'Owner assigned',
   hist_appt:'Appointment booked', hist_note:'Note added', hist_tag:'Tag', hist_archived:'Archived',
   hist_restored:'Restored', hist_enriched:'Enriched from chat', hist_payment:'Payment logged', hist_outreach:'Outreach sent',
+  hist_payment_deleted:'Payment deleted', hist_fu_reminded:'Follow-up reminder', hist_newsletter:'Newsletter sent',
+  hist_deal_new:'New deal opened', hist_deal_archived:'Deal archived', hist_deal_status:'Deal status change',
+  hist_delivery_failed:'Delivery failed', hist_departure_assigned:'Assigned to a departure', hist_departure_removed:'Removed from departure',
+  hist_email_sent:'Itinerary emailed', hist_email_failed:'Email failed', hist_review_followup:'Review reminder sent',
+  summary_hd:'Summary and next step', summary_refresh:'Refresh summary', summary_loading:'Generating…', summary_empty:'No conversation yet to summarize.',
+  summary_err:'Could not generate the summary.', summary_next:'Next step',
+  next_send_quote:'Send quote', next_confirm_date:'Confirm travel date', next_follow_up:'Follow up',
+  next_escalate_human:'Escalate to a person', next_wait_customer:'Wait for customer reply', next_none:'No action suggested',
+  pay_hd:'Payments and invoice', pay_invoice:'🧾 Invoice / receipt', no_deals:'No sales logged yet.',
+  pay_total:'Price', pay_paid:'Paid', pay_pending:'Pending', total:'Total',
+  pay_state_paid:'Paid', pay_state_partial:'Partially paid', pay_state_unpaid:'Payment pending', pay_state_unpriced:'No price set yet',
+  m_wise:'Wise', m_cash:'Cash', m_stripe:'Stripe', m_other:'Other',
+  k_deposit:'Deposit', k_balance:'Balance', k_other:'Other',
+  c_amount:'Amount', btn_add_pay:'+ Add payment', al_pay_amount:'Enter a valid amount.', cfm_pay_delete:'Delete this payment? This cannot be undone.',
+  deal_won:'✅ Won', deal_lost:'❌ Lost',
+  inv_title:'Payment receipt', inv_client:'Client', inv_issued:'Issued', inv_item:'Tour / package', inv_qty:'People',
+  inv_amount:'Amount', inv_total:'Total', inv_paid:'Paid', inv_balance:'Balance due', inv_print:'Print / Save as PDF',
+  inv_no_deal:'No closed sale yet — set the amount on the lead card.', inv_payments:'Payments received', inv_no_pay:'No payments logged.', inv_method:'Method',
   confirm_won:'Mark this lead as won?', err_status:'Could not update the status.',
+  wa_blocked:'⛔ WhatsApp account blocked (code {code}): NO template goes out — outreach, owner alerts and reminders all bounce. Fix it in Meta\'s billing hub.',
   ask_when:'Appointment date and time (YYYY-MM-DDTHH:MM):', appt_created:'Appointment created.', err_appt:'Could not create the appointment.',
   ask_phone_new:'New lead phone (with country code, digits only):', invalid_phone:'Invalid phone.',
   ask_name_opt:'Name (optional):', err_lead_create:'Could not create the lead (already exists?).',
@@ -1250,6 +1309,12 @@ function initials(name){
 const STATUS_KEY = {'':'st_new', new:'st_new', quoted:'st_quoted', won:'st_won', lost:'st_lost', noshow:'st_noshow'};
 const STATUS_LABEL = new Proxy({}, { get: (_, status) => t(STATUS_KEY[status] || 'st_new') });
 const STATUS_DOT = {'':CB, new:CB, quoted:CO, won:CG, lost:'var(--red)', noshow:GR};
+// Pastilla con el color del estado de fondo (no solo el puntito) — mismo color de STATUS_DOT,
+// atenuado con color-mix para que el texto siga siendo legible en claro y en oscuro.
+function stBadge(status){
+  const c = STATUS_DOT[status] || CB;
+  return `<span class="stbadge" style="background:color-mix(in srgb, ${c} 18%, transparent);color:${c}"><span class="d" style="background:${c}"></span>${STATUS_LABEL[status]}</span>`;
+}
 function tourLine(l){
   const bits=[l.tour||'Bali–Komodo'];
   if(l.package) bits.push(l.package);
@@ -1359,7 +1424,7 @@ async function renderThread(){
     <span class="av" style="background:${hashColor(c.phone)}">${initials(c.name||c.phone)}</span>
     <div style="flex:1;min-width:0">
       <div style="display:flex;align-items:center;gap:9px"><span class="nm" onclick="openLead('${c.phone}')">${c.name||c.phone}</span>
-        <span class="estpill"><span class="d" style="background:${STATUS_DOT[c.status]||CB}"></span>${STATUS_LABEL[c.status]}</span></div>
+        ${stBadge(c.status)}</div>
       <div class="meta">${tourLine(c)}</div>
     </div>
     <button class="toolbtn ${c.paused?'on':''}" onclick="togglePauseFlow('${c.phone}')">${c.paused?t('p_resume'):t('p_pause')}</button>
@@ -1570,7 +1635,7 @@ function renderLeadsTable(){
         <span class="av" style="background:${hashColor(l.phone)}">${initials(l.name||l.phone)}</span>
         <div><div class="nm" onclick="openLead('${l.phone}')">${l.name||l.phone}</div></div>
       </div>
-      <span class="st"><span class="d" style="background:${STATUS_DOT[l.status]||CB}"></span>${STATUS_LABEL[l.status]}</span>
+      ${stBadge(l.status)}
       <span class="tourpill">${tourLine(l)}</span>
       <span class="val">${l.dealValue?fmt(parseInt(l.dealValue,10)):'—'}</span>
       <button class="actbtn" onclick="openLead('${l.phone}')">${t('see')}</button>
@@ -1586,8 +1651,32 @@ function openLead(phone){
   go('lead');
 }
 function fmtHistTime(ts){ return ts ? new Date(ts).toLocaleString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : ''; }
-const HIST_KEY = {created:'hist_created',imported:'hist_imported',status:'hist_status',owner:'hist_owner',appt:'hist_appt',note:'hist_note',tag:'hist_tag',archived:'hist_archived',restored:'hist_restored',enriched:'hist_enriched',payment:'hist_payment',outreach:'hist_outreach'};
-const HIST_LABEL = new Proxy({}, { get: (_, type) => HIST_KEY[type] ? t(HIST_KEY[type]) : undefined });
+const HIST_KEY = {created:'hist_created',imported:'hist_imported',status:'hist_status',owner:'hist_owner',appt:'hist_appt',note:'hist_note',tag:'hist_tag',archived:'hist_archived',restored:'hist_restored',enriched:'hist_enriched',payment:'hist_payment',payment_deleted:'hist_payment_deleted',outreach:'hist_outreach',fu_reminded:'hist_fu_reminded',newsletter:'hist_newsletter',deal_new:'hist_deal_new',deal_archived:'hist_deal_archived',deal_status:'hist_deal_status',delivery_failed:'hist_delivery_failed',departure_assigned:'hist_departure_assigned',departure_removed:'hist_departure_removed',email_sent:'hist_email_sent',email_failed:'hist_email_failed',review_followup:'hist_review_followup'};
+const HIST_LABEL = new Proxy({}, { get: (_, type) => HIST_KEY[type] ? t(HIST_KEY[type]) : type });
+// Icono + color fijos por tipo de evento — antes el punto de la actividad salía de hashColor(ev.type),
+// un color pseudo-aleatorio sin significado. Aquí "rojo" es siempre un fallo, "verde" un avance real.
+const TL_ICON = {created:'✨',imported:'⬆️',status:'🔁',owner:'👤',appt:'📞',note:'📝',tag:'🏷️',archived:'📦',restored:'♻️',enriched:'🔍',payment:'💰',payment_deleted:'💸',outreach:'💬',fu_reminded:'📅',newsletter:'📧',deal_new:'🆕',deal_archived:'🗂️',deal_status:'🔀',delivery_failed:'⛔',departure_assigned:'🛫',departure_removed:'🛫',email_sent:'📧',email_failed:'⛔',review_followup:'⭐'};
+const TL_COLOR = {created:CG,imported:CB,status:CB,owner:CV,appt:CV,note:GR,tag:CO,archived:GR,restored:CG,enriched:CO,payment:CG,payment_deleted:RED,outreach:CG,fu_reminded:CO,newsletter:CB,deal_new:CG,deal_archived:GR,deal_status:CB,delivery_failed:RED,departure_assigned:CB,departure_removed:GR,email_sent:CG,email_failed:RED,review_followup:CO};
+// Muchos eventos guardan su detalle en campos propios (from/to, model, code/detail…), no en
+// `notes`/`title` — antes de esto la línea de actividad se quedaba en blanco para casi todos.
+function tlDesc(ev){
+  switch(ev.type){
+    case 'status': return t('hist_status')+': '+esc(STATUS_LABEL[ev.to]||ev.to||'—');
+    case 'owner': return esc(ev.to||'—');
+    case 'appt': return esc(ev.title||'');
+    case 'tag': return esc(ev.to||'');
+    case 'delivery_failed': return '<b style="color:'+RED+'">('+esc(ev.code||'?')+')</b> '+esc(ev.detail||'');
+    case 'email_failed': return esc(ev.to||'')+(ev.error?' — '+esc(ev.error):'');
+    case 'email_sent': return esc(ev.to||'');
+    case 'deal_new': return esc(ev.model||'');
+    case 'deal_archived': return esc(ev.model||'');
+    case 'deal_status': return esc(ev.model||'')+' → '+esc(STATUS_LABEL[ev.to]||ev.to||'—');
+    case 'payment': return (ev.amount?fmt(parseInt(ev.amount,10)):'')+(ev.method?' · '+esc(ev.method):'');
+    case 'newsletter': return esc(ev.subject||'');
+    case 'departure_assigned': case 'departure_removed': return '';
+    default: return esc(ev.notes||'');
+  }
+}
 function renderLead(){
   const l = curLead;
   if(!l) return;
@@ -1596,7 +1685,7 @@ function renderLead(){
     <div style="flex:1;min-width:0">
       <div class="nm">${l.name||l.phone}</div>
       <div class="tags">
-        <span class="estpill"><span class="d" style="background:${STATUS_DOT[l.status]||CB}"></span>${STATUS_LABEL[l.status]}</span>
+        ${stBadge(l.status)}
         <span class="tourpill2">${tourLine(l)}</span>
         <span class="via">${t('via')} ${l.source||l.adSource||'WhatsApp'}</span>
       </div>
@@ -1615,9 +1704,163 @@ function renderLead(){
   const hist = (Array.isArray(l.history)?l.history:[]).slice().reverse().slice(0,10);
   document.getElementById('ldTimeline').innerHTML = hist.length ? hist.map((ev,i)=>`
     <div class="tlrow">
-      <div class="tlrail"><span class="d" style="background:${hashColor(ev.type)}"></span>${i<hist.length-1?'<span class="line"></span>':''}</div>
-      <div class="tlbody"><div class="tltop"><span class="t">${HIST_LABEL[ev.type]||ev.type}</span><span class="tm">${fmtHistTime(ev.ts)}</span></div><div class="tldesc">${ev.notes||ev.title||''}</div></div>
+      <div class="tlrail"><span class="d" style="background:${TL_COLOR[ev.type]||GR}"></span>${i<hist.length-1?'<span class="line"></span>':''}</div>
+      <div class="tlbody"><div class="tltop"><span class="t">${TL_ICON[ev.type]||'•'} ${esc(HIST_LABEL[ev.type])}</span><span class="tm">${fmtHistTime(ev.ts)}</span></div><div class="tldesc">${tlDesc(ev)}</div></div>
     </div>`).join('') : `<div style="padding:8px 0;color:var(--muted);font-size:13px">${t('no_activity')}</div>`;
+  loadLeadSummary(l.phone);
+  document.getElementById('ldPayments').innerHTML = renderPaymentsCard(l);
+}
+
+// ── Qué ha comprado / cuánto ha pagado / cuánto debe — mismo cálculo que `paxPayment()`
+// del servidor (index.js), aquí en cliente porque los datos (dealValue + payments[]) ya
+// están en el lead que tenemos cargado; no hace falta un endpoint nuevo para esto.
+function payTotals(l){
+  const expected = Math.max(0, parseInt(l.dealValue,10)||0);
+  const paid = (Array.isArray(l.payments)?l.payments:[]).reduce((a,p)=>a+(Number(p.amount)||0),0);
+  const pending = Math.max(0, expected-paid);
+  const state = !expected ? (paid>0?'partial':'unpriced') : paid>=expected ? 'paid' : (paid>0?'partial':'unpaid');
+  return {expected,paid,pending,state};
+}
+const DEAL_BADGE = {open:'🟡',won:'✅',lost:'❌'};
+function renderPaymentsCard(l){
+  const deals = (Array.isArray(l.deals)?l.deals:[]).slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const dealsHtml = deals.length ? deals.map(d=>{
+    const head = esc(d.tour||d.model||'—') + (d.package?' — '+esc(d.package):'');
+    const sub = (d.travelDate?esc(d.travelDate):'') + (d.dealValue?' · '+fmt(parseInt(d.dealValue,10)):'');
+    const actions = d.status==='open' ? `<div style="display:flex;gap:6px;margin-top:4px">
+        <button class="actbtn" style="width:auto;padding:5px 9px;font-size:12px" onclick="fichaDealAction('${d.id}','won')">${t('deal_won')}</button>
+        <button class="actbtn" style="width:auto;padding:5px 9px;font-size:12px" onclick="fichaDealAction('${d.id}','lost')">${t('deal_lost')}</button>
+      </div>` : '';
+    return `<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)"><span>${DEAL_BADGE[d.status]||'🗂️'}</span><div><div style="font-weight:600;font-size:13px">${head}</div><div style="font-size:12px;color:var(--muted)">${sub}</div>${actions}</div></div>`;
+  }).join('') : `<div style="color:var(--muted);font-size:13px;padding:2px 0 8px">${t('no_deals')}</div>`;
+  const pt = payTotals(l);
+  const ps = (Array.isArray(l.payments)?l.payments:[]).slice().sort((a,b)=>(a.at||0)-(b.at||0));
+  const paysHtml = ps.length ? ps.map(p=>`
+    <div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:12.5px">
+      <b>${fmt(p.amount||0)}</b><span style="color:var(--muted)">${esc(p.method||'')} · ${t('k_'+(p.kind||'other'))}</span>
+      <span style="color:var(--muted);margin-left:auto">${fmtHistTime(p.at)}</span>
+      <button class="actbtn" style="width:auto;padding:3px 8px;font-size:11px" onclick="fichaDelPayment('${p.id}')">${t('delete')}</button>
+    </div>`).join('') : `<div style="color:var(--muted);font-size:13px;padding:2px 0 8px">${t('no_payments')}</div>`;
+  return `
+    <div style="padding-bottom:6px">${dealsHtml}</div>
+    <div style="display:flex;gap:16px;padding:8px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin:6px 0">
+      <div><div style="font-size:11.5px;color:var(--muted)">${t('pay_total')}</div><div style="font-weight:700">${pt.expected?fmt(pt.expected):'—'}</div></div>
+      <div><div style="font-size:11.5px;color:var(--muted)">${t('pay_paid')}</div><div style="font-weight:700;color:${CG}">${fmt(pt.paid)}</div></div>
+      <div><div style="font-size:11.5px;color:var(--muted)">${t('pay_pending')}</div><div style="font-weight:700;color:${pt.pending>0?RED:CG}">${fmt(pt.pending)}</div></div>
+      <div style="align-self:center"><span class="stbadge" style="background:color-mix(in srgb, ${pt.state==='paid'?CG:pt.state==='partial'?CO:pt.state==='unpaid'?RED:GR} 18%, transparent);color:${pt.state==='paid'?CG:pt.state==='partial'?CO:pt.state==='unpaid'?RED:GR}">${t('pay_state_'+pt.state)}</span></div>
+    </div>
+    ${paysHtml}
+    <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+      <input id="payAmt" type="number" min="0" step="10" placeholder="${t('c_amount')}" style="width:100px;padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:var(--card);color:inherit">
+      <select id="payMethod" style="padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:var(--card);color:inherit"><option value="wise">${t('m_wise')}</option><option value="cash">${t('m_cash')}</option><option value="stripe">${t('m_stripe')}</option><option value="other">${t('m_other')}</option></select>
+      <select id="payKind" style="padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:var(--card);color:inherit"><option value="deposit">${t('k_deposit')}</option><option value="balance">${t('k_balance')}</option><option value="other">${t('k_other')}</option></select>
+      <button class="actbtn" style="width:auto;padding:7px 12px" onclick="fichaAddPayment()">${t('btn_add_pay')}</button>
+    </div>`;
+}
+async function fichaDealAction(dealId, status){
+  if(!curLead) return;
+  try{
+    const r = await fetch('/admin/api/deal', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:curLead.phone, dealId, status}) });
+    if(!r.ok) throw 0;
+    await refreshLeads(); openLead(curLead.phone); renderKanban();
+  }catch(e){ showToast(t('err_status')); }
+}
+async function fichaAddPayment(){
+  if(!curLead) return;
+  const amt = parseFloat(document.getElementById('payAmt').value);
+  if(!(amt>0)){ showToast(t('al_pay_amount')); return; }
+  const method = document.getElementById('payMethod').value;
+  const kind = document.getElementById('payKind').value;
+  try{
+    const r = await fetch('/admin/api/payment', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:curLead.phone, amount:amt, currency:'usd', method, kind}) });
+    if(!r.ok) throw 0;
+    await refreshLeads(); openLead(curLead.phone);
+  }catch(e){ showToast(t('err_payment_create')); }
+}
+async function fichaDelPayment(id){
+  if(!curLead) return;
+  if(!await askConfirm(t('cfm_pay_delete'))) return;
+  try{
+    const r = await fetch('/admin/api/payment/delete', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:curLead.phone, id}) });
+    if(!r.ok) throw 0;
+    await refreshLeads(); openLead(curLead.phone);
+  }catch(e){ showToast(t('err_payment_delete')); }
+}
+
+// ── Factura / recibo de pago: documento imprimible (ventana propia + window.print) ────────
+// No hay servicio de PDF desplegado para este bot — en vez de depender de uno, se genera un
+// documento HTML limpio y se imprime/"Guarda como PDF" desde el propio navegador. Es un RECIBO
+// de lo ya cobrado (dato real: deals + payments del lead), no una factura fiscal con NPWP/entidad
+// legal — eso exigiría datos que hoy no están confirmados para B2K.
+function openInvoice(phone){
+  const l = leads.find(x=>x.phone===phone); if(!l) return;
+  const deal = (Array.isArray(l.deals)?l.deals:[]).find(d=>d.status==='open') || (Array.isArray(l.deals)?l.deals:[])[0];
+  const pt = payTotals(l);
+  const pax = Math.max(1, (parseInt(l.riders,10)||0)+(parseInt(l.pillions,10)||0));
+  const ps = (Array.isArray(l.payments)?l.payments:[]).slice().sort((a,b)=>(a.at||0)-(b.at||0));
+  const dateFmt = ts => new Date(ts||Date.now()).toLocaleDateString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short',year:'numeric'});
+  const rows = ps.length ? ps.map(p=>`<tr><td>${dateFmt(p.at)}</td><td>${esc(p.method||'')}</td><td>${esc(t('k_'+(p.kind||'other')))}</td><td style="text-align:right">${fmt(p.amount||0)}</td></tr>`).join('')
+    : `<tr><td colspan="4" style="color:#888">${esc(t('inv_no_pay'))}</td></tr>`;
+  const itemLine = deal ? `${esc(deal.tour||deal.model||l.tour||'—')}${deal.package?' — '+esc(deal.package):''}` : (l.tour ? esc(l.tour) : esc(t('inv_no_deal')));
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(t('inv_title'))} — ${esc(l.name||l.phone)}</title>
+<style>
+  body{font-family:-apple-system,Segoe UI,Arial,sans-serif;color:#1a1a1a;max-width:640px;margin:40px auto;padding:0 20px}
+  h1{font-size:20px;margin:0 0 2px} .sub{color:#666;font-size:13px;margin-bottom:24px}
+  .row{display:flex;justify-content:space-between;font-size:13px;margin:4px 0}
+  table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}
+  th,td{padding:6px 4px;text-align:left;border-bottom:1px solid #e5e5e5}
+  .totals{margin-top:14px;font-size:14px} .totals .row b{font-size:16px}
+  .balance{color:${pt.pending>0?'#c0392b':'#1e7f4f'}}
+  .pbtn{margin-top:28px} .pbtn button{padding:8px 16px;font-size:13px;cursor:pointer}
+  @media print{.pbtn{display:none}}
+</style></head><body>
+  <h1>Bali Moto Adventures</h1>
+  <div class="sub">${esc(t('inv_title'))} · ${esc(t('inv_issued'))}: ${dateFmt(Date.now())}</div>
+  <div class="row"><span>${esc(t('inv_client'))}</span><b>${esc(l.name||l.phone)}</b></div>
+  <div class="row"><span>WhatsApp</span><span>+${esc(l.phone)}</span></div>
+  ${l.email?`<div class="row"><span>Email</span><span>${esc(l.email)}</span></div>`:''}
+  <table><thead><tr><th>${esc(t('inv_item'))}</th><th>${esc(t('inv_qty'))}</th><th style="text-align:right">${esc(t('inv_amount'))}</th></tr></thead>
+  <tbody><tr><td>${itemLine}${deal&&deal.travelDate?'<br><span style="color:#888;font-size:12px">'+esc(deal.travelDate)+'</span>':''}</td><td>${pax}</td><td style="text-align:right">${pt.expected?fmt(pt.expected):'—'}</td></tr></tbody></table>
+  <div style="margin-top:20px;font-weight:600;font-size:13px">${esc(t('inv_payments'))}</div>
+  <table><thead><tr><th>${esc(t('inv_issued'))}</th><th>${esc(t('inv_method'))}</th><th></th><th style="text-align:right">${esc(t('inv_amount'))}</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="totals">
+    <div class="row"><span>${esc(t('inv_total'))}</span><span>${pt.expected?fmt(pt.expected):'—'}</span></div>
+    <div class="row"><span>${esc(t('inv_paid'))}</span><span>${fmt(pt.paid)}</span></div>
+    <div class="row balance"><span><b>${esc(t('inv_balance'))}</b></span><b>${fmt(pt.pending)}</b></div>
+  </div>
+  <div class="pbtn"><button onclick="window.print()">${esc(t('inv_print'))}</button></div>
+</body></html>`;
+  const win = window.open('', '_blank');
+  if(!win){ showToast(t('err_status')); return; }
+  win.document.write(html); win.document.close();
+}
+
+// ── Resumen de conversación + siguiente paso (IA) ──────────────────────
+// nextAction llega SIEMPRE como una de las claves de NEXT_ACTION_LABEL (el servidor la valida
+// contra esa misma lista antes de guardarla) — nunca es texto libre que el propio lead pudiera
+// intentar dictar a través del chat. El resumen se pinta con textContent, no innerHTML: aunque
+// el modelo devolviera HTML/script, no se ejecuta.
+const NEXT_ACTION_LABEL = {send_quote:'next_send_quote',confirm_date:'next_confirm_date',follow_up:'next_follow_up',escalate_human:'next_escalate_human',wait_customer:'next_wait_customer',none:'next_none'};
+async function loadLeadSummary(phone, force){
+  const box = document.getElementById('ldSummary');
+  if(!box) return;
+  box.innerHTML = '';
+  const loading = document.createElement('div');
+  loading.style.cssText = 'color:var(--muted);font-size:13px';
+  loading.textContent = t('summary_loading');
+  box.appendChild(loading);
+  try{
+    const r = await fetch('/admin/api/lead-summary', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, force:!!force, lang:LANG}) });
+    const d = await r.json();
+    if(!curLead || curLead.phone !== phone) return; // el usuario ya abrió otra ficha
+    box.innerHTML = '';
+    if(!r.ok){ box.textContent = d.error === 'Todavía no hay conversación con este lead' ? t('summary_empty') : t('summary_err'); return; }
+    const p = document.createElement('div'); p.style.cssText = 'font-size:13.5px;line-height:1.5'; p.textContent = d.summary || t('summary_empty');
+    const nextKey = NEXT_ACTION_LABEL[d.nextAction] ? d.nextAction : 'none';
+    const chip = document.createElement('span'); chip.className = 'tourpill2'; chip.style.marginTop = '8px'; chip.style.display = 'inline-block';
+    chip.textContent = t('summary_next') + ': ' + t(NEXT_ACTION_LABEL[nextKey]);
+    box.appendChild(p); box.appendChild(chip);
+  }catch(e){ if(curLead && curLead.phone===phone){ box.innerHTML=''; box.textContent = t('summary_err'); } }
 }
 
 // ================= modales estilizados (reemplaza prompt()/confirm() nativos) =================
@@ -1737,6 +1980,119 @@ async function newLeadFlow(){
 async function refreshLeads(){
   const r = await fetch('/admin/api/leads', { headers:{'X-Admin-Key':sessionKey} });
   if(r.ok) leads = await r.json();
+}
+// Cuenta bloqueada (billing/suspensión): mientras lo esté, ninguna plantilla sale. El aviso
+// va arriba del todo porque el fallo llega por webhook DESPUÉS del "✓ enviado" del botón.
+async function loadWaStatus(){
+  try{
+    const r = await fetch('/admin/api/wa-status', { headers:{'X-Admin-Key':sessionKey} });
+    const s = await r.json();
+    const el = document.getElementById('waBanner'), b = s && s.blocked;
+    if(!el) return;
+    el.style.display = b ? 'block' : 'none';
+    if(b) el.textContent = t('wa_blocked', {code:b.code}) + ' · ' + (b.detail||'');
+  }catch(e){ /* best-effort */ }
+}
+
+// ================= Exportar / Importar CSV (leads y operadores) =================
+// Mismo formato y mismos endpoints que ya usa /admin (panel.html) — aquí solo faltaba
+// cablearlos: el botón "Exportar" del topbar era decorativo y no había ninguna forma de
+// subir un CSV en este panel.
+function csvCell(s){ s = s==null ? '' : String(s); return '"'+s.replace(/"/g,'""')+'"'; }
+function downloadCsv(filename, lines){
+  const blob = new Blob(['﻿'+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+}
+const LEAD_CSV_COLS = [['phone','Teléfono'],['name','Nombre'],['email','Email'],['country','País'],['tour','Tour'],['package','Paquete'],['status','Estado'],['dealValue','Valor'],['travelDate','Fecha viaje'],['source','Origen'],['createdAt','Creado']];
+function exportLeadsCsv(){
+  const cols = LEAD_CSV_COLS;
+  const lines = [cols.map(c=>csvCell(c[1])).join(',')];
+  leads.filter(l=>!l.archived).forEach(l=>{
+    lines.push(cols.map(c=>{
+      if(c[0]==='phone') return csvCell('+'+l.phone);
+      if(c[0]==='status') return csvCell(STATUS_LABEL[l.status]);
+      if(c[0]==='createdAt') return csvCell(l.createdAt ? new Date(l.createdAt).toISOString() : '');
+      return csvCell(l[c[0]]);
+    }).join(','));
+  });
+  downloadCsv('leads_'+new Date().toISOString().slice(0,10)+'.csv', lines);
+}
+function exportOperatorsCsv(){
+  const cols = ['company','contact','email','phone','country','status','notes'];
+  const lines = [cols.map(c=>csvCell(c)).join(',')];
+  operators.forEach(o=>lines.push(cols.map(c=>csvCell(o[c])).join(',')));
+  downloadCsv((opsDb==='tao'?'travel_advisors_':'operadores_')+new Date().toISOString().slice(0,10)+'.csv', lines);
+}
+function topbarExport(){ if(curView==='operators') exportOperatorsCsv(); else exportLeadsCsv(); }
+
+// Import CSV de Meta Lead Ads: UTF-16, separado por tabuladores (formato real de su export).
+function parseMetaCsv(text){
+  if(text && text.charCodeAt(0)===0xFEFF) text = text.slice(1);
+  const lines = text.split(/\r?\n/).filter(l=>l.replace(/\t/g,'').trim().length);
+  if(lines.length<2) return [];
+  const cells = line => line.split('\t').map(c=>{ c=c.trim(); if(c.length>1 && c[0]==='"' && c[c.length-1]==='"') c=c.slice(1,-1); return c; });
+  const hdr = cells(lines[0]).map(h=>h.toLowerCase().replace(/[^a-z0-9_?]/g,''));
+  const idx = {}; hdr.forEach((h,i)=>idx[h]=i);
+  const col = (c,n) => { const i=idx[n]; return (i==null||i>=c.length) ? '' : (c[i]||''); };
+  const mappkg = v => { v=(v||'').toLowerCase(); if(v.indexOf('deluxe')>=0) return 'Deluxe'; if(v.indexOf('standard')>=0||v.indexOf('best_value')>=0) return 'Standard / best value'; return ''; };
+  const out = [];
+  for(let k=1;k<lines.length;k++){
+    const c = cells(lines[k]); const phone = (col(c,'whatsapp_number')||'').replace(/\D/g,'');
+    if(!phone) continue;
+    out.push({ whatsapp:phone, name:col(c,'full_name'), email:(col(c,'email')||'').toLowerCase(),
+      package: mappkg(col(c,'which_package_fits_you_best?')||col(c,'which_package_fits_you_best')),
+      tour:'Bali to Komodo', createdTime:col(c,'created_time'), source:col(c,'campaign_name') });
+  }
+  return out;
+}
+async function importLeadsFile(file){
+  const buf = new Uint8Array(await file.arrayBuffer());
+  let enc = 'utf-8';
+  if(buf[0]===0xFF && buf[1]===0xFE) enc='utf-16le'; else if(buf[0]===0xFE && buf[1]===0xFF) enc='utf-16be';
+  let text; try{ text = new TextDecoder(enc).decode(buf); }catch(e){ text = new TextDecoder('utf-8').decode(buf); }
+  let rows; try{ rows = parseMetaCsv(text); }catch(e){ rows = []; }
+  if(!rows.length){ showToast(t('err_no_rows')); return; }
+  try{
+    const r = await fetch('/admin/api/import', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({rows}) });
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error||'');
+    await refreshLeads(); renderKanban(); renderLeadsTbl(); if(leadsViewMode==='table') renderLeadsTable();
+    showToast(t('import_ok',{created:j.created||0,updated:j.updated||0}), {type:'success'});
+  }catch(e){ showToast(t('err_import')); }
+}
+
+// Import CSV genérico de operadores (no el formato Meta): company/contact/email/phone/country/notes.
+function opsParseCsv(text){
+  const rows=[]; let row=[], field='', inQ=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQ){ if(c==='"'){ if(text[i+1]==='"'){field+='"'; i++;} else inQ=false; } else field+=c; }
+    else { if(c==='"') inQ=true; else if(c===','||c===';'){row.push(field);field='';} else if(c==='\n'){row.push(field);rows.push(row);row=[];field='';} else if(c==='\r'){} else field+=c; }
+  }
+  if(field.length||row.length){row.push(field);rows.push(row);}
+  if(!rows.length) return [];
+  const headers = rows[0].map(h=>h.trim().toLowerCase());
+  return rows.slice(1).filter(r=>r.some(v=>v&&v.trim())).map(r=>{
+    const obj={}; headers.forEach((h,idx)=>obj[h]=r[idx]||''); return obj;
+  });
+}
+async function importOperatorsFile(file){
+  const text = await file.text();
+  let rows; try{ rows = opsParseCsv(text); }catch(e){ rows = []; }
+  if(!rows.length){ showToast(t('err_no_rows')); return; }
+  try{
+    const r = await fetch('/admin/api/import-operators', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({db:opsDb, rows}) });
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error||'');
+    await loadOperators();
+    showToast(t('import_ok',{created:j.created||0,updated:j.updated||0}), {type:'success'});
+  }catch(e){ showToast(t('err_import')); }
+}
+function topbarImportFile(e){
+  const file = e.target.files[0]; e.target.value = '';
+  if(!file) return;
+  if(curView==='operators') importOperatorsFile(file); else importLeadsFile(file);
 }
 
 // ======================================================================
@@ -1989,9 +2345,13 @@ async function newPaymentFlow(){
   }catch(e){ showToast(t('err_payment_create')); }
 }
 async function assignPaymentFlow(idx){
+  // Manda `ref` (id de la sesión de Stripe) cuando está disponible: el backend lo prefiere sobre
+  // `idx` porque la posición en la lista puede desincronizarse entre listar y asignar si entra
+  // o se asigna otro pago entre medias — mismo patrón ya validado en /admin (panel.html).
+  const item = lastUnmatched.find(p=>p.idx===idx);
   const phone = await askPrompt(t('ask_assign_phone'),''); if(!phone) return;
   try{
-    const r = await fetch('/admin/api/payments/assign', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({idx, phone}) });
+    const r = await fetch('/admin/api/payments/assign', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({idx, phone, ref: item && item.ref}) });
     if(!r.ok) throw 0;
     await refreshLeads(); loadInvoices();
   }catch(e){ showToast(t('err_payment_assign')); }
@@ -2515,8 +2875,10 @@ const titles = {overview:'Resumen', chats:'Conversaciones', leads:'Leads', lead:
 const loadedOnce = {};
 let opsDb = 'ops'; // 'ops' (Operadores B2B) | 'tao' (Travel Adventures Operators) -- misma vista, dos agendas
 let prevView = 'overview';
+let curView = 'overview'; // para que Exportar/Importar del topbar sepan sobre qué dataset actuar
 function openOpsNav(db){ opsDb = db; loadedOnce.operators = false; pageState.ops = 1; go('operators'); }
 function go(view){
+  curView = view;
   if(document.getElementById('v'+view.charAt(0).toUpperCase()+view.slice(1)).id !== 'vLead') prevView = view;
   ALL_VIEWS.forEach(v=>{
     document.getElementById('v'+v.charAt(0).toUpperCase()+v.slice(1)).classList.toggle('hidden', v!==view);
@@ -2576,6 +2938,8 @@ function startApp(){
   notifItems = buildNotifItems();
   renderNotifs();
   loadCanned();
+  loadWaStatus();
+  setInterval(loadWaStatus, 10000);
   const storedWho = sessionStorage.getItem('botpanel_who');
   if(storedWho && OWNER_OPTS.includes(storedWho)){ whoAmI = storedWho; paintWho(); }
   else switchWho();
