@@ -598,6 +598,7 @@ textarea.nlinput{resize:vertical}
     <div class="langbtn">
       <span id="langEs" onclick="setLang('es')">ES</span>
       <span id="langEn" onclick="setLang('en')">EN</span>
+      <span id="langId" onclick="setLang('id')">ID</span>
     </div>
     <div class="bottomnav">
       <div class="navitem" onclick="toggleTheme()" style="cursor:pointer"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 5.6a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8z"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6"/></svg><span class="lbl" data-i18n="bn_appearance">Apariencia</span><span id="themeState" style="font-size:11.5px;color:var(--muted)"></span></div>
@@ -1326,9 +1327,190 @@ en: {
   bulk_sel:'selected', bulk_status:'Change status…', bulk_owner:'Assign to…',
   bulk_archive:'Archive', bulk_restore:'Restore', bulk_delete:'Delete', bulk_clear:'Clear selection',
   err_bulk:'Could not apply the bulk action.', no_archived:'No archived leads.',
+},
+id: {
+  login_sub:'Password sama seperti /admin', login_ph:'Password panel', login_enter:'Masuk',
+  who_ttl:'Siapa kamu?', who_sub:'Untuk mencatat siapa yang membuat atau mengubah dari sini',
+  nav_essentials:'Utama', nav_overview:'Ringkasan', nav_chats:'Chat',
+  nav_daniel:'Daniel (agen AI)', nav_b2c:'B2C', nav_bot:'BOT', nav_leads:'Klien',
+  nav_flota:'Armada', nav_appts:'Janji temu', nav_invoices:'Invoice', nav_account:'Akun', nav_team:'Tim', nav_settings:'Pengaturan',
+  ph_search_flota:'Cari model, plat nomor, kode…', ft_unidades:'Unit', ft_tarifas:'Tarif',
+  ft_err:'Gagal memuat data armada.', ft_total:'Total', ft_available:'Tersedia', ft_rented:'Disewa', ft_maint:'Servis', ft_retired:'Pensiun',
+  ft_none_units:'Tidak ada unit yang cocok.', ft_none_models:'Tidak ada model yang cocok.', ft_models:'Model',
+  ft_readonly:'Hanya baca — diedit di sistem BBM', ft_source:'Sumber: Supabase', ft_per_day:'/hari', ft_per_month:'/bulan', ft_day:'/hari',
+  ft_th_model:'Model', ft_th_code:'Kode', ft_th_plate:'Plat nomor', ft_th_status:'Status', ft_th_daily:'Harian', ft_th_weekly:'Mingguan', ft_th_monthly:'Bulanan', ft_th_offer:'Promo',
+  ft_offer_active:'Aktif', ft_offer_save:'Simpan', ft_offer_saved:'Tersimpan ✓', ft_offer_bad_pct:'Diskon harus dalam % antara 1 dan 90.', ft_offer_err:'Promo gagal disimpan.',
+  nav_media:'Foto & video', nav_newsletter:'Newsletter',
+  notif_hd:'Notifikasi', notif_empty:'Belum ada yang baru saat ini.',
+  notif_waiting:'menunggu balasan lebih dari 24 jam', notif_overdue:'follow-up terlambat',
+  notif_new_today:'baru hari ini', notif_unmatched:'pembayaran Stripe belum ditandai',
+  export:'Ekspor', import:'Impor', new_lead:'+ Lead baru',
+  err_no_rows:'Tidak ada baris valid di file ini.', err_import:'Gagal impor file.',
+  import_ok:'✓ {created} baru · {updated} diperbarui',
+  last30:'30 hari terakhir', seg_all:'Semua', seg_active:'Aktif', seg_needs:'Perlu tindakan',
+  waiting_hd:'Menunggu balasan', unit_leads:'lead', waiting_meta:'menunggu balasan >24 jam — data real',
+  open_queue:'Buka antrian', overdue_hd:'Follow-up terlambat', unit_tasks:'tugas',
+  overdue_meta:'dari {n} lead aktif — data real', review:'Cek',
+  dot_new:'{n} baru', dot_sub:'{avg} rata-rata/hari · {days} hari ada lead baru',
+  performance:'Performa', real_data_badge:'Data real dari b2k-bot, agregat', full_report:'Lihat laporan lengkap',
+  leads_by_channel:'Lead per kanal', see_report:'Lihat laporan', leads_per_day:'Lead baru per hari',
+  real_60d:'Real · 60 hari terakhir', needs_attention:'Lead yang butuh perhatian', see_all_leads:'Lihat semua lead',
+  th_lead:'Lead', th_interest:'Minat', th_waiting:'Menunggu', th_value:'Nilai', th_company:'Perusahaan',
+  th_contact:'Kontak', th_country:'Negara', th_status:'Status', th_when:'Kapan', th_title_notes:'Judul / catatan',
+  th_amount:'Jumlah', th_method:'Metode', th_date:'Tanggal',
+  search_conv:'Cari chat', composer_ph:'Tulis pesan WhatsApp…', send:'Kirim',
+  t_canned:'Balasan cepat', t_attach:'Kirim foto/video', canned_empty:'Belum ada balasan cepat tersimpan',
+  edit_tpl:'Edit balasan cepat', m_canned:'Balasan cepat', m_canned_help:'Satu per baris · format', m_canned_fmt:'Judul | teks',
+  al_media_big:'File terlalu besar (maks 16 MB).', al_tpl:'Gagal disimpan.',
+  win_open_a:'🟢 Jendela 24 jam terbuka · tutup dalam ', win_closed:'🔴 Jendela 24 jam tertutup — perlu template untuk menulis',
+  win_closed_ph:'Jendela 24 jam tertutup', win_never:'🔴 Klien belum pernah mengirim pesan — tidak bisa kirim teks bebas sampai dia membuka percakapan',
+  act_outreach:'💬 Mulai percakapan', act_reoutreach:'💬 Kirim ulang intro', outreach_ing:'⏳ Mengirim…', outreach_ok:'✓ Intro terkirim',
+  outreach_err:'Gagal memulai percakapan (mungkin template intro belum disetel?).',
+  p_pause:'⏸ Jeda bot', p_resume:'▶ Aktifkan lagi bot',
+  kanban_tab:'Kanban', table_tab:'Tabel', back:'Kembali',
+  contact_data:'Data kontak', interest:'Minat', activity:'Aktivitas', add_note:'+ Tambah catatan',
+  ask_note:'Catatan internal (tidak terlihat oleh klien):', notes_hd:'Catatan', no_notes:'Belum ada catatan.', edit_note:'Edit catatan',
+  loading:'Memuat…', new_operator:'+ Operator baru', new_appt:'+ Janji temu baru', new_payment:'+ Catat pembayaran',
+  recent_payments:'Pembayaran terbaru', team_hd:'Pembagian lead per orang', team_sub:'dihitung dari lead yang sudah dimuat',
+  session:'Sesi', connected_as:'Masuk sebagai', panel:'Panel', backend:'Backend', backend_val:'sama seperti /admin',
+  bn_switch:'Ganti pengguna', logout:'Keluar', bn_appearance:'Tampilan',
+  bn_collapse:'Ciutkan menu', bn_expand:'Perluas menu', of:'dari', btn_cancel:'Batal', btn_ok:'OK',
+  theme_light:'Terang', theme_dark:'Gelap',
+  cal_today:'Hari ini', cal_month:'Bulan', cal_list:'Daftar', cal_more:'+{n} lagi',
+  about_pilot:'Tentang pilot ini',
+  about_pilot_desc:'Reskin dari /admin dengan gaya visual dashboard referensi. Tidak menambah logika tulis baru: setiap aksi memanggil endpoint yang sama yang sudah dipakai /admin setiap hari. Untuk pengaturan sungguhan (WhatsApp, template, variabel Railway) tetap lewat /admin atau Railway langsung — di sini tidak bisa diubah.',
+  kpi_new_leads:'Lead baru (30h)', kpi_conversion:'Tingkat konversi', kpi_collected:'Pendapatan diterima',
+  kpi_active_leads:'Lead aktif', kpi_vs_prev:'vs {n} (30 hari sebelumnya)', kpi_won_of:'{w} menang dari {c} closing',
+  kpi_travellers:'{p} motor jalan · {d} pergerakan hari ini', kpi_breakdown:'{n} baru · {q} sudah ditawarkan · {w} menang',
+  st_new:'Baru', st_quoted:'Sudah ditawarkan', st_won:'Menang', st_lost:'Gagal', st_noshow:'No-show',
+  wait_min:'{n} menit lalu', wait_h:'{n} jam lalu', wait_d:'{n} hari lalu',
+  lead_waiting:'Menunggu balasan', lead_overdue:'Follow-up terlambat', see:'Lihat', nothing_pending:'Tidak ada yang pending saat ini.',
+  add_lead:'+ Tambah lead', kanban_summary:'{n} lead · {v} sedang berjalan',
+  loading_conv:'Memuat percakapan real…', no_messages:'Belum ada pesan', conv_load_error:'Gagal memuat percakapan',
+  send_error:'Pesan gagal terkirim.', view_lead:'Lihat profil',
+  via:'via', respond:'Balas', schedule_appt:'Buat janji temu', mark_won:'Tandai menang',
+  f_phone:'Telepon', f_email:'Email', f_country:'Negara', f_origin:'Sumber', f_created:'Dibuat',
+  to_confirm:'Menunggu konfirmasi', closed_amount:'jumlah closing', not_quoted_yet:'belum ditawarkan',
+  est_value:'perkiraan nilai', no_activity:'Belum ada aktivitas tercatat.',
+  hist_created:'Lead dibuat', hist_imported:'Diimpor', hist_status:'Perubahan status', hist_owner:'Pemilik ditugaskan',
+  hist_appt:'Janji temu dibuat', hist_note:'Catatan ditambahkan', hist_tag:'Tag', hist_archived:'Diarsipkan',
+  hist_restored:'Dipulihkan', hist_enriched:'Dilengkapi otomatis dari chat', hist_payment:'Pembayaran tercatat', hist_outreach:'Kontak dimulai',
+  hist_payment_deleted:'Pembayaran dihapus', hist_fu_reminded:'Pengingat follow-up', hist_newsletter:'Newsletter terkirim',
+  hist_deal_new:'Deal baru dibuka', hist_deal_archived:'Deal diarsipkan', hist_deal_status:'Perubahan status deal',
+  hist_delivery_failed:'Pengiriman gagal', hist_departure_assigned:'Ditugaskan ke keberangkatan', hist_departure_removed:'Dikeluarkan dari keberangkatan',
+  hist_email_sent:'Itinerary dikirim lewat email', hist_email_failed:'Gagal mengirim email', hist_review_followup:'Pengingat review terkirim',
+  summary_hd:'Ringkasan dan langkah selanjutnya', summary_refresh:'Perbarui ringkasan', summary_loading:'Membuat…', summary_empty:'Belum ada percakapan untuk diringkas.',
+  summary_err:'Gagal membuat ringkasan.', summary_next:'Langkah selanjutnya',
+  next_send_quote:'Kirim penawaran', next_confirm_date:'Konfirmasi tanggal perjalanan', next_follow_up:'Follow-up',
+  next_escalate_human:'Eskalasi ke orang', next_wait_customer:'Tunggu balasan klien', next_none:'Tidak ada saran tindakan',
+  pay_hd:'Pembayaran dan invoice', pay_invoice:'🧾 Invoice / kwitansi', no_deals:'Belum ada penjualan tercatat.',
+  pay_total:'Harga', pay_paid:'Sudah dibayar', pay_pending:'Pending', total:'Total', pay_total_ph:'Harga total', save:'Simpan',
+  pay_state_paid:'Lunas', pay_state_partial:'Bayar sebagian', pay_state_unpaid:'Belum dibayar', pay_state_unpriced:'Harga belum ditentukan',
+  m_wise:'Wise', m_cash:'Tunai', m_stripe:'Stripe', m_other:'Lainnya',
+  k_deposit:'DP', k_balance:'Sisa', k_other:'Lainnya',
+  c_amount:'Jumlah', btn_add_pay:'+ Tambah pembayaran', al_pay_amount:'Masukkan jumlah yang valid.', cfm_pay_delete:'Hapus pembayaran ini? Tidak bisa dibatalkan.',
+  deal_won:'✅ Menang', deal_lost:'❌ Gagal',
+  inv_title:'Kwitansi pembayaran', inv_client:'Klien', inv_issued:'Diterbitkan', inv_item:'Tour / paket', inv_qty:'Orang',
+  inv_amount:'Jumlah', inv_total:'Total', inv_paid:'Dibayar', inv_balance:'Sisa tagihan', inv_print:'Cetak / Simpan sebagai PDF',
+  inv_no_deal:'Belum ada penjualan closing — jumlahnya diisi di profil lead.', inv_payments:'Pembayaran diterima', inv_no_pay:'Belum ada pembayaran tercatat.', inv_method:'Metode',
+  confirm_won:'Tandai lead ini sebagai menang?', err_status:'Gagal memperbarui status.',
+  wa_blocked:'⛔ Akun WhatsApp diblokir (code {code}): TIDAK ADA template yang bisa keluar — outreach, notifikasi ke owner, dan pengingat semuanya gagal. Perbaiki di billing hub Meta.',
+  ask_when:'Tanggal dan jam janji temu (YYYY-MM-DDTHH:MM):', appt_created:'Janji temu dibuat.', err_appt:'Gagal membuat janji temu.',
+  ask_phone_new:'Nomor HP lead baru (dengan kode negara, hanya angka):', invalid_phone:'Nomor HP tidak valid.',
+  ask_name_opt:'Nama (opsional):', err_lead_create:'Gagal membuat lead (mungkin sudah ada?).',
+  no_name:'(tanpa nama)', archive:'Arsipkan', no_operators:'Belum ada operator.',
+  ask_company:'Nama perusahaan:', ask_contact_opt:'Kontak person (opsional):', ask_email_opt:'Email (opsional):',
+  err_operator_create:'Gagal membuat operator.', ask_op_status:'Status (baru / sedang chat / aktif / ditolak):',
+  err_operator_update:'Gagal memperbarui.', confirm_archive_op:'Arsipkan operator ini?', err_operator_archive:'Gagal mengarsipkan.',
+  confirm_delete_op:'Hapus operator ini secara permanen? Tidak bisa dibatalkan.',
+  edit:'Edit', th_email:'Email',
+  pay_paid:'Lunas', pay_partial:'Sebagian', pay_unpaid:'Belum dibayar', pay_unpriced:'Belum ada harga',
+  ask_dep_date:'Tanggal keberangkatan (YYYY-MM-DD):', ask_dep_tour:'Tour (opsional):', ask_dep_guided:'Apakah keberangkatan ini dengan pemandu? (+$550/orang)',
+  ask_dep_capacity:'Total kapasitas:', invalid_date:'Tanggal tidak valid (gunakan YYYY-MM-DD).',
+  confirm_delete_dep:'Hapus keberangkatan ini? Penumpang TIDAK ikut terhapus, statusnya jadi belum ditugaskan.', confirm_unassign_dep:'Keluarkan klien ini dari keberangkatan?',
+  err_departure:'Gagal menyimpan keberangkatan.', err_departure_delete:'Gagal menghapus.', err_departure_assign:'Gagal memperbarui penugasan.',
+  // -- media --
+  upload_media:'+ Unggah', no_media:'Belum ada foto atau video.', media_no_caption:'tanpa keterangan',
+  media_count:'{n} file', media_too_big:'Maksimal 16 MB.',
+  ask_media_label:'Label (dipakai Daniel untuk memilih file):', ask_media_caption:'Keterangan (dilihat klien):', ask_media_use:'Kapan Daniel harus memakainya? (catatan internal, tidak pernah dilihat klien)',
+  err_media_upload:'Gagal mengunggah file.', err_media_update:'Gagal disimpan.', confirm_delete_media:'Hapus file ini?',
+  // -- newsletter --
+  nl_compose:'Tulis', nl_dataset:'Kirim ke', nl_ds_leads:'Lead (WhatsApp)', nl_ds_operators:'Operator', nl_ds_tao:'Travel Adv.', nl_ds_subscribers:'Subscriber web',
+  nl_subject:'Subjek', nl_subject_ph:'Subjek email', nl_body:'Isi (bisa **tebal**, [[Tombol|url]], ![alt](gambar))', nl_body_ph:'Tulis isi kontennya…',
+  nl_mode:'Isi email', nl_mode_compose:'Tulis di sini', nl_mode_brevo:'Pakai template Brevo',
+  nl_template:'Template Brevo', nl_template_hint:'Hanya template transactional Brevo yang aktif yang muncul di sini. Personalisasi dengan {{params.name}}; tambahkan {{params.unsub}} di footer untuk unsubscribe.',
+  nl_no_templates:'Belum ada template transactional di Brevo (buat di Brevo → Transactional → Templates)', nl_pick_template:'Pilih template Brevo.',
+  nl_test:'Kirim tes', nl_schedule:'Jadwalkan', nl_send_now:'Kirim sekarang',
+  nl_scheduled_hd:'Terjadwal', nl_scope:'Cakupan', nl_scope_all:'Semua', nl_cancel:'Batal', nl_no_scheduled:'Belum ada yang dijadwalkan.',
+  nl_history_hd:'Riwayat', nl_result:'Hasil', nl_failed:'gagal', nl_no_history:'Belum ada yang terkirim.',
+  nl_subs_hd:'Subscriber web', nl_subs_add:'+ Tambah', nl_subs_source:'Sumber', nl_subscribed:'Subscribed', nl_unsub:'Unsubscribed', nl_no_subs:'Belum ada subscriber.',
+  nl_need_subject_body:'Subjek atau isi belum diisi (atau pilih template).', nl_confirm_send:'Kirim sekarang ke semua audiens yang dipilih?',
+  nl_sent_result:'Terkirim: {sent} dari {total}.', nl_send_error:'Gagal menyelesaikan aksi ini',
+  ask_test_email:'Kirim tes ke email mana?', nl_test_sent:'Tes terkirim.',
+  nl_scheduled_ok:'Campaign berhasil dijadwalkan.', nl_confirm_cancel:'Batalkan jadwal kirim ini?',
+  ask_subscriber_email:'Email yang ditambahkan:', confirm_delete_subscriber:'Hapus subscriber ini?',
+  ops_count:'{n} operator', appts_count:'{n} janji temu', delete:'Hapus', no_appts:'Belum ada janji temu.',
+  ask_phone_appt_opt:'Nomor HP lead (hanya angka, opsional kalau internal):', ask_appt_name:'Nama untuk janji temu:',
+  confirm_delete_appt:'Hapus janji temu ini?', err_appt_delete:'Gagal menghapus.', call_title:'Telepon',
+  unmatched_hd:'Pembayaran Stripe belum ditandai', th_origin:'Sumber', assign:'Tandai',
+  invoices_count:'{n} pembayaran terbaru', invoices_count_unmatched:' · {n} belum ditandai', no_payments:'Belum ada pembayaran tercatat.',
+  ask_phone_pay:'Nomor HP lead (hanya angka):', ask_amount:'Jumlah:', invalid_amount:'Jumlah tidak valid.',
+  ask_method:'Metode (stripe / wise / cash / other):', err_payment_create:'Gagal mencatat pembayaran.',
+  ask_provider:'Provider (stripe / xendit):', err_provider:'Provider tidak valid — gunakan stripe atau xendit.',
+  inv_k_confirmed:'lunas', inv_k_pending:'link pending', inv_k_cancelled:'link dibatalkan',
+  ask_assign_phone:'Ditandai ke nomor HP mana? (hanya angka):', err_payment_assign:'Gagal ditandai.',
+  confirm_delete_payment:'Hapus pembayaran ini?', err_payment_delete:'Gagal menghapus.',
+  inv_status_paid:'Lunas', inv_status_pending:'Pending', inv_status_cancelled:'Dibatalkan',
+  inv_cancel:'Batalkan', inv_add_receipt:'+ Kwitansi', inv_view_receipt:'Lihat kwitansi',
+  confirm_cancel_invoice:'Batalkan link pembayaran ini di provider?', err_invoice_cancel:'Gagal membatalkan di provider.',
+  ask_receipt_url:'URL kwitansi/invoice:', err_invoice_receipt:'Gagal menyimpan kwitansi.',
+  unassigned:'(belum ditugaskan)', you_suffix:' (kamu)', team_won_pending:'{w} menang · {p} pending',
+  team_manage_hd:'Anggota tim', team_add_ph:'Nama', team_add_btn:'+ Tambah',
+  team_dup:'Sudah ada di tim.', team_confirm_remove:'Keluarkan {n} dari tim? Lead miliknya jadi "belum ditugaskan".',
+  team_min_one:'Tim tidak boleh kosong.', team_remove:'Keluarkan',
+  err_who_missing:'Pilih',
+  // -- kenapa tidak closing (dropoff, Ringkasan) --
+  da_dropoff:'Kenapa tidak closing', da_dropoff_list:'Lead dingin terbaru',
+  da_dropoff_empty:'Tidak ada lead dingin untuk dianalisis (belum ada lead yang diam 24+ jam).',
+  da_dropoff_scanned:'Dianalisis {n} dari {t} lead dingin',
+  da_drop_price:'Diam setelah dikasih harga', da_drop_location:'Diam setelah bahas lokasi/antar',
+  da_drop_insurance_deposit:'Diam setelah bahas asuransi/deposit', da_drop_documents:'Diam setelah diminta dokumen',
+  da_drop_availability:'Diam setelah bahas ketersediaan model', da_drop_payment:'Diam setelah bahas pembayaran',
+  da_drop_other:'Diam di titik lain', da_drop_no_data:'Tidak ada riwayat chat atau bot tidak membalas',
+  da_dropoff_err:'Gagal memeriksa — bukan berarti tidak ada lead dingin, tapi pembacaan datanya gagal.',
+  // -- reservas: cola de traspaso al ERP del cliente --
+  nav_bookings:'Booking',
+  bookings_help:'Sewa yang sudah closing dan masih perlu dibuat di ERP klien. Tidak ada motor yang dipesan dari sini: sistem mereka yang menentukan.',
+  bookings_empty:'Belum ada sewa yang closing.', bookings_nodata:'Tidak ada data sewa',
+  bookings_mark:'Sudah dibuat di ERP', bookings_undo:'Batalkan', bookings_err:'Gagal memperbarui booking',
+  bk_deliv:'Antar', bk_id:'ID', bk_paid:'sudah bayar', bk_nopay:'belum ada pembayaran tercatat',
+  bk_pending:'PENDING', bk_inerp:'DI ERP', bk_grp_pending:'Belum dibuat', bk_grp_done:'Sudah di ERP',
+  bk_tocreate:'perlu dibuat di ERP',
+  bookings_load_err:'Gagal memeriksa — bukan berarti tidak ada booking, tapi pembacaan datanya gagal.',
+  // -- interruptor global del bot (apaga/enciende para TODOS los clientes) --
+  bot_on:'Bot ON', bot_off:'Bot OFF',
+  bot_on_title:'Bot MENYALA — klik untuk mematikan', bot_off_title:'Bot MATI — klik untuk menyalakan',
+  bot_confirm_on:'NYALAKAN bot? Bot akan membalas semua klien lagi.',
+  bot_confirm_off:'MATIKAN bot? Bot berhenti membalas dan follow-up (pesan tetap tersimpan di CRM).',
+  bot_pass_prompt:'Password admin untuk saklar ini:', bot_wrong_pass:'Password salah.',
+  net_error:'Error jaringan.',
+  // -- salud del almacén (Redis vs RAM) --
+  store_redis:'Redis · persisten', store_ram:'RAM · TIDAK persisten — atur Redis', store_title:'Status penyimpanan data',
+  // -- autorrelleno de fichas desde el chat (enrich-all) --
+  enrich_all:'Perbarui dari chat', enrich_ing:'Menganalisis…', enrich_done:'diperbarui',
+  err_enrich:'Gagal memperbarui dari chat.',
+  // -- archivar / restaurar / lote (Meta Leads) --
+  show_archived:'Diarsipkan', show_active:'Aktif', restore:'Pulihkan',
+  cfm_delete_lead:'Hapus lead ini secara permanen? Tidak bisa dibatalkan.',
+  cfm_delete_n:'Hapus {n} lead secara permanen? Tidak bisa dibatalkan.',
+  err_archive:'Gagal mengarsipkan.', err_delete:'Gagal menghapus.',
+  bulk_sel:'dipilih', bulk_status:'Ubah status…', bulk_owner:'Tugaskan ke…',
+  bulk_archive:'Arsipkan', bulk_restore:'Pulihkan', bulk_delete:'Hapus', bulk_clear:'Batalkan pilihan',
+  err_bulk:'Gagal menerapkan aksi massal.', no_archived:'Tidak ada lead yang diarsipkan.',
 }
 };
 let LANG = localStorage.getItem('botpanel_lang') || 'es';
+function panelLocale(){ return {es:'es-ES', en:'en-US', id:'id-ID'}[LANG] || 'en-US'; }
 function t(key, vars){
   let s = (I18N[LANG] && I18N[LANG][key]) ?? (I18N.es[key] ?? key);
   if(vars) for(const k in vars) s = s.replace('{'+k+'}', vars[k]);
@@ -1346,6 +1528,7 @@ function applyStaticI18n(){
   });
   document.getElementById('langEs').classList.toggle('on', LANG==='es');
   document.getElementById('langEn').classList.toggle('on', LANG==='en');
+  document.getElementById('langId').classList.toggle('on', LANG==='id');
 }
 function setLang(lang){
   LANG = lang;
@@ -1416,10 +1599,10 @@ const deltaPct = (cur,prev) => prev ? Math.round(1000*(cur-prev)/prev)/10 : null
 function buildKpis(){
   return [
     {label:t('kpi_new_leads'),ibg:CB,val:String(REAL.newLast30d),ic:'usersW',
-      delta:(REAL.newLast30d>=REAL.newPrev30d?'+':'')+(deltaPct(REAL.newLast30d,REAL.newPrev30d) ?? 0).toLocaleString(LANG==='es'?'es-ES':'en-US')+'%',
+      delta:(REAL.newLast30d>=REAL.newPrev30d?'+':'')+(deltaPct(REAL.newLast30d,REAL.newPrev30d) ?? 0).toLocaleString(panelLocale())+'%',
       arrow:REAL.newLast30d>=REAL.newPrev30d?'&uarr;':'&darr;',dc:REAL.newLast30d>=REAL.newPrev30d?GREEN:RED,
       vs:t('kpi_vs_prev',{n:REAL.newPrev30d})},
-    {label:t('kpi_conversion'),ibg:CO,val:REAL.conversionPct.toLocaleString(LANG==='es'?'es-ES':'en-US')+'%',ic:'trend',
+    {label:t('kpi_conversion'),ibg:CO,val:REAL.conversionPct.toLocaleString(panelLocale())+'%',ic:'trend',
       meta:t('kpi_won_of',{w:REAL.wonCount,c:REAL.closedCount})},
     {label:t('kpi_collected'),ibg:CG,val:fmt(REAL.collected),ic:'euro',
       meta:t('kpi_travellers',{p:REAL.travellers,d:REAL.departures})},
@@ -1549,12 +1732,12 @@ async function loadBookings(){
   }catch(e){ bookings = []; bookingsError = true; }
   renderBookings();
 }
-function fullMoney(n){ n = parseInt(n,10)||0; return n ? ('Rp '+n.toLocaleString(LANG==='es'?'es-ES':'en-US')) : ''; }
+function fullMoney(n){ n = parseInt(n,10)||0; return n ? ('Rp '+n.toLocaleString(panelLocale())) : ''; }
 function bkDay(s){
   if(!s) return '';
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s).trim());
   if(!m) return esc(s);
-  return new Date(+m[1],+m[2]-1,+m[3]).toLocaleDateString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short'});
+  return new Date(+m[1],+m[2]-1,+m[3]).toLocaleDateString(panelLocale(),{day:'numeric',month:'short'});
 }
 function renderBookings(){
   const el = document.getElementById('bookingsBody'); if(!el) return;
@@ -1580,7 +1763,7 @@ function renderBookings(){
       chips += `<a class="bkchip docs" href="/admin/api/doc/${encodeURIComponent(d.id)}?key=${encodeURIComponent(sessionKey)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">📎 ${t('bk_id')}${r.docs.length>1?' '+(j+1):''}</a>`;
     });
     const payline = r.paidAt
-      ? `${esc((r.provider||'').charAt(0).toUpperCase()+(r.provider||'').slice(1))} · ${t('bk_paid')} ${new Date(r.paidAt).toLocaleDateString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short'})}`
+      ? `${esc((r.provider||'').charAt(0).toUpperCase()+(r.provider||'').slice(1))} · ${t('bk_paid')} ${new Date(r.paidAt).toLocaleDateString(panelLocale(),{day:'numeric',month:'short'})}`
       : t('bk_nopay');
     const badge = r.erpCreated ? `<span class="bkbadge done">${t('bk_inerp')}</span>` : `<span class="bkbadge pend">${t('bk_pending')}</span>`;
     const btn = r.erpCreated
@@ -2262,7 +2445,7 @@ function openInvoice(phone){
   const pt = payTotals(l);
   const pax = 1; // alquiler: una unidad por deal, no hay concepto de riders/pillions como en tour
   const ps = (Array.isArray(l.payments)?l.payments:[]).slice().sort((a,b)=>(a.at||0)-(b.at||0));
-  const dateFmt = ts => new Date(ts||Date.now()).toLocaleDateString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short',year:'numeric'});
+  const dateFmt = ts => new Date(ts||Date.now()).toLocaleDateString(panelLocale(),{day:'numeric',month:'short',year:'numeric'});
   const rows = ps.length ? ps.map(p=>`<tr><td>${dateFmt(p.at)}</td><td>${esc(p.method||'')}</td><td>${esc(t('k_'+(p.kind||'other')))}</td><td style="text-align:right">${fmt(p.amount||0)}</td></tr>`).join('')
     : `<tr><td colspan="4" style="color:#888">${esc(t('inv_no_pay'))}</td></tr>`;
   const dateRange = deal && (deal.startDate||deal.endDate) ? `${esc(deal.startDate||'?')} &rarr; ${esc(deal.endDate||'?')}` : '';
@@ -2647,7 +2830,7 @@ function renderAppts(){
   const p = paginate('appts', upcoming);
   document.getElementById('apptsTbl').innerHTML = p.items.map(a=>`
     <div class="tblrow" style="grid-template-columns:1.3fr 1.6fr 1.5fr 90px">
-      <span class="wait">${a.when ? new Date(a.when).toLocaleString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '—'}</span>
+      <span class="wait">${a.when ? new Date(a.when).toLocaleString(panelLocale(),{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '—'}</span>
       <span class="wait">${a.name||''} ${a.phone?('+'+a.phone):''}</span>
       <span class="wait">${a.title||t('call_title')}${a.closer?(' · '+a.closer):''}</span>
       <button class="actbtn" onclick="deleteApptFlow('${a.id}')">${t('delete')}</button>
@@ -2663,7 +2846,7 @@ function renderAppts(){
 // ======================================================================
 let apptsViewMode = 'cal';
 let calDate = new Date(); calDate.setDate(1);
-const DOW = { es:['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'], en:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] };
+const DOW = { es:['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'], en:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], id:['Sen','Sel','Rab','Kam','Jum','Sab','Min'] };
 function setApptsViewMode(mode){
   apptsViewMode = mode;
   document.querySelectorAll('#apptsViewSeg .seg').forEach((el,i)=>{
@@ -2681,8 +2864,8 @@ function apptChipClick(id){
 function renderApptsCalendar(){
   const dowEl = document.getElementById('calDow');
   if(!dowEl) return; // vista aun no montada (login/who-gate)
-  dowEl.innerHTML = DOW[LANG==='en'?'en':'es'].map(d=>`<span>${d}</span>`).join('');
-  document.getElementById('calLabel').textContent = calDate.toLocaleDateString(LANG==='es'?'es-ES':'en-US',{month:'long',year:'numeric'});
+  dowEl.innerHTML = (DOW[LANG] || DOW.es).map(d=>`<span>${d}</span>`).join('');
+  document.getElementById('calLabel').textContent = calDate.toLocaleDateString(panelLocale(),{month:'long',year:'numeric'});
 
   const year = calDate.getFullYear(), month = calDate.getMonth();
   const firstDow = (new Date(year,month,1).getDay()+6)%7; // lunes=0
@@ -2713,7 +2896,7 @@ function renderApptsCalendar(){
     const rest = dayAppts.length-shown.length;
     return `<div class="calday ${c.out?'out':''} ${isToday?'today':''}">
       <div class="dn">${c.day}</div>
-      ${shown.map(a=>`<div class="calchip" onclick="apptChipClick('${a.id}')" title="${(a.name||a.title||'').replace(/"/g,'&quot;')}">${new Date(a.when).toLocaleTimeString(LANG==='es'?'es-ES':'en-US',{hour:'2-digit',minute:'2-digit'})} ${a.name||a.title||''}</div>`).join('')}
+      ${shown.map(a=>`<div class="calchip" onclick="apptChipClick('${a.id}')" title="${(a.name||a.title||'').replace(/"/g,'&quot;')}">${new Date(a.when).toLocaleTimeString(panelLocale(),{hour:'2-digit',minute:'2-digit'})} ${a.name||a.title||''}</div>`).join('')}
       ${rest>0?`<div class="calmore" onclick="setApptsViewMode('list')">${t('cal_more',{n:rest})}</div>`:''}
     </div>`;
   }).join('');
@@ -2771,7 +2954,7 @@ function renderInvoices(){
       <span class="wait" style="cursor:pointer" onclick="openLead('${pm.phone}')">${esc(pm.name||pm.phone)}${pm.model?` <span style="color:var(--muted)">· ${esc(pm.model)}</span>`:''}</span>
       <span class="val">${fmt(pm.amount||0)}</span>
       <span>${invBadge(pm)}</span>
-      <span class="wait">${pm.ts?new Date(pm.ts).toLocaleDateString(LANG==='es'?'es-ES':'en-US'):'—'}</span>
+      <span class="wait">${pm.ts?new Date(pm.ts).toLocaleDateString(panelLocale()):'—'}</span>
       <span style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">${acts.join('')}</span>
     </div>`;
   }).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('no_payments')}</div>`;
@@ -3017,7 +3200,7 @@ function renderNewsletter(){
   const schedPg = paginate('nlSched', nlScheduled);
   document.getElementById('nlScheduledTbl').innerHTML = schedPg.items.map(c=>`
     <div class="tblrow" style="grid-template-columns:1.3fr 2fr 1fr 90px">
-      <span class="wait">${new Date(c.when).toLocaleString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
+      <span class="wait">${new Date(c.when).toLocaleString(panelLocale(),{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
       <span class="wait">${c.subject}</span>
       <span class="wait">${c.scope==null?t('nl_scope_all'):c.scope}</span>
       <button class="actbtn" onclick="cancelScheduledFlow('${c.id}')">${t('nl_cancel')}</button>
@@ -3027,7 +3210,7 @@ function renderNewsletter(){
   const histPg = paginate('nlHist', nlHistory.slice().sort((a,b)=>b.at-a.at));
   document.getElementById('nlHistoryTbl').innerHTML = histPg.items.map(c=>`
     <div class="tblrow" style="grid-template-columns:1.3fr 2fr 1fr 1fr">
-      <span class="wait">${new Date(c.at).toLocaleDateString(LANG==='es'?'es-ES':'en-US')}</span>
+      <span class="wait">${new Date(c.at).toLocaleDateString(panelLocale())}</span>
       <span class="wait">${c.subject}</span>
       <span class="tourpill">${t('nl_ds_'+c.dataset)}</span>
       <span class="wait">${c.sent}/${c.total}${c.failed?(' · '+c.failed+' '+t('nl_failed')):''}</span>
