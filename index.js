@@ -1933,6 +1933,29 @@ function buildMediaHint(mediaLib) {
     + "\nTHE TAG IS THE ONLY THING THAT SENDS ANYTHING. The caption travels attached to the file automatically — do NOT type the caption, the label, or a list of clip titles into your message, and do NOT announce them line by line. Writing \"Here's the clips:\" followed by their titles sends NOTHING: the customer gets a message naming videos that never arrive (this happened to a real customer three times). If you say you're sending something, the tag must be there."
     + "\nIF THE CUSTOMER SAYS IT DIDN'T ARRIVE: resend it ONCE. If they say it still hasn't landed, STOP resending — do NOT say you'll look into it or check on your end (nobody is watching that, and the conversation dies there). Give them the website link so they get the content another way, and keep the conversation moving to the next step.";
 }
+// Bloque de salidas guiadas para el prompt, generado en vivo desde `listDepartures()` (Redis) en
+// cada turno — NUNCA texto fijo en context.md. El bug real que esto corrige: el 28-ago se dieron de
+// alta 7 salidas guiadas de 2027 en el CRM y el bot siguió diciendo "nothing published for 2027"
+// durante 3 días porque nadie copió las fechas a mano al prompt. Con esto, dar de alta una salida
+// en el panel la hace disponible al bot en el siguiente mensaje, sin editar ni desplegar nada.
+function buildDeparturesHint(departures) {
+  const today = todayBiz(); // "YYYY-MM-DD", comparable como string
+  const open = (departures || [])
+    .filter((d) => d.guided && d.state !== "cancelled" && d.date >= today)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const header = "GUIDED DEPARTURES DATA (live from the CRM, regenerated fresh on every message — "
+    + "this is the ONLY source of truth for which fixed guided dates are currently open. If any other "
+    + "part of your instructions names a specific guided date as an example, THIS list is what's actually "
+    + "confirmed right now and wins on conflict, because unlike prose it can never go stale):";
+  if (!open.length) {
+    return `${header}\nThere are currently NO open guided departures on file for any tour or edition. Never invent one — say guided dates aren't published yet and capture the lead per WANTS A GUIDED TOUR IN A FUTURE YEAR.`;
+  }
+  const lines = open.map((d) => {
+    const label = new Date(d.date + "T00:00:00Z").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
+    return `- ${label} — ${d.tour}, ${d.package} edition`;
+  });
+  return `${header}\n${lines.join("\n")}\nEach needs a minimum of 6 riders (smaller groups get grouped together with others, up to 12 max) and is specific to the tour+edition shown — don't offer a Deluxe date for a Roundtrip lead or vice versa unless that exact combination is listed. A date/edition combo NOT on this list is NOT confirmed: say so honestly instead of inventing one or reusing an old date. For real-time remaining spots on any listed departure, say "let me check the latest availability for you" and set [INTENT:escalate].`;
+}
 async function setMediaLib(list) {
   const arr = Array.isArray(list) ? list.slice(0, 50) : [];
   if (redisClient) await redisClient.set("media_lib", JSON.stringify(arr));
@@ -2333,6 +2356,8 @@ app.post("/webhook", async (req, res) => {
     // Media disponible (gestionada desde el panel): se inyecta para que el bot solo ofrezca lo que existe.
     const mediaLib = await getMediaLib();
     const mediaHint = buildMediaHint(mediaLib);
+    // Salidas guiadas (gestionadas desde el panel): en vivo desde Redis, nunca copiadas a mano en context.md.
+    const departuresHint = buildDeparturesHint(await listDepartures());
     // Streaming (no create): evita el "Premature close" en respuestas no-stream y mantiene viva la conexión.
     const response = await claudeMessage({
       model: MODEL,
@@ -2346,10 +2371,11 @@ app.post("/webhook", async (req, res) => {
       max_tokens: 2000,
       // Prompt caching: el system (~11.5k tok fijos: context.md + BASE_INSTRUCTIONS) es idéntico en cada turno.
       // Con cache_control, la 1ª vez paga 1.25x y el resto de la charla (dentro de 5 min) paga 0.1x → ~-78% del coste de system.
-      // mediaHint va en bloque aparte tras el prefijo cacheado (cambia solo al editar la media library).
+      // mediaHint/departuresHint van en bloque aparte tras el prefijo cacheado (cambian solo al editar el panel).
       system: [
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
         { type: "text", text: dateHint() },
+        { type: "text", text: departuresHint },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
       ],
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // prompt = últimos 20; el resto es historial del panel
@@ -2848,6 +2874,7 @@ app.post("/admin/api/simulate", async (req, res) => {
     history.push({ role: "user", content: text, ts: Date.now() });
     const mediaLib = await getMediaLib();
     const mediaHint = buildMediaHint(mediaLib);
+    const departuresHint = buildDeparturesHint(await listDepartures()); // paridad simulador/producción
     const response = await claudeMessage({
       model: MODEL,
       thinking: { type: "adaptive" }, // espejo del webhook real (paridad simulador/producción)
@@ -2856,6 +2883,7 @@ app.post("/admin/api/simulate", async (req, res) => {
       system: [
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
         { type: "text", text: dateHint() },
+        { type: "text", text: departuresHint },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
       ],
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // mismo recorte que el webhook real
