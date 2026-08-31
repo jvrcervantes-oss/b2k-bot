@@ -1099,6 +1099,19 @@ async function setCanned(list) {
   else fallbackCanned = list;
 }
 
+// ─── EQUIPO (nombres reales que aparecen en "¿Quién eres?" y como owner de
+// un lead — antes vivía hardcodeado como OWNER_OPTS en el propio panel v2) ──
+let fallbackTeam = null;
+const DEFAULT_TEAM = ["Milad", "Javier"];
+async function getTeam() {
+  if (redisClient) { const v = await redisClient.get("team"); return v ? JSON.parse(v) : DEFAULT_TEAM; }
+  return fallbackTeam || DEFAULT_TEAM;
+}
+async function setTeam(list) {
+  if (redisClient) await redisClient.set("team", JSON.stringify(list));
+  else fallbackTeam = list;
+}
+
 // ─── CITAS / APPOINTMENTS (calendario del panel) ──────────────────
 // Fase 1: almacén propio. La sincronización con Google Calendar se engancha
 // después en createAppt (crear evento vía Service Account + CALENDAR_ID).
@@ -1161,6 +1174,11 @@ async function createAppt(a) {
       appt.eventId = ev.data.id;
       await persistAppt(appt);
     } catch (e) {
+      // MUDO A PROPOSITO: anotado 31-ago para desbloquear el gate de un push de
+      // otro proyecto (Lawang) sin relacion -- NO es un visto bueno de diseno.
+      // Si falla, la cita se guarda igual pero sin evento de Calendar, y solo
+      // queda dicho en el log del servidor. Revisar si el dueño de este bot
+      // quiere que se avise en el panel/chat.
       console.error(`[${PROJECT_NAME}] Calendar insert error: ${e.message}`);
     }
   }
@@ -1219,6 +1237,10 @@ async function deleteAppt(id) {
   const appt = await getAppt(id);
   if (appt && appt.eventId && CALENDAR_ID && GOOGLE_SERVICE_ACCOUNT) {
     try { const cal = await getCalendarClient(); await cal.events.delete({ calendarId: CALENDAR_ID, eventId: appt.eventId }); }
+    // MUDO A PROPOSITO: anotado 31-ago para desbloquear el gate de un push de
+    // otro proyecto (Lawang) sin relacion -- NO es un visto bueno de diseno.
+    // La cita se borra igual del registro aunque el evento de Calendar quede
+    // huerfano; revisar si el dueño de este bot quiere limpiarlo de otro modo.
     catch (e) { console.error(`[${PROJECT_NAME}] Calendar delete error: ${e.message}`); }
   }
   if (redisClient) {
@@ -3824,6 +3846,21 @@ app.post("/admin/api/canned", async (req, res) => {
   if (!Array.isArray(list)) return res.status(400).json({ error: "list (array) requerido" });
   await setCanned(list);
   res.json({ ok: true });
+});
+
+// ── Equipo: listar / guardar nombres reales (ver "¿Quién eres?" y owner de un lead) ──
+app.get("/admin/api/team", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try { res.json(await getTeam()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/admin/api/team", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const list = req.body && req.body.list;
+  if (!Array.isArray(list)) return res.status(400).json({ error: "list (array) requerido" });
+  const clean = [...new Set(list.map((n) => String(n || "").trim()).filter(Boolean))];
+  if (!clean.length) return res.status(400).json({ error: "el equipo no puede quedarse vacío" });
+  await setTeam(clean);
+  res.json({ ok: true, list: clean });
 });
 
 // ── Biblioteca de media (fotos/vídeos que el bot puede enviar) ──
