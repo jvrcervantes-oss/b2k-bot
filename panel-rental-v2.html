@@ -1127,6 +1127,7 @@ es: {
   da_drop_insurance_deposit:'Se calló tras seguro/depósito', da_drop_documents:'Se calló tras pedir documentos',
   da_drop_availability:'Se calló tras disponibilidad del modelo', da_drop_payment:'Se calló tras el pago',
   da_drop_other:'Se calló en otro punto', da_drop_no_data:'Sin historial de chat o sin respuesta del bot',
+  da_dropoff_err:'No se pudo consultar — no es que no haya leads fríos, es que falló la lectura.',
   // -- reservas: cola de traspaso al ERP del cliente --
   nav_bookings:'Reservas',
   bookings_help:'Alquileres cerrados que hay que crear en el ERP del cliente. Aquí no se reserva ninguna moto: su sistema manda.',
@@ -1135,6 +1136,7 @@ es: {
   bk_deliv:'Entrega', bk_id:'ID', bk_paid:'pagado', bk_nopay:'sin pago registrado',
   bk_pending:'PENDIENTE', bk_inerp:'EN ERP', bk_grp_pending:'Pendientes', bk_grp_done:'Ya en el ERP',
   bk_tocreate:'por crear en el ERP',
+  bookings_load_err:'No se pudo consultar — no es que no haya reservas, es que falló la lectura.',
   // -- interruptor global del bot (apaga/enciende para TODOS los clientes) --
   bot_on:'Bot ON', bot_off:'Bot OFF',
   bot_on_title:'Bot ENCENDIDO — clic para apagar', bot_off_title:'Bot APAGADO — clic para encender',
@@ -1313,6 +1315,7 @@ en: {
   da_drop_insurance_deposit:'Went quiet after insurance/deposit', da_drop_documents:'Went quiet after documents were asked',
   da_drop_availability:'Went quiet after model availability', da_drop_payment:'Went quiet after payment',
   da_drop_other:'Went quiet elsewhere', da_drop_no_data:'No chat history or no bot reply',
+  da_dropoff_err:'Could not check — this is not "no cold leads", the read failed.',
   // -- bookings: queue to hand off to the client's ERP --
   nav_bookings:'Bookings',
   bookings_help:'Closed rentals that still need creating in the client ERP. Nothing is reserved here: their system is the source of truth.',
@@ -1321,6 +1324,7 @@ en: {
   bk_deliv:'Delivery', bk_id:'ID', bk_paid:'paid', bk_nopay:'no payment recorded',
   bk_pending:'PENDING', bk_inerp:'IN ERP', bk_grp_pending:'To create', bk_grp_done:'Already in ERP',
   bk_tocreate:'to create in ERP',
+  bookings_load_err:'Could not check — this is not "no bookings", the read failed.',
   // -- global bot switch (turns the bot off/on for EVERY customer) --
   bot_on:'Bot ON', bot_off:'Bot OFF',
   bot_on_title:'Bot ON — click to turn off', bot_off_title:'Bot OFF — click to turn on',
@@ -1511,16 +1515,22 @@ function needsAttention(l){
 // ======================================================================
 const DROPOFF_ICON = {price:'💰',location:'📍',insurance_deposit:'🛡️',documents:'🪪',availability:'🏍️',payment:'💳',other:'❓',no_data:'🕸️'};
 let dropoff = null;
+let dropoffError = false; // distinto de "sin leads fríos": aquí no pudimos ni preguntar
 async function loadDropoff(){
   try{
     const r = await fetch('/admin/api/dropoff', { headers:{'X-Admin-Key':sessionKey} });
-    dropoff = r.ok ? await r.json() : null;
-  }catch(e){ dropoff = null; }
+    if(!r.ok) throw 0;
+    dropoff = await r.json();
+    dropoffError = false;
+  }catch(e){ dropoff = null; dropoffError = true; }
   renderDropoff();
 }
 function renderDropoff(){
   const barsEl = document.getElementById('dropBarsCard'), listEl = document.getElementById('dropListCard');
   if(!barsEl || !listEl) return;
+  // Un fallo de red NO se pinta igual que "no hay leads fríos" — lo segundo es un hecho verificado,
+  // lo primero es no haber podido mirar (misma regla que el badge de salud / el interruptor del bot).
+  if(dropoffError){ barsEl.innerHTML = `<div class="dropempty">${t('da_dropoff_err')}</div>`; listEl.innerHTML=''; return; }
   if(!dropoff){ barsEl.innerHTML = `<div class="dropempty">${t('da_dropoff_empty')}</div>`; listEl.innerHTML=''; return; }
   const buckets = dropoff.buckets || {}, items = dropoff.items || [];
   const cats = Object.keys(buckets).sort((a,b)=>buckets[b]-buckets[a]);
@@ -1530,14 +1540,15 @@ function renderDropoff(){
         <div class="dropbar"><span class="bv">${buckets[k]}</span><div class="bfill" style="height:${Math.max(4,Math.round(buckets[k]/mx*100))}%"></div><span class="bl">${DROPOFF_ICON[k]||''} ${t('da_drop_'+k)}</span></div>`).join('')}</div>
        <div style="margin-top:10px;font-size:12.5px;color:var(--muted)">${t('da_dropoff_scanned',{n:dropoff.scanned,t:dropoff.total})}</div>`
     : `<div class="dropempty">${t('da_dropoff_empty')}</div>`;
-  listEl.innerHTML = items.length
+  const listHead = `<div style="font-weight:600;font-size:13.5px;margin-bottom:10px">${t('da_dropoff_list')}</div>`;
+  listEl.innerHTML = listHead + (items.length
     ? items.slice(0,6).map(it=>`
         <div class="droprow" onclick="openLead('${it.phone}')">
           <div class="dropic">${DROPOFF_ICON[it.category]||'❓'}</div>
           <div class="dropmain"><div class="nm">${esc(it.name||('+'+it.phone))}</div><div class="ds">${esc(t('da_drop_'+it.category))}${it.lastMessage?' · '+esc(it.lastMessage):''}</div></div>
           <div class="dropwhen">${waitStr(it.updatedAt)}</div>
         </div>`).join('')
-    : `<div class="dropempty">${t('da_dropoff_empty')}</div>`;
+    : `<div class="dropempty">${t('da_dropoff_empty')}</div>`);
 }
 
 // ======================================================================
@@ -1548,11 +1559,14 @@ function renderDropoff(){
 // de qué alquileres cerrados quedan por teclear allí.
 // ======================================================================
 let bookings = [];
+let bookingsError = false; // distinto de "sin alquileres cerrados": aquí no pudimos ni preguntar
 async function loadBookings(){
   try{
     const r = await fetch('/admin/api/bookings', { headers:{'X-Admin-Key':sessionKey} });
-    bookings = r.ok ? await r.json() : [];
-  }catch(e){ bookings = []; }
+    if(!r.ok) throw 0;
+    bookings = await r.json();
+    bookingsError = false;
+  }catch(e){ bookings = []; bookingsError = true; }
   renderBookings();
 }
 function fullMoney(n){ n = parseInt(n,10)||0; return n ? ('Rp '+n.toLocaleString(LANG==='es'?'es-ES':'en-US')) : ''; }
@@ -1564,8 +1578,13 @@ function bkDay(s){
 }
 function renderBookings(){
   const el = document.getElementById('bookingsBody'); if(!el) return;
-  const pendCount = bookings.filter(r=>!r.erpCreated).length;
   const badgeEl = document.getElementById('navBookingsBadge');
+  if(bookingsError){
+    if(badgeEl) badgeEl.classList.add('hidden'); // sin dato fiable, no se enseña un "0" que parecería "todo al día"
+    el.innerHTML = `<div class="dropempty">${t('bookings_load_err')}</div>`;
+    return;
+  }
+  const pendCount = bookings.filter(r=>!r.erpCreated).length;
   if(badgeEl){ badgeEl.textContent = pendCount; badgeEl.classList.toggle('hidden', !pendCount); }
   if(!bookings.length){ el.innerHTML = `<div class="dropempty">${t('bookings_empty')}</div>`; return; }
   function card(r){
@@ -3316,6 +3335,7 @@ function startApp(){
   loadDropoff();
   loadBotStatus();
   loadHealth();
+  loadBookings(); loadedOnce.bookings = true; // se carga ya al arrancar para que el badge del nav sea real, no muerto hasta la primera visita
   setInterval(loadWaStatus, 10000);
   const storedWho = sessionStorage.getItem('botpanel_who');
   if(storedWho && OWNER_OPTS.includes(storedWho)){ whoAmI = storedWho; paintWho(); }
