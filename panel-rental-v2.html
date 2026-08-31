@@ -149,6 +149,63 @@ table.leadstbl{width:100%;border-collapse:collapse}
 .actbtn{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:7px 0;font-size:13px;font-weight:600;width:100px;justify-self:end}
 .actbtn:hover{background:var(--bg)}
 
+/* ---------- por qué no cierran (dropoff, Resumen) ---------- */
+.dropbars{display:flex;align-items:flex-end;gap:14px;height:130px;padding:6px 4px 0}
+.dropbar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
+.dropbar .bv{font-size:12.5px;font-weight:600;margin-bottom:4px}
+.dropbar .bfill{width:100%;max-width:34px;border-radius:6px 6px 0 0;background:var(--accent)}
+.dropbar .bl{font-size:11px;color:var(--muted);margin-top:7px;text-align:center;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.dropempty{padding:20px 4px;color:var(--muted);font-size:13.5px}
+.droprow{display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px solid var(--border);cursor:pointer}
+.droprow:first-child{border-top:none}
+.dropic{width:30px;height:30px;border-radius:9px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.dropmain{flex:1;min-width:0}
+.dropmain .nm{font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dropmain .ds{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dropwhen{font-size:12px;color:var(--muted);flex-shrink:0}
+
+/* ---------- reservas: cola de traspaso al ERP ---------- */
+.bkgroup{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:14px 0 6px}
+.bkgroup:first-child{padding-top:0}
+.bkrow{display:flex;align-items:center;gap:12px;padding:13px 0;border-top:1px solid var(--border);cursor:pointer}
+.bkrow:first-of-type{border-top:none}
+.bkic{width:34px;height:34px;border-radius:10px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.bkmain{flex:1;min-width:0}
+.bktop{display:flex;align-items:baseline;gap:6px;font-weight:600;font-size:13.5px}
+.bktop .who{color:var(--muted);font-weight:500}
+.bkchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}
+.bkchip{background:var(--card2);border-radius:7px;padding:3px 9px;font-size:11.5px;color:var(--text);white-space:nowrap}
+.bkchip.key{background:var(--accent-soft);color:var(--accent-ink)}
+.bkchip.docs{color:var(--accent-ink);cursor:pointer}
+.bkright{text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:7px}
+.bkamt{font-weight:700;font-size:14.5px}
+.bkamt small{display:block;font-weight:500;font-size:11.5px;color:var(--muted)}
+.bkactline{display:flex;align-items:center;gap:8px}
+.bkbadge{font-size:10.5px;font-weight:700;letter-spacing:.03em;padding:3px 8px;border-radius:99px}
+.bkbadge.pend{background:color-mix(in srgb, var(--cat-orange) 18%, transparent);color:var(--cat-orange)}
+.bkbadge.done{background:color-mix(in srgb, var(--green) 18%, transparent);color:var(--green)}
+.bkact{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12.5px;font-weight:600}
+.bkact.primary{background:var(--strong);color:var(--strong-ink);border:none}
+
+/* ---------- interruptor global del bot + salud del almacén (topbar) ---------- */
+.botswitch{display:flex;align-items:center;gap:7px;background:var(--card);border:1px solid var(--border);border-radius:99px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0}
+.botswitch .d{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* ---------- selección múltiple + menú de fila (Meta Leads) ---------- */
+.selchk{width:16px;height:16px;cursor:pointer}
+.rowkebab{position:relative}
+.kebabbtn{width:30px;height:30px;border-radius:8px;background:transparent;border:none;color:var(--muted);font-size:17px;display:flex;align-items:center;justify-content:center}
+.kebabbtn:hover{background:var(--card2)}
+.rowmenu{position:absolute;top:34px;right:0;min-width:150px;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(20,20,18,.16);z-index:30;overflow:hidden}
+.rowmenu div{padding:9px 14px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
+.rowmenu div:hover{background:var(--card2)}
+.rowmenu div.danger{color:var(--red)}
+.bulkbar{display:none;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:10px 16px;margin-bottom:14px;flex-wrap:wrap}
+.bulkbar b{font-size:13.5px}
+.bulkbar select,.bulkbar button{font-family:inherit;font-size:13px;font-weight:600;border-radius:8px;padding:7px 11px;border:1px solid var(--border);background:var(--card);color:var(--text)}
+.bulkbar button.danger{color:var(--red)}
+.bulkbar button.ghost{background:none;border:none;color:var(--muted)}
+
 /* ---------- chats ---------- */
 #vChats{display:flex;min-height:0;height:100%}
 .chatlist{width:330px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;background:var(--bg)}
@@ -495,6 +552,11 @@ textarea.nlinput{resize:vertical}
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 2.6h5.6l2.4 2.4v8.4H4z"/><path d="M6 8.2h4M6 10.6h4"/></svg>
         <span class="lbl" data-i18n="nav_invoices">Facturas</span>
       </div>
+      <div class="navitem" data-view="bookings">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.8 3.8h10.4v9.4H2.8z"/><path d="M5.5 2.2v3M10.5 2.2v3"/><path d="M5.5 9.4l1.6 1.6 3.2-3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="lbl" data-i18n="nav_bookings">Reservas</span>
+        <span class="badge hidden" id="navBookingsBadge">0</span>
+      </div>
       <div class="navitem" data-view="newsletter">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.2" y="3.8" width="11.6" height="9" rx="1.2"/><path d="M2.6 4.6L8 9l5.4-4.4"/></svg>
         <span class="lbl" data-i18n="nav_newsletter">Newsletter</span>
@@ -565,6 +627,13 @@ textarea.nlinput{resize:vertical}
     <div class="topbar">
       <svg id="viewIcon" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.6 2.6h4.2v4.2H2.6z"/><path d="M9.2 2.6h4.2v4.2H9.2z"/><path d="M2.6 9.2h4.2v4.2H2.6z"/><path d="M9.2 9.2h4.2v4.2H9.2z"/></svg>
       <span class="ttl" id="viewTitle">Resumen</span>
+      <span class="tsbadge hidden" id="storeBadge" data-i18n-title="store_title" title="Estado del almacén de datos">
+        <span class="dot" id="storeDot" style="background:var(--muted)"></span><span id="storeLbl">—</span>
+      </span>
+      <div class="botswitch hidden" id="botPower" onclick="toggleBotGlobal()" data-i18n-title="bot_on_title" title="Encender / apagar el bot">
+        <span class="d" id="botPowerDot" style="background:var(--green)"></span><span id="botPowerLbl" data-i18n="bot_on">Bot ON</span>
+      </div>
+      <button class="btn" id="enrichAllBtn" onclick="enrichAllFlow()"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M13.4 4.6A5.6 5.6 0 1 0 14 8"/><path d="M14 2.6V5h-2.4"/></svg><span data-i18n="enrich_all">Actualizar desde chats</span></button>
       <div class="notifwrap">
         <button class="iconbtn" onclick="toggleNotifs(event)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 11h8l-1-1.6V7a3 3 0 0 0-6 0v2.4z"/><path d="M6.8 13.2h2.4"/></svg></button>
         <span id="notifBadge" class="notifbadge hidden">0</span>
@@ -634,6 +703,12 @@ textarea.nlinput{resize:vertical}
         <div class="tblhead"><span data-i18n="th_lead">Lead</span><span data-i18n="th_interest">Interés</span><span data-i18n="th_waiting">Esperando</span><span data-i18n="th_value">Valor</span><span></span></div>
         <div id="leadsTbl"></div>
       </div>
+
+      <div class="sechd"><span class="t" data-i18n="da_dropoff">Por qué no cierran</span></div>
+      <div class="grid2">
+        <div class="card" style="padding:18px" id="dropBarsCard"></div>
+        <div class="card" style="padding:18px" id="dropListCard"></div>
+      </div>
     </div>
 
     <!-- ---------- CHATS ---------- -->
@@ -664,12 +739,17 @@ textarea.nlinput{resize:vertical}
       <div class="filters">
         <button class="btn"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.8 3.8h10.4v9.4H2.8z"/><path d="M2.8 6.8h10.4"/><path d="M5.5 2.2v3M10.5 2.2v3"/></svg><span data-i18n="last30">Últimos 30 días</span></button>
         <div class="segmented" id="leadsViewSeg"><span class="seg on" data-i18n="kanban_tab" onclick="setLeadsViewMode('kanban')">Kanban</span><span class="seg" data-i18n="table_tab" onclick="setLeadsViewMode('table')">Tabla</span></div>
+        <button class="btn" id="archToggleBtn" onclick="toggleArchivedView()"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.4 3.2h11.2v2.8H2.4z"/><path d="M3.4 6v6.8h9.2V6"/><path d="M6.6 8.6h2.8"/></svg><span id="archToggleLbl" data-i18n="show_archived">Archivados</span></button>
         <span style="flex:1"></span>
         <span style="font-size:13px;color:var(--muted)" id="kanbanSummary"></span>
       </div>
+      <div class="bulkbar" id="leadsBulkBar"></div>
       <div class="kanwrap" id="kanban"></div>
       <div class="card tblcard hidden" id="leadsTableWrap">
-        <div class="tblhead"><span data-i18n="th_lead">Lead</span><span data-i18n="th_status">Estado</span><span data-i18n="th_interest">Interés</span><span data-i18n="th_value">Valor</span><span></span></div>
+        <div class="tblhead" id="leadsTableHead" style="grid-template-columns:28px 2.1fr 1.3fr 1fr .7fr 138px">
+          <span><input type="checkbox" class="selchk" id="leadsSelAll" onchange="toggleSelectAll(this.checked)"></span>
+          <span data-i18n="th_lead">Lead</span><span data-i18n="th_status">Estado</span><span data-i18n="th_interest">Interés</span><span data-i18n="th_value">Valor</span><span></span>
+        </div>
         <div id="leadsTableTbl"></div>
         <div id="leadsTablePager"></div>
       </div>
@@ -767,6 +847,14 @@ textarea.nlinput{resize:vertical}
           <div id="payTbl"></div>
           <div id="payPager"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- ---------- RESERVAS: cola de traspaso al ERP del cliente ---------- -->
+    <div class="view hidden" id="vBookings">
+      <div style="padding:18px 28px 30px">
+        <p style="color:var(--muted);font-size:13.5px;margin:0 0 18px" data-i18n="bookings_help">Alquileres cerrados que hay que crear en el ERP del cliente. Aquí no se reserva ninguna moto: su sistema manda.</p>
+        <div class="card" style="padding:18px" id="bookingsBody"></div>
       </div>
     </div>
 
@@ -1031,6 +1119,42 @@ es: {
   ask_receipt_url:'URL del recibo/factura:', err_invoice_receipt:'No se pudo guardar el recibo.',
   unassigned:'(sin asignar)', you_suffix:' (tú)', team_won_pending:'{w} ganados · {p} pendientes',
   err_who_missing:'Elegir',
+  // -- por qué no cierran (dropoff, Resumen) --
+  da_dropoff:'Por qué no cierran', da_dropoff_list:'Leads fríos recientes',
+  da_dropoff_empty:'Sin leads fríos que analizar (ningún lead lleva 24+ horas sin novedad).',
+  da_dropoff_scanned:'Analizados {n} de {t} leads fríos',
+  da_drop_price:'Se calló tras el precio', da_drop_location:'Se calló tras la ubicación/entrega',
+  da_drop_insurance_deposit:'Se calló tras seguro/depósito', da_drop_documents:'Se calló tras pedir documentos',
+  da_drop_availability:'Se calló tras disponibilidad del modelo', da_drop_payment:'Se calló tras el pago',
+  da_drop_other:'Se calló en otro punto', da_drop_no_data:'Sin historial de chat o sin respuesta del bot',
+  // -- reservas: cola de traspaso al ERP del cliente --
+  nav_bookings:'Reservas',
+  bookings_help:'Alquileres cerrados que hay que crear en el ERP del cliente. Aquí no se reserva ninguna moto: su sistema manda.',
+  bookings_empty:'Todavía no hay alquileres cerrados.', bookings_nodata:'Sin datos del alquiler',
+  bookings_mark:'Creada en el ERP', bookings_undo:'Deshacer', bookings_err:'No se pudo actualizar la reserva',
+  bk_deliv:'Entrega', bk_id:'ID', bk_paid:'pagado', bk_nopay:'sin pago registrado',
+  bk_pending:'PENDIENTE', bk_inerp:'EN ERP', bk_grp_pending:'Pendientes', bk_grp_done:'Ya en el ERP',
+  bk_tocreate:'por crear en el ERP',
+  // -- interruptor global del bot (apaga/enciende para TODOS los clientes) --
+  bot_on:'Bot ON', bot_off:'Bot OFF',
+  bot_on_title:'Bot ENCENDIDO — clic para apagar', bot_off_title:'Bot APAGADO — clic para encender',
+  bot_confirm_on:'¿ENCENDER el bot? Volverá a responder a todos los clientes.',
+  bot_confirm_off:'¿APAGAR el bot? Dejará de responder y de hacer seguimiento (los mensajes se siguen guardando en el CRM).',
+  bot_pass_prompt:'Contraseña de administración del interruptor:', bot_wrong_pass:'Contraseña incorrecta.',
+  net_error:'Error de red.',
+  // -- salud del almacén (Redis vs RAM) --
+  store_redis:'Redis · persistente', store_ram:'RAM · NO persiste — configura Redis', store_title:'Estado del almacén de datos',
+  // -- autorrelleno de fichas desde el chat (enrich-all) --
+  enrich_all:'Actualizar desde chats', enrich_ing:'Analizando…', enrich_done:'actualizados',
+  err_enrich:'No se pudo actualizar desde los chats.',
+  // -- archivar / restaurar / lote (Meta Leads) --
+  show_archived:'Archivados', show_active:'Activos', restore:'Restaurar',
+  cfm_delete_lead:'¿Borrar este lead para siempre? No se puede deshacer.',
+  cfm_delete_n:'¿Borrar {n} leads para siempre? No se puede deshacer.',
+  err_archive:'No se pudo archivar.', err_delete:'No se pudo borrar.',
+  bulk_sel:'seleccionados', bulk_status:'Cambiar estado…', bulk_owner:'Asignar a…',
+  bulk_archive:'Archivar', bulk_restore:'Restaurar', bulk_delete:'Borrar', bulk_clear:'Quitar selección',
+  err_bulk:'No se pudo aplicar la acción en lote.', no_archived:'No hay leads archivados.',
 },
 en: {
   login_sub:'Same password as /admin', login_ph:'Panel password', login_enter:'Sign in',
@@ -1181,6 +1305,42 @@ en: {
   ask_receipt_url:'Receipt/invoice URL:', err_invoice_receipt:'Could not save the receipt.',
   unassigned:'(unassigned)', you_suffix:' (you)', team_won_pending:'{w} won · {p} pending',
   err_who_missing:'Choose',
+  // -- why deals don't close (dropoff, Overview) --
+  da_dropoff:'Why deals don\'t close', da_dropoff_list:'Recently cold leads',
+  da_dropoff_empty:'No cold leads to analyze (no lead has been quiet for 24+ hours).',
+  da_dropoff_scanned:'Analyzed {n} of {t} cold leads',
+  da_drop_price:'Went quiet after the price', da_drop_location:'Went quiet after location/delivery',
+  da_drop_insurance_deposit:'Went quiet after insurance/deposit', da_drop_documents:'Went quiet after documents were asked',
+  da_drop_availability:'Went quiet after model availability', da_drop_payment:'Went quiet after payment',
+  da_drop_other:'Went quiet elsewhere', da_drop_no_data:'No chat history or no bot reply',
+  // -- bookings: queue to hand off to the client's ERP --
+  nav_bookings:'Bookings',
+  bookings_help:'Closed rentals that still need creating in the client ERP. Nothing is reserved here: their system is the source of truth.',
+  bookings_empty:'No closed rentals yet.', bookings_nodata:'No rental details',
+  bookings_mark:'Created in ERP', bookings_undo:'Undo', bookings_err:'Could not update the booking',
+  bk_deliv:'Delivery', bk_id:'ID', bk_paid:'paid', bk_nopay:'no payment recorded',
+  bk_pending:'PENDING', bk_inerp:'IN ERP', bk_grp_pending:'To create', bk_grp_done:'Already in ERP',
+  bk_tocreate:'to create in ERP',
+  // -- global bot switch (turns the bot off/on for EVERY customer) --
+  bot_on:'Bot ON', bot_off:'Bot OFF',
+  bot_on_title:'Bot ON — click to turn off', bot_off_title:'Bot OFF — click to turn on',
+  bot_confirm_on:'Turn the bot ON? It will reply to all customers again.',
+  bot_confirm_off:'Turn the bot OFF? It stops replying and following up (messages are still saved in the CRM).',
+  bot_pass_prompt:'Master password for the switch:', bot_wrong_pass:'Wrong password.',
+  net_error:'Network error.',
+  // -- data store health (Redis vs RAM) --
+  store_redis:'Redis · persistent', store_ram:'RAM · NOT persistent — set up Redis', store_title:'Data store status',
+  // -- lead auto-fill from chat history (enrich-all) --
+  enrich_all:'Update from chats', enrich_ing:'Analyzing…', enrich_done:'updated',
+  err_enrich:'Could not update from chats.',
+  // -- archive / restore / bulk (Meta Leads) --
+  show_archived:'Archived', show_active:'Active', restore:'Restore',
+  cfm_delete_lead:'Delete this lead forever? This cannot be undone.',
+  cfm_delete_n:'Delete {n} leads forever? This cannot be undone.',
+  err_archive:'Could not archive.', err_delete:'Could not delete.',
+  bulk_sel:'selected', bulk_status:'Change status…', bulk_owner:'Assign to…',
+  bulk_archive:'Archive', bulk_restore:'Restore', bulk_delete:'Delete', bulk_clear:'Clear selection',
+  err_bulk:'Could not apply the bulk action.', no_archived:'No archived leads.',
 }
 };
 let LANG = localStorage.getItem('botpanel_lang') || 'es';
@@ -1211,6 +1371,11 @@ function setLang(lang){
   if(curLead) renderLead();
   if(!document.getElementById('vAppts').classList.contains('hidden')) renderAppts();
   if(!document.getElementById('vTeam').classList.contains('hidden')) renderTeam();
+  renderDropoff();
+  renderBookings();
+  renderBulkBar();
+  const archLbl = document.getElementById('archToggleLbl'); if(archLbl) archLbl.textContent = showArchived ? t('show_active') : t('show_archived');
+  paintBotPower();
   paintWho();
   paintSetupCard();
   applyTheme(theme);
@@ -1338,6 +1503,170 @@ function needsAttention(l){
 }
 
 // ================= render helpers =================
+// ======================================================================
+// POR QUÉ NO CIERRAN — /admin/api/dropoff (ya existía, portado de panel-rental.html:
+// loadDropoff/renderDropoffCard). Analiza leads fríos (24h+ sin novedad, status!=won)
+// y clasifica el último mensaje del bot antes del silencio por categoría — heurística
+// de keywords en el servidor (classifyDropoff), no NLP.
+// ======================================================================
+const DROPOFF_ICON = {price:'💰',location:'📍',insurance_deposit:'🛡️',documents:'🪪',availability:'🏍️',payment:'💳',other:'❓',no_data:'🕸️'};
+let dropoff = null;
+async function loadDropoff(){
+  try{
+    const r = await fetch('/admin/api/dropoff', { headers:{'X-Admin-Key':sessionKey} });
+    dropoff = r.ok ? await r.json() : null;
+  }catch(e){ dropoff = null; }
+  renderDropoff();
+}
+function renderDropoff(){
+  const barsEl = document.getElementById('dropBarsCard'), listEl = document.getElementById('dropListCard');
+  if(!barsEl || !listEl) return;
+  if(!dropoff){ barsEl.innerHTML = `<div class="dropempty">${t('da_dropoff_empty')}</div>`; listEl.innerHTML=''; return; }
+  const buckets = dropoff.buckets || {}, items = dropoff.items || [];
+  const cats = Object.keys(buckets).sort((a,b)=>buckets[b]-buckets[a]);
+  const mx = cats.reduce((m,k)=>Math.max(m,buckets[k]),1);
+  barsEl.innerHTML = cats.length
+    ? `<div class="dropbars">${cats.map(k=>`
+        <div class="dropbar"><span class="bv">${buckets[k]}</span><div class="bfill" style="height:${Math.max(4,Math.round(buckets[k]/mx*100))}%"></div><span class="bl">${DROPOFF_ICON[k]||''} ${t('da_drop_'+k)}</span></div>`).join('')}</div>
+       <div style="margin-top:10px;font-size:12.5px;color:var(--muted)">${t('da_dropoff_scanned',{n:dropoff.scanned,t:dropoff.total})}</div>`
+    : `<div class="dropempty">${t('da_dropoff_empty')}</div>`;
+  listEl.innerHTML = items.length
+    ? items.slice(0,6).map(it=>`
+        <div class="droprow" onclick="openLead('${it.phone}')">
+          <div class="dropic">${DROPOFF_ICON[it.category]||'❓'}</div>
+          <div class="dropmain"><div class="nm">${esc(it.name||('+'+it.phone))}</div><div class="ds">${esc(t('da_drop_'+it.category))}${it.lastMessage?' · '+esc(it.lastMessage):''}</div></div>
+          <div class="dropwhen">${waitStr(it.updatedAt)}</div>
+        </div>`).join('')
+    : `<div class="dropempty">${t('da_dropoff_empty')}</div>`;
+}
+
+// ======================================================================
+// RESERVAS: cola de traspaso al ERP del cliente — /admin/api/bookings +
+// /admin/api/booking/erp (ya existían, portados de panel-rental.html:
+// loadBookings/renderBookings/resToggle). El bot cotiza y cobra pero NO reserva
+// ninguna moto: el ERP del cliente es la fuente de verdad, esto es solo la lista
+// de qué alquileres cerrados quedan por teclear allí.
+// ======================================================================
+let bookings = [];
+async function loadBookings(){
+  try{
+    const r = await fetch('/admin/api/bookings', { headers:{'X-Admin-Key':sessionKey} });
+    bookings = r.ok ? await r.json() : [];
+  }catch(e){ bookings = []; }
+  renderBookings();
+}
+function fullMoney(n){ n = parseInt(n,10)||0; return n ? ('Rp '+n.toLocaleString(LANG==='es'?'es-ES':'en-US')) : ''; }
+function bkDay(s){
+  if(!s) return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s).trim());
+  if(!m) return esc(s);
+  return new Date(+m[1],+m[2]-1,+m[3]).toLocaleDateString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short'});
+}
+function renderBookings(){
+  const el = document.getElementById('bookingsBody'); if(!el) return;
+  const pendCount = bookings.filter(r=>!r.erpCreated).length;
+  const badgeEl = document.getElementById('navBookingsBadge');
+  if(badgeEl){ badgeEl.textContent = pendCount; badgeEl.classList.toggle('hidden', !pendCount); }
+  if(!bookings.length){ el.innerHTML = `<div class="dropempty">${t('bookings_empty')}</div>`; return; }
+  function card(r){
+    let dates = '';
+    if(r.startDate && r.endDate) dates = bkDay(r.startDate)+' → '+bkDay(r.endDate);
+    else if(r.startDate) dates = bkDay(r.startDate);
+    else if(r.endDate) dates = '→ '+bkDay(r.endDate);
+    let chips = '';
+    if(dates) chips += `<span class="bkchip key">📅 ${t('bk_deliv')} ${dates}</span>`;
+    if(r.deliveryLocation) chips += `<span class="bkchip">📍 ${esc(r.deliveryLocation)}</span>`;
+    if(r.insuranceTier) chips += `<span class="bkchip">🛡️ ${esc(r.insuranceTier)}</span>`;
+    (r.docs||[]).forEach((d,j)=>{
+      chips += `<a class="bkchip docs" href="/admin/api/doc/${encodeURIComponent(d.id)}?key=${encodeURIComponent(sessionKey)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">📎 ${t('bk_id')}${r.docs.length>1?' '+(j+1):''}</a>`;
+    });
+    const payline = r.paidAt
+      ? `${esc((r.provider||'').charAt(0).toUpperCase()+(r.provider||'').slice(1))} · ${t('bk_paid')} ${new Date(r.paidAt).toLocaleDateString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short'})}`
+      : t('bk_nopay');
+    const badge = r.erpCreated ? `<span class="bkbadge done">${t('bk_inerp')}</span>` : `<span class="bkbadge pend">${t('bk_pending')}</span>`;
+    const btn = r.erpCreated
+      ? `<button class="bkact" onclick="bookingErpToggle('${r.phone}','${r.dealId||''}',false,this)">${t('bookings_undo')}</button>`
+      : `<button class="bkact primary" onclick="bookingErpToggle('${r.phone}','${r.dealId||''}',true,this)">${t('bookings_mark')}</button>`;
+    return `<div class="bkrow" onclick="openLead('${r.phone}')">
+      <div class="bkic">🛵</div>
+      <div class="bkmain"><div class="bktop"><span>${esc(r.model||t('bookings_nodata'))}</span>${r.name?`<span class="who">· ${esc(r.name)}</span>`:''}</div>
+      <div class="bkchips">${chips||`<span class="bkchip">${t('bookings_nodata')}</span>`}</div></div>
+      <div class="bkright"><div class="bkamt">${fullMoney(r.amount)||'—'}<small>${payline}</small></div>
+      <div class="bkactline" onclick="event.stopPropagation()">${badge}${btn}</div></div></div>`;
+  }
+  const pendRows = bookings.filter(r=>!r.erpCreated).map(card).join('');
+  const doneRows = bookings.filter(r=>r.erpCreated).map(card).join('');
+  let html = '';
+  if(pendRows) html += `<div class="bkgroup">${t('bk_grp_pending')}</div>${pendRows}`;
+  if(doneRows) html += `<div class="bkgroup">${t('bk_grp_done')}</div>${doneRows}`;
+  el.innerHTML = html;
+}
+async function bookingErpToggle(phone, dealId, done, btn){
+  btn.disabled = true;
+  try{
+    const r = await fetch('/admin/api/booking/erp', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, dealId, done}) });
+    if(!r.ok) throw 0;
+    await loadBookings();
+  }catch(e){ btn.disabled = false; showToast(t('bookings_err')); }
+}
+
+// ======================================================================
+// INTERRUPTOR GLOBAL DEL BOT — /admin/api/bot (ya existía, portado de
+// panel-rental.html: paintBotPower/initBotPower). Apaga/enciende el bot ENTERO
+// para TODOS los clientes; exige la 2ª contraseña (masterAuth en el servidor).
+// ======================================================================
+let botOn = true;
+function paintBotPower(){
+  const dot = document.getElementById('botPowerDot'), lbl = document.getElementById('botPowerLbl'), wrap = document.getElementById('botPower');
+  if(!dot) return;
+  dot.style.background = botOn ? 'var(--green)' : 'var(--red)';
+  lbl.textContent = botOn ? t('bot_on') : t('bot_off');
+  if(wrap) wrap.title = botOn ? t('bot_on_title') : t('bot_off_title');
+}
+async function loadBotStatus(){
+  try{
+    const r = await fetch('/admin/api/bot', { headers:{'X-Admin-Key':sessionKey} });
+    if(r.ok){
+      const d = await r.json();
+      if(typeof d.enabled==='boolean') botOn = d.enabled;
+      const wrap = document.getElementById('botPower'); if(wrap) wrap.classList.remove('hidden');
+    }
+    // si la respuesta no es ok (ej. sin ADMIN_PASSWORD en el entorno), el switch se queda oculto:
+    // mejor no mostrar nada que mostrar "Bot ON" sin saber si es verdad.
+  }catch(e){ /* MUDO A PROPOSITO: sin dato no se afirma nada — el switch se queda oculto */ }
+  paintBotPower();
+}
+async function toggleBotGlobal(){
+  const want = !botOn;
+  if(!await askConfirm(want ? t('bot_confirm_on') : t('bot_confirm_off'), {danger:!want})) return;
+  const pass = await askPrompt(t('bot_pass_prompt'), ''); if(!pass) return;
+  try{
+    const r = await fetch('/admin/api/bot', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({enabled:want, pass}) });
+    if(r.status===403){ showToast(t('bot_wrong_pass')); return; }
+    if(!r.ok){ const e = await r.json().catch(()=>({})); showToast(e.error||t('net_error')); return; }
+    const d = await r.json();
+    botOn = !!d.enabled;
+    paintBotPower();
+  }catch(e){ showToast(t('net_error')); }
+}
+
+// ======================================================================
+// SALUD DEL ALMACÉN — /admin/api/health (ya existía, portado de panel-rental.html:
+// loadHealth). Redis = persistente; RAM = se pierde todo si Railway reinicia el
+// contenedor — aviso operativo, no un dato bonito.
+// ======================================================================
+async function loadHealth(){
+  const dot = document.getElementById('storeDot'), lbl = document.getElementById('storeLbl'), badge = document.getElementById('storeBadge');
+  try{
+    const r = await fetch('/admin/api/health', { headers:{'X-Admin-Key':sessionKey} });
+    if(!r.ok) throw 0;
+    const h = await r.json();
+    if(badge) badge.classList.remove('hidden');
+    if(h.storage==='redis'){ dot.style.background='var(--green)'; lbl.textContent=t('store_redis'); }
+    else { dot.style.background='var(--red)'; lbl.textContent=t('store_ram'); }
+  }catch(e){ /* MUDO A PROPOSITO: sin dato no se afirma "todo bien" — el badge se queda oculto */ }
+}
+
 function renderKpis(){
   document.getElementById('kpis').innerHTML = buildKpis().map(k=>`
     <div class="card kpi">
@@ -1631,11 +1960,105 @@ function setLeadsViewMode(mode){
   document.getElementById('leadsTableWrap').classList.toggle('hidden', mode!=='table');
   if(mode==='table') renderLeadsTable();
 }
-function renderLeadsTable(){
-  const rows = leads.filter(l=>!l.archived).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+// ======================================================================
+// ARCHIVAR / RESTAURAR + ACCIONES EN LOTE — /admin/api/archive y /admin/api/bulk
+// (backend ya existía, portado de panel-rental.html: rowMenu/rowArchive/bulkAct).
+// El botón "Archivados" del filtro obliga a vista de tabla: el kanban es el pipeline
+// activo, un lead archivado ya salió de ese flujo.
+// ======================================================================
+let showArchived = false;
+let selectedLeads = {};
+function toggleArchivedView(){
+  showArchived = !showArchived;
+  document.getElementById('archToggleBtn').classList.toggle('dark', showArchived);
+  document.getElementById('archToggleLbl').textContent = showArchived ? t('show_active') : t('show_archived');
+  selectedLeads = {};
+  if(showArchived && leadsViewMode!=='table') setLeadsViewMode('table');
+  else renderLeadsTable();
+  renderBulkBar();
+}
+function selectedLeadPhones(){ return Object.keys(selectedLeads).filter(p=>selectedLeads[p]); }
+function toggleSelectRow(phone, on){ if(on) selectedLeads[phone]=true; else delete selectedLeads[phone]; renderBulkBar(); }
+function toggleSelectAll(on){
+  const rows = (showArchived ? leads.filter(l=>l.archived) : leads.filter(l=>!l.archived));
   const p = paginate('leads', rows);
+  p.items.forEach(l=>{ if(on) selectedLeads[l.phone]=true; else delete selectedLeads[l.phone]; });
+  renderLeadsTable(); renderBulkBar();
+}
+function renderBulkBar(){
+  const bar = document.getElementById('leadsBulkBar');
+  const sel = selectedLeadPhones();
+  if(!sel.length){ bar.style.display='none'; bar.innerHTML=''; return; }
+  bar.style.display='flex';
+  const stOpts = KAN_ORDER.map(st=>`<option value="${st}">${STATUS_LABEL[st]}</option>`).join('');
+  const owOpts = OWNER_OPTS.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('');
+  bar.innerHTML = `<b>${sel.length}</b> ${t('bulk_sel')}
+    <select onchange="bulkAction('status',this.value);this.value=''"><option value="">${t('bulk_status')}</option>${stOpts}</select>
+    <select onchange="bulkAction('owner',this.value);this.value=''"><option value="">${t('bulk_owner')}</option>${owOpts}</select>
+    ${showArchived ? `<button onclick="bulkAction('restore')">${t('bulk_restore')}</button>` : `<button onclick="bulkAction('archive')">${t('bulk_archive')}</button>`}
+    <button class="danger" onclick="bulkDeleteFlow()">${t('bulk_delete')}</button>
+    <button class="ghost" onclick="clearLeadSelection()">${t('bulk_clear')}</button>`;
+}
+function clearLeadSelection(){ selectedLeads={}; renderLeadsTable(); renderBulkBar(); }
+async function bulkAction(action, value){
+  const phones = selectedLeadPhones(); if(!phones.length) return;
+  try{
+    const r = await fetch('/admin/api/bulk', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phones, action, value}) });
+    if(!r.ok) throw 0;
+    selectedLeads = {};
+    await refreshLeads(); renderLeadsTable(); renderKanban(); renderBulkBar();
+  }catch(e){ showToast(t('err_bulk')); }
+}
+async function bulkDeleteFlow(){
+  const phones = selectedLeadPhones(); if(!phones.length) return;
+  if(!await askConfirm(t('cfm_delete_n',{n:phones.length}), {danger:true})) return;
+  bulkAction('delete');
+}
+function closeRowMenu(){ const m=document.getElementById('rowmenu'); if(m) m.remove(); }
+function toggleRowMenu(ev, phone){
+  ev.stopPropagation();
+  const already = document.getElementById('rowmenu');
+  closeRowMenu();
+  if(already && already.dataset.phone===phone) return; // 2º clic sobre el mismo kebab: solo cerrar
+  const l = leads.find(x=>x.phone===phone); if(!l) return;
+  const m = document.createElement('div'); m.className='rowmenu'; m.id='rowmenu'; m.dataset.phone=phone;
+  m.innerHTML = `<div onclick="openLead('${phone}')">${t('view_lead')}</div>`
+    + (l.archived
+        ? `<div onclick="archiveLeadFlow('${phone}',false)">${t('restore')}</div>`
+        : `<div onclick="archiveLeadFlow('${phone}',true)">${t('archive')}</div>`)
+    + `<div class="danger" onclick="deleteLeadFlow('${phone}')">${t('delete')}</div>`;
+  ev.currentTarget.parentElement.appendChild(m);
+  setTimeout(()=>document.addEventListener('click', closeRowMenu, {once:true}), 0);
+}
+async function archiveLeadFlow(phone, archived){
+  closeRowMenu();
+  try{
+    const r = await fetch('/admin/api/archive', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, archived}) });
+    if(!r.ok) throw 0;
+    await refreshLeads();
+    renderLeadsTable(); renderKanban();
+    if(curLead && curLead.phone===phone){ curLead = leads.find(x=>x.phone===phone) || curLead; renderLead(); }
+  }catch(e){ showToast(t('err_archive')); }
+}
+async function deleteLeadFlow(phone){
+  closeRowMenu();
+  if(!await askConfirm(t('cfm_delete_lead'), {danger:true})) return;
+  try{
+    const r = await fetch('/admin/api/lead/delete', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone}) });
+    if(!r.ok) throw 0;
+    delete selectedLeads[phone];
+    await refreshLeads(); renderLeadsTable(); renderKanban();
+    if(curLead && curLead.phone===phone) go('leads');
+  }catch(e){ showToast(t('err_delete')); }
+}
+function renderLeadsTable(){
+  const rows = (showArchived ? leads.filter(l=>l.archived) : leads.filter(l=>!l.archived)).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const p = paginate('leads', rows);
+  const allSel = p.items.length && p.items.every(l=>selectedLeads[l.phone]);
+  const selAllEl = document.getElementById('leadsSelAll'); if(selAllEl) selAllEl.checked = !!allSel;
   document.getElementById('leadsTableTbl').innerHTML = p.items.map(l=>`
-    <div class="tblrow">
+    <div class="tblrow" style="grid-template-columns:28px 2.1fr 1.3fr 1fr .7fr 138px">
+      <span onclick="event.stopPropagation()"><input type="checkbox" class="selchk" ${selectedLeads[l.phone]?'checked':''} onchange="toggleSelectRow('${l.phone}',this.checked)"></span>
       <div class="leadid">
         <span class="av" style="background:${hashColor(l.phone)}">${initials(l.name||l.phone)}</span>
         <div><div class="nm" onclick="openLead('${l.phone}')">${l.name||l.phone}</div></div>
@@ -1643,8 +2066,11 @@ function renderLeadsTable(){
       ${stBadge(l.status)}
       <span class="tourpill">${tourLine(l)}</span>
       <span class="val">${l.dealValue?fmt(parseInt(l.dealValue,10)):'—'}</span>
-      <button class="actbtn" onclick="openLead('${l.phone}')">${t('see')}</button>
-    </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nothing_pending')}</div>`;
+      <span style="display:flex;gap:6px;justify-content:flex-end;align-items:center">
+        <button class="actbtn" style="width:auto;padding:7px 12px" onclick="openLead('${l.phone}')">${t('see')}</button>
+        <div class="rowkebab"><button class="kebabbtn" onclick="toggleRowMenu(event,'${l.phone}')">&#8942;</button></div>
+      </span>
+    </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${showArchived?t('no_archived'):t('nothing_pending')}</div>`;
   document.getElementById('leadsTablePager').innerHTML = pagerHtml('leads', p);
 }
 
@@ -1699,6 +2125,8 @@ function renderLead(){
       <button class="primary" onclick="selectChat('${l.phone}');go('chats')">${t('respond')}</button>
       <button class="ghost" onclick="scheduleApptFlow('${l.phone}')">${t('schedule_appt')}</button>
       <button class="win" onclick="markWonFlow('${l.phone}')">${t('mark_won')}</button>
+      <button class="ghost" onclick="archiveLeadFlow('${l.phone}',${!l.archived})">${l.archived?t('restore'):t('archive')}</button>
+      <button class="ghost" style="color:var(--red)" onclick="deleteLeadFlow('${l.phone}')">${t('delete')}</button>
     </div>`;
   const datos = [[t('f_phone'),'+'+l.phone],[t('f_email'),l.email||'—'],[t('f_country'),l.country||'—'],[t('f_origin'),l.source||l.adSource||'WhatsApp'],[t('f_created'),fmtHistTime(l.createdAt)||'—']];
   document.getElementById('ldDatos').innerHTML = datos.map(([k,v])=>`<div class="ldrow"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('');
@@ -2123,6 +2551,23 @@ function topbarImportFile(e){
   const file = e.target.files[0]; e.target.value = '';
   if(!file) return;
   importLeadsFile(file);
+}
+
+// Autorrelleno de ficha por IA desde el historial del chat, en lote (todos los leads
+// incompletos) — /admin/api/enrich-all (ya existía, portado de panel-rental.html: dbEnrich).
+async function enrichAllFlow(){
+  const btn = document.getElementById('enrichAllBtn');
+  const label = btn.querySelector('[data-i18n]') || btn.querySelector('span');
+  const orig = label.textContent;
+  btn.disabled = true; label.textContent = t('enrich_ing');
+  try{
+    const r = await fetch('/admin/api/enrich-all', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:'{}' });
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.error||'');
+    await refreshLeads(); renderKanban(); if(leadsViewMode==='table') renderLeadsTable();
+    label.textContent = '✓ '+(j.enriched||0)+' '+t('enrich_done');
+  }catch(e){ label.textContent = t('err_enrich'); }
+  setTimeout(()=>{ label.textContent = orig; btn.disabled = false; }, 2800);
 }
 
 // ======================================================================
@@ -2787,9 +3232,9 @@ function buildDots(){
 }
 
 // ================= view switching =================
-const ALL_VIEWS = ['overview','chats','leads','lead','flota','appts','invoices','team','settings','media','newsletter'];
+const ALL_VIEWS = ['overview','chats','leads','lead','flota','appts','invoices','bookings','team','settings','media','newsletter'];
 const titles = {overview:'Resumen', chats:'Conversaciones', leads:'Meta Leads', lead:'Ficha de lead', flota:'Flota',
-  appts:'Citas', invoices:'Facturas', team:'Equipo', settings:'Ajustes',
+  appts:'Citas', invoices:'Facturas', bookings:'Reservas', team:'Equipo', settings:'Ajustes',
   media:'Fotos y vídeos', newsletter:'Newsletter'};
 const loadedOnce = {};
 let prevView = 'overview';
@@ -2808,6 +3253,7 @@ function go(view){
   if(view==='flota' && !loadedOnce.flota){ loadedOnce.flota=true; loadFlota(); }
   if(view==='appts' && !loadedOnce.appts){ loadedOnce.appts=true; loadAppts(); }
   if(view==='invoices' && !loadedOnce.invoices){ loadedOnce.invoices=true; loadInvoices(); }
+  if(view==='bookings' && !loadedOnce.bookings){ loadedOnce.bookings=true; loadBookings(); }
   if(view==='media' && !loadedOnce.media){ loadedOnce.media=true; loadMedia(); }
   if(view==='newsletter' && !loadedOnce.newsletter){ loadedOnce.newsletter=true; loadNewsletterView(); }
   if(view==='team'){ renderTeam(); } // barato, siempre client-side sobre `leads` ya cargado
@@ -2867,6 +3313,9 @@ function startApp(){
   renderNotifs();
   loadCanned();
   loadWaStatus();
+  loadDropoff();
+  loadBotStatus();
+  loadHealth();
   setInterval(loadWaStatus, 10000);
   const storedWho = sessionStorage.getItem('botpanel_who');
   if(storedWho && OWNER_OPTS.includes(storedWho)){ whoAmI = storedWho; paintWho(); }
