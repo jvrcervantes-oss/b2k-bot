@@ -132,8 +132,13 @@ button{font-family:inherit;cursor:pointer}
 .tsbadge .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
 table.leadstbl{width:100%;border-collapse:collapse}
 .tblcard{overflow:hidden}
-.tblhead{display:grid;grid-template-columns:2.1fr 1.5fr 1fr .7fr 110px;gap:12px;padding:11px 16px;font-size:12.5px;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border)}
-.tblrow{display:grid;grid-template-columns:2.1fr 1.5fr 1fr .7fr 110px;gap:12px;padding:var(--row-pad);align-items:center;border-top:1px solid var(--border)}
+.tblhead{display:grid;grid-template-columns:24px 2.1fr 1.5fr 1fr .7fr 110px;gap:12px;padding:11px 16px;font-size:12.5px;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border)}
+.tblrow{display:grid;grid-template-columns:24px 2.1fr 1.5fr 1fr .7fr 110px;gap:12px;padding:var(--row-pad);align-items:center;border-top:1px solid var(--border)}
+.tblhead input[type=checkbox],.tblrow input[type=checkbox]{accent-color:var(--strong);width:16px;height:16px;cursor:pointer}
+.bulkbar{display:none;align-items:center;gap:10px;padding:10px 16px;background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;font-size:13px}
+.bulkbar select,.bulkbar button{font-size:12.5px;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer}
+.bulkbar button.danger{color:var(--red);border-color:var(--red)}
+.bulkbar .sp{flex:1}
 .tblrow:first-of-type{border-top:none}
 .leadid{display:flex;align-items:center;gap:11px;min-width:0}
 .leadid .av{width:36px;height:36px;border-radius:10px;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;flex-shrink:0}
@@ -242,6 +247,7 @@ table.leadstbl{width:100%;border-collapse:collapse}
 .ldhero .actions .primary{background:var(--strong);color:var(--strong-ink);border:none}
 .ldhero .actions .ghost{background:var(--card);border:1px solid var(--border);color:var(--text)}
 .ldhero .actions .win{background:var(--card);border:1px solid var(--border);color:var(--green)}
+.ldhero .actions .danger{background:var(--card);border:1px solid var(--border);color:var(--red)}
 .ldgrid{display:grid;grid-template-columns:1fr 1.5fr;gap:16px;align-items:start}
 .ldcol{display:flex;flex-direction:column;gap:16px}
 .ldcard .hd{padding:13px 18px;border-bottom:1px solid var(--border);font-weight:600;font-size:14.5px}
@@ -596,6 +602,7 @@ textarea.nlinput{resize:vertical}
       <input type="file" id="topbarCsvFile" accept=".csv,text/csv" class="hidden" onchange="topbarImportFile(event)">
       <button class="btn" onclick="document.getElementById('topbarCsvFile').click()"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 6v7"/><path d="M5.3 8.6L8 5.8l2.7 2.8"/><path d="M3 10.5V13h10v-2.5"/></svg><span data-i18n="import">Importar</span></button>
       <button class="btn" onclick="topbarExport()"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 10V3"/><path d="M5.3 5.4L8 2.6l2.7 2.8"/><path d="M3 10.5V13h10v-2.5"/></svg><span data-i18n="export">Exportar</span></button>
+      <button class="btn" id="btnEnrichAll" onclick="topbarEnrichAll()" title="Lee las conversaciones y rellena los datos que falten en cada ficha"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M13 4.5a5 5 0 1 0 1 3"/><path d="M13 1.8v2.7h-2.7"/></svg><span data-i18n="enrich_all">Actualizar desde chats</span></button>
       <button class="btn dark" onclick="newLeadFlow()" data-i18n="new_lead">+ Nuevo lead</button>
     </div>
 
@@ -688,8 +695,9 @@ textarea.nlinput{resize:vertical}
         <span style="font-size:13px;color:var(--muted)" id="kanbanSummary"></span>
       </div>
       <div class="kanwrap" id="kanban"></div>
+      <div class="bulkbar" id="leadsBulkBar"></div>
       <div class="card tblcard hidden" id="leadsTableWrap">
-        <div class="tblhead"><span data-i18n="th_lead">Lead</span><span data-i18n="th_status">Estado</span><span data-i18n="th_interest">Interés</span><span data-i18n="th_value">Valor</span><span></span></div>
+        <div class="tblhead"><span><input type="checkbox" id="leadsSelAll" onchange="toggleSelAll(this.checked)"></span><span data-i18n="th_lead">Lead</span><span data-i18n="th_status">Estado</span><span data-i18n="th_interest">Interés</span><span data-i18n="th_value">Valor</span><span></span></div>
         <div id="leadsTableTbl"></div>
         <div id="leadsTablePager"></div>
       </div>
@@ -968,6 +976,7 @@ es: {
   notif_waiting:'esperando respuesta hace más de 24h', notif_overdue:'seguimiento vencido',
   notif_new_today:'nuevo hoy', notif_unmatched:'pago de Stripe sin asignar',
   export:'Exportar', import:'Importar', new_lead:'+ Nuevo lead',
+  enrich_all:'Actualizar desde chats', enrich_all_ok:'{n} fichas actualizadas desde sus conversaciones.',
   err_no_rows:'No se encontraron filas válidas en el archivo.', err_import:'Error al importar el archivo.',
   import_ok:'✓ {created} nuevos · {updated} actualizados',
   last30:'Últimos 30 días', seg_all:'Todos', seg_active:'Activos', seg_needs:'Requieren acción',
@@ -1012,6 +1021,15 @@ es: {
   loading_conv:'Cargando conversación real…', no_messages:'Sin mensajes todavía', conv_load_error:'No se pudo cargar la conversación',
   send_error:'No se pudo enviar el mensaje.', view_lead:'Ver ficha',
   via:'vía', respond:'Responder', schedule_appt:'Agendar cita', mark_won:'Marcar ganado',
+  archive_lead:'Archivar', restore_lead:'Restaurar', delete_lead:'Borrar', send_trip_email:'Enviar itinerario por email',
+  cfm_delete:'¿Borrar este lead? Se pierde toda su ficha y su conversación. No se puede deshacer.',
+  cfm_archive:'¿Archivar este lead?', cfm_restore:'¿Restaurar este lead?',
+  ask_email:'Email de destino:', al_email_sent:'Itinerario enviado.', err_delete:'No se pudo borrar el lead.',
+  err_archive:'No se pudo archivar el lead.', err_email:'No se pudo enviar el email.',
+  bulk_sel:'seleccionados', bulk_status:'Cambiar estado…', bulk_tag:'+ Etiqueta', bulk_archive:'Archivar',
+  bulk_restore:'Restaurar', bulk_delete:'Borrar', bulk_clear:'Quitar selección',
+  bulk_partial:'Lote a medias: {ok} hechos, {ko} fallidos.', bulk_ok:'{n} leads actualizados.',
+  prompt_tag:'Nombre de la etiqueta:', cfm_delete_n:'¿Borrar {n} leads definitivamente? No se puede deshacer.',
   f_phone:'Teléfono', f_email:'Email', f_country:'País', f_origin:'Origen', f_created:'Creado',
   to_confirm:'Por confirmar', closed_amount:'importe cerrado', not_quoted_yet:'sin cotizar todavía',
   est_value:'valor estimado', no_activity:'Sin actividad registrada.',
@@ -1113,6 +1131,7 @@ en: {
   notif_waiting:'waiting over 24h', notif_overdue:'follow-up overdue',
   notif_new_today:'new today', notif_unmatched:'unassigned Stripe payment',
   export:'Export', import:'Import', new_lead:'+ New lead',
+  enrich_all:'Refresh from chats', enrich_all_ok:'{n} profiles updated from their conversations.',
   err_no_rows:'No valid rows found in the file.', err_import:'Error importing the file.',
   import_ok:'✓ {created} new · {updated} updated',
   last30:'Last 30 days', seg_all:'All', seg_active:'Active', seg_needs:'Needs action',
@@ -1157,6 +1176,15 @@ en: {
   loading_conv:'Loading real conversation…', no_messages:'No messages yet', conv_load_error:'Could not load the conversation',
   send_error:'Could not send the message.', view_lead:'View lead',
   via:'via', respond:'Reply', schedule_appt:'Book appointment', mark_won:'Mark as won',
+  archive_lead:'Archive', restore_lead:'Restore', delete_lead:'Delete', send_trip_email:'Send itinerary by email',
+  cfm_delete:'Delete this lead? Their whole record and conversation will be lost. This cannot be undone.',
+  cfm_archive:'Archive this lead?', cfm_restore:'Restore this lead?',
+  ask_email:'Destination email:', al_email_sent:'Itinerary sent.', err_delete:'Could not delete the lead.',
+  err_archive:'Could not archive the lead.', err_email:'Could not send the email.',
+  bulk_sel:'selected', bulk_status:'Set status…', bulk_tag:'+ Tag', bulk_archive:'Archive',
+  bulk_restore:'Restore', bulk_delete:'Delete', bulk_clear:'Clear selection',
+  bulk_partial:'Batch partially done: {ok} ok, {ko} failed.', bulk_ok:'{n} leads updated.',
+  prompt_tag:'Tag name:', cfm_delete_n:'Delete {n} leads permanently? This cannot be undone.',
   f_phone:'Phone', f_email:'Email', f_country:'Country', f_origin:'Source', f_created:'Created',
   to_confirm:'To be confirmed', closed_amount:'closed amount', not_quoted_yet:'not quoted yet',
   est_value:'estimated value', no_activity:'No activity logged.',
@@ -1702,6 +1730,7 @@ function renderLeadsTable(){
   const p = paginate('leads', rows);
   document.getElementById('leadsTableTbl').innerHTML = p.items.map(l=>`
     <div class="tblrow">
+      <span><input type="checkbox" ${bulkSelected[l.phone]?'checked':''} onchange="toggleBulkSel('${l.phone}',this.checked)"></span>
       <div class="leadid">
         <span class="av" style="background:${hashColor(l.phone)}">${initials(l.name||l.phone)}</span>
         <div><div class="nm" onclick="openLead('${l.phone}')">${l.name||l.phone}</div></div>
@@ -1712,6 +1741,55 @@ function renderLeadsTable(){
       <button class="actbtn" onclick="openLead('${l.phone}')">${t('see')}</button>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nothing_pending')}</div>`;
   document.getElementById('leadsTablePager').innerHTML = pagerHtml('leads', p);
+  const selAll = document.getElementById('leadsSelAll');
+  if(selAll) selAll.checked = p.items.length>0 && p.items.every(l=>bulkSelected[l.phone]);
+  renderBulkBar();
+}
+
+// ── selección múltiple + acciones en lote (solo vista Tabla) ──────────────────────────
+let bulkSelected = {};
+function toggleBulkSel(phone, checked){ if(checked) bulkSelected[phone]=true; else delete bulkSelected[phone]; renderBulkBar(); const a=document.getElementById('leadsSelAll'); if(a){ const rows=leads.filter(l=>!l.archived); const p=paginate('leads', rows); a.checked = p.items.length>0 && p.items.every(l=>bulkSelected[l.phone]); } }
+function toggleSelAll(checked){
+  const rows = leads.filter(l=>!l.archived).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const p = paginate('leads', rows);
+  p.items.forEach(l=>{ if(checked) bulkSelected[l.phone]=true; else delete bulkSelected[l.phone]; });
+  renderLeadsTable();
+}
+function clearBulkSel(){ bulkSelected={}; renderLeadsTable(); }
+function selectedBulkPhones(){ return Object.keys(bulkSelected); }
+function renderBulkBar(){
+  const bar = document.getElementById('leadsBulkBar');
+  if(!bar) return;
+  const sel = selectedBulkPhones();
+  if(!sel.length){ bar.style.display='none'; bar.innerHTML=''; return; }
+  bar.style.display='flex';
+  const stOpts = Object.keys(STATUS_KEY).filter(k=>k!=='').map(k=>`<option value="${k}">${esc(t(STATUS_KEY[k]))}</option>`).join('');
+  bar.innerHTML = `<b>${sel.length}</b> ${t('bulk_sel')}
+    <select onchange="bulkAct('status',this.value);this.value=''"><option value="">${t('bulk_status')}</option>${stOpts}</select>
+    <button onclick="bulkTag()">${t('bulk_tag')}</button>
+    <button onclick="bulkAct('archive')">${t('bulk_archive')}</button>
+    <button onclick="bulkAct('restore')">${t('bulk_restore')}</button>
+    <button class="danger" onclick="bulkAct('delete')">${t('bulk_delete')}</button>
+    <span class="sp"></span>
+    <button onclick="clearBulkSel()">${t('bulk_clear')}</button>`;
+}
+async function bulkAct(action, value){
+  const phones = selectedBulkPhones();
+  if(!phones.length) return;
+  if(action==='delete' && !await askConfirm(t('cfm_delete_n').replace('{n}', phones.length), {danger:true})) return;
+  try{
+    const r = await fetch('/admin/api/bulk', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phones, action, value}) });
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error||'');
+    if(j.failed && j.failed.length) showToast(t('bulk_partial').replace('{ok}', j.count||0).replace('{ko}', j.failed.length));
+    else showToast(t('bulk_ok').replace('{n}', j.count||phones.length), {type:'success'});
+    bulkSelected = {};
+    await refreshLeads(); renderLeadsTable(); renderKanban();
+  }catch(e){ showToast(t('err_status')); }
+}
+async function bulkTag(){
+  const tag = await askPrompt(t('prompt_tag'), '');
+  if(tag && tag.trim()) bulkAct('tag', tag.trim());
 }
 
 let curLead = null;
@@ -1766,6 +1844,9 @@ function renderLead(){
       <button class="primary" onclick="selectChat('${l.phone}');go('chats')">${t('respond')}</button>
       <button class="ghost" onclick="scheduleApptFlow('${l.phone}')">${t('schedule_appt')}</button>
       <button class="win" onclick="markWonFlow('${l.phone}')">${t('mark_won')}</button>
+      <button class="ghost" onclick="fichaTripEmail()">${t('send_trip_email')}</button>
+      <button class="ghost" onclick="fichaArchive(${l.archived ? 'false' : 'true'})">${t(l.archived ? 'restore_lead' : 'archive_lead')}</button>
+      <button class="danger" onclick="fichaDelete()">${t('delete_lead')}</button>
     </div>`;
   const datos = [[t('f_phone'),'+'+l.phone],[t('f_email'),l.email||'—'],[t('f_country'),l.country||'—'],[t('f_origin'),l.source||l.adSource||'WhatsApp'],[t('f_created'),fmtHistTime(l.createdAt)||'—']];
   document.getElementById('ldDatos').innerHTML = datos.map(([k,v])=>`<div class="ldrow"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('');
@@ -1888,6 +1969,40 @@ async function fichaDelPayment(id){
     if(!r.ok) throw 0;
     await refreshLeads(); openLead(curLead.phone);
   }catch(e){ showToast(t('err_payment_delete')); }
+}
+async function fichaTripEmail(){
+  if(!curLead) return;
+  const to = await askPrompt(t('ask_email'), curLead.email||'');
+  if(!to) return;
+  try{
+    const r = await fetch('/admin/api/send-trip-email', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:curLead.phone, to:to.trim()}) });
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error||'');
+    showToast(t('al_email_sent'), {type:'success'});
+    await refreshLeads(); openLead(curLead.phone);
+  }catch(e){ showToast(t('err_email')); }
+}
+async function fichaArchive(arch){
+  if(!curLead) return;
+  if(!await askConfirm(t(arch ? 'cfm_archive' : 'cfm_restore'))) return;
+  try{
+    const r = await fetch('/admin/api/archive', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:curLead.phone, archived:arch}) });
+    if(!r.ok) throw 0;
+    await refreshLeads(); openLead(curLead.phone);
+  }catch(e){ showToast(t('err_archive')); }
+}
+async function fichaDelete(){
+  if(!curLead) return;
+  if(!await askConfirm(t('cfm_delete'), {danger:true})) return;
+  const ph = curLead.phone;
+  try{
+    const r = await fetch('/admin/api/lead/delete', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:ph}) });
+    if(!r.ok) throw 0;
+    leads = leads.filter(x=>x.phone!==ph);
+    curLead = null;
+    goBack();
+    renderKanban();
+  }catch(e){ showToast(t('err_delete')); }
 }
 
 // ── Factura / recibo de pago: documento imprimible (ventana propia + window.print) ────────
@@ -2157,6 +2272,19 @@ function exportOperatorsCsv(){
   downloadCsv((opsDb==='tao'?'travel_advisors_':'operadores_')+new Date().toISOString().slice(0,10)+'.csv', lines);
 }
 function topbarExport(){ if(curView==='operators') exportOperatorsCsv(); else exportLeadsCsv(); }
+async function topbarEnrichAll(){
+  const b = document.getElementById('btnEnrichAll');
+  if(b.disabled) return;
+  b.disabled = true;
+  try{
+    const r = await fetch('/admin/api/enrich-all', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:'{}' });
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error||'');
+    await refreshLeads(); renderKanban(); if(curView==='leads') renderLeadsTable();
+    showToast(t('enrich_all_ok').replace('{n}', j.enriched||0), {type:'success'});
+  }catch(e){ showToast(t('err_status')); }
+  finally{ b.disabled = false; }
+}
 
 // Import CSV de Meta Lead Ads: UTF-16, separado por tabuladores (formato real de su export).
 function parseMetaCsv(text){
