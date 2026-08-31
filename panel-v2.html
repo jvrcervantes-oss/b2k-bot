@@ -1058,6 +1058,7 @@ es: {
   inv_no_deal:'Sin venta cerrada todavía — el importe se pone en la ficha.', inv_payments:'Pagos recibidos', inv_no_pay:'Sin pagos registrados.', inv_method:'Método',
   confirm_won:'¿Marcar este lead como ganado?', err_status:'No se pudo actualizar el estado.',
   wa_blocked:'⛔ Cuenta de WhatsApp bloqueada (code {code}): no sale NINGUNA plantilla — outreach, avisos al owner y recordatorios rebotan. Se arregla en el billing hub de Meta.',
+  wa_blocked_clear:'Ya está resuelto, quitar aviso', wa_blocked_cleared_ok:'Aviso quitado.', wa_blocked_clear_err:'No se pudo quitar el aviso.',
   ask_when:'Fecha y hora de la cita (AAAA-MM-DDTHH:MM):', appt_created:'Cita creada.', err_appt:'No se pudo crear la cita.',
   ask_phone_new:'Teléfono del lead nuevo (con prefijo de país, solo dígitos):', invalid_phone:'Teléfono inválido.',
   ask_name_opt:'Nombre (opcional):', err_lead_create:'No se pudo crear el lead (¿ya existe?).',
@@ -1213,6 +1214,7 @@ en: {
   inv_no_deal:'No closed sale yet — set the amount on the lead card.', inv_payments:'Payments received', inv_no_pay:'No payments logged.', inv_method:'Method',
   confirm_won:'Mark this lead as won?', err_status:'Could not update the status.',
   wa_blocked:'⛔ WhatsApp account blocked (code {code}): NO template goes out — outreach, owner alerts and reminders all bounce. Fix it in Meta\'s billing hub.',
+  wa_blocked_clear:'Already fixed, clear this', wa_blocked_cleared_ok:'Notice cleared.', wa_blocked_clear_err:'Could not clear the notice.',
   ask_when:'Appointment date and time (YYYY-MM-DDTHH:MM):', appt_created:'Appointment created.', err_appt:'Could not create the appointment.',
   ask_phone_new:'New lead phone (with country code, digits only):', invalid_phone:'Invalid phone.',
   ask_name_opt:'Name (optional):', err_lead_create:'Could not create the lead (already exists?).',
@@ -2229,7 +2231,8 @@ async function loadWaStatus(){
     const el = document.getElementById('waBanner'), b = s && s.blocked;
     if(!el) return;
     el.style.display = b ? 'block' : 'none';
-    if(b) el.textContent = t('wa_blocked', {code:b.code}) + ' · ' + (b.detail||'');
+    if(b) el.innerHTML = esc(t('wa_blocked', {code:b.code}) + ' · ' + (b.detail||''))
+      + ` <button onclick="dismissWaBlocked()" style="margin-left:10px;background:#fff;color:#b91c1c;border:none;border-radius:6px;padding:4px 10px;font:600 12px system-ui,sans-serif;cursor:pointer">${t('wa_blocked_clear')}</button>`;
   }catch(e){
     /* MUDO A PROPOSITO, pero con limite: si no se puede leer el estado, lo que NO se
        puede hacer es dejar el banner diciendo que todo va bien. Se deja como estaba
@@ -2237,6 +2240,16 @@ async function loadWaStatus(){
        resto del panel — misma clave de sesion—, asi que un aviso propio aqui seria el
        segundo de dos. */
   }
+}
+// El aviso normalmente se cura solo (próximo delivered/read, o TTL a las 6h) — este botón es
+// solo para no esperar cuando ya se sabe que el problema de fondo (billing en Meta) está resuelto.
+async function dismissWaBlocked(){
+  try{
+    const r = await fetch('/admin/api/wa-status/clear', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:'{}' });
+    if(!r.ok) throw 0;
+    showToast(t('wa_blocked_cleared_ok'), {type:'success'});
+    await loadWaStatus();
+  }catch(e){ showToast(t('wa_blocked_clear_err')); }
 }
 
 // ================= Exportar / Importar CSV (leads y operadores) =================
