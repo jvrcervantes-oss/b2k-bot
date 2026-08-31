@@ -688,9 +688,9 @@ const BUILTIN_PLAYBOOKS = {
       'startDate (free text like "next Monday" or a date), endDate (return/end date of the rental, free text or a date), deliveryLocation (free text). ' +
       'Use null for anything not clearly stated by the customer. Never guess.',
     canned: [
-      { title: "Saludo", text: "Hey! Thanks for reaching out! Which bike are you after, and for how long?" },
-      { title: "Pedir datos", text: "To give you an exact quote: which model, how many days, and where should we deliver it?" },
-      { title: "Confirmar entrega", text: "We deliver straight to your hotel or villa. What's the address?" },
+      { title: "Greeting", text: "Hey! Thanks for reaching out! Which bike are you after, and for how long?" },
+      { title: "Ask for details", text: "To give you an exact quote: which model, how many days, and where should we deliver it?" },
+      { title: "Confirm delivery", text: "We deliver straight to your hotel or villa. What's the address?" },
     ],
     helpWith: "your rental",
     deposit: null, // el alquiler cobra importe dinámico en IDR (createStripeCheckoutIDR, rama balibest), no un depósito fijo por persona
