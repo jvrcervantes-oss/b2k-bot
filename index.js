@@ -2822,6 +2822,25 @@ app.post("/admin/api/send", async (req, res) => {
   res.json({ ok: true });
 });
 
+// Registrar en la ficha un mensaje YA enviado por otra vía (p.ej. una plantilla lanzada a mano
+// contra la Graph API para una campaña puntual). NUNCA envía nada — solo deja rastro en el
+// historial de Conversaciones y refresca la ficha, igual que /send salvo por el envío en sí. Sin
+// esto, un mensaje mandado fuera de /send o de followupTick es invisible en el panel: pasó de
+// verdad, pero nadie lo ve. NO pausa al bot (a diferencia de /send): esto no es una toma de
+// control humana, así que el bot debe seguir respondiendo normal a lo que conteste el lead.
+app.post("/admin/api/log-outbound", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, text, ts } = req.body || {};
+  if (!phone || !text) return res.status(400).json({ error: "phone y text requeridos" });
+  const history = await getConversation(phone);
+  const when = Number(ts) > 0 ? Number(ts) : Date.now();
+  history.push({ role: "assistant", content: text, ts: when, by: "human" });
+  await saveConversation(phone, history);
+  const prev = await getLead(phone);
+  await recordLead(phone, prev && prev.name, (prev && prev.intent) || "interested", text, "human");
+  res.json({ ok: true });
+});
+
 // Enviar una foto/vídeo a mano al cliente (toma de control). Igual que /send: envía, registra y pausa el bot.
 app.post("/admin/api/send-media", async (req, res) => {
   if (!adminAuth(req, res)) return;
