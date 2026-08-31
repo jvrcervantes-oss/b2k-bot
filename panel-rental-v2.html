@@ -2833,7 +2833,7 @@ async function loadFlota(){
       const o = Array.isArray(p.offers) ? p.offers[0] : p.offers;
       if(o) flotaOffers[p.id] = o;
     });
-  }catch(e){ /* ofertas es un extra — si falla, Tarifas sigue sin esa columna */ }
+  }catch(e){ /* MUDO A PROPOSITO: ofertas es un extra — si falla, Tarifas sigue sin esa columna */ }
   renderFlota();
 }
 function setFlotaTab(tab){
@@ -3203,7 +3203,7 @@ function buildHex(){
     const d=Math.sqrt(dx*dx*1.25+dy*dy);
     const n1=rnd(), n2=rnd();
     let fill='var(--chart-empty)';
-    if(d+(n1-0.5)*0.38<0.66){
+    if(cats.length && d+(n1-0.5)*0.38<0.66){
       let a=(Math.atan2(dy,dx)/Math.PI+1)/2;
       a=(a+(n2-0.5)*0.24+1)%1;
       let acc=0, f=cats[0][0];
@@ -3217,10 +3217,14 @@ function buildHex(){
   document.getElementById('hexChart').innerHTML = `<svg viewBox="0 0 ${(cols+0.5)*w+2} ${rows*1.5*r+r+2}" style="width:100%;height:auto;display:block">${polys}</svg>`;
 }
 function buildDots(){
-  // real daily new-lead counts, gaps filled with 0 across the actual date range fetched
+  // real daily new-lead counts, gaps filled with 0 across the actual date range fetched.
+  // Sin ningún lead en los últimos 60 días (instalación nueva, o de verdad cero altas) el
+  // backend devuelve [] — se pinta el rango de los últimos 60 días vacío en vez de reventar.
+  const has = REAL.dailyNewLeads60d.length > 0;
   const map = new Map(REAL.dailyNewLeads60d);
-  const first = new Date(REAL.dailyNewLeads60d[0][0]+'T00:00:00Z');
-  const last = new Date(REAL.dailyNewLeads60d[REAL.dailyNewLeads60d.length-1][0]+'T00:00:00Z');
+  const todayUTC = new Date(new Date().toISOString().slice(0,10)+'T00:00:00Z');
+  const first = has ? new Date(REAL.dailyNewLeads60d[0][0]+'T00:00:00Z') : new Date(todayUTC.getTime()-59*86400000);
+  const last = has ? new Date(REAL.dailyNewLeads60d[REAL.dailyNewLeads60d.length-1][0]+'T00:00:00Z') : todayUTC;
   const days = Math.round((last-first)/86400000)+1;
   const series = [];
   for(let i=0;i<days;i++){
