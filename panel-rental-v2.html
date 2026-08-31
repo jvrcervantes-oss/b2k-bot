@@ -2764,7 +2764,7 @@ async function loadTeam(){
   try{
     const r = await fetch('/admin/api/team', { headers:{'X-Admin-Key':sessionKey} });
     if(r.ok){ const list = await r.json(); if(Array.isArray(list) && list.length) OWNER_OPTS = list; }
-  }catch(e){ /* se queda con el fallback ya inicializado */ }
+  }catch(e){ /* MUDO A PROPOSITO: se queda con el fallback ya inicializado */ }
 }
 function renderTeam(){
   const groups = {};
@@ -3420,7 +3420,7 @@ function buildDots(){
       els+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${on?2.3:1.15}" fill="${on?'var(--accent)':'var(--chart-dot-off)'}"/>`;
     }
   });
-  const fmtD = d => d.toLocaleDateString('es-ES',{day:'numeric',month:'short'});
+  const fmtD = d => d.toLocaleDateString(panelLocale(),{day:'numeric',month:'short'});
   [[0,'start'],[0.33,'middle'],[0.66,'middle'],[1,'end']].forEach(([f,an])=>{
     const idx = Math.min(days-1, Math.round(f*(days-1)));
     const x = PL+idx*xs+xs/2;
