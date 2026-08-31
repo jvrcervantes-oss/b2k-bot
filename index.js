@@ -2828,13 +2828,21 @@ app.post("/admin/api/send", async (req, res) => {
 // esto, un mensaje mandado fuera de /send o de followupTick es invisible en el panel: pasó de
 // verdad, pero nadie lo ve. NO pausa al bot (a diferencia de /send): esto no es una toma de
 // control humana, así que el bot debe seguir respondiendo normal a lo que conteste el lead.
+// Acepta `ts` porque el envío real casi nunca es "ahora": si el lead ya respondió en vivo antes
+// de que esto se registre (pasó con un lead real, 31-ago-2026 — el mensaje quedó pegado DESPUÉS
+// de una conversación que ya lo respondía), el mensaje debe insertarse en su sitio cronológico
+// real, no al final. Por eso ordena por ts tras insertar, y si el mismo texto ya está en el
+// historial actualiza su ts en vez de duplicarlo (permite recolocar un registro ya hecho mal).
 app.post("/admin/api/log-outbound", async (req, res) => {
   if (!adminAuth(req, res)) return;
   const { phone, text, ts } = req.body || {};
   if (!phone || !text) return res.status(400).json({ error: "phone y text requeridos" });
   const history = await getConversation(phone);
   const when = Number(ts) > 0 ? Number(ts) : Date.now();
-  history.push({ role: "assistant", content: text, ts: when, by: "human" });
+  const existing = history.find((m) => m.role === "assistant" && m.content === text);
+  if (existing) existing.ts = when;
+  else history.push({ role: "assistant", content: text, ts: when, by: "human" });
+  history.sort((a, b) => (a.ts || 0) - (b.ts || 0));
   await saveConversation(phone, history);
   const prev = await getLead(phone);
   await recordLead(phone, prev && prev.name, (prev && prev.intent) || "interested", text, "human");
