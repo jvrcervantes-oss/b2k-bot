@@ -423,6 +423,20 @@ textarea.nlinput{resize:vertical}
 .modalbox .modalbtns .primary{background:var(--strong);color:var(--strong-ink)}
 .modalbox .modalbtns .danger{background:var(--red);color:#fff}
 
+/* ---------- preview lateral de lead (drawer) — clic rápido desde Clientes, sin salir de la lista ---------- */
+.leadPrevOv{position:fixed;inset:0;background:rgba(10,10,8,0);z-index:310;display:flex;justify-content:flex-end;pointer-events:none;transition:background .18s ease}
+.leadPrevOv.in{background:rgba(10,10,8,.45);pointer-events:auto}
+.leadPrevPanel{width:100%;max-width:380px;height:100%;background:var(--bg);border-left:1px solid var(--border);box-shadow:-24px 0 60px rgba(0,0,0,.25);padding:20px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;transform:translateX(100%);transition:transform .22s cubic-bezier(.2,.7,.3,1)}
+.leadPrevOv.in .leadPrevPanel{transform:translateX(0)}
+.leadPrevOv.out .leadPrevPanel{transform:translateX(100%)}
+.leadPrevTop{display:flex;justify-content:flex-end}
+.leadPrevX{width:30px;height:30px;border-radius:50%;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center}
+.leadPrevX:hover{color:var(--text)}
+.leadPrevPanel .ldhero{flex-direction:column;align-items:flex-start;gap:10px}
+.leadPrevPanel .ldhero .actions{margin-left:0;flex-wrap:wrap;width:100%}
+.leadPrevPanel .ldhero .actions button{flex:1 1 calc(50% - 5px);justify-content:center;padding:9px 10px}
+.leadPrevFull{width:100%;justify-content:center;margin-top:auto}
+
 /* ---------- paginación (norma del estudio, mismo patrón que /admin) ---------- */
 .pager{display:flex;align-items:center;gap:10px;padding:12px 16px;font-size:12.5px;color:var(--muted)}
 .pager .pgbtns{display:flex;align-items:center;gap:4px;margin-left:auto}
@@ -2096,7 +2110,7 @@ function renderKanban(){
       <div class="hd"><span class="dot" style="background:${col.dot}"></span><span class="nm">${col.name}</span><span class="cnt">${col.cards.length}</span><span class="sum">${fmt(sum)}</span></div>
       <div class="kancards">
         ${p.items.map(cd=>`
-          <div class="kancard" draggable="true" data-phone="${cd.phone}" ondragstart="kDrag(event)" onclick="openLead('${cd.phone}')">
+          <div class="kancard" draggable="true" data-phone="${cd.phone}" ondragstart="kDrag(event)" onclick="openLeadPreview('${cd.phone}')">
             <div class="nm">${cd.name||cd.phone}</div>
             <span class="tour">${tourLine(cd)}</span>
             <div class="foot"><span class="val">${cd.dealValue?fmt(parseInt(cd.dealValue,10)):'—'}</span><span class="meta">${waitStr(cd.updatedAt)}</span><span class="av" style="background:${hashColor(cd.phone)}">${initials(cd.name||cd.phone)}</span></div>
@@ -2243,13 +2257,13 @@ function renderLeadsTable(){
       <span onclick="event.stopPropagation()"><input type="checkbox" class="selchk" ${selectedLeads[l.phone]?'checked':''} onchange="toggleSelectRow('${l.phone}',this.checked)"></span>
       <div class="leadid">
         <span class="av" style="background:${hashColor(l.phone)}">${initials(l.name||l.phone)}</span>
-        <div><div class="nm" onclick="openLead('${l.phone}')">${l.name||l.phone}</div></div>
+        <div><div class="nm" onclick="openLeadPreview('${l.phone}')">${l.name||l.phone}</div></div>
       </div>
       ${stBadge(l.status)}
       <span class="tourpill">${tourLine(l)}</span>
       <span class="val">${l.dealValue?fmt(parseInt(l.dealValue,10)):'—'}</span>
       <span style="display:flex;gap:6px;justify-content:flex-end;align-items:center">
-        <button class="actbtn" style="width:auto;padding:7px 12px" onclick="openLead('${l.phone}')">${t('see')}</button>
+        <button class="actbtn" style="width:auto;padding:7px 12px" onclick="openLeadPreview('${l.phone}')">${t('see')}</button>
         <div class="rowkebab"><button class="kebabbtn" onclick="toggleRowMenu(event,'${l.phone}')">&#8942;</button></div>
       </span>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${showArchived?t('no_archived'):t('nothing_pending')}</div>`;
@@ -2262,6 +2276,63 @@ function openLead(phone){
   if(!curLead) return;
   renderLead();
   go('lead');
+}
+// ---------- preview lateral de lead: clic rápido desde Clientes (kanban/tabla), sin salir de la lista.
+// La ficha completa (openLead → go('lead')) sigue siendo la vía para notas, pagos, timeline y borrar.
+function leadPrevEscHandler(e){ if(e.key==='Escape') closeLeadPreview(); }
+function closeLeadPreview(instant){
+  const ov = document.getElementById('leadPrevOv');
+  document.removeEventListener('keydown', leadPrevEscHandler);
+  if(!ov) return;
+  if(instant){ ov.remove(); return; }
+  ov.classList.remove('in'); ov.classList.add('out');
+  setTimeout(()=>ov.remove(), 200);
+}
+function openLeadPreview(phone){
+  const l = leads.find(x=>x.phone===phone);
+  if(!l) return;
+  closeLeadPreview(true);
+  const datos = [[t('f_phone'),'+'+l.phone],[t('f_email'),l.email||'—'],[t('f_origin'),l.source||l.adSource||'WhatsApp']];
+  const ov = document.createElement('div'); ov.className = 'leadPrevOv'; ov.id = 'leadPrevOv';
+  ov.innerHTML = `<div class="leadPrevPanel">
+      <div class="leadPrevTop"><button class="leadPrevX" id="leadPrevClose" aria-label="${t('btn_cancel')}">&#10005;</button></div>
+      <div class="card ldhero">
+        <span class="av" style="background:${hashColor(l.phone)}">${initials(l.name||l.phone)}</span>
+        <div style="flex:1;min-width:0">
+          <div class="nm">${esc(l.name||l.phone)}</div>
+          <div class="tags">${stBadge(l.status)}<span class="tourpill2">${tourLine(l)}</span></div>
+        </div>
+        <div class="actions">
+          <button class="primary" id="leadPrevRespond">${t('respond')}</button>
+          <button class="ghost" id="leadPrevAppt">${t('schedule_appt')}</button>
+          <button class="win" id="leadPrevWon">${t('mark_won')}</button>
+          <button class="ghost" id="leadPrevArch">${l.archived?t('restore'):t('archive')}</button>
+        </div>
+      </div>
+      <div class="card ldcard">
+        <div class="hd" data-i18n="contact_data">${t('contact_data')}</div>
+        <div class="body">${datos.map(([k,v])=>`<div class="ldrow"><span class="k">${k}</span><span class="v">${esc(String(v))}</span></div>`).join('')}</div>
+      </div>
+      <div class="card ldcard interest">
+        <div class="hd" data-i18n="interest">${t('interest')}</div>
+        <div class="body">
+          <div class="tour">${tourLine(l)}</div>
+          <div class="fecha">${l.startDate ? esc(l.startDate)+(l.endDate?' → '+esc(l.endDate):''):t('to_confirm')}</div>
+          <div class="valwrap"><span class="valbig">${l.dealValue?fmt(parseInt(l.dealValue,10)):'—'}</span><span class="vallbl">${l.dealValue?t('closed_amount'):t('not_quoted_yet')}</span></div>
+        </div>
+      </div>
+      <button class="btn dark leadPrevFull" id="leadPrevOpenFull">${t('view_lead')} →</button>
+    </div>`;
+  document.body.appendChild(ov);
+  requestAnimationFrame(()=>ov.classList.add('in'));
+  ov.querySelector('#leadPrevClose').onclick = ()=>closeLeadPreview();
+  ov.querySelector('#leadPrevRespond').onclick = ()=>{ closeLeadPreview(true); selectChat(l.phone); go('chats'); };
+  ov.querySelector('#leadPrevAppt').onclick = ()=>{ closeLeadPreview(true); scheduleApptFlow(l.phone); };
+  ov.querySelector('#leadPrevWon').onclick = ()=>{ closeLeadPreview(true); markWonFlow(l.phone); };
+  ov.querySelector('#leadPrevArch').onclick = ()=>{ archiveLeadFlow(l.phone, !l.archived); closeLeadPreview(true); };
+  ov.querySelector('#leadPrevOpenFull').onclick = ()=>{ closeLeadPreview(true); openLead(l.phone); };
+  ov.onclick = e=>{ if(e.target===ov) closeLeadPreview(); };
+  document.addEventListener('keydown', leadPrevEscHandler);
 }
 function fmtHistTime(ts){ return ts ? new Date(ts).toLocaleString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : ''; }
 const HIST_KEY = {created:'hist_created',imported:'hist_imported',status:'hist_status',owner:'hist_owner',appt:'hist_appt',note:'hist_note',tag:'hist_tag',archived:'hist_archived',restored:'hist_restored',enriched:'hist_enriched',payment:'hist_payment',payment_deleted:'hist_payment_deleted',outreach:'hist_outreach',fu_reminded:'hist_fu_reminded',newsletter:'hist_newsletter',deal_new:'hist_deal_new',deal_archived:'hist_deal_archived',deal_status:'hist_deal_status',delivery_failed:'hist_delivery_failed',departure_assigned:'hist_departure_assigned',departure_removed:'hist_departure_removed',email_sent:'hist_email_sent',email_failed:'hist_email_failed',review_followup:'hist_review_followup'};
