@@ -218,7 +218,7 @@ table.leadstbl{width:100%;border-collapse:collapse}
 .kancol .hd .nm{font-weight:600;font-size:14px}
 .kancol .hd .cnt{background:var(--card2);border-radius:7px;padding:1px 7px;font-size:12px;font-weight:600;color:var(--muted)}
 .kancol .hd .sum{font-size:12.5px;color:var(--muted);font-weight:500;margin-left:auto}
-.kancards{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 340px);overflow-y:auto;padding-right:4px}
+.kancards{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 260px);overflow-y:auto;padding-right:4px}
 .kancard{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 14px;cursor:pointer}
 .kancard:hover{border-color:var(--border2)}
 .kancard .nm{font-weight:600;font-size:14px}
@@ -392,9 +392,10 @@ textarea.nlinput{resize:vertical}
 .pager .pgbtns button{width:28px;height:28px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:12.5px;display:flex;align-items:center;justify-content:center}
 .pager .pgbtns button:disabled{opacity:.4;cursor:default}
 .pager .pgnum{padding:0 8px;font-weight:600;color:var(--text)}
-.kancol .pager{flex-wrap:wrap;padding:8px 2px 2px;gap:6px}
+.kancol .pager{flex-wrap:wrap;padding:4px 2px 0;gap:4px;font-size:11px}
 .kancol .pager .pgbtns{margin-left:0}
-.kancol .pager button{width:24px;height:24px}
+.kancol .pager .pgnum{padding:0 4px}
+.kancol .pager button{width:20px;height:20px;font-size:11px}
 
 /* ---------- kanban: arrastrar entre columnas ---------- */
 .kancol.dragover .kancards{outline:2px dashed var(--accent);outline-offset:-4px;border-radius:10px}
