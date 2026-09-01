@@ -1675,7 +1675,7 @@ async function saveLead(phone, name, lastMessage, intent) {
 
 // Mapeo de campos editables → columnas fijas del CRM (cabeceras del Sheet)
 const SHEET_COL = { name: "A", country: "B", email: "D", tour: "E", package: "F", status: "H", owner: "J", travelDate: "K", nextFollowUp: "M", notes: "O" };
-const STATUS_SHEET_LABEL = { new: "New", quoted: "Quoted", won: "Won ✅", lost: "Lost", noshow: "No-show" };
+const STATUS_SHEET_LABEL = { new: "New", quoted: "Quoted", followup: "Follow up", won: "Won ✅", lost: "Lost", noshow: "No-show" };
 
 async function updateLeadCells(sheets, row, vals) {
   const data = Object.keys(vals)

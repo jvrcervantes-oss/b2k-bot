@@ -210,7 +210,7 @@ table.leadstbl{width:100%;border-collapse:collapse}
 .threadhd .toolbtn:disabled{opacity:.6;cursor:default}
 
 /* ---------- kanban ---------- */
-#vLeads{padding:18px 28px 30px;overflow:auto}
+#vLeads{padding:18px 28px 18px;overflow:auto}
 .kanwrap{display:flex;gap:16px;align-items:flex-start}
 .kancol{width:250px;flex-shrink:0}
 .kancol .hd{display:flex;align-items:center;gap:8px;padding:6px 4px 12px}
@@ -218,7 +218,7 @@ table.leadstbl{width:100%;border-collapse:collapse}
 .kancol .hd .nm{font-weight:600;font-size:14px}
 .kancol .hd .cnt{background:var(--card2);border-radius:7px;padding:1px 7px;font-size:12px;font-weight:600;color:var(--muted)}
 .kancol .hd .sum{font-size:12.5px;color:var(--muted);font-weight:500;margin-left:auto}
-.kancards{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 280px);overflow-y:auto;padding-right:4px}
+.kancards{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 340px);overflow-y:auto;padding-right:4px}
 .kancard{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 14px;cursor:pointer}
 .kancard:hover{border-color:var(--border2)}
 .kancard .nm{font-weight:600;font-size:14px}
@@ -399,7 +399,6 @@ textarea.nlinput{resize:vertical}
 /* ---------- kanban: arrastrar entre columnas ---------- */
 .kancol.dragover .kancards{outline:2px dashed var(--accent);outline-offset:-4px;border-radius:10px}
 .kancard[draggable]{cursor:grab}
-.kancard .kstatus{width:100%;margin-top:9px;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:12px}
 
 /* ---------- microanimaciones (misma curva/duración que /admin: cubic-bezier(.2,.7,.3,1), .15-.2s) ---------- */
 .navitem,.btn,.iconbtn,.actbtn,.kancard,.addcard,.mediacard,.tblrow,.segmented .seg,.pager .pgbtns button,#sideToggleIcon{
@@ -1035,7 +1034,7 @@ es: {
   kpi_new_leads:'Leads nuevos (30d)', kpi_conversion:'Tasa de conversión', kpi_collected:'Ingresos cobrados',
   kpi_active_leads:'Leads activos', kpi_vs_prev:'vs {n} (30d previos)', kpi_won_of:'{w} ganados de {c} cerrados',
   kpi_travellers:'{p} viajeros en {d} salidas', kpi_breakdown:'{n} nuevos · {q} cotizados · {w} ganados',
-  st_new:'Nuevo', st_quoted:'Cotizado', st_won:'Ganado', st_lost:'Perdido', st_noshow:'No-show',
+  st_new:'Nuevo', st_quoted:'Cotizado', st_followup:'Follow up', st_won:'Ganado', st_lost:'Perdido', st_noshow:'No-show',
   wait_min:'hace {n} min', wait_h:'hace {n} h', wait_d:'hace {n} d',
   lead_waiting:'Esperando respuesta', lead_overdue:'Seguimiento vencido', see:'Ver', nothing_pending:'Nada pendiente ahora mismo.', no_chat_results:'Sin conversaciones que coincidan.',
   add_lead:'+ Añadir lead', kanban_summary:'{n} leads · {v} en juego',
@@ -1192,7 +1191,7 @@ en: {
   kpi_new_leads:'New leads (30d)', kpi_conversion:'Conversion rate', kpi_collected:'Revenue collected',
   kpi_active_leads:'Active leads', kpi_vs_prev:'vs {n} (prev 30d)', kpi_won_of:'{w} won of {c} closed',
   kpi_travellers:'{p} travellers across {d} departures', kpi_breakdown:'{n} new · {q} quoted · {w} won',
-  st_new:'New', st_quoted:'Quoted', st_won:'Won', st_lost:'Lost', st_noshow:'No-show',
+  st_new:'New', st_quoted:'Quoted', st_followup:'Follow up', st_won:'Won', st_lost:'Lost', st_noshow:'No-show',
   wait_min:'{n} min ago', wait_h:'{n} h ago', wait_d:'{n} d ago',
   lead_waiting:'Waiting for reply', lead_overdue:'Follow-up overdue', see:'View', nothing_pending:'Nothing pending right now.', no_chat_results:'No matching conversations.',
   add_lead:'+ Add lead', kanban_summary:'{n} leads · {v} in play',
@@ -1423,9 +1422,9 @@ function initials(name){
   if(!parts.length) return '?';
   return (parts[0][0]+(parts[1]?parts[1][0]:'')).toUpperCase();
 }
-const STATUS_KEY = {'':'st_new', new:'st_new', quoted:'st_quoted', won:'st_won', lost:'st_lost', noshow:'st_noshow'};
+const STATUS_KEY = {'':'st_new', new:'st_new', quoted:'st_quoted', followup:'st_followup', won:'st_won', lost:'st_lost', noshow:'st_noshow'};
 const STATUS_LABEL = new Proxy({}, { get: (_, status) => t(STATUS_KEY[status] || 'st_new') });
-const STATUS_DOT = {'':CB, new:CB, quoted:CO, won:CG, lost:'var(--red)', noshow:GR};
+const STATUS_DOT = {'':CB, new:CB, quoted:CO, followup:CV, won:CG, lost:'var(--red)', noshow:GR};
 // Pastilla con el color del estado de fondo (no solo el puntito) — mismo color de STATUS_DOT,
 // atenuado con color-mix para que el texto siga siendo legible en claro y en oscuro.
 function stBadge(status){
@@ -1685,7 +1684,7 @@ async function sendMessage(){
   box.disabled = false; box.focus();
 }
 
-const KAN_ORDER = ['new','quoted','won','lost','noshow'];
+const KAN_ORDER = ['new','quoted','followup','won','lost','noshow'];
 const KAN_PAGE_SIZE = 10;
 function renderKanban(){
   const order = KAN_ORDER;
@@ -1708,9 +1707,6 @@ function renderKanban(){
             <div class="nm">${cd.name||cd.phone}</div>
             <span class="tour">${tourLine(cd)}</span>
             <div class="foot"><span class="val">${cd.dealValue?fmt(parseInt(cd.dealValue,10)):'—'}</span><span class="meta">${waitStr(cd.updatedAt)}</span><span class="av" style="background:${hashColor(cd.phone)}">${initials(cd.name||cd.phone)}</span></div>
-            <select class="kstatus" onclick="event.stopPropagation()" onchange="kSetStatus(event,'${cd.phone}')">
-              ${KAN_ORDER.map(st=>`<option value="${st}" ${(cd.status||'new')===st?'selected':''}>${STATUS_LABEL[st]}</option>`).join('')}
-            </select>
           </div>`).join('')}
         <div class="addcard" onclick="newLeadFlow()">${t('add_lead')}</div>
       </div>
@@ -1738,8 +1734,6 @@ function kDrop(e){
   if(!phone) return;
   kApplyStatus(phone, st);
 }
-function kSetStatus(e, phone){ e.stopPropagation(); kApplyStatus(phone, e.target.value); }
-
 let leadsViewMode = 'kanban';
 function setLeadsViewMode(mode){
   leadsViewMode = mode;
