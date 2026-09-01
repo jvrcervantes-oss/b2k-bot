@@ -747,8 +747,9 @@ textarea.nlinput{resize:vertical}
           <span style="flex:1"></span>
           <button class="btn dark" onclick="newOperatorFlow()" data-i18n="new_operator">+ Nuevo operador</button>
         </div>
+        <div class="bulkbar" id="opsBulkBar"></div>
         <div class="card tblcard">
-          <div class="tblhead" style="grid-template-columns:2fr 1.4fr 1fr 1fr 90px"><span data-i18n="th_company">Empresa</span><span data-i18n="th_contact">Contacto</span><span data-i18n="th_country">País</span><span data-i18n="th_status">Estado</span><span></span></div>
+          <div class="tblhead" style="grid-template-columns:40px 2fr 1.4fr 1fr 1fr 150px"><span><input type="checkbox" id="opsSelAll" onchange="toggleOpsSelAll(this.checked)"></span><span data-i18n="th_company">Empresa</span><span data-i18n="th_contact">Contacto</span><span data-i18n="th_country">País</span><span data-i18n="th_status">Estado</span><span></span></div>
           <div id="opsTbl"></div>
           <div id="opsPager"></div>
         </div>
@@ -861,12 +862,18 @@ textarea.nlinput{resize:vertical}
         <div class="card" style="padding:20px;margin-bottom:18px">
           <div style="font-weight:600;font-size:15px;margin-bottom:14px" data-i18n="nl_compose">Redactar</div>
           <label class="nlfield" data-i18n="nl_dataset">Enviar a</label>
-          <select id="nlDataset" class="nlinput">
+          <select id="nlDataset" class="nlinput" onchange="nlOnDatasetChange()">
             <option value="leads" data-i18n="nl_ds_leads">Leads (WhatsApp)</option>
             <option value="operators" data-i18n="nl_ds_operators">Operadores</option>
             <option value="tao" data-i18n="nl_ds_tao">Travel Adv.</option>
             <option value="subscribers" data-i18n="nl_ds_subscribers">Suscriptores web</option>
           </select>
+          <label class="nlfield" data-i18n="nl_scope">Alcance</label>
+          <select id="nlScope" class="nlinput" onchange="nlUpdateCount()">
+            <option value="all" data-i18n="nl_scope_all">Todos</option>
+            <option value="selected" data-i18n="nl_scope_selected">Solo los seleccionados</option>
+          </select>
+          <div id="nlCount" style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px"></div>
           <label class="nlfield" data-i18n="nl_mode">Contenido del email</label>
           <select id="nlMode" class="nlinput" onchange="nlApplyMode()">
             <option value="compose" data-i18n="nl_mode_compose">Escribirlo aquí</option>
@@ -1027,7 +1034,7 @@ es: {
   ask_email:'Email de destino:', al_email_sent:'Itinerario enviado.', err_delete:'No se pudo borrar el lead.',
   err_archive:'No se pudo archivar el lead.', err_email:'No se pudo enviar el email.',
   bulk_sel:'seleccionados', bulk_status:'Cambiar estado…', bulk_tag:'+ Etiqueta', bulk_archive:'Archivar',
-  bulk_restore:'Restaurar', bulk_delete:'Borrar', bulk_clear:'Quitar selección',
+  bulk_restore:'Restaurar', bulk_delete:'Borrar', bulk_clear:'Quitar selección', bulk_newsletter:'📧 Newsletter a estos',
   bulk_partial:'Lote a medias: {ok} hechos, {ko} fallidos.', bulk_ok:'{n} leads actualizados.',
   prompt_tag:'Nombre de la etiqueta:', cfm_delete_n:'¿Borrar {n} leads definitivamente? No se puede deshacer.',
   f_phone:'Teléfono', f_email:'Email', f_country:'País', f_origin:'Origen', f_created:'Creado',
@@ -1092,7 +1099,8 @@ es: {
   nl_template:'Plantilla de Brevo', nl_template_hint:'Solo aparecen las plantillas transaccionales activas de Brevo. Personaliza con {{params.name}}; añade {{params.unsub}} en el pie para la baja.',
   nl_no_templates:'No hay plantillas transaccionales en Brevo (créala en Brevo → Transactional → Templates)', nl_pick_template:'Elige una plantilla de Brevo.',
   nl_test:'Enviar prueba', nl_schedule:'Programar', nl_send_now:'Enviar ahora',
-  nl_scheduled_hd:'Programados', nl_scope:'Alcance', nl_scope_all:'Todos', nl_cancel:'Cancelar', nl_no_scheduled:'Nada programado.',
+  nl_scheduled_hd:'Programados', nl_scope:'Alcance', nl_scope_all:'Todos', nl_scope_selected:'Solo los seleccionados', nl_scope_n_sel:'{n} sel.', nl_cancel:'Cancelar', nl_no_scheduled:'Nada programado.',
+  nl_count:'{n} destinatarios con email', nl_sel_no_email:'{k} de los seleccionados no tiene un email válido', nl_no_recipients:'No hay destinatarios con email en esta selección.',
   nl_history_hd:'Historial', nl_result:'Resultado', nl_failed:'fallidos', nl_no_history:'Sin envíos todavía.',
   nl_subs_hd:'Suscriptores web', nl_subs_add:'+ Añadir', nl_subs_source:'Origen', nl_subscribed:'Suscrito', nl_unsub:'Dado de baja', nl_no_subs:'Sin suscriptores todavía.',
   nl_need_subject_body:'Falta asunto o cuerpo (o elige una plantilla).', nl_confirm_send:'¿Enviar ya a toda la audiencia elegida?',
@@ -1183,7 +1191,7 @@ en: {
   ask_email:'Destination email:', al_email_sent:'Itinerary sent.', err_delete:'Could not delete the lead.',
   err_archive:'Could not archive the lead.', err_email:'Could not send the email.',
   bulk_sel:'selected', bulk_status:'Set status…', bulk_tag:'+ Tag', bulk_archive:'Archive',
-  bulk_restore:'Restore', bulk_delete:'Delete', bulk_clear:'Clear selection',
+  bulk_restore:'Restore', bulk_delete:'Delete', bulk_clear:'Clear selection', bulk_newsletter:'📧 Newsletter to these',
   bulk_partial:'Batch partially done: {ok} ok, {ko} failed.', bulk_ok:'{n} leads updated.',
   prompt_tag:'Tag name:', cfm_delete_n:'Delete {n} leads permanently? This cannot be undone.',
   f_phone:'Phone', f_email:'Email', f_country:'Country', f_origin:'Source', f_created:'Created',
@@ -1248,7 +1256,8 @@ en: {
   nl_template:'Brevo template', nl_template_hint:'Only Brevo active transactional templates show up. Personalize with {{params.name}}; add {{params.unsub}} in the footer for opt-out.',
   nl_no_templates:'No transactional templates in Brevo (create one in Brevo → Transactional → Templates)', nl_pick_template:'Pick a Brevo template.',
   nl_test:'Send test', nl_schedule:'Schedule', nl_send_now:'Send now',
-  nl_scheduled_hd:'Scheduled', nl_scope:'Scope', nl_scope_all:'Everyone', nl_cancel:'Cancel', nl_no_scheduled:'Nothing scheduled.',
+  nl_scheduled_hd:'Scheduled', nl_scope:'Scope', nl_scope_all:'Everyone', nl_scope_selected:'Only the selected ones', nl_scope_n_sel:'{n} sel.', nl_cancel:'Cancel', nl_no_scheduled:'Nothing scheduled.',
+  nl_count:'{n} recipients with an email', nl_sel_no_email:'{k} of the selected have no valid email', nl_no_recipients:'No recipients with an email in this selection.',
   nl_history_hd:'History', nl_result:'Result', nl_failed:'failed', nl_no_history:'No campaigns sent yet.',
   nl_subs_hd:'Web subscribers', nl_subs_add:'+ Add', nl_subs_source:'Source', nl_subscribed:'Subscribed', nl_unsub:'Unsubscribed', nl_no_subs:'No subscribers yet.',
   nl_need_subject_body:'Missing subject or body (or pick a template).', nl_confirm_send:'Send now to the whole chosen audience?',
@@ -1772,8 +1781,15 @@ function renderBulkBar(){
     <button onclick="bulkAct('archive')">${t('bulk_archive')}</button>
     <button onclick="bulkAct('restore')">${t('bulk_restore')}</button>
     <button class="danger" onclick="bulkAct('delete')">${t('bulk_delete')}</button>
+    <button onclick="leadsToNewsletter()">${t('bulk_newsletter')}</button>
     <span class="sp"></span>
     <button onclick="clearBulkSel()">${t('bulk_clear')}</button>`;
+}
+function leadsToNewsletter(){
+  go('newsletter');
+  document.getElementById('nlDataset').value = 'leads';
+  document.getElementById('nlScope').value = 'selected';
+  nlOnDatasetChange();
 }
 async function bulkAct(action, value){
   const phones = selectedBulkPhones();
@@ -2398,6 +2414,9 @@ function renderTeam(){
 // uso desde /admin). CRUD real: mismo endpoint, sin lógica nueva.
 // ======================================================================
 let operators = [];
+// Selección para newsletter — una entrada por agenda ('ops'/'tao'), igual que en /admin: si
+// compartieran la misma, marcar en Operadores podría acabar mandando el email a Travel Adv.
+let opsSelected = { ops:{}, tao:{} };
 async function loadOperators(){
   document.getElementById('opsTbl').innerHTML = '';
   const r = await fetch('/admin/api/operators?db='+opsDb, { headers:{'X-Admin-Key':sessionKey} });
@@ -2409,7 +2428,8 @@ function renderOperators(){
   document.getElementById('opsSummary').textContent = t('ops_count',{n:active.length});
   const p = paginate('ops', active);
   document.getElementById('opsTbl').innerHTML = p.items.map(o=>`
-    <div class="tblrow" style="grid-template-columns:2fr 1.4fr 1fr 1fr 150px">
+    <div class="tblrow" style="grid-template-columns:40px 2fr 1.4fr 1fr 1fr 150px">
+      <span><input type="checkbox" ${opsSelected[opsDb][o.id]?'checked':''} onchange="toggleOpsSel('${o.id}',this.checked)"></span>
       <div class="leadid"><span class="av" style="background:${hashColor(o.company||o.id)}">${initials(o.company||'?')}</span>
         <div><div class="nm" onclick="editOperatorFlow('${o.id}')">${o.company||t('no_name')}</div><span class="st" style="font-size:12px;color:var(--muted)">${o.contact||''}</span></div></div>
       <span class="wait">${o.email||o.phone||'—'}</span>
@@ -2421,6 +2441,41 @@ function renderOperators(){
       </div>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('no_operators')}</div>`;
   document.getElementById('opsPager').innerHTML = pagerHtml('ops', p);
+  const selAll = document.getElementById('opsSelAll');
+  if(selAll) selAll.checked = p.items.length>0 && p.items.every(o=>opsSelected[opsDb][o.id]);
+  renderOpsBulkBar();
+}
+// ── selección múltiple + salto a Newsletter (solo Operadores/TAO; sin lote de estado/borrado,
+// eso ya lo cubren los botones por fila) ──────────────────────────────────────────────────
+function toggleOpsSel(id, checked){
+  if(checked) opsSelected[opsDb][id] = true; else delete opsSelected[opsDb][id];
+  renderOpsBulkBar();
+  const a = document.getElementById('opsSelAll');
+  if(a){ const active = operators.filter(o=>!o.archived); const p = paginate('ops', active); a.checked = p.items.length>0 && p.items.every(o=>opsSelected[opsDb][o.id]); }
+}
+function toggleOpsSelAll(checked){
+  const active = operators.filter(o=>!o.archived);
+  const p = paginate('ops', active);
+  p.items.forEach(o=>{ if(checked) opsSelected[opsDb][o.id]=true; else delete opsSelected[opsDb][o.id]; });
+  renderOperators();
+}
+function clearOpsSel(){ opsSelected[opsDb] = {}; renderOperators(); }
+function selectedOpsIds(){ return Object.keys(opsSelected[opsDb]); }
+function renderOpsBulkBar(){
+  const bar = document.getElementById('opsBulkBar'); if(!bar) return;
+  const sel = selectedOpsIds();
+  if(!sel.length){ bar.style.display='none'; bar.innerHTML=''; return; }
+  bar.style.display='flex';
+  bar.innerHTML = `<b>${sel.length}</b> ${t('bulk_sel')}
+    <button onclick="opsToNewsletter()">${t('bulk_newsletter')}</button>
+    <span class="sp"></span>
+    <button onclick="clearOpsSel()">${t('bulk_clear')}</button>`;
+}
+function opsToNewsletter(){
+  go('newsletter');
+  document.getElementById('nlDataset').value = opsDb==='tao' ? 'tao' : 'operators';
+  document.getElementById('nlScope').value = 'selected';
+  nlOnDatasetChange();
 }
 async function newOperatorFlow(){
   const company = await askPrompt(t('ask_company'),''); if(!company) return;
@@ -2447,6 +2502,7 @@ async function archiveOperatorFlow(id){
   try{
     const r = await fetch('/admin/api/operator/archive', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, archived:true, db:opsDb}) });
     if(!r.ok) throw 0;
+    delete opsSelected[opsDb][id];
     await loadOperators();
   }catch(e){ showToast(t('err_operator_archive')); }
 }
@@ -2455,6 +2511,7 @@ async function deleteOperatorFlow(id){
   try{
     const r = await fetch('/admin/api/operator/delete', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, db:opsDb}) });
     if(!r.ok) throw 0;
+    delete opsSelected[opsDb][id];
     await loadOperators();
   }catch(e){ showToast(t('err_operator_archive')); }
 }
@@ -2838,6 +2895,63 @@ async function loadNewsletterView(){
   nlScheduled = s.ok ? await s.json() : [];
   subscribers = sub.ok ? await sub.json() : [];
   renderNewsletter();
+  nlUpdateCount();
+}
+// ── Alcance del envío: "Todos" (el dataset entero) o "Solo los seleccionados" (la marca que
+// se hizo con checkboxes en Leads/Operadores/Travel Adv., antes de saltar aquí con el botón
+// "Newsletter a estos"). Suscriptores no tiene selección por-item, así que siempre es "Todos".
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+let nlOpsCache = { ops:null, tao:null };
+function nlOperatorsFor(d){ return opsDb===d ? operators : (nlOpsCache[d] || []); }
+async function nlEnsureOperators(d){
+  if(opsDb===d || nlOpsCache[d]) return;
+  try{
+    const r = await fetch('/admin/api/operators?db='+d, { headers:{'X-Admin-Key':sessionKey} });
+    nlOpsCache[d] = r.ok ? await r.json() : [];
+  }catch(e){ nlOpsCache[d] = []; }
+}
+function nlRecipients(){
+  const dataset = document.getElementById('nlDataset').value;
+  const isSubs = dataset==='subscribers';
+  const scope = isSubs ? 'all' : document.getElementById('nlScope').value;
+  let source, selMap, keyOf;
+  if(dataset==='operators' || dataset==='tao'){
+    const d = dataset==='tao' ? 'tao' : 'ops';
+    source = nlOperatorsFor(d); selMap = opsSelected[d]; keyOf = o=>o.id;
+  } else if(isSubs){
+    source = subscribers; selMap = {}; keyOf = s=>s.email;
+  } else {
+    source = leads; selMap = bulkSelected; keyOf = l=>l.phone;
+  }
+  const seen = new Set(); const ids = [];
+  let unsubN = 0, noEmail = 0, selTotal = 0;
+  source.forEach(l=>{
+    if(l.archived) return;
+    const key = keyOf(l);
+    if(scope==='selected'){ if(!selMap[key]) return; selTotal++; }
+    const email = (l.email||'').toLowerCase().trim();
+    if(!EMAIL_RE.test(email)){ if(scope==='selected') noEmail++; return; }
+    if(l.emailUnsub){ unsubN++; return; }
+    if(seen.has(email)) return; seen.add(email);
+    ids.push(key);
+  });
+  return { ids, dataset, count: ids.length, unsub: unsubN, noEmail, selTotal };
+}
+function nlUpdateCount(){
+  const box = document.getElementById('nlCount'); if(!box) return;
+  const r = nlRecipients();
+  let msg = t('nl_count', {n:r.count});
+  if(document.getElementById('nlScope').value==='selected' && r.noEmail>0) msg += ' · ' + t('nl_sel_no_email',{k:r.noEmail});
+  box.textContent = msg;
+}
+async function nlOnDatasetChange(){
+  const val = document.getElementById('nlDataset').value;
+  const scopeSel = document.getElementById('nlScope');
+  const isSubs = val==='subscribers';
+  scopeSel.disabled = isSubs;
+  if(isSubs) scopeSel.value = 'all';
+  if(val==='operators' || val==='tao') await nlEnsureOperators(val==='tao'?'tao':'ops');
+  nlUpdateCount();
 }
 function renderNewsletter(){
   const schedPg = paginate('nlSched', nlScheduled);
@@ -2845,7 +2959,7 @@ function renderNewsletter(){
     <div class="tblrow" style="grid-template-columns:1.3fr 2fr 1fr 90px">
       <span class="wait">${new Date(c.when).toLocaleString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
       <span class="wait">${c.subject}</span>
-      <span class="wait">${c.scope==null?t('nl_scope_all'):c.scope}</span>
+      <span class="wait">${c.scope==null?t('nl_scope_all'):t('nl_scope_n_sel',{n:c.scope})}</span>
       <button class="actbtn" onclick="cancelScheduledFlow('${c.id}')">${t('nl_cancel')}</button>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nl_no_scheduled')}</div>`;
   document.getElementById('nlSchedPager').innerHTML = pagerHtml('nlSched', schedPg);
@@ -2891,16 +3005,18 @@ async function nlLoadTemplates(){
 }
 function nlPayload(){
   const dataset = document.getElementById('nlDataset').value;
-  if(document.getElementById('nlMode').value==='brevo'){
-    const templateId = document.getElementById('nlTemplate').value;
-    return /^\d+$/.test(templateId) ? { dataset, templateId } : { dataset };
-  }
-  return { dataset, subject: document.getElementById('nlSubject').value.trim(), body: document.getElementById('nlBody').value.trim() };
+  const scope = document.getElementById('nlScope').value;
+  const p = document.getElementById('nlMode').value==='brevo'
+    ? (()=>{ const templateId = document.getElementById('nlTemplate').value; return /^\d+$/.test(templateId) ? { dataset, templateId } : { dataset }; })()
+    : { dataset, subject: document.getElementById('nlSubject').value.trim(), body: document.getElementById('nlBody').value.trim() };
+  if(scope==='selected') p.ids = nlRecipients().ids;
+  return p;
 }
 function nlHasContent(p){ return p.templateId!=null || !!(p.subject && p.body); }
 async function sendNewsletterFlow(){
   const p = nlPayload();
   if(!nlHasContent(p)){ showToast(t(document.getElementById('nlMode').value==='brevo'?'nl_pick_template':'nl_need_subject_body')); return; }
+  if(!nlRecipients().count){ showToast(t('nl_no_recipients')); return; }
   if(!await askConfirm(t('nl_confirm_send'), {danger:true})) return;
   try{
     const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify(p) });
@@ -2924,6 +3040,7 @@ async function testNewsletterFlow(){
 async function scheduleNewsletterFlow(){
   const p = nlPayload();
   if(!nlHasContent(p)){ showToast(t(document.getElementById('nlMode').value==='brevo'?'nl_pick_template':'nl_need_subject_body')); return; }
+  if(!nlRecipients().count){ showToast(t('nl_no_recipients')); return; }
   const when = await askPrompt(t('ask_when'),''); if(!when) return;
   try{
     const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({...p, when}) });
