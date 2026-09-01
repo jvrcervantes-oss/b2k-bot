@@ -1740,18 +1740,24 @@
       var L = leads.filter(function(x){ return x.phone === curLead.phone; })[0]; if(L) L.paused = ns;
     });
   }
-  function sendMsg(){
-    if(!curLead) return;
-    var ta = document.getElementById('reply'), txt = ta.value.trim(); if(!txt) return;
+  // Envío compartido por texto libre (sendMsg) y respuestas rápidas (useCanned).
+  function sendText(txt, onSuccess){
+    if(!curLead || !txt) return;
     var btn = document.getElementById('sendBtn'); btn.disabled = true;
-    apiPost('send', { phone: curLead.phone, text: txt }).then(function(r){
+    return apiPost('send', { phone: curLead.phone, text: txt }).then(function(r){
       if(!r.ok) return r.json().then(function(e){ throw e; });
-      ta.value = ''; ta.style.height = 'auto'; appendBubble('assistant', txt, {by:'human'});
+      appendBubble('assistant', txt, {by:'human'});
       curLead.paused = true; updatePauseUI(true);
       var L = leads.filter(function(x){ return x.phone === curLead.phone; })[0]; if(L) L.paused = true;
+      if(onSuccess) onSuccess();
     }).catch(function(e){
       alert(t('al_send') + ((e && e.error) || 'error') + t('al_send2'));
     }).then(function(){ btn.disabled = false; });
+  }
+  function sendMsg(){
+    if(!curLead) return;
+    var ta = document.getElementById('reply'), txt = ta.value.trim(); if(!txt) return;
+    sendText(txt, function(){ ta.value = ''; ta.style.height = 'auto'; });
   }
   // Enviar una foto/vídeo a mano desde el chat: subir → send-media. La caja de texto (si hay) va de pie.
   function sendMediaFromComposer(file){
@@ -1798,12 +1804,18 @@
     if(pop.classList.contains('on')){ pop.classList.remove('on'); return; }
     renderCannedPop(); pop.classList.add('on');
   }
+  // Con la caja vacía, elegir una respuesta rápida la manda directa (un clic = enviado).
+  // Si ya había algo escrito, se añade al final para no tirar el borrador — el envío sigue siendo manual.
   function useCanned(i){
     var c = canned[i]; if(!c) return;
-    var ta = document.getElementById('reply');
-    ta.value = ta.value ? (ta.value.replace(/\s*$/,'') + ' ' + c.text) : c.text;
-    ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'; ta.focus();
     document.getElementById('cannedPop').classList.remove('on');
+    var ta = document.getElementById('reply');
+    if(ta.value.trim()){
+      ta.value = ta.value.replace(/\s*$/,'') + ' ' + c.text;
+      ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'; ta.focus();
+      return;
+    }
+    sendText(c.text);
   }
   function editCanned(){
     document.getElementById('cannedPop').classList.remove('on');
