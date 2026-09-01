@@ -1804,18 +1804,39 @@
     if(pop.classList.contains('on')){ pop.classList.remove('on'); return; }
     renderCannedPop(); pop.classList.add('on');
   }
-  // Con la caja vacía, elegir una respuesta rápida la manda directa (un clic = enviado).
-  // Si ya había algo escrito, se añade al final para no tirar el borrador — el envío sigue siendo manual.
+  // Las respuestas rápidas de seguimiento usan [Name]/[Tour]/[Date/time] como recordatorio de qué
+  // personalizar a mano. Se rellenan de verdad con los datos del lead antes de usarlas — nunca debe
+  // salir un [placeholder] literal a un cliente real (pasó el 1-sep con +17029697647).
+  function cannedFirstName(l){ return ((l&&l.name)||'').trim().split(/\s+/)[0] || 'there'; }
+  function cannedTourSubject(l){
+    var parts = [l&&l.tour, l&&l.package].filter(Boolean).join(' ').trim();
+    return parts ? ('the '+parts) : 'your Indonesia trip';
+  }
+  function fillCannedPlaceholders(text, lead){
+    var out = text;
+    if(out.indexOf('[Name]')>=0) out = out.split('[Name]').join(cannedFirstName(lead));
+    if(out.indexOf('[Tour]')>=0) out = out.split('[Tour]').join(cannedTourSubject(lead));
+    if(out.indexOf('[Date/time]')>=0){
+      var a = nextApptFor(lead && lead.phone);
+      out = out.split('[Date/time]').join(a ? fmtWhen(a.when) : 'the scheduled time');
+    }
+    return out;
+  }
+  // Con la caja vacía y sin ningún [hueco] sin resolver, elegir una respuesta rápida la manda directa
+  // (un clic = enviado). Si ya había algo escrito, o queda un placeholder que no supimos rellenar, se
+  // añade al final para revisar a mano — el envío no se fuerza nunca con un hueco sin rellenar.
   function useCanned(i){
     var c = canned[i]; if(!c) return;
     document.getElementById('cannedPop').classList.remove('on');
     var ta = document.getElementById('reply');
-    if(ta.value.trim()){
-      ta.value = ta.value.replace(/\s*$/,'') + ' ' + c.text;
+    var text = fillCannedPlaceholders(c.text || '', curLead);
+    var unresolved = /\[[^\]]+\]/.test(text);
+    if(ta.value.trim() || unresolved){
+      ta.value = (ta.value.trim() ? ta.value.replace(/\s*$/,'') + ' ' : '') + text;
       ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'; ta.focus();
       return;
     }
-    sendText(c.text);
+    sendText(text);
   }
   function editCanned(){
     document.getElementById('cannedPop').classList.remove('on');

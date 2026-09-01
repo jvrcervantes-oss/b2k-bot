@@ -1626,18 +1626,45 @@ function toggleCannedPop(){
   if(pop.classList.contains('hidden')){ renderCannedPop(); pop.classList.remove('hidden'); }
   else pop.classList.add('hidden');
 }
-// Con la caja vacía, elegir una respuesta rápida la manda directa (un clic = enviado).
-// Si ya había algo escrito, se añade al final para no tirar el borrador — el envío sigue siendo manual.
-function useCanned(i){
+// Las respuestas rápidas de seguimiento usan [Name]/[Tour]/[Date/time] como recordatorio de qué
+// personalizar a mano. Se rellenan de verdad con los datos del lead antes de usarlas — nunca debe
+// salir un [placeholder] literal a un cliente real (pasó el 1-sep con +17029697647).
+function cannedFirstName(l){ return ((l&&l.name)||'').trim().split(/\s+/)[0] || 'there'; }
+function cannedTourSubject(l){
+  const parts = [l&&l.tour, l&&l.package].filter(Boolean).join(' ').trim();
+  return parts ? ('the '+parts) : 'your Indonesia trip';
+}
+function cannedNextAppt(phone){
+  const now = Date.now()-3600000;
+  return appts.filter(a=>a.phone===phone && new Date(a.when).getTime()>=now).sort((a,b)=>new Date(a.when)-new Date(b.when))[0];
+}
+async function fillCannedPlaceholders(text, lead){
+  let out = text;
+  if(out.indexOf('[Name]')>=0) out = out.split('[Name]').join(cannedFirstName(lead));
+  if(out.indexOf('[Tour]')>=0) out = out.split('[Tour]').join(cannedTourSubject(lead));
+  if(out.indexOf('[Date/time]')>=0){
+    if(!loadedOnce.appts){ loadedOnce.appts = true; try{ await loadAppts(); }catch(e){} }
+    const a = cannedNextAppt(lead && lead.phone);
+    out = out.split('[Date/time]').join(a ? new Date(a.when).toLocaleString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : (LANG==='es'?'la hora acordada':'the scheduled time'));
+  }
+  return out;
+}
+// Con la caja vacía y sin ningún [hueco] sin resolver, elegir una respuesta rápida la manda directa
+// (un clic = enviado). Si ya había algo escrito, o queda un placeholder que no supimos rellenar, se
+// añade al final para revisar a mano — el envío no se fuerza nunca con un hueco sin rellenar.
+async function useCanned(i){
   const c = canned[i]; if(!c) return;
   closeCannedPop();
   const box = document.getElementById('composerInput');
-  if((box.value||'').trim()){
-    box.value = box.value.trim() + ' ' + (c.text||'');
+  const lead = leads.find(l=>l.phone===curChatPhone);
+  const text = await fillCannedPlaceholders(c.text||'', lead);
+  const unresolved = /\[[^\]]+\]/.test(text);
+  if((box.value||'').trim() || unresolved){
+    box.value = (box.value.trim() ? box.value.trim()+' ' : '') + text;
     box.focus();
     return;
   }
-  box.value = c.text || '';
+  box.value = text;
   sendMessage();
 }
 function openCannedEdit(){
