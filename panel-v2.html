@@ -1626,11 +1626,19 @@ function toggleCannedPop(){
   if(pop.classList.contains('hidden')){ renderCannedPop(); pop.classList.remove('hidden'); }
   else pop.classList.add('hidden');
 }
+// Con la caja vacía, elegir una respuesta rápida la manda directa (un clic = enviado).
+// Si ya había algo escrito, se añade al final para no tirar el borrador — el envío sigue siendo manual.
 function useCanned(i){
   const c = canned[i]; if(!c) return;
-  document.getElementById('composerInput').value = c.text || '';
   closeCannedPop();
-  document.getElementById('composerInput').focus();
+  const box = document.getElementById('composerInput');
+  if((box.value||'').trim()){
+    box.value = box.value.trim() + ' ' + (c.text||'');
+    box.focus();
+    return;
+  }
+  box.value = c.text || '';
+  sendMessage();
 }
 function openCannedEdit(){
   closeCannedPop();
