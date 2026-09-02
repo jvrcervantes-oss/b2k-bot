@@ -219,9 +219,10 @@ table.leadstbl{width:100%;border-collapse:collapse}
 .kancol .hd .cnt{background:var(--card2);border-radius:7px;padding:1px 7px;font-size:12px;font-weight:600;color:var(--muted)}
 .kancol .hd .sum{font-size:12.5px;color:var(--muted);font-weight:500;margin-left:auto}
 .kancards{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 260px);overflow-y:auto;padding-right:4px}
-.kancard{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 14px;cursor:pointer}
+.kancard{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 14px;cursor:pointer;position:relative}
 .kancard:hover{border-color:var(--border2)}
-.kancard .nm{font-weight:600;font-size:14px}
+.kancard .kanchk{position:absolute;top:12px;right:12px;width:16px;height:16px;cursor:pointer;margin:0}
+.kancard .nm{font-weight:600;font-size:14px;padding-right:22px}
 .kancard .tour{display:inline-block;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:2px 8px;font-size:12px;font-weight:500;margin-top:7px}
 .kancard .foot{display:flex;align-items:center;gap:8px;margin-top:11px}
 .kancard .val{font-weight:700;font-size:14px}
@@ -704,6 +705,7 @@ textarea.nlinput{resize:vertical}
     <div class="view hidden" id="vLeads">
       <div class="filters">
         <button class="btn"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.8 3.8h10.4v9.4H2.8z"/><path d="M2.8 6.8h10.4"/><path d="M5.5 2.2v3M10.5 2.2v3"/></svg><span data-i18n="last30">Últimos 30 días</span></button>
+        <div class="search" style="flex:1;max-width:280px;margin-bottom:0"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M7 2.8a4.2 4.2 0 1 1 0 8.4 4.2 4.2 0 0 1 0-8.4z"/><path d="M10.2 10.2L13.6 13.6"/></svg><input type="text" id="leadsSearch" class="searchinput" data-i18n-ph="search_leads" placeholder="Buscar por nombre, teléfono, email o tour…" oninput="onLeadsSearch()"></div>
         <div class="segmented" id="leadsViewSeg"><span class="seg on" data-i18n="kanban_tab" onclick="setLeadsViewMode('kanban')">Kanban</span><span class="seg" data-i18n="table_tab" onclick="setLeadsViewMode('table')">Tabla</span></div>
         <span style="flex:1"></span>
         <span style="font-size:13px;color:var(--muted)" id="kanbanSummary"></span>
@@ -758,6 +760,7 @@ textarea.nlinput{resize:vertical}
       <div style="padding:18px 28px 30px">
         <div class="filters">
           <span style="font-size:13px;color:var(--muted)" id="opsSummary" data-i18n="loading">Cargando…</span>
+          <div class="search" style="flex:1;max-width:280px;margin-bottom:0"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M7 2.8a4.2 4.2 0 1 1 0 8.4 4.2 4.2 0 0 1 0-8.4z"/><path d="M10.2 10.2L13.6 13.6"/></svg><input type="text" id="opsSearch" class="searchinput" data-i18n-ph="search_ops" placeholder="Buscar por empresa, contacto, email…" oninput="onOpsSearch()"></div>
           <span style="flex:1"></span>
           <button class="btn dark" onclick="newOperatorFlow()" data-i18n="new_operator">+ Nuevo operador</button>
         </div>
@@ -1012,6 +1015,7 @@ es: {
   th_contact:'Contacto', th_country:'País', th_status:'Estado', th_when:'Cuándo', th_title_notes:'Título / notas',
   th_amount:'Importe', th_method:'Método', th_date:'Fecha',
   search_conv:'Buscar conversación', composer_ph:'Escribe un mensaje de WhatsApp…', send:'Enviar',
+  search_leads:'Buscar por nombre, teléfono, email o tour…', search_ops:'Buscar por empresa, contacto, email…',
   t_canned:'Respuestas rápidas', t_attach:'Enviar foto/vídeo', canned_empty:'Sin respuestas rápidas guardadas',
   edit_tpl:'Editar respuestas rápidas', m_canned:'Respuestas rápidas', m_canned_help:'Una por línea · formato', m_canned_fmt:'Título | texto',
   al_media_big:'Archivo demasiado grande (máx 16 MB).', al_tpl:'No se pudo guardar.',
@@ -1083,6 +1087,8 @@ es: {
   ask_when:'Fecha y hora de la cita (AAAA-MM-DDTHH:MM):', appt_created:'Cita creada.', err_appt:'No se pudo crear la cita.',
   ask_phone_new:'Teléfono del lead nuevo (con prefijo de país, solo dígitos):', invalid_phone:'Teléfono inválido.',
   ask_name_opt:'Nombre (opcional):', err_lead_create:'No se pudo crear el lead (¿ya existe?).',
+  lbl_name:'Nombre', appt_phone_ph:'34811037978', appt_name_ph:'Jeffrey Connors', appt_when_ph:'2026-09-15T15:00',
+  appt_when_hint:'Formato AAAA-MM-DDTHH:MM, 24h (ej. 15 sep a las 3 de la tarde → 2026-09-15T15:00)',
   no_name:'(sin nombre)', archive:'Archivar', no_operators:'Sin operadores todavía.',
   ask_company:'Nombre de la empresa:', ask_contact_opt:'Persona de contacto (opcional):', ask_email_opt:'Email (opcional):',
   err_operator_create:'No se pudo crear el operador.', ask_op_status:'Estado (nuevo / en conversación / activo / descartado):',
@@ -1169,6 +1175,7 @@ en: {
   th_contact:'Contact', th_country:'Country', th_status:'Status', th_when:'When', th_title_notes:'Title / notes',
   th_amount:'Amount', th_method:'Method', th_date:'Date',
   search_conv:'Search conversation', composer_ph:'Write a WhatsApp message…', send:'Send',
+  search_leads:'Search by name, phone, email or tour…', search_ops:'Search by company, contact, email…',
   t_canned:'Quick replies', t_attach:'Send photo/video', canned_empty:'No quick replies saved',
   edit_tpl:'Edit quick replies', m_canned:'Quick replies', m_canned_help:'One per line · format', m_canned_fmt:'Title | text',
   al_media_big:'File too large (max 16MB).', al_tpl:"Couldn't save.",
@@ -1240,6 +1247,8 @@ en: {
   ask_when:'Appointment date and time (YYYY-MM-DDTHH:MM):', appt_created:'Appointment created.', err_appt:'Could not create the appointment.',
   ask_phone_new:'New lead phone (with country code, digits only):', invalid_phone:'Invalid phone.',
   ask_name_opt:'Name (optional):', err_lead_create:'Could not create the lead (already exists?).',
+  lbl_name:'Name', appt_phone_ph:'34811037978', appt_name_ph:'Jeffrey Connors', appt_when_ph:'2026-09-15T15:00',
+  appt_when_hint:'Format YYYY-MM-DDTHH:MM, 24h (e.g. Sep 15 at 3pm → 2026-09-15T15:00)',
   no_name:'(no name)', archive:'Archive', no_operators:'No operators yet.',
   ask_company:'Company name:', ask_contact_opt:'Contact person (optional):', ask_email_opt:'Email (optional):',
   err_operator_create:'Could not create the operator.', ask_op_status:'Status (new / talking / active / dropped):',
@@ -1722,12 +1731,24 @@ async function sendMessage(){
 
 const KAN_ORDER = ['new','quoted','followup','won','lost','noshow'];
 const KAN_PAGE_SIZE = 10;
+// ── búsqueda: Meta Leads (Kanban + Tabla comparten esta misma query) ──────────────
+let leadsSearchQ = '';
+function onLeadsSearch(){
+  leadsSearchQ = (document.getElementById('leadsSearch')?.value || '').trim().toLowerCase();
+  renderKanban();
+  if(leadsViewMode==='table') renderLeadsTable();
+}
+function leadMatchesSearch(l){
+  if(!leadsSearchQ) return true;
+  const hay = [l.name, l.phone, l.email, l.tour, l.package, l.country].filter(Boolean).join(' ').toLowerCase();
+  return hay.includes(leadsSearchQ);
+}
 function renderKanban(){
   const order = KAN_ORDER;
   const inCol = (l,st) => st==='new' ? (!l.status || l.status==='new') : l.status===st;
   const cols = order.map(st=>({
     st, name: STATUS_LABEL[st], dot: STATUS_DOT[st],
-    cards: leads.filter(l=>!l.archived && inCol(l,st)).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0))
+    cards: leads.filter(l=>!l.archived && inCol(l,st) && leadMatchesSearch(l)).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0))
   }));
   let total=0, sumAll=0;
   document.getElementById('kanban').innerHTML = cols.map(col=>{
@@ -1740,6 +1761,7 @@ function renderKanban(){
       <div class="kancards">
         ${p.items.map(cd=>`
           <div class="kancard" draggable="true" data-phone="${cd.phone}" ondragstart="kDrag(event)" onclick="openLeadPreview('${cd.phone}')">
+            <input type="checkbox" class="kanchk" ${bulkSelected[cd.phone]?'checked':''} onmousedown="event.stopPropagation()" onclick="event.stopPropagation()" onchange="toggleBulkSel('${cd.phone}',this.checked)">
             <div class="nm">${cd.name||cd.phone}</div>
             <span class="tour">${tourLine(cd)}</span>
             <div class="foot"><span class="val">${cd.dealValue?fmt(parseInt(cd.dealValue,10)):'—'}</span><span class="meta">${waitStr(cd.updatedAt)}</span><span class="av" style="background:${hashColor(cd.phone)}">${initials(cd.name||cd.phone)}</span></div>
@@ -1750,6 +1772,7 @@ function renderKanban(){
     </div>`;
   }).join('');
   document.getElementById('kanbanSummary').textContent = t('kanban_summary',{n:total, v:fmt(sumAll)});
+  renderBulkBar();
 }
 // -- arrastrar entre columnas (desktop) + selector de estado (táctil/móvil) --
 let kDragPhone = null;
@@ -1781,7 +1804,7 @@ function setLeadsViewMode(mode){
   if(mode==='table') renderLeadsTable();
 }
 function renderLeadsTable(){
-  const rows = leads.filter(l=>!l.archived).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const rows = leads.filter(l=>!l.archived && leadMatchesSearch(l)).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
   const p = paginate('leads', rows);
   document.getElementById('leadsTableTbl').innerHTML = p.items.map(l=>`
     <div class="tblrow">
@@ -1803,14 +1826,18 @@ function renderLeadsTable(){
 
 // ── selección múltiple + acciones en lote (solo vista Tabla) ──────────────────────────
 let bulkSelected = {};
-function toggleBulkSel(phone, checked){ if(checked) bulkSelected[phone]=true; else delete bulkSelected[phone]; renderBulkBar(); const a=document.getElementById('leadsSelAll'); if(a){ const rows=leads.filter(l=>!l.archived); const p=paginate('leads', rows); a.checked = p.items.length>0 && p.items.every(l=>bulkSelected[l.phone]); } }
+// No se re-renderiza el Kanban en cada click (aunque el checkbox vive ahí): .kancards hace
+// scroll interno por columna, y reconstruir el innerHTML en cada toggle devolvía la columna
+// al principio a media selección — justo mientras se estaban marcando varios leads para
+// archivar. El propio checkbox ya refleja su estado nuevo sin redibujar nada.
+function toggleBulkSel(phone, checked){ if(checked) bulkSelected[phone]=true; else delete bulkSelected[phone]; renderBulkBar(); const a=document.getElementById('leadsSelAll'); if(a){ const rows=leads.filter(l=>!l.archived && leadMatchesSearch(l)); const p=paginate('leads', rows); a.checked = p.items.length>0 && p.items.every(l=>bulkSelected[l.phone]); } }
 function toggleSelAll(checked){
-  const rows = leads.filter(l=>!l.archived).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const rows = leads.filter(l=>!l.archived && leadMatchesSearch(l)).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
   const p = paginate('leads', rows);
   p.items.forEach(l=>{ if(checked) bulkSelected[l.phone]=true; else delete bulkSelected[l.phone]; });
   renderLeadsTable();
 }
-function clearBulkSel(){ bulkSelected={}; renderLeadsTable(); }
+function clearBulkSel(){ bulkSelected={}; renderLeadsTable(); renderKanban(); }
 function selectedBulkPhones(){ return Object.keys(bulkSelected); }
 function renderBulkBar(){
   const bar = document.getElementById('leadsBulkBar');
@@ -2260,6 +2287,49 @@ function askConfirm(message, opts){
     ov.onclick = e => { if(e.target===ov) close(false); };
   });
 }
+// Formulario de cita en UNA sola ventana (antes eran hasta 3 prompts seguidos: teléfono →
+// nombre → cuándo). Si el lead ya se conoce (scheduleApptFlow) el teléfono/nombre vienen
+// fijados y solo se pide la fecha; si se crea suelta (newApptFlow, botón "+ Nueva cita") los
+// tres campos son editables. Cada campo lleva un ejemplo real como placeholder — "cuándo" es
+// el único que además explica el formato debajo, porque es el único que el servidor parsea
+// con `new Date(when)` y un formato libre ahí rompe el calendario en silencio.
+function askApptForm(title, defaults){
+  defaults = defaults || {};
+  return new Promise(resolve=>{
+    const ov = document.createElement('div'); ov.className = 'modalov';
+    const locked = !!defaults.lockContact;
+    ov.innerHTML = `<div class="modalbox" style="max-width:420px">
+      <div class="modalmsg">${esc(title)}</div>
+      <label class="nlfield">${t('f_phone')}</label>
+      <input class="nlinput" id="apptPhone" type="text" placeholder="${t('appt_phone_ph')}" ${locked?'disabled':''}>
+      <label class="nlfield">${t('lbl_name')}</label>
+      <input class="nlinput" id="apptName" type="text" placeholder="${t('appt_name_ph')}" ${locked?'disabled':''}>
+      <label class="nlfield">${t('th_when')}</label>
+      <input class="nlinput" id="apptWhen" type="text" placeholder="${t('appt_when_ph')}">
+      <div style="font-size:12px;color:var(--muted);margin:-6px 0 10px">${t('appt_when_hint')}</div>
+      <div class="modalbtns"><button class="ghost" id="modalCancel">${t('btn_cancel')}</button><button class="primary" id="modalOk">${t('btn_ok')}</button></div>
+    </div>`;
+    document.body.appendChild(ov);
+    const phoneEl = ov.querySelector('#apptPhone'), nameEl = ov.querySelector('#apptName'), whenEl = ov.querySelector('#apptWhen');
+    phoneEl.value = defaults.phone || ''; nameEl.value = defaults.name || '';
+    (locked ? whenEl : phoneEl).focus();
+    const close = v => { ov.classList.add('out'); setTimeout(()=>ov.remove(), 150); resolve(v); };
+    // El servidor guarda `when` tal cual y el calendario lo parsea con `new Date(when)` — una
+    // fecha no válida no da error, simplemente la cita se crea y nunca aparece en el mes
+    // (`if(isNaN(d)) return` en renderApptsCalendar). Se ataja aquí, antes de que llegue a crear
+    // una cita fantasma.
+    const submit = () => {
+      const w = whenEl.value.trim();
+      if(!w || isNaN(new Date(w))){ whenEl.focus(); whenEl.style.borderColor = 'var(--red)'; return; }
+      close({ phone: phoneEl.value.trim(), name: nameEl.value.trim(), when: w });
+    };
+    whenEl.oninput = () => { whenEl.style.borderColor = ''; };
+    ov.querySelector('#modalCancel').onclick = () => close(null);
+    ov.querySelector('#modalOk').onclick = submit;
+    [phoneEl, nameEl, whenEl].forEach(el => { el.onkeydown = e => { if(e.key==='Enter') submit(); if(e.key==='Escape') close(null); }; });
+    ov.onclick = e => { if(e.target===ov) close(null); };
+  });
+}
 function showToast(message, opts){
   opts = opts || {};
   let wrap = document.getElementById('toastWrap');
@@ -2314,10 +2384,10 @@ async function markWonFlow(phone){
 }
 async function scheduleApptFlow(phone){
   const l = leads.find(x=>x.phone===phone);
-  const when = await askPrompt(t('ask_when'), '');
-  if(!when) return;
+  const f = await askApptForm(t('schedule_appt'), { phone, name: l?.name||'', lockContact:true });
+  if(!f) return;
   try{
-    const r = await fetch('/admin/api/appts', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, name:l?.name||'', title:t('call_title'), when, closer:whoAmI}) });
+    const r = await fetch('/admin/api/appts', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, name:l?.name||'', title:t('call_title'), when:f.when, closer:whoAmI}) });
     if(!r.ok) throw 0;
     showToast(t('appt_created'), {type:'success'}); await refreshLeads(); openLead(phone);
   }catch(e){ showToast(t('err_appt')); }
@@ -2519,6 +2589,15 @@ let operators = [];
 // Selección para newsletter — una entrada por agenda ('ops'/'tao'), igual que en /admin: si
 // compartieran la misma, marcar en Operadores podría acabar mandando el email a Travel Adv.
 let opsSelected = { ops:{}, tao:{} };
+// Búsqueda — misma razón que la selección: una entrada por agenda, para que cambiar de pestaña
+// (Operadores ↔ Travel Adv.) no arrastre el texto buscado de la otra.
+let opsSearchQ = { ops:'', tao:'' };
+function onOpsSearch(){ opsSearchQ[opsDb] = (document.getElementById('opsSearch')?.value || '').trim().toLowerCase(); renderOperators(); }
+function opMatchesSearch(o){
+  const q = opsSearchQ[opsDb]; if(!q) return true;
+  const hay = [o.company, o.contact, o.email, o.phone, o.country].filter(Boolean).join(' ').toLowerCase();
+  return hay.includes(q);
+}
 async function loadOperators(){
   document.getElementById('opsTbl').innerHTML = '';
   const r = await fetch('/admin/api/operators?db='+opsDb, { headers:{'X-Admin-Key':sessionKey} });
@@ -2526,7 +2605,9 @@ async function loadOperators(){
   renderOperators();
 }
 function renderOperators(){
-  const active = operators.filter(o=>!o.archived);
+  const searchEl = document.getElementById('opsSearch');
+  if(searchEl && document.activeElement!==searchEl) searchEl.value = opsSearchQ[opsDb];
+  const active = operators.filter(o=>!o.archived && opMatchesSearch(o));
   document.getElementById('opsSummary').textContent = t('ops_count',{n:active.length});
   const p = paginate('ops', active);
   document.getElementById('opsTbl').innerHTML = p.items.map(o=>`
@@ -2553,10 +2634,10 @@ function toggleOpsSel(id, checked){
   if(checked) opsSelected[opsDb][id] = true; else delete opsSelected[opsDb][id];
   renderOpsBulkBar();
   const a = document.getElementById('opsSelAll');
-  if(a){ const active = operators.filter(o=>!o.archived); const p = paginate('ops', active); a.checked = p.items.length>0 && p.items.every(o=>opsSelected[opsDb][o.id]); }
+  if(a){ const active = operators.filter(o=>!o.archived && opMatchesSearch(o)); const p = paginate('ops', active); a.checked = p.items.length>0 && p.items.every(o=>opsSelected[opsDb][o.id]); }
 }
 function toggleOpsSelAll(checked){
-  const active = operators.filter(o=>!o.archived);
+  const active = operators.filter(o=>!o.archived && opMatchesSearch(o));
   const p = paginate('ops', active);
   p.items.forEach(o=>{ if(checked) opsSelected[opsDb][o.id]=true; else delete opsSelected[opsDb][o.id]; });
   renderOperators();
@@ -2706,11 +2787,10 @@ function renderApptsCalendar(){
   }).join('');
 }
 async function newApptFlow(){
-  const phone = await askPrompt(t('ask_phone_appt_opt'),'') || '';
-  const name = await askPrompt(t('ask_appt_name'),'') || '';
-  const when = await askPrompt(t('ask_when'),''); if(!when) return;
+  const f = await askApptForm(t('new_appt'), {});
+  if(!f) return;
   try{
-    const r = await fetch('/admin/api/appts', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, name, title:t('call_title'), when, closer:whoAmI}) });
+    const r = await fetch('/admin/api/appts', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone:f.phone, name:f.name, title:t('call_title'), when:f.when, closer:whoAmI}) });
     if(!r.ok) throw 0;
     await loadAppts();
   }catch(e){ showToast(t('err_appt')); }
