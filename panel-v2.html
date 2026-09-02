@@ -925,6 +925,12 @@ textarea.nlinput{resize:vertical}
           <div id="nlHistoryTbl"></div>
           <div id="nlHistPager"></div>
         </div>
+        <div class="sechd"><span class="t" data-i18n="nl_elog_hd">Registro de emails</span></div>
+        <div class="card tblcard" style="margin-bottom:22px">
+          <div class="tblhead" style="grid-template-columns:1.1fr 1.6fr 2fr 1fr .9fr"><span data-i18n="th_when">Cuándo</span><span data-i18n="th_email">Email</span><span data-i18n="nl_subject">Asunto</span><span data-i18n="nl_elog_kind">Tipo</span><span data-i18n="th_status">Estado</span></div>
+          <div id="nlElogTbl"></div>
+          <div id="nlElogPager"></div>
+        </div>
         <div class="sechd"><span class="t" data-i18n="nl_subs_hd">Suscriptores web</span><button class="btn" onclick="addSubscriberFlow()" data-i18n="nl_subs_add">+ Añadir</button></div>
         <div class="card tblcard">
           <div class="tblhead" style="grid-template-columns:2fr 1fr 1fr 90px"><span data-i18n="th_email">Email</span><span data-i18n="nl_subs_source">Origen</span><span data-i18n="th_status">Estado</span><span></span></div>
@@ -1122,6 +1128,7 @@ es: {
   nl_scheduled_hd:'Programados', nl_scope:'Alcance', nl_scope_all:'Todos', nl_scope_selected:'Solo los seleccionados', nl_scope_n_sel:'{n} sel.', nl_cancel:'Cancelar', nl_no_scheduled:'Nada programado.',
   nl_count:'{n} destinatarios con email', nl_sel_no_email:'{k} de los seleccionados no tiene un email válido', nl_no_recipients:'No hay destinatarios con email en esta selección.',
   nl_history_hd:'Historial', nl_result:'Resultado', nl_failed:'fallidos', nl_no_history:'Sin envíos todavía.',
+  nl_elog_hd:'Registro de emails', nl_elog_kind:'Tipo', nl_elog_k_itinerary:'Itinerario', nl_elog_k_newsletter:'Newsletter', nl_elog_k_test:'Prueba', nl_elog_k_otro:'Otro', nl_elog_ok:'Enviado', nl_elog_fail:'Fallo', nl_no_elog:'Sin emails todavía.',
   nl_subs_hd:'Suscriptores web', nl_subs_add:'+ Añadir', nl_subs_source:'Origen', nl_subscribed:'Suscrito', nl_unsub:'Dado de baja', nl_no_subs:'Sin suscriptores todavía.',
   nl_need_subject_body:'Falta asunto o cuerpo (o elige una plantilla).', nl_confirm_send:'¿Enviar ya a toda la audiencia elegida?',
   nl_sent_result:'Enviado: {sent} de {total}.', nl_send_error:'No se pudo completar la acción',
@@ -1282,6 +1289,7 @@ en: {
   nl_scheduled_hd:'Scheduled', nl_scope:'Scope', nl_scope_all:'Everyone', nl_scope_selected:'Only the selected ones', nl_scope_n_sel:'{n} sel.', nl_cancel:'Cancel', nl_no_scheduled:'Nothing scheduled.',
   nl_count:'{n} recipients with an email', nl_sel_no_email:'{k} of the selected have no valid email', nl_no_recipients:'No recipients with an email in this selection.',
   nl_history_hd:'History', nl_result:'Result', nl_failed:'failed', nl_no_history:'No campaigns sent yet.',
+  nl_elog_hd:'Email log', nl_elog_kind:'Type', nl_elog_k_itinerary:'Itinerary', nl_elog_k_newsletter:'Newsletter', nl_elog_k_test:'Test', nl_elog_k_otro:'Other', nl_elog_ok:'Sent', nl_elog_fail:'Failed', nl_no_elog:'No emails yet.',
   nl_subs_hd:'Web subscribers', nl_subs_add:'+ Add', nl_subs_source:'Source', nl_subscribed:'Subscribed', nl_unsub:'Unsubscribed', nl_no_subs:'No subscribers yet.',
   nl_need_subject_body:'Missing subject or body (or pick a template).', nl_confirm_send:'Send now to the whole chosen audience?',
   nl_sent_result:'Sent: {sent} of {total}.', nl_send_error:'Could not complete the action',
@@ -2371,6 +2379,7 @@ Object.assign(PAGE_RENDER, {
   leads: ()=>renderLeadsTable(), ops: ()=>renderOperators(), appts: ()=>renderAppts(),
   pay: ()=>renderInvoices(), dep: ()=>renderDepartures(), media: ()=>renderMedia(),
   nlSched: ()=>renderNewsletter(), nlHist: ()=>renderNewsletter(), subs: ()=>renderNewsletter(),
+  nlElog: ()=>renderNewsletter(),
 });
 KAN_ORDER.forEach(st=>{ PAGE_RENDER['kan_'+st] = ()=>renderKanban(); });
 
@@ -3066,16 +3075,18 @@ async function deleteMediaFlow(i){
 // NEWSLETTER — /admin/api/newsletter (enviar/programar) + /history +
 // /scheduled + /cancel, más /admin/api/subscribers (audiencia web).
 // ======================================================================
-let nlHistory = [], nlScheduled = [], subscribers = [];
+let nlHistory = [], nlScheduled = [], subscribers = [], nlEmailLog = [];
 async function loadNewsletterView(){
-  const [h,s,sub] = await Promise.all([
+  const [h,s,sub,el] = await Promise.all([
     fetch('/admin/api/newsletter/history', {headers:{'X-Admin-Key':sessionKey}}),
     fetch('/admin/api/newsletter/scheduled', {headers:{'X-Admin-Key':sessionKey}}),
     fetch('/admin/api/subscribers', {headers:{'X-Admin-Key':sessionKey}}),
+    fetch('/admin/api/email-log', {headers:{'X-Admin-Key':sessionKey}}),
   ]);
   nlHistory = h.ok ? await h.json() : [];
   nlScheduled = s.ok ? await s.json() : [];
   subscribers = sub.ok ? await sub.json() : [];
+  nlEmailLog = el.ok ? await el.json() : [];
   renderNewsletter();
   nlUpdateCount();
 }
@@ -3155,6 +3166,20 @@ function renderNewsletter(){
       <span class="wait">${c.sent}/${c.total}${c.failed?(' · '+c.failed+' '+t('nl_failed')):''}</span>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nl_no_history')}</div>`;
   document.getElementById('nlHistPager').innerHTML = pagerHtml('nlHist', histPg);
+
+  // Registro de emails uno a uno (endpoint email-log): itinerarios que el bot manda en la
+  // conversación, newsletter (una fila por destinatario) y pruebas, con su estado real.
+  // El "Historial" de arriba resume campañas; esto es el detalle por email.
+  const elogPg = paginate('nlElog', nlEmailLog);
+  document.getElementById('nlElogTbl').innerHTML = elogPg.items.map(e=>`
+    <div class="tblrow" style="grid-template-columns:1.1fr 1.6fr 2fr 1fr .9fr">
+      <span class="wait">${new Date(e.at).toLocaleString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
+      <span class="wait">${esc(e.to||'')}</span>
+      <span class="wait">${esc(e.subject||'—')}</span>
+      <span class="tourpill">${t({itinerary:'nl_elog_k_itinerary',newsletter:'nl_elog_k_newsletter',test:'nl_elog_k_test'}[e.kind]||'nl_elog_k_otro')}${e.kind==='newsletter'&&e.dataset?(' · '+t('nl_ds_'+e.dataset)):''}</span>
+      <span class="wait"${e.ok?'':' title="'+esc(e.error||'')+'" style="color:#c73e3e"'}>${t(e.ok?'nl_elog_ok':'nl_elog_fail')}</span>
+    </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nl_no_elog')}</div>`;
+  document.getElementById('nlElogPager').innerHTML = pagerHtml('nlElog', elogPg);
 
   const subsPg = paginate('subs', subscribers.filter(s=>!s.archived));
   document.getElementById('subsTbl').innerHTML = subsPg.items.map(s=>`

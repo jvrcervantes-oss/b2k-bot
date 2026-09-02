@@ -3514,23 +3514,48 @@ function renderEmailHtml(bodyHtml, unsub) {
 </div></body></html>`;
 }
 
+// ─── REGISTRO CENTRAL DE EMAILS (Redis: lista email_log, cap 1000; fallback en memoria) ──
+// Una fila por email individual que sale por sendEmail(): itinerarios que el bot manda en la
+// conversación, newsletter (una fila por destinatario) y pruebas. nl_campaigns resume campañas;
+// esto responde "¿qué emails ha mandado el bot, a quién, y aceptó Brevo el envío?".
+// El cap es alto a propósito: una campaña de 200 destinatarios son 200 filas y no debe
+// comerse los itinerarios, que es lo que el owner más quiere poder revisar.
+let fallbackEmailLog = [];
+async function logEmail(entry) {
+  const rec = Object.assign({ at: Date.now() }, entry);
+  try {
+    if (redisClient) { await redisClient.lPush("email_log", JSON.stringify(rec)); await redisClient.lTrim("email_log", 0, 999); }
+    else { fallbackEmailLog.unshift(rec); if (fallbackEmailLog.length > 1000) fallbackEmailLog.length = 1000; }
+  } catch (e) { /* best-effort: el registro nunca debe tumbar un envío */ }
+}
+async function getEmailLog(limit) {
+  const n = Math.min(parseInt(limit, 10) || 300, 1000);
+  if (redisClient) { const a = await redisClient.lRange("email_log", 0, n - 1); return a.map((x) => JSON.parse(x)); }
+  return fallbackEmailLog.slice(0, n);
+}
+
 // Envía un email vía Brevo (API transaccional). Dos modos:
 //  · plantilla de Brevo → { to, templateId, params } (usa su asunto/diseño; params = {{params.x}})
 //  · HTML propio        → { to, subject, html }
+// kind/phone/dataset no viajan a Brevo: son metadatos para el registro central (email_log).
 // Devuelve {ok} o {ok:false,error}.
-async function sendEmail({ to, name, subject, html, templateId, params, from }) {
+async function sendEmail({ to, name, subject, html, templateId, params, from, kind, phone, dataset }) {
   if (!MAIL_READY) return { ok: false, error: "email no configurado" };
   const dest = [{ email: to, ...(name ? { name } : {}) }];
   const payload = templateId
     ? { templateId, to: dest, params: params || {} }
     : { sender: parseFrom(from || MAIL_FROM), to: dest, subject, htmlContent: html };
   if (MAIL_REPLY_TO) payload.replyTo = { email: MAIL_REPLY_TO };
+  const rec = { to, name: name || "", subject: templateId ? `Plantilla Brevo #${templateId}` : (subject || ""), kind: kind || "otro", ...(phone ? { phone } : {}), ...(dataset ? { dataset } : {}) };
   try {
     await axios.post("https://api.brevo.com/v3/smtp/email", payload,
       { headers: { "api-key": (BREVO_API_KEY || "").trim(), "Content-Type": "application/json", accept: "application/json" }, timeout: 15000 });
+    await logEmail({ ...rec, ok: true });
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e.response?.data ? JSON.stringify(e.response.data) : e.message };
+    const error = e.response?.data ? JSON.stringify(e.response.data) : e.message;
+    await logEmail({ ...rec, ok: false, error: String(error).slice(0, 300) });
+    return { ok: false, error };
   }
 }
 
@@ -3590,6 +3615,7 @@ async function sendTripEmail(phone, toOverride) {
   const r = await sendEmail({
     to, name: lead.name || "", from: MAIL_FROM_SALES || MAIL_FROM,
     subject: `Your ${trip.label} route — Bali Moto Adventures`, html,
+    kind: "itinerary", phone,
   });
   if (r.ok) {
     if (!lead.email) await updateLeadFields(phone, { email: to.toLowerCase() });
@@ -3676,7 +3702,7 @@ async function runCampaign({ subject, body, templateId, phones, ids, dataset, ho
   const label = templateId ? `template#${templateId}` : subject;
   let sent = 0, failed = 0;
   for (const r of recipients) {
-    const out = await sendEmail(buildFor(r.email, r.name, r.company));
+    const out = await sendEmail({ ...buildFor(r.email, r.name, r.company), kind: "newsletter", dataset: dataset || "leads", ...(isOperators || isSubs ? {} : { phone: r.key }) });
     // logEvent solo aplica a leads (tienen timeline por phone); operadores/suscriptores no.
     if (out.ok) { sent++; if (!isOperators && !isSubs) await logEvent(r.key, "newsletter", { subject: label }); }
     else { failed++; console.warn(`[${PROJECT_NAME}] newsletter fallo a ${r.email}: ${out.error}`); }
@@ -3739,7 +3765,7 @@ app.post("/admin/api/newsletter", async (req, res) => {
     const one = templateId
       ? { to: testTo, templateId, params: { unsub: unsubUrl(host, testTo), name: "", email: testTo, company: "" } }
       : { to: testTo, subject: personalize(subject, "", ""), html: renderEmailHtml(mdToHtml(personalize(body, "", "")), unsubUrl(host, testTo)) };
-    const r = await sendEmail(one);
+    const r = await sendEmail({ ...one, kind: "test" });
     return r.ok ? res.json({ ok: true, test: true }) : res.status(502).json({ error: r.error });
   }
 
@@ -3775,6 +3801,13 @@ app.get("/admin/api/newsletter/history", async (req, res) => {
     }
     res.json(list.map((c) => ({ id: c.id, at: c.at, dataset: c.dataset, subject: c.subject, total: c.total, sent: c.sent, failed: c.failed })));
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Registro central de emails individuales (itinerarios, newsletter, pruebas), más reciente primero.
+// ?limit=N para pedir más de los 300 por defecto (tope 1000, el cap de la lista).
+app.get("/admin/api/email-log", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try { res.json(await getEmailLog(req.query.limit)); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Lista las campañas programadas (resumen, sin el cuerpo completo).

@@ -875,6 +875,7 @@
       <div class="sec-actions"><button id="nlSend" class="btn-primary" data-i18n="nl_send">Enviar</button></div>
       <div id="nlSchedList" class="nl-sched"></div>
       <div id="nlHistList" class="nl-sched"></div>
+      <div id="nlEmailLog" class="nl-sched"></div>
     </div>
   </div>
 
@@ -1101,6 +1102,7 @@
       empty_results:'Sin resultados', empty_clients:'Aún no hay clientes', empty_convs:'Aún no hay conversaciones', no_msgs:'Sin mensajes guardados', no_tpl:'Sin plantillas aún',
       flash_saved:'✓ Guardado', flash_err:'✕ Error', imp_ing:'⏳ Importando ', imp_new:'nuevos', imp_upd:'act.', imp_exist:'ya existían', imp_chat:'del chat, no duplicados', enr_ing:'⏳ Leyendo chats…', enr_done:'actualizados',
       nl_hist_title:'Enviados', nl_hist_recip:'destinatarios',
+      nl_elog_title:'Registro de emails (uno a uno)', nl_elog_k_itinerary:'Itinerario', nl_elog_k_newsletter:'Newsletter', nl_elog_k_test:'Prueba', nl_elog_k_otro:'Otro', nl_elog_fail:'FALLO',
       al_status:'No se pudo guardar el estado', al_pkg:'No se pudo guardar el paquete', al_nolead:'No se han encontrado leads en el archivo (¿es el CSV de Meta Lead Ads?).', al_imp:'Error al importar', al_tpl:'No se pudieron guardar las plantillas',
       al_send:'No se pudo enviar: ', al_send2:'\n\nSi han pasado +24h desde el último mensaje del cliente, WhatsApp no permite texto libre (haría falta plantilla).', cfm_cancel:'¿Cancelar esta cita?',
       notify_wait:'🔔 Lead por responder', notify_hot:'🔴 Lead caliente (reserva)',
@@ -1178,6 +1180,7 @@
       empty_results:'No results', empty_clients:'No clients yet', empty_convs:'No conversations yet', no_msgs:'No saved messages', no_tpl:'No templates yet',
       flash_saved:'✓ Saved', flash_err:'✕ Error', imp_ing:'⏳ Importing ', imp_new:'new', imp_upd:'upd.', imp_exist:'already existed', imp_chat:'from chat, not duplicated', enr_ing:'⏳ Reading chats…', enr_done:'updated',
       nl_hist_title:'Sent', nl_hist_recip:'recipients',
+      nl_elog_title:'Email log (one by one)', nl_elog_k_itinerary:'Itinerary', nl_elog_k_newsletter:'Newsletter', nl_elog_k_test:'Test', nl_elog_k_otro:'Other', nl_elog_fail:'FAILED',
       al_status:"Couldn't save status", al_pkg:"Couldn't save package", al_nolead:'No leads found in the file (is it the Meta Lead Ads CSV?).', al_imp:'Import error', al_tpl:"Couldn't save templates",
       al_send:"Couldn't send: ", al_send2:"\n\nIf it's been 24h+ since the customer's last message, WhatsApp blocks free text (a template is required).", cfm_cancel:'Cancel this appointment?',
       notify_wait:'🔔 Lead to reply', notify_hot:'🔴 Hot lead (booking)',
@@ -2995,6 +2998,21 @@
       box.innerHTML = rs.length ? rs.map(function(e){return '<span class="db-tag">'+esc(e)+'</span>';}).join(' ') : '—';
     }).catch(function(){ box.textContent='—'; });
   };
+  // Registro de emails uno a uno (endpoint email-log): cada email que salió de verdad por Brevo
+  // — el itinerario que el bot manda en la conversación, la newsletter (una fila por destinatario)
+  // y las pruebas — con su estado real. El "Enviados" de arriba resume campañas; esto es el detalle.
+  function nlLoadEmailLog(){
+    var box=document.getElementById('nlEmailLog');
+    api('email-log').then(function(r){return r.json();}).then(function(list){
+      if(!Array.isArray(list)||!list.length){ box.innerHTML=''; return; }
+      box.innerHTML='<div class="nl-sched-h">'+t('nl_elog_title')+'</div>'+list.map(function(e){
+        var kind=t({itinerary:'nl_elog_k_itinerary',newsletter:'nl_elog_k_newsletter',test:'nl_elog_k_test'}[e.kind]||'nl_elog_k_otro');
+        if(e.kind==='newsletter'&&e.dataset) kind+=' · '+nlDsLabel(e.dataset);
+        var st=e.ok?'':' · <b style="color:#c73e3e" title="'+esc(e.error||'')+'">'+t('nl_elog_fail')+'</b>';
+        return '<div class="nl-sched-row"><div class="nl-sched-info"><b>'+esc(e.to||'')+'</b><span>'+nlFmtWhen(e.at)+' · '+kind+' · '+esc(e.subject||'—')+st+'</span></div></div>';
+      }).join('');
+    }).catch(function(){ box.innerHTML=''; });
+  }
   // Modo de contenido: escribir aquí (compose) vs plantilla de Brevo (brevo).
   var nlTemplatesLoaded=false;
   function nlApplyMode(){
@@ -3027,7 +3045,7 @@
     var isSubs=document.getElementById('nlDataset').value==='subscribers';
     document.getElementById('nlSubsManage').style.display=isSubs?'':'none';
     if(isSubs) loadSubscribers().then(function(){ nlSyncTagUI(); nlUpdateCount(); }); else { nlSyncTagUI(); nlUpdateCount(); }
-    nlLoadScheduled(); nlLoadHistory(); }
+    nlLoadScheduled(); nlLoadHistory(); nlLoadEmailLog(); }
   function nlPost(payload, btn){ var orig=btn.textContent, err=document.getElementById('nlErr'); err.style.color=''; btn.disabled=true; btn.textContent=t('nl_sending');
     return apiPost('newsletter',payload).then(function(res){ return res.json().then(function(j){ return {ok:res.ok,j:j}; }); })
       .then(function(o){ if(!o.ok) throw ((o.j&&o.j.error)||'error'); return o.j; })
@@ -3162,7 +3180,7 @@
     if(whenVal) c.when=new Date(whenVal).toISOString();
     nlPost(c, this).then(function(j){ if(!j) return;
       if(j.scheduled){ err.style.color='var(--accent)'; err.textContent=t('nl_scheduled_ok'); document.getElementById('nlWhen').value=''; nlUpdateCount(); nlLoadScheduled(); }
-      else { err.style.color='var(--accent)'; err.textContent=t('nl_sent').replace('{s}',j.sent||0).replace('{f}',j.failed||0); nlLoadHistory(); }
+      else { err.style.color='var(--accent)'; err.textContent=t('nl_sent').replace('{s}',j.sent||0).replace('{f}',j.failed||0); nlLoadHistory(); nlLoadEmailLog(); }
     });
   };
   document.getElementById('mediaAdd').onclick=function(){ readMediaFromDOM(); mediaItems.push({id:'',label:'',type:'image',url:'',caption:''}); renderMediaRows(); };
