@@ -744,13 +744,31 @@ function apptDescription(a) {
   ].filter(Boolean).join("\n");
 }
 
+// Una cita futura activa por teléfono, o null. Sin esto, mover un lead dos
+// veces a la etapa de reunión (un doble clic, un doble-render del drop del
+// kanban) duplica la cita Y el evento de Calendar — con Meet incluido cuando
+// esté activo, gastando cuota de conferencias por nada (hallazgo Bots #3,
+// revisión previa 10-sep-2026).
+async function getApptActivaPorTelefono(phone) {
+  if (!phone) return null;
+  const todas = await listAppts();
+  const ahora = Date.now();
+  return todas.find((a) => a.phone === phone && apptTs(a.when) >= ahora) || null;
+}
+
 async function createAppt(a) {
+  const existente = await getApptActivaPorTelefono(a.phone || "");
+  if (existente) return updateAppt(existente.id, a);
+
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const appt = { id, phone: a.phone || "", name: a.name || "", title: a.title || "Cita", when: a.when, closer: a.closer || "", notes: a.notes || "", createdAt: Date.now() };
   await persistAppt(appt);
   if (appt.phone) logEvent(appt.phone, "appt", { title: appt.title, when: appt.when });
 
   // Sincroniza con Google Calendar si está configurado (Service Account + CALENDAR_ID).
+  // Hoy NO lo está para Lawang (verificado 10-sep-2026): esta rama queda dormida
+  // hasta que el owner monte el acceso de Google Workspace — en cuanto exista,
+  // el Meet automático se activa sin tocar código.
   if (CALENDAR_ID && GOOGLE_SERVICE_ACCOUNT) {
     try {
       const cal = await getCalendarClient();
@@ -758,14 +776,38 @@ async function createAppt(a) {
       const startNaive = appt.when.length === 16 ? appt.when + ":00" : appt.when;
       const ev = await cal.events.insert({
         calendarId: CALENDAR_ID,
+        conferenceDataVersion: 1,
         requestBody: {
           summary: appt.title,
           description: apptDescription(appt),
           start: { dateTime: startNaive, timeZone: tz },
           end: { dateTime: addMinutesNaive(appt.when, 30), timeZone: tz },
+          // Meet automático (hallazgo Bots #1): necesita que la cuenta detrás de
+          // GOOGLE_SERVICE_ACCOUNT tenga Domain-Wide Delegation en el Workspace
+          // de Lawang — sin eso, Calendar puede devolver el evento SIN
+          // `conferenceData` (falla la conferencia, no el evento entero) y aquí
+          // no se distingue ese caso: `eventId` se guarda igual y el panel
+          // enseñará "sin enlace" si `hangoutLink` no viene en la respuesta.
+          conferenceData: {
+            createRequest: {
+              requestId: id,
+              conferenceSolutionKey: { type: "hangoutsMeet" },
+            },
+          },
+          // guestsCanSeeOtherGuests:false (hallazgo Seguridad #5) — con varios
+          // leads pasando por la agenda de los mismos closers, el valor por
+          // defecto de Calendar dejaría que dos leads distintos se vieran el
+          // email entre sí como invitados del mismo tipo de evento.
+          guestsCanSeeOtherGuests: false,
+          guestsCanInviteOthers: false,
+          // sendUpdates:'none' en la llamada (no aquí, es parámetro de la
+          // request) — decisión deliberada: que Google mande o no la
+          // invitación al closer lo decide el proxy, no un valor por defecto
+          // que mandaría avisos a terceros sin que nadie lo pidiera.
         },
       });
       appt.eventId = ev.data.id;
+      appt.meetLink = ev.data.hangoutLink || "";
       await persistAppt(appt);
     } catch (e) {
       console.error(`[${PROJECT_NAME}] Calendar insert error: ${e.message}`);
@@ -798,6 +840,8 @@ async function updateAppt(id, fields) {
           description: apptDescription(appt),
           start: { dateTime: startNaive, timeZone: tz },
           end: { dateTime: addMinutesNaive(appt.when, 30), timeZone: tz },
+          guestsCanSeeOtherGuests: false,
+          guestsCanInviteOthers: false,
         },
       });
     } catch (e) {
