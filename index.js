@@ -9,6 +9,10 @@ import Stripe from "stripe";
 import crypto from "crypto";
 
 const app = express();
+// Railway pone su edge delante: sin esto req.ip es SIEMPRE la IP interna del proxy y
+// cualquier límite "por IP" (freno de auth, rate de la pasarela B2B) se vuelve un cubo
+// global — un scanner externo bloquearía al equipo entero. Con 1 se lee X-Forwarded-For.
+app.set("trust proxy", 1);
 // verify: guarda el body crudo — la firma X-Hub-Signature-256 de Meta se calcula sobre los bytes
 // exactos recibidos, no sobre el JSON re-serializado (re-serializar cambia el orden/espacios y rompe el HMAC).
 app.use(express.json({ limit: "30mb", verify: (req, _res, buf) => { req.rawBody = buf; } })); // 30mb: un vídeo de 16MB en base64 ocupa ~21.3MB; con 20mb el upload del panel fallaba en el parser
@@ -3973,7 +3977,14 @@ app.post("/admin/api/kanban-cols", async (req, res) => {
 // nota interna a un cliente una vez) y la transcripción va delimitada como DATO, no instrucción.
 const AI_EMAIL_FIELDS = ["name", "country", "tour", "package", "riders", "pillions", "travelDate", "dealValue"];
 let aiEmailCalls = []; // timestamps de la última hora (tope de coste: 30/h)
-const AI_PLACEHOLDER_RE = /\[[^\]\n]{0,40}\]|\{\{|\bTBD\b|\bXXX+\b|your name|\[name\]|lorem ipsum/i;
+const AI_PLACEHOLDER_RE = /\[[^\]\n]{0,40}\]|\{\{|\bTBD\b|\bXXX+\b|your name|lorem ipsum/i;
+// El markdown legítimo del compositor usa corchetes ([texto](url), [[Botón|url]]) — se quita
+// ANTES de buscar huecos, o todo email con un enlace daría falso "placeholder" y el envío
+// se negaría en un borrador perfectamente bueno.
+function hasPlaceholder(text) {
+  const scan = String(text || "").replace(/\[\[[^\]]*\|[^\]]*\]\]/g, "").replace(/\[[^\]]*\]\([^)]*\)/g, "");
+  return AI_PLACEHOLDER_RE.test(scan);
+}
 app.post("/admin/api/ai-email", async (req, res) => {
   if (!adminAuth(req, res)) return;
   if (!ANTHROPIC_API_KEY) return res.status(503).json({ error: "falta ANTHROPIC_API_KEY" });
@@ -4036,7 +4047,7 @@ app.post("/admin/api/ai-email", async (req, res) => {
     // Gate mecánico anti-placeholder: si algo con pinta de hueco sobrevivió al prompt, se AVISA
     // en grande — el humano escanea, no lee (lección del autosend con placeholder de B2K).
     const warnings = [];
-    if (AI_PLACEHOLDER_RE.test(subject + "\n" + body)) warnings.push("placeholder");
+    if (hasPlaceholder(subject + "\n" + body)) warnings.push("placeholder");
     if (!lead.email) warnings.push("no_email");
     res.json({ subject, body, missing, warnings, to: lead.email || "" });
   } catch (e) {
@@ -4057,7 +4068,7 @@ app.post("/admin/api/ai-email/send", async (req, res) => {
   const to = String((lead && lead.email) || "").trim().toLowerCase();
   if (!EMAIL_RE.test(to)) return res.status(400).json({ error: "la ficha no tiene un email válido" });
   if ((await getUnsubSet()).has(to)) return res.status(400).json({ error: "ese email se dio de baja — no se le puede escribir" });
-  if (AI_PLACEHOLDER_RE.test(subject + "\n" + body)) return res.status(400).json({ error: "el texto aún tiene un hueco tipo [placeholder] — complétalo antes de enviar" });
+  if (hasPlaceholder(subject + "\n" + body)) return res.status(400).json({ error: "el texto aún tiene un hueco tipo [placeholder] — complétalo antes de enviar" });
   const urls = (subject + "\n" + body).match(/https?:\/\/[^\s)\]>"']+/gi) || [];
   for (const u of urls) {
     if (!AI_EMAIL_LINK_ALLOW.test(u)) return res.status(400).json({ error: `enlace no permitido en el email: ${u.slice(0, 80)}` });
@@ -4226,7 +4237,7 @@ app.post("/partners/book", async (req, res) => {
     return res.status(429).json({ error: "too many requests today — please email us instead" });
   }
   const b = req.body || {};
-  const clientName = String(b.clientName || "").trim().slice(0, 80);
+  const clientName = String(b.clientName || "").replace(/[\r\n]+/g, " ").trim().slice(0, 80);
   const email = String(b.email || "").trim().toLowerCase().slice(0, 120);
   if (!clientName || !EMAIL_RE.test(email)) return res.status(400).json({ error: "client name and a valid email are required" });
   const phone = String(b.phone || "").replace(/[^\d+ ]/g, "").slice(0, 24);
