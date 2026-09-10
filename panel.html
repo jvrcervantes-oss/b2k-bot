@@ -2100,6 +2100,10 @@
     if(key==='status'){
       var st=l.status||'';
       var o=ST_OPTS.map(function(x){return '<option value="'+x[0]+'"'+(st===x[0]?' selected':'')+'>'+x[1]+'</option>';}).join('');
+      // Estados custom del kanban del panel v2 (columnas configurables): si el estado no está
+      // en ST_OPTS se añade como opción para NO perderlo al guardar desde aquí (mismo patrón
+      // que PKG_OPTS con paquetes desconocidos).
+      if(st && !ST_OPTS.some(function(x){return x[0]===st;})) o+='<option value="'+esc(st)+'" selected>'+esc(st)+'</option>';
       return '<td onclick="event.stopPropagation()"><select class="db-sel st-'+(st||'none')+'" onchange="dbSetStatus(\''+l.phone+'\',this)">'+o+'</select></td>';
     }
     if(key==='package'){
@@ -2594,6 +2598,8 @@
           // Selector de estado (táctil): en móvil el drag&drop no funciona, así se cambia con un toque.
           + '<select class="kstatus" onclick="event.stopPropagation()" onchange="kSetStatus(event,\''+l.phone+'\')">'
             + ST_OPTS.map(function(x){return '<option value="'+x[0]+'"'+((l.status||'')===x[0]?' selected':'')+'>'+x[1]+'</option>';}).join('')
+            // estado custom del kanban v2 → opción extra para no resetearlo al guardar la ficha
+            + ((l.status && !ST_OPTS.some(function(x){return x[0]===l.status;})) ? '<option value="'+esc(l.status)+'" selected>'+esc(l.status)+'</option>' : '')
           + '</select></div>';
       }).join('');
       return '<div class="kcol" data-status="'+c[0]+'" ondragover="kOver(event)" ondragleave="kLeave(event)" ondrop="kDrop(event)"><h4>'+t(c[1])+'<span class="kc">'+items.length+'</span></h4><div class="kcards">'+cards+'</div></div>';

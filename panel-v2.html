@@ -104,7 +104,7 @@ button{font-family:inherit;cursor:pointer}
 .sechd{display:flex;align-items:baseline;margin-bottom:12px}
 .sechd .t{font-size:17px;font-weight:600;flex:1}
 .sechd .a{font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer}
-.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:26px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;margin-bottom:26px}
 .kpi .hd{display:flex;align-items:center;gap:11px;padding:13px 16px;border-bottom:1px solid var(--border)}
 .kpi .hd .ic{width:32px;height:32px;border-radius:9px;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .kpi .hd b{font-weight:600;font-size:14px}
@@ -707,6 +707,8 @@ textarea.nlinput{resize:vertical}
         <button class="btn"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.8 3.8h10.4v9.4H2.8z"/><path d="M2.8 6.8h10.4"/><path d="M5.5 2.2v3M10.5 2.2v3"/></svg><span data-i18n="last30">Últimos 30 días</span></button>
         <div class="search" style="flex:1;max-width:280px;margin-bottom:0"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M7 2.8a4.2 4.2 0 1 1 0 8.4 4.2 4.2 0 0 1 0-8.4z"/><path d="M10.2 10.2L13.6 13.6"/></svg><input type="text" id="leadsSearch" class="searchinput" data-i18n-ph="search_leads" placeholder="Buscar por nombre, teléfono, email o tour…" oninput="onLeadsSearch()"></div>
         <div class="segmented" id="leadsViewSeg"><span class="seg on" data-i18n="kanban_tab" onclick="setLeadsViewMode('kanban')">Kanban</span><span class="seg" data-i18n="table_tab" onclick="setLeadsViewMode('table')">Tabla</span></div>
+        <select id="leadsStatusFilter" class="nlinput" style="width:auto;margin:0;padding:8px 10px;font-size:13px" onchange="onStatusFilter()"></select>
+        <button class="btn" onclick="kanColsFlow()"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.8 2.8h3.2v10.4H2.8zM6.4 2.8h3.2v7H6.4zM10 2.8h3.2v8.6H10z"/></svg><span data-i18n="kan_cols_btn">Columnas</span></button>
         <span style="flex:1"></span>
         <span style="font-size:13px;color:var(--muted)" id="kanbanSummary"></span>
       </div>
@@ -821,6 +823,14 @@ textarea.nlinput{resize:vertical}
       <div style="padding:18px 28px 30px">
         <div class="sechd"><span class="t" data-i18n="team_hd">Reparto de leads por persona</span><span class="a" style="cursor:default;color:var(--muted)" data-i18n="team_sub">calculado de los leads ya cargados</span></div>
         <div class="kpis" id="teamCards" style="grid-template-columns:repeat(3,1fr)"></div>
+        <div class="sechd" style="margin-top:24px"><span class="t" data-i18n="tc_hd">Chat del equipo</span></div>
+        <div class="card" style="max-width:720px;display:flex;flex-direction:column;height:440px">
+          <div id="tcMsgs" style="flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:10px"></div>
+          <div style="display:flex;gap:10px;padding:12px 14px;border-top:1px solid var(--border)">
+            <input id="tcInput" class="nlinput" style="margin:0;flex:1" maxlength="1000" data-i18n-ph="tc_ph" placeholder="Escribe un mensaje para el equipo…" onkeydown="if(event.key==='Enter')sendTeamChat()">
+            <button class="btn dark" onclick="sendTeamChat()" data-i18n="tc_send">Enviar</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -835,6 +845,15 @@ textarea.nlinput{resize:vertical}
           <div style="display:flex;gap:10px;margin-top:16px">
             <button class="btn" onclick="switchWho()" data-i18n="bn_switch">Cambiar de usuario</button>
             <button class="btn" onclick="logoutV2()" data-i18n="logout">Cerrar sesión</button>
+          </div>
+        </div>
+        <div class="card" style="padding:20px;margin-bottom:16px">
+          <div style="font-weight:600;font-size:15px;margin-bottom:8px" data-i18n="set_adspend_hd">Gasto en publicidad</div>
+          <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:12px" data-i18n="set_adspend_hint"></div>
+          <label class="nlfield" id="adspendLbl"></label>
+          <div style="display:flex;gap:10px">
+            <input id="adspendInput" class="nlinput" type="number" min="0" step="1" style="margin:0;max-width:160px" placeholder="0">
+            <button class="btn" onclick="saveAdSpendFlow()" data-i18n="set_adspend_save">Guardar</button>
           </div>
         </div>
         <div class="card" style="padding:20px">
@@ -855,6 +874,10 @@ textarea.nlinput{resize:vertical}
         <div class="card tblcard">
           <div class="tblhead" style="grid-template-columns:1.8fr 1.2fr 1fr 1fr 110px"><span data-i18n="th_lead">Lead</span><span data-i18n="th_interest">Interés</span><span data-i18n="th_value">Valor</span><span data-i18n="th_status">Estado</span><span></span></div>
           <div id="depUnassignedTbl"></div>
+        </div>
+        <div class="sechd" style="margin-top:24px"><span class="t" data-i18n="bk_hd">Solicitudes de reserva (operadores B2B)</span></div>
+        <div class="card tblcard">
+          <div id="bookingsTbl"></div>
         </div>
       </div>
     </div>
@@ -891,6 +914,7 @@ textarea.nlinput{resize:vertical}
             <option value="selected" data-i18n="nl_scope_selected">Solo los seleccionados</option>
           </select>
           <div id="nlCount" style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px"></div>
+          <div id="nlRecipList" class="hidden" style="margin:-4px 0 14px;max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:10px 12px"></div>
           <label class="nlfield" data-i18n="nl_mode">Contenido del email</label>
           <select id="nlMode" class="nlinput" onchange="nlApplyMode()">
             <option value="compose" data-i18n="nl_mode_compose">Escribirlo aquí</option>
@@ -936,6 +960,12 @@ textarea.nlinput{resize:vertical}
           <div class="tblhead" style="grid-template-columns:2fr 1fr 1fr 90px"><span data-i18n="th_email">Email</span><span data-i18n="nl_subs_source">Origen</span><span data-i18n="th_status">Estado</span><span></span></div>
           <div id="subsTbl"></div>
           <div id="subsPager"></div>
+        </div>
+        <div class="sechd" style="margin-top:22px"><span class="t" data-i18n="nl_unsubs_hd">Bajas de la newsletter</span></div>
+        <div class="card tblcard">
+          <div class="tblhead" style="grid-template-columns:2fr 1.4fr 1fr"><span data-i18n="th_email">Email</span><span data-i18n="th_lead">Lead</span><span data-i18n="f_origin">Origen</span></div>
+          <div id="unsubsTbl"></div>
+          <div id="unsubsPager"></div>
         </div>
       </div>
     </div>
@@ -1049,6 +1079,28 @@ es: {
   wait_min:'hace {n} min', wait_h:'hace {n} h', wait_d:'hace {n} d',
   lead_waiting:'Esperando respuesta', lead_overdue:'Seguimiento vencido', see:'Ver', nothing_pending:'Nada pendiente ahora mismo.', no_chat_results:'Sin conversaciones que coincidan.',
   add_lead:'+ Añadir lead', kanban_summary:'{n} leads · {v} en juego',
+  st_wait_client:'Esperando al cliente',
+  kan_cols_btn:'Columnas', kan_cols_hd:'Columnas del kanban',
+  kan_cols_hint:'Las 6 de fábrica se pueden renombrar y reordenar, no borrar (el motor les da semántica). Las que añadas son etapas activas del pipeline.',
+  kan_col_add:'+ Añadir columna', kan_col_name_ph:'Nombre de la columna', kan_cols_saved:'Columnas guardadas',
+  kan_col_del_leads:'Esa columna tiene {n} leads: pasarán a "Nuevo". ¿Borrarla?',
+  filter_status_all:'Estado: todos',
+  notif_clear:'Limpiar todo', notif_booking:'Solicitud de reserva B2B pendiente',
+  kpi_cpl:'Coste por lead (mes)', kpi_cpl_meta:'{s} · {n} leads Meta · {w} ganados este mes', kpi_cpl_none:'Añade el gasto de ads del mes en Ajustes',
+  set_adspend_hd:'Gasto en publicidad', set_adspend_lbl:'Gasto de ads de {ym} (USD)', set_adspend_save:'Guardar', set_adspend_saved:'Gasto guardado',
+  set_adspend_hint:'La cuenta de Meta que gasta (IG boosting) no es legible por API — el número se apunta aquí a mano y alimenta el KPI "Coste por lead".',
+  nl_recipients_show:'Ver destinatarios', nl_recipients_hd:'Destinatarios ahora mismo ({n})', nl_recipients_none:'Nadie con email válido en ese alcance.',
+  nl_unsubs_hd:'Bajas de la newsletter', nl_no_unsubs:'Nadie se ha dado de baja.', nl_unsub_src_lead:'lead', nl_unsub_src_operators:'Operadores', nl_unsub_src_tao:'Travel Adv.', nl_unsub_src_subscriber:'suscriptor web',
+  nl_hist_loading:'Cargando destinatarios…', nl_hist_none:'(sin lista guardada — campaña anterior a este cambio)',
+  ai_email_btn:'✨ Email IA', ai_email_hd:'Email de ventas — borrador IA', ai_email_gen:'Analizando el lead y redactando…',
+  ai_email_missing:'Datos que faltaban (el borrador NO los inventa):',
+  ai_email_warn_placeholder:'⚠ Hay un hueco tipo [placeholder] en el texto — complétalo antes de enviar.',
+  ai_email_warn_noemail:'⚠ La ficha no tiene email: añádelo para poder enviar.',
+  ai_email_send:'Enviar email', ai_email_sent:'Email enviado.', ai_email_to:'Para', ai_email_err:'No se pudo generar el borrador',
+  tc_hd:'Chat del equipo', tc_ph:'Escribe un mensaje para el equipo…', tc_send:'Enviar', tc_empty:'Sin mensajes todavía. Escribe el primero.',
+  bk_hd:'Solicitudes de reserva (operadores B2B)', bk_empty:'Sin solicitudes.', bk_pending:'Pendiente', bk_handled:'Gestionada', bk_dismissed:'Descartada',
+  bk_mark_handled:'Gestionada', bk_dismiss:'Descartar', bk_flex:'Fecha flexible',
+  bk_link_btn:'Link reserva', bk_link_copied:'Link de reserva copiado — pégaselo al operador.', bk_link_err:'No se pudo generar el link',
   loading_conv:'Cargando conversación real…', no_messages:'Sin mensajes todavía', conv_load_error:'No se pudo cargar la conversación',
   send_error:'No se pudo enviar el mensaje.', view_lead:'Ver ficha',
   via:'vía', respond:'Responder', schedule_appt:'Agendar cita', mark_won:'Marcar ganado',
@@ -1210,6 +1262,28 @@ en: {
   wait_min:'{n} min ago', wait_h:'{n} h ago', wait_d:'{n} d ago',
   lead_waiting:'Waiting for reply', lead_overdue:'Follow-up overdue', see:'View', nothing_pending:'Nothing pending right now.', no_chat_results:'No matching conversations.',
   add_lead:'+ Add lead', kanban_summary:'{n} leads · {v} in play',
+  st_wait_client:'Waiting on client',
+  kan_cols_btn:'Columns', kan_cols_hd:'Kanban columns',
+  kan_cols_hint:'The 6 built-in columns can be renamed and reordered, not deleted (the engine gives them meaning). Columns you add are active pipeline stages.',
+  kan_col_add:'+ Add column', kan_col_name_ph:'Column name', kan_cols_saved:'Columns saved',
+  kan_col_del_leads:'That column has {n} leads: they will move to "New". Delete it?',
+  filter_status_all:'Status: all',
+  notif_clear:'Clear all', notif_booking:'B2B booking request pending',
+  kpi_cpl:'Cost per lead (month)', kpi_cpl_meta:'{s} · {n} Meta leads · {w} won this month', kpi_cpl_none:'Add this month\'s ad spend in Settings',
+  set_adspend_hd:'Ad spend', set_adspend_lbl:'Ad spend for {ym} (USD)', set_adspend_save:'Save', set_adspend_saved:'Spend saved',
+  set_adspend_hint:'The Meta account that actually spends (IG boosting) is not readable via API — the figure is entered here by hand and feeds the "Cost per lead" KPI.',
+  nl_recipients_show:'View recipients', nl_recipients_hd:'Recipients right now ({n})', nl_recipients_none:'No one with a valid email in that scope.',
+  nl_unsubs_hd:'Newsletter unsubscribes', nl_no_unsubs:'No one has unsubscribed.', nl_unsub_src_lead:'lead', nl_unsub_src_operators:'Operators', nl_unsub_src_tao:'Travel Adv.', nl_unsub_src_subscriber:'web subscriber',
+  nl_hist_loading:'Loading recipients…', nl_hist_none:'(no list stored — campaign predates this change)',
+  ai_email_btn:'✨ AI email', ai_email_hd:'Sales email — AI draft', ai_email_gen:'Analysing the lead and writing…',
+  ai_email_missing:'Facts that were missing (the draft does NOT invent them):',
+  ai_email_warn_placeholder:'⚠ There is a [placeholder]-style gap in the text — fill it in before sending.',
+  ai_email_warn_noemail:'⚠ The lead has no email on file: add one to be able to send.',
+  ai_email_send:'Send email', ai_email_sent:'Email sent.', ai_email_to:'To', ai_email_err:'Could not generate the draft',
+  tc_hd:'Team chat', tc_ph:'Write a message to the team…', tc_send:'Send', tc_empty:'No messages yet. Write the first one.',
+  bk_hd:'Booking requests (B2B operators)', bk_empty:'No requests.', bk_pending:'Pending', bk_handled:'Handled', bk_dismissed:'Dismissed',
+  bk_mark_handled:'Handled', bk_dismiss:'Dismiss', bk_flex:'Flexible date',
+  bk_link_btn:'Booking link', bk_link_copied:'Booking link copied — send it to the operator.', bk_link_err:'Could not generate the link',
   loading_conv:'Loading real conversation…', no_messages:'No messages yet', conv_load_error:'Could not load the conversation',
   send_error:'Could not send the message.', view_lead:'View lead',
   via:'via', respond:'Reply', schedule_appt:'Book appointment', mark_won:'Mark as won',
@@ -1336,7 +1410,7 @@ function setLang(lang){
   localStorage.setItem('botpanel_lang', lang);
   applyStaticI18n();
   document.getElementById('viewTitle').textContent = curView==='operators' ? (opsDb==='tao'?t('nav_tao'):t('nav_operators')) : t(VIEW_TITLE_KEY[curView]||curView);
-  if(REAL){ renderRealStats(); renderKpis(); renderChannels(); buildHex(); buildDots(); renderLeadsTbl(); renderKanban(); if(leadsViewMode==='table') renderLeadsTable(); notifItems=buildNotifItems(); renderNotifs(); }
+  if(REAL){ renderRealStats(); renderKpis(); renderChannels(); buildHex(); buildDots(); renderLeadsTbl(); renderStatusFilterOpts(); renderKanban(); if(leadsViewMode==='table') renderLeadsTable(); notifItems=buildNotifItems(); renderNotifs(); }
   if(document.getElementById('vChats') && !document.getElementById('vChats').classList.contains('hidden')) renderChats();
   if(curLead) renderLead();
   if(!document.getElementById('vOperators').classList.contains('hidden')) renderOperators();
@@ -1406,7 +1480,16 @@ function buildKpis(){
     {label:t('kpi_collected'),ibg:CG,val:fmt(REAL.collected),ic:'euro',
       meta:t('kpi_travellers',{p:REAL.travellers,d:REAL.departures})},
     {label:t('kpi_active_leads'),ibg:CV,val:String(REAL.totalActive),ic:'chatW',
-      meta:t('kpi_breakdown',{n:REAL.byStatus.new?.count||0,q:REAL.byStatus.quoted?.count||0,w:REAL.byStatus.won?.count||0})}
+      meta:t('kpi_breakdown',{n:REAL.byStatus.new?.count||0,q:REAL.byStatus.quoted?.count||0,w:REAL.byStatus.won?.count||0})},
+    // Coste por lead del MES NATURAL: gasto de ads (apuntado a mano en Ajustes — la cuenta que
+    // gasta no es legible por API) ÷ leads de Meta del mes. Sin gasto apuntado NO se enseña un
+    // $0 falso: se pide el dato.
+    (()=>{ const a = REAL.acquisition||{};
+      const has = typeof a.adSpend==='number';
+      const denom = a.newMetaThisMonth || a.newThisMonth || 0;
+      return {label:t('kpi_cpl'),ibg:CO,val: (has && denom) ? fmt(Math.round(a.adSpend/denom)) : '—', ic:'trend',
+        meta: has ? t('kpi_cpl_meta',{s:fmt(Math.round(a.adSpend)), n:a.newMetaThisMonth||0, w:a.wonThisMonth||0}) : t('kpi_cpl_none')};
+    })()
   ];
 }
 const ICONS = {
@@ -1441,8 +1524,29 @@ function initials(name){
   return (parts[0][0]+(parts[1]?parts[1][0]:'')).toUpperCase();
 }
 const STATUS_KEY = {'':'st_new', new:'st_new', quoted:'st_quoted', followup:'st_followup', won:'st_won', lost:'st_lost', noshow:'st_noshow'};
-const STATUS_LABEL = new Proxy({}, { get: (_, status) => t(STATUS_KEY[status] || 'st_new') });
-const STATUS_DOT = {'':CB, new:CB, quoted:CO, followup:CV, won:CG, lost:'var(--red)', noshow:GR};
+// Columnas del kanban: configurables desde el servidor (/admin/api/kanban-cols). Las 6 de
+// fábrica se renombran/reordenan pero no se borran (el motor les da semántica); las añadidas
+// son etapas activas. Se referencian SIEMPRE por key — la etiqueta es editable, la key no.
+let KAN_COLS = [
+  {key:'new',label:''},{key:'quoted',label:''},{key:'followup',label:''},
+  {key:'wait_client',label:''},{key:'won',label:''},{key:'lost',label:''},{key:'noshow',label:''}
+];
+const KAN_BUILTIN = ['new','quoted','followup','won','lost','noshow'];
+function kanColOf(st){ return KAN_COLS.find(c=>c.key===st); }
+function statusLabelOf(status){
+  const c = kanColOf(status||'new');
+  if(c && c.label) return c.label;                       // etiqueta renombrada en config
+  if(STATUS_KEY[status||'']) return t(STATUS_KEY[status||'']);
+  if(status==='wait_client') return t('st_wait_client');
+  return c ? (c.label||status) : t('st_new');            // estado huérfano → se pinta como Nuevo
+}
+const STATUS_LABEL = new Proxy({}, { get: (_, status) => statusLabelOf(status) });
+const STATUS_DOT_FIXED = {'':CB, new:CB, quoted:CO, followup:CV, wait_client:'var(--cat-orange)', won:CG, lost:'var(--red)', noshow:GR};
+const STATUS_DOT = new Proxy({}, { get: (_, status) => {
+  if(STATUS_DOT_FIXED[status]) return STATUS_DOT_FIXED[status];
+  const i = KAN_COLS.findIndex(c=>c.key===status);
+  return i>=0 ? [CB,CO,CG,CV][i%4] : CB;                 // color estable por posición para las custom
+}});
 // Pastilla con el color del estado de fondo (no solo el puntito) — mismo color de STATUS_DOT,
 // atenuado con color-mix para que el texto siga siendo legible en claro y en oscuro.
 function stBadge(status){
@@ -1737,8 +1841,75 @@ async function sendMessage(){
   box.disabled = false; box.focus();
 }
 
-const KAN_ORDER = ['new','quoted','followup','won','lost','noshow'];
 const KAN_PAGE_SIZE = 10;
+// ── filtro por estado (Kanban muestra solo esa columna; Tabla filtra las filas) ──────────
+let leadsStatusFilter = '';
+function onStatusFilter(){
+  leadsStatusFilter = document.getElementById('leadsStatusFilter')?.value || '';
+  renderKanban();
+  if(leadsViewMode==='table') renderLeadsTable();
+}
+function renderStatusFilterOpts(){
+  const sel = document.getElementById('leadsStatusFilter'); if(!sel) return;
+  const cur = leadsStatusFilter;
+  sel.innerHTML = `<option value="">${esc(t('filter_status_all'))}</option>` +
+    KAN_COLS.map(c=>`<option value="${esc(c.key)}"${c.key===cur?' selected':''}>${esc(statusLabelOf(c.key))}</option>`).join('');
+}
+function leadInStatus(l, key){
+  return key==='new' ? (!l.status || l.status==='new' || !kanColOf(l.status)) : l.status===key;
+}
+// ── editor de columnas (añadir / renombrar / mover / borrar las custom) ──────────────────
+async function kanColsFlow(){
+  const ov = document.createElement('div'); ov.className='modalov';
+  let cols = KAN_COLS.map(c=>({...c}));
+  const paint = ()=>{
+    ov.querySelector('#kcList').innerHTML = cols.map((c,i)=>`
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <span style="width:10px;height:10px;border-radius:50%;background:${STATUS_DOT[c.key]};flex:none"></span>
+        <input class="nlinput" style="margin:0;flex:1" value="${esc(c.label || (STATUS_KEY[c.key]?t(STATUS_KEY[c.key]):(c.key==='wait_client'?t('st_wait_client'):c.key)))}" onchange="this.dispatchEvent(new CustomEvent('kcren',{bubbles:true,detail:{i:${i},v:this.value}}))">
+        <button class="actbtn" style="width:auto;padding:6px 9px" ${i===0?'disabled':''} onclick="this.dispatchEvent(new CustomEvent('kcmove',{bubbles:true,detail:{i:${i},d:-1}}))">↑</button>
+        <button class="actbtn" style="width:auto;padding:6px 9px" ${i===cols.length-1?'disabled':''} onclick="this.dispatchEvent(new CustomEvent('kcmove',{bubbles:true,detail:{i:${i},d:1}}))">↓</button>
+        <button class="actbtn" style="width:auto;padding:6px 9px${KAN_BUILTIN.includes(c.key)?';visibility:hidden':''}" onclick="this.dispatchEvent(new CustomEvent('kcdel',{bubbles:true,detail:{i:${i}}}))">✕</button>
+      </div>`).join('');
+  };
+  ov.innerHTML = `<div class="modalbox" style="max-width:440px">
+    <div class="modalmsg">${esc(t('kan_cols_hd'))}</div>
+    <div style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px">${esc(t('kan_cols_hint'))}</div>
+    <div id="kcList"></div>
+    <button class="actbtn" style="width:auto;padding:7px 10px" id="kcAdd">${esc(t('kan_col_add'))}</button>
+    <div class="modalbtns"><button class="ghost" id="modalCancel">${t('btn_cancel')}</button><button class="primary" id="modalOk">${t('btn_ok')}</button></div>
+  </div>`;
+  document.body.appendChild(ov); paint();
+  ov.addEventListener('kcren', e=>{ cols[e.detail.i].label = String(e.detail.v||'').trim().slice(0,30); });
+  ov.addEventListener('kcmove', e=>{ const {i,d}=e.detail; const j=i+d; if(j<0||j>=cols.length) return; [cols[i],cols[j]]=[cols[j],cols[i]]; paint(); });
+  ov.addEventListener('kcdel', async e=>{
+    const c = cols[e.detail.i];
+    if(KAN_BUILTIN.includes(c.key)) return;
+    const n = leads.filter(l=>!l.archived && l.status===c.key).length;
+    if(n && !await askConfirm(t('kan_col_del_leads',{n}), {danger:true})) return;
+    cols.splice(e.detail.i,1); paint();
+  });
+  ov.querySelector('#kcAdd').onclick = async ()=>{
+    if(cols.length>=12) return;
+    const name = await askPrompt(t('kan_col_name_ph'),''); if(!name || !name.trim()) return;
+    cols.push({key:'c_'+Date.now().toString(36), label:String(name).trim().slice(0,30)}); paint();
+  };
+  const close = ()=>{ ov.classList.add('out'); setTimeout(()=>ov.remove(),150); };
+  ov.querySelector('#modalCancel').onclick = close;
+  ov.onclick = e=>{ if(e.target===ov) close(); };
+  ov.querySelector('#modalOk').onclick = async ()=>{
+    try{
+      const r = await fetch('/admin/api/kanban-cols', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({cols}) });
+      const d = await r.json();
+      if(!r.ok) throw new Error(d.error||'');
+      KAN_COLS = d.cols;
+      if(leadsStatusFilter && !kanColOf(leadsStatusFilter)) leadsStatusFilter='';
+      renderStatusFilterOpts(); renderKanban(); if(leadsViewMode==='table') renderLeadsTable();
+      showToast(t('kan_cols_saved'), {type:'success'});
+      close();
+    }catch(e){ showToast(e.message||'error'); }
+  };
+}
 // ── búsqueda: Meta Leads (Kanban + Tabla comparten esta misma query) ──────────────
 let leadsSearchQ = '';
 function onLeadsSearch(){
@@ -1752,12 +1923,12 @@ function leadMatchesSearch(l){
   return hay.includes(leadsSearchQ);
 }
 function renderKanban(){
-  const order = KAN_ORDER;
-  const inCol = (l,st) => st==='new' ? (!l.status || l.status==='new') : l.status===st;
+  const order = (leadsStatusFilter && kanColOf(leadsStatusFilter)) ? [leadsStatusFilter] : KAN_COLS.map(c=>c.key);
   const cols = order.map(st=>({
-    st, name: STATUS_LABEL[st], dot: STATUS_DOT[st],
-    cards: leads.filter(l=>!l.archived && inCol(l,st) && leadMatchesSearch(l)).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0))
+    st, name: statusLabelOf(st), dot: STATUS_DOT[st],
+    cards: leads.filter(l=>!l.archived && leadInStatus(l,st) && leadMatchesSearch(l)).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0))
   }));
+  order.forEach(st=>{ PAGE_RENDER['kan_'+st] = ()=>renderKanban(); }); // pagers de columnas custom incluidas
   let total=0, sumAll=0;
   document.getElementById('kanban').innerHTML = cols.map(col=>{
     const sum = col.cards.reduce((a,c)=>a+(parseInt(c.dealValue,10)||0),0);
@@ -1812,7 +1983,7 @@ function setLeadsViewMode(mode){
   if(mode==='table') renderLeadsTable();
 }
 function renderLeadsTable(){
-  const rows = leads.filter(l=>!l.archived && leadMatchesSearch(l)).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const rows = leads.filter(l=>!l.archived && leadMatchesSearch(l) && (!leadsStatusFilter || leadInStatus(l,leadsStatusFilter))).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
   const p = paginate('leads', rows);
   document.getElementById('leadsTableTbl').innerHTML = p.items.map(l=>`
     <div class="tblrow">
@@ -1853,7 +2024,7 @@ function renderBulkBar(){
   const sel = selectedBulkPhones();
   if(!sel.length){ bar.style.display='none'; bar.innerHTML=''; return; }
   bar.style.display='flex';
-  const stOpts = Object.keys(STATUS_KEY).filter(k=>k!=='').map(k=>`<option value="${k}">${esc(t(STATUS_KEY[k]))}</option>`).join('');
+  const stOpts = KAN_COLS.map(c=>`<option value="${esc(c.key)}">${esc(statusLabelOf(c.key))}</option>`).join('');
   bar.innerHTML = `<b>${sel.length}</b> ${t('bulk_sel')}
     <select onchange="bulkAct('status',this.value);this.value=''"><option value="">${t('bulk_status')}</option>${stOpts}</select>
     <button onclick="bulkTag()">${t('bulk_tag')}</button>
@@ -1926,6 +2097,7 @@ function openLeadPreview(phone){
           <button class="primary" id="leadPrevRespond">${t('respond')}</button>
           <button class="ghost" id="leadPrevAppt">${t('schedule_appt')}</button>
           <button class="win" id="leadPrevWon">${t('mark_won')}</button>
+          <button class="ghost" onclick="aiEmailFlow('${l.phone}')">${t('ai_email_btn')}</button>
           <button class="ghost" id="leadPrevArch">${l.archived?t('restore_lead'):t('archive_lead')}</button>
         </div>
       </div>
@@ -2000,6 +2172,7 @@ function renderLead(){
       <button class="ghost" onclick="scheduleApptFlow('${l.phone}')">${t('schedule_appt')}</button>
       <button class="win" onclick="markWonFlow('${l.phone}')">${t('mark_won')}</button>
       <button class="ghost" onclick="fichaTripEmail()">${t('send_trip_email')}</button>
+      <button class="ghost" onclick="aiEmailFlow('${l.phone}')">${t('ai_email_btn')}</button>
       <button class="ghost" onclick="fichaArchive(${l.archived ? 'false' : 'true'})">${t(l.archived ? 'restore_lead' : 'archive_lead')}</button>
       <button class="danger" onclick="fichaDelete()">${t('delete_lead')}</button>
     </div>`;
@@ -2379,9 +2552,9 @@ Object.assign(PAGE_RENDER, {
   leads: ()=>renderLeadsTable(), ops: ()=>renderOperators(), appts: ()=>renderAppts(),
   pay: ()=>renderInvoices(), dep: ()=>renderDepartures(), media: ()=>renderMedia(),
   nlSched: ()=>renderNewsletter(), nlHist: ()=>renderNewsletter(), subs: ()=>renderNewsletter(),
-  nlElog: ()=>renderNewsletter(),
+  nlElog: ()=>renderNewsletter(), unsubs: ()=>renderNewsletter(),
 });
-KAN_ORDER.forEach(st=>{ PAGE_RENDER['kan_'+st] = ()=>renderKanban(); });
+// (los pagers de columna se registran dinámicamente dentro de renderKanban — las columnas son configurables)
 
 async function markWonFlow(phone){
   if(!await askConfirm(t('confirm_won'))) return;
@@ -2620,7 +2793,7 @@ function renderOperators(){
   document.getElementById('opsSummary').textContent = t('ops_count',{n:active.length});
   const p = paginate('ops', active);
   document.getElementById('opsTbl').innerHTML = p.items.map(o=>`
-    <div class="tblrow" style="grid-template-columns:40px 2fr 1.4fr 1fr 1fr 150px">
+    <div class="tblrow" style="grid-template-columns:40px 2fr 1.4fr .8fr .8fr 290px">
       <span><input type="checkbox" ${opsSelected[opsDb][o.id]?'checked':''} onchange="toggleOpsSel('${o.id}',this.checked)"></span>
       <div class="leadid"><span class="av" style="background:${hashColor(o.company||o.id)}">${initials(o.company||'?')}</span>
         <div><div class="nm" onclick="editOperatorFlow('${o.id}')">${o.company||t('no_name')}</div><span class="st" style="font-size:12px;color:var(--muted)">${o.contact||''}</span></div></div>
@@ -2628,6 +2801,7 @@ function renderOperators(){
       <span class="wait">${o.country||'—'}</span>
       <span class="tourpill">${o.status||'nuevo'}</span>
       <div style="display:flex;gap:6px;justify-self:end">
+        <button class="actbtn" style="width:auto;padding:7px 10px" title="${esc(t('bk_link_copied'))}" onclick="copyBookingLinkFlow('${o.id}')">🔗 ${t('bk_link_btn')}</button>
         <button class="actbtn" style="width:auto;padding:7px 10px" onclick="archiveOperatorFlow('${o.id}')">${t('archive')}</button>
         <button class="actbtn" style="width:auto;padding:7px 10px" onclick="deleteOperatorFlow('${o.id}')">${t('delete')}</button>
       </div>
@@ -3075,18 +3249,20 @@ async function deleteMediaFlow(i){
 // NEWSLETTER — /admin/api/newsletter (enviar/programar) + /history +
 // /scheduled + /cancel, más /admin/api/subscribers (audiencia web).
 // ======================================================================
-let nlHistory = [], nlScheduled = [], subscribers = [], nlEmailLog = [];
+let nlHistory = [], nlScheduled = [], subscribers = [], nlEmailLog = [], nlUnsubs = [];
 async function loadNewsletterView(){
-  const [h,s,sub,el] = await Promise.all([
+  const [h,s,sub,el,un] = await Promise.all([
     fetch('/admin/api/newsletter/history', {headers:{'X-Admin-Key':sessionKey}}),
     fetch('/admin/api/newsletter/scheduled', {headers:{'X-Admin-Key':sessionKey}}),
     fetch('/admin/api/subscribers', {headers:{'X-Admin-Key':sessionKey}}),
     fetch('/admin/api/email-log', {headers:{'X-Admin-Key':sessionKey}}),
+    fetch('/admin/api/unsubscribes', {headers:{'X-Admin-Key':sessionKey}}),
   ]);
   nlHistory = h.ok ? await h.json() : [];
   nlScheduled = s.ok ? await s.json() : [];
   subscribers = sub.ok ? await sub.json() : [];
   nlEmailLog = el.ok ? await el.json() : [];
+  nlUnsubs = un.ok ? await un.json() : [];
   renderNewsletter();
   nlUpdateCount();
 }
@@ -3116,7 +3292,7 @@ function nlRecipients(){
   } else {
     source = leads; selMap = bulkSelected; keyOf = l=>l.phone;
   }
-  const seen = new Set(); const ids = [];
+  const seen = new Set(); const ids = []; const detail = [];
   let unsubN = 0, noEmail = 0, selTotal = 0;
   source.forEach(l=>{
     if(l.archived) return;
@@ -3127,15 +3303,33 @@ function nlRecipients(){
     if(l.emailUnsub){ unsubN++; return; }
     if(seen.has(email)) return; seen.add(email);
     ids.push(key);
+    // detalle para la lista fija de "a quién le va a llegar" + los datos de muestra de la prueba
+    detail.push({ email, name: (isSubs ? '' : ((dataset==='operators'||dataset==='tao') ? (l.contact||l.company) : l.name)) || '', company: (dataset==='operators'||dataset==='tao') ? (l.company||'') : '' });
   });
-  return { ids, dataset, count: ids.length, unsub: unsubN, noEmail, selTotal };
+  return { ids, detail, dataset, count: ids.length, unsub: unsubN, noEmail, selTotal };
 }
 function nlUpdateCount(){
   const box = document.getElementById('nlCount'); if(!box) return;
   const r = nlRecipients();
   let msg = t('nl_count', {n:r.count});
   if(document.getElementById('nlScope').value==='selected' && r.noEmail>0) msg += ' · ' + t('nl_sel_no_email',{k:r.noEmail});
-  box.textContent = msg;
+  box.innerHTML = esc(msg) + (r.count ? ` · <span style="cursor:pointer;text-decoration:underline" onclick="nlToggleRecipients()">${esc(t('nl_recipients_show'))}</span>` : '');
+  const list = document.getElementById('nlRecipList');
+  if(list && !list.classList.contains('hidden')) nlRenderRecipients();
+}
+// Lista FIJA de destinatarios en el compositor: el owner pidió ver "los correos o compañías
+// que has seleccionado" antes de darle a enviar, no un número a secas.
+function nlToggleRecipients(){
+  const list = document.getElementById('nlRecipList'); if(!list) return;
+  list.classList.toggle('hidden');
+  if(!list.classList.contains('hidden')) nlRenderRecipients();
+}
+function nlRenderRecipients(){
+  const list = document.getElementById('nlRecipList'); if(!list) return;
+  const r = nlRecipients();
+  list.innerHTML = `<div style="font-weight:600;font-size:12.5px;margin-bottom:7px">${esc(t('nl_recipients_hd',{n:r.count}))}</div>` +
+    (r.detail.length ? r.detail.map(d=>`<span style="display:inline-block;background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:3px 10px;margin:0 6px 6px 0;font-size:12px">${esc(d.name||'')}${d.name?' · ':''}${esc(d.email)}${d.company?(' — '+esc(d.company)):''}</span>`).join('')
+      : `<span style="font-size:12.5px;color:var(--muted)">${esc(t('nl_recipients_none'))}</span>`);
 }
 async function nlOnDatasetChange(){
   const val = document.getElementById('nlDataset').value;
@@ -3158,13 +3352,16 @@ function renderNewsletter(){
   document.getElementById('nlSchedPager').innerHTML = pagerHtml('nlSched', schedPg);
 
   const histPg = paginate('nlHist', nlHistory.slice().sort((a,b)=>b.at-a.at));
+  // Con HORA (no solo fecha) y expandible: clic en la fila → la lista de emails a los que
+  // llegó ESA campaña (endpoint history?id=...). Responde "¿a quién y cuándo se lo mandé?".
   document.getElementById('nlHistoryTbl').innerHTML = histPg.items.map(c=>`
-    <div class="tblrow" style="grid-template-columns:1.3fr 2fr 1fr 1fr">
-      <span class="wait">${new Date(c.at).toLocaleDateString(LANG==='es'?'es-ES':'en-US')}</span>
-      <span class="wait">${c.subject}</span>
+    <div class="tblrow" style="grid-template-columns:1.3fr 2fr 1fr 1fr;cursor:pointer" onclick="nlHistExpand('${esc(c.id)}')">
+      <span class="wait">${new Date(c.at).toLocaleString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
+      <span class="wait">${esc(c.subject)}</span>
       <span class="tourpill">${t('nl_ds_'+c.dataset)}</span>
       <span class="wait">${c.sent}/${c.total}${c.failed?(' · '+c.failed+' '+t('nl_failed')):''}</span>
-    </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nl_no_history')}</div>`;
+    </div>
+    <div id="nlHistRec_${esc(c.id)}" class="hidden" style="padding:8px 16px 14px;font-size:12.5px;color:var(--muted);border-bottom:1px solid var(--border)"></div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nl_no_history')}</div>`;
   document.getElementById('nlHistPager').innerHTML = pagerHtml('nlHist', histPg);
 
   // Registro de emails uno a uno (endpoint email-log): itinerarios que el bot manda en la
@@ -3190,6 +3387,28 @@ function renderNewsletter(){
       <button class="actbtn" onclick="removeSubscriberFlow('${s.email}')">${t('delete')}</button>
     </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nl_no_subs')}</div>`;
   document.getElementById('subsPager').innerHTML = pagerHtml('subs', subsPg);
+
+  // Bajas: quién se ha dado de baja de la newsletter, con nombre/empresa si el email cruza
+  // con alguna base (lead, Operadores, Travel Adv., suscriptor web).
+  const unsubsPg = paginate('unsubs', nlUnsubs);
+  document.getElementById('unsubsTbl').innerHTML = unsubsPg.items.map(u=>`
+    <div class="tblrow" style="grid-template-columns:2fr 1.4fr 1fr">
+      <span class="wait">${esc(u.email)}</span>
+      <span class="wait">${esc(u.name||'—')}</span>
+      <span class="tourpill">${esc(u.source ? t('nl_unsub_src_'+u.source) : '—')}</span>
+    </div>`).join('') || `<div style="padding:20px;color:var(--muted);font-size:13.5px">${t('nl_no_unsubs')}</div>`;
+  document.getElementById('unsubsPager').innerHTML = pagerHtml('unsubs', unsubsPg);
+}
+async function nlHistExpand(id){
+  const box = document.getElementById('nlHistRec_'+id); if(!box) return;
+  if(!box.classList.contains('hidden')){ box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  box.textContent = t('nl_hist_loading');
+  try{
+    const r = await fetch('/admin/api/newsletter/history?id='+encodeURIComponent(id), { headers:{'X-Admin-Key':sessionKey} });
+    const d = r.ok ? await r.json() : {recipients:[]};
+    box.textContent = (d.recipients&&d.recipients.length) ? d.recipients.join(' · ') : t('nl_hist_none');
+  }catch(e){ box.textContent = t('nl_hist_none'); }
 }
 let nlTemplatesLoaded = false;
 function nlApplyMode(){
@@ -3237,8 +3456,12 @@ async function testNewsletterFlow(){
   const p = nlPayload();
   if(!nlHasContent(p)){ showToast(t(document.getElementById('nlMode').value==='brevo'?'nl_pick_template':'nl_need_subject_body')); return; }
   const testTo = await askPrompt(t('ask_test_email'),''); if(!testTo) return;
+  // La prueba personaliza con los datos del PRIMER destinatario real del dataset elegido, para
+  // que {{nombre}}/{{empresa}} se vean como llegarán de verdad (antes iban vacíos y la empresa
+  // se omitía). Ojo: en Leads B2C {{empresa}} va vacía también en el envío real, por diseño.
+  const first = nlRecipients().detail[0] || {};
   try{
-    const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({...p, testTo}) });
+    const r = await fetch('/admin/api/newsletter', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({...p, testTo, sampleName:first.name||'', sampleCompany:first.company||''}) });
     const d = await r.json();
     if(!r.ok) throw new Error(d.error||'');
     showToast(t('nl_test_sent'), {type:'success'});
@@ -3412,31 +3635,61 @@ function explainSetup(){ showToast(t('setup_explain'), {type:'info'}); }
 // panel, igual de barata que en Facturas). Sin backend nuevo.
 // ======================================================================
 let notifItems = [];
+let bookings = []; // solicitudes de reserva B2B (se cargan en loadReal y al abrir Salidas)
+// Descartes de la campanita: por navegador (localStorage) — quitar un aviso aquí no borra el
+// dato de fondo (el lead/reserva sigue donde estaba), solo silencia esa fila.
+function notifDismissed(){
+  try{ return new Set(JSON.parse(localStorage.getItem('v2NotifDismissed')||'[]')); }catch(e){ return new Set(); }
+}
+function notifDismiss(id, ev){
+  if(ev) ev.stopPropagation();
+  try{
+    const arr = JSON.parse(localStorage.getItem('v2NotifDismissed')||'[]');
+    arr.push(id);
+    localStorage.setItem('v2NotifDismissed', JSON.stringify(arr.slice(-300)));
+  }catch(e){}
+  notifItems = buildNotifItems(); renderNotifs();
+}
+function notifClearAll(ev){
+  if(ev) ev.stopPropagation();
+  try{
+    const arr = JSON.parse(localStorage.getItem('v2NotifDismissed')||'[]');
+    notifItems.forEach(n=>arr.push(n.id));
+    localStorage.setItem('v2NotifDismissed', JSON.stringify(arr.slice(-300)));
+  }catch(e){}
+  notifItems = buildNotifItems(); renderNotifs();
+}
 function buildNotifItems(){
   const items = [];
   leads.filter(l=>!l.archived).forEach(l=>{
     if(l.waiting && l.lastInboundAt && (Date.now()-l.lastInboundAt)>24*3600*1000){
-      items.push({dot:CO, tt:l.name||l.phone, ds:t('notif_waiting'), go:()=>openLead(l.phone), at:l.lastInboundAt});
+      items.push({id:'w:'+l.phone+':'+l.lastInboundAt, dot:CO, tt:l.name||l.phone, ds:t('notif_waiting'), go:()=>openLead(l.phone), at:l.lastInboundAt});
     } else if(l.nextFollowUp){
       const d = new Date(l.nextFollowUp).getTime();
-      if(!isNaN(d) && d<Date.now() && !['won','lost','noshow'].includes(l.status)) items.push({dot:'var(--red)', tt:l.name||l.phone, ds:t('notif_overdue'), go:()=>openLead(l.phone), at:d});
+      if(!isNaN(d) && d<Date.now() && !['won','lost','noshow'].includes(l.status)) items.push({id:'f:'+l.phone+':'+d, dot:'var(--red)', tt:l.name||l.phone, ds:t('notif_overdue'), go:()=>openLead(l.phone), at:d});
     }
     if(l.createdAt && (Date.now()-l.createdAt)<24*3600*1000){
-      items.push({dot:CG, tt:l.name||l.phone, ds:t('notif_new_today'), go:()=>openLead(l.phone), at:l.createdAt});
+      items.push({id:'n:'+l.phone+':'+l.createdAt, dot:CG, tt:l.name||l.phone, ds:t('notif_new_today'), go:()=>openLead(l.phone), at:l.createdAt});
     }
   });
-  return items.sort((a,b)=>b.at-a.at).slice(0,20);
+  bookings.filter(b=>b.status==='pending').forEach(b=>{
+    items.push({id:'b:'+b.id, dot:CV, tt:(b.company||'')+(b.company?' · ':'')+b.clientName, ds:t('notif_booking'), go:()=>go('departures'), at:b.at});
+  });
+  const gone = notifDismissed();
+  return items.filter(n=>!gone.has(n.id)).sort((a,b)=>b.at-a.at).slice(0,20);
 }
 function renderNotifs(){
   const items = notifItems;
   const badge = document.getElementById('notifBadge');
   if(items.length){ badge.textContent = items.length>99?'99+':items.length; badge.classList.remove('hidden'); }
   else badge.classList.add('hidden');
-  document.getElementById('notifList').innerHTML = items.length ? items.map((n,i)=>`
-    <div class="notifitem" onclick="notifItems[${i}].go(); toggleNotifs()">
+  document.getElementById('notifList').innerHTML = (items.length ? items.map((n,i)=>`
+    <div class="notifitem" onclick="notifItems[${i}].go(); toggleNotifs()" style="position:relative;padding-right:30px">
       <span class="dot" style="background:${n.dot}"></span>
-      <div><div class="tt">${n.tt}</div><div class="ds">${n.ds}</div></div>
-    </div>`).join('') : `<div class="notifempty">${t('notif_empty')}</div>`;
+      <div><div class="tt">${esc(n.tt)}</div><div class="ds">${esc(n.ds)}</div></div>
+      <span onclick="notifDismiss('${esc(n.id)}', event)" title="✕" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--muted);font-size:13px;padding:4px">✕</span>
+    </div>`).join('') : `<div class="notifempty">${t('notif_empty')}</div>`)
+    + (items.length ? `<div style="padding:9px 12px;text-align:center;border-top:1px solid var(--border)"><span onclick="notifClearAll(event)" style="cursor:pointer;font-size:12.5px;color:var(--muted)">${esc(t('notif_clear'))}</span></div>` : '');
 }
 async function toggleNotifs(ev){
   if(ev) ev.stopPropagation();
@@ -3557,12 +3810,13 @@ function go(view){
   if(view==='appts' && !loadedOnce.appts){ loadedOnce.appts=true; loadAppts(); }
   if(view==='invoices' && !loadedOnce.invoices){ loadedOnce.invoices=true; loadInvoices(); }
   if(view==='departures' && !loadedOnce.departures){ loadedOnce.departures=true; loadDepartures(); }
+  if(view==='departures'){ loadBookings(); }
   if(view==='media' && !loadedOnce.media){ loadedOnce.media=true; loadMedia(); }
   if(view==='newsletter' && !loadedOnce.newsletter){ loadedOnce.newsletter=true; loadNewsletterView(); }
   if(view==='sim' && !loadedOnce.sim){ loadedOnce.sim=true; renderSimMsgs(); }
   if(view==='wtpl' && !loadedOnce.wtpl){ loadedOnce.wtpl=true; loadWaTemplates(); }
-  if(view==='team'){ renderTeam(); } // barato, siempre client-side sobre `leads` ya cargado
-  if(view==='settings'){ document.getElementById('setWho').textContent = whoAmI || '—'; }
+  if(view==='team'){ renderTeam(); loadTeamChat(); } // reparto client-side + chat del equipo
+  if(view==='settings'){ document.getElementById('setWho').textContent = whoAmI || '—'; loadAdSpendUI(); }
   setUrl(viewPath(view));
 }
 function goBack(){ go(prevView==='lead'?'overview':prevView); }
@@ -3592,6 +3846,170 @@ document.querySelectorAll('.navitem[data-view]').forEach(el=>{
   });
 });
 
+// ================= chat de equipo (Redis vía /admin/api/teamchat) =================
+let tcMsgs = [], tcTimer = null;
+function renderTeamChat(){
+  const box = document.getElementById('tcMsgs'); if(!box) return;
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  box.innerHTML = tcMsgs.length ? tcMsgs.map(m=>{
+    const mine = m.who===whoAmI;
+    return `<div style="display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'}">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:2px">${esc(m.who)} · ${new Date(m.at).toLocaleString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+      <div style="max-width:78%;padding:9px 13px;border-radius:12px;font-size:14px;line-height:1.45;background:${mine?'var(--cat-blue)':'var(--bg)'};border:1px solid var(--border);white-space:pre-wrap;word-break:break-word">${esc(m.text)}</div>
+    </div>`;
+  }).join('') : `<div style="color:var(--muted);font-size:13.5px;text-align:center;margin-top:40px">${esc(t('tc_empty'))}</div>`;
+  if(nearBottom || tcMsgs.length<=1) box.scrollTop = box.scrollHeight;
+}
+async function loadTeamChat(){
+  try{
+    const r = await fetch('/admin/api/teamchat', { headers:{'X-Admin-Key':sessionKey} });
+    if(r.ok){ tcMsgs = await r.json(); renderTeamChat(); }
+  }catch(e){}
+  // polling de 10s SOLO mientras la vista Equipo está abierta — el resto del panel no lo paga
+  if(tcTimer) clearInterval(tcTimer);
+  tcTimer = setInterval(async ()=>{
+    if(document.getElementById('vTeam').classList.contains('hidden')){ clearInterval(tcTimer); tcTimer=null; return; }
+    try{
+      const last = tcMsgs.length ? tcMsgs[tcMsgs.length-1].at : 0;
+      const r = await fetch('/admin/api/teamchat?after='+last, { headers:{'X-Admin-Key':sessionKey} });
+      if(r.ok){ const news = await r.json(); if(news.length){ tcMsgs = tcMsgs.concat(news); renderTeamChat(); } }
+    }catch(e){}
+  }, 10000);
+}
+async function sendTeamChat(){
+  const inp = document.getElementById('tcInput');
+  const text = (inp.value||'').trim(); if(!text) return;
+  if(!whoAmI){ switchWho(); return; }
+  inp.value='';
+  try{
+    const r = await fetch('/admin/api/teamchat', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({who:whoAmI, text}) });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'');
+    tcMsgs.push(d.msg); renderTeamChat();
+  }catch(e){ showToast(t('send_error')); inp.value = text; }
+}
+
+// ================= gasto en ads (Ajustes) → KPI coste por lead =================
+let adSpendMap = null;
+function curYm(){ return new Date().toISOString().slice(0,7); }
+async function loadAdSpendUI(){
+  const lbl = document.getElementById('adspendLbl');
+  if(lbl) lbl.textContent = t('set_adspend_lbl',{ym:curYm()});
+  try{
+    const r = await fetch('/admin/api/ad-spend', { headers:{'X-Admin-Key':sessionKey} });
+    if(r.ok){ adSpendMap = await r.json();
+      const v = adSpendMap[curYm()];
+      document.getElementById('adspendInput').value = typeof v==='number' ? v : '';
+    }
+  }catch(e){}
+}
+async function saveAdSpendFlow(){
+  const raw = document.getElementById('adspendInput').value;
+  const amount = Number(raw);
+  if(raw==='' || !(amount>=0)){ showToast(t('nl_send_error')); return; }
+  try{
+    const r = await fetch('/admin/api/ad-spend', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({ym:curYm(), amount}) });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'');
+    showToast(t('set_adspend_saved'), {type:'success'});
+    // refresca el KPI sin recargar: pide overview-v2 otra vez
+    try{ const o = await fetch('/admin/api/overview-v2', { headers:{'X-Admin-Key':sessionKey} }); if(o.ok){ REAL = await o.json(); renderKpis(); } }catch(e){}
+  }catch(e){ showToast(e.message||'error'); }
+}
+
+// ================= email IA por lead (borrador → revisión humana → envío) =================
+let aiEmailBusy = false;
+async function aiEmailFlow(phone){
+  if(aiEmailBusy) return; aiEmailBusy = true;
+  const ov = document.createElement('div'); ov.className='modalov';
+  ov.innerHTML = `<div class="modalbox" style="max-width:560px">
+    <div class="modalmsg">${esc(t('ai_email_hd'))}</div>
+    <div id="aiBody" style="font-size:13.5px;color:var(--muted)">${esc(t('ai_email_gen'))}</div>
+    <div class="modalbtns"><button class="ghost" id="modalCancel">${t('btn_cancel')}</button><button class="primary hidden" id="aiSend">${esc(t('ai_email_send'))}</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const close = ()=>{ ov.classList.add('out'); setTimeout(()=>ov.remove(),150); aiEmailBusy=false; };
+  ov.querySelector('#modalCancel').onclick = close;
+  let draft = null;
+  try{
+    const r = await fetch('/admin/api/ai-email', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone}) });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'');
+    draft = d;
+  }catch(e){
+    ov.querySelector('#aiBody').textContent = t('ai_email_err')+': '+(e.message||'');
+    return;
+  }
+  const warns = [];
+  if((draft.warnings||[]).includes('placeholder')) warns.push(t('ai_email_warn_placeholder'));
+  if((draft.warnings||[]).includes('no_email')) warns.push(t('ai_email_warn_noemail'));
+  ov.querySelector('#aiBody').innerHTML = `
+    ${warns.map(w=>`<div style="background:color-mix(in srgb,var(--red) 12%,transparent);color:var(--red);border-radius:8px;padding:8px 11px;font-size:12.5px;margin-bottom:10px">${esc(w)}</div>`).join('')}
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">${esc(t('ai_email_to'))}: <b>${esc(draft.to||'—')}</b></div>
+    <label class="nlfield">${t('nl_subject')}</label>
+    <input class="nlinput" id="aiSubject" maxlength="150">
+    <label class="nlfield">${t('nl_body')}</label>
+    <textarea class="nlinput" id="aiBodyTxt" rows="11" style="font-size:13.5px"></textarea>
+    ${(draft.missing&&draft.missing.length)?`<div style="font-size:12.5px;color:var(--muted)"><b>${esc(t('ai_email_missing'))}</b> ${draft.missing.map(esc).join(' · ')}</div>`:''}`;
+  ov.querySelector('#aiSubject').value = draft.subject;
+  ov.querySelector('#aiBodyTxt').value = draft.body;
+  const sendBtn = ov.querySelector('#aiSend');
+  if(draft.to) sendBtn.classList.remove('hidden');
+  sendBtn.onclick = async ()=>{
+    sendBtn.disabled = true;
+    try{
+      const r = await fetch('/admin/api/ai-email/send', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({phone, subject:ov.querySelector('#aiSubject').value, body:ov.querySelector('#aiBodyTxt').value}) });
+      const d = await r.json();
+      if(!r.ok) throw new Error(d.error||'');
+      showToast(t('ai_email_sent'), {type:'success'});
+      close();
+    }catch(e){ showToast(e.message||'error'); sendBtn.disabled = false; }
+  };
+}
+
+// ================= solicitudes de reserva B2B (pasarela /partners/book) =================
+async function loadBookings(){
+  try{
+    const r = await fetch('/admin/api/bookings', { headers:{'X-Admin-Key':sessionKey} });
+    if(r.ok){ bookings = await r.json(); }
+  }catch(e){}
+  renderBookings();
+  notifItems = buildNotifItems(); renderNotifs();
+}
+function renderBookings(){
+  const box = document.getElementById('bookingsTbl'); if(!box) return;
+  const stc = {pending:CO, handled:CG, dismissed:GR};
+  box.innerHTML = bookings.length ? bookings.map(b=>`
+    <div class="tblrow" style="grid-template-columns:1.1fr 1.6fr 1.4fr 1fr 1fr 170px">
+      <span class="wait">${new Date(b.at).toLocaleString(LANG==='es'?'es-ES':'en-US',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
+      <div><div class="nm">${esc(b.clientName)}</div><span style="font-size:12px;color:var(--muted)">${esc(b.company||'')}</span></div>
+      <span class="wait">${esc(b.email)}${b.phone?('<br>'+esc(b.phone)):''}</span>
+      <span class="tourpill">${esc(b.package||'—')} · ${b.riders}R${b.pillions?('+'+b.pillions+'P'):''}</span>
+      <span class="wait">${b.departureId?esc(b.departureId):(b.dateText?esc(b.dateText):esc(t('bk_flex')))}${b.notes?('<br><span style="font-size:11.5px;color:var(--muted)">'+esc(b.notes)+'</span>'):''}</span>
+      <div style="display:flex;gap:6px;align-items:center;justify-self:end">
+        <span class="stbadge" style="background:color-mix(in srgb, ${stc[b.status]||GR} 18%, transparent);color:${stc[b.status]||GR}">${esc(t('bk_'+b.status))}</span>
+        ${b.status==='pending'?`<button class="actbtn" style="width:auto;padding:6px 9px" onclick="bookingStatusFlow('${esc(b.id)}','handled')">${esc(t('bk_mark_handled'))}</button>
+        <button class="actbtn" style="width:auto;padding:6px 9px" onclick="bookingStatusFlow('${esc(b.id)}','dismissed')">✕</button>`:''}
+      </div>
+    </div>`).join('') : `<div style="padding:20px;color:var(--muted);font-size:13.5px">${esc(t('bk_empty'))}</div>`;
+}
+async function bookingStatusFlow(id, status){
+  try{
+    const r = await fetch('/admin/api/booking/status', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id, status}) });
+    if(!r.ok) throw 0;
+    await loadBookings();
+  }catch(e){ showToast(t('nl_send_error')); }
+}
+async function copyBookingLinkFlow(opId){
+  try{
+    const r = await fetch('/admin/api/operator/booklink', { method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':sessionKey}, body:JSON.stringify({id:opId, db:opsDb}) });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'');
+    try{ await navigator.clipboard.writeText(d.url); showToast(t('bk_link_copied'), {type:'success'}); }
+    catch(e){ await askPrompt(t('bk_link_btn'), d.url); }
+  }catch(e){ showToast(t('bk_link_err')+(e.message?(': '+e.message):'')); }
+}
+
 // ================= auth + live fetch =================
 // Misma clave que /admin: comparte sessionStorage('botpanel_key'), así que si ya
 // entraste al panel real en esta pestaña no hace falta volver a escribirla aquí.
@@ -3600,15 +4018,22 @@ function getStoredKey(){
   return new URLSearchParams(location.search).get('key') || sessionStorage.getItem('botpanel_key') || '';
 }
 async function loadReal(key){
-  const [ovR] = await Promise.all([
+  const [ovR, kcR, bkR] = await Promise.all([
     fetch('/admin/api/overview-v2', { headers: { 'X-Admin-Key': key } }),
+    fetch('/admin/api/kanban-cols', { headers: { 'X-Admin-Key': key } }),
+    fetch('/admin/api/bookings', { headers: { 'X-Admin-Key': key } }),
   ]);
   if(!ovR.ok) throw new Error('auth');
   REAL = await ovR.json();
+  // Columnas y reservas fallan SUAVE: sin config se usan las de fábrica, sin reservas la
+  // lista queda vacía — un fallo aquí no debe leerse como "clave incorrecta".
+  try{ if(kcR.ok) KAN_COLS = await kcR.json(); }catch(e){}
+  try{ if(bkR.ok) bookings = await bkR.json(); }catch(e){}
   sessionKey = key;
   sessionStorage.setItem('botpanel_key', key);
   if(location.search) history.replaceState(null,'',location.pathname);
   await refreshLeads(); // leads reales — PII de verdad, ver aviso arriba del bloque `let leads`
+  renderStatusFilterOpts();
 }
 function startApp(){
   renderRealStats();
