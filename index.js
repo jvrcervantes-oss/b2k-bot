@@ -434,7 +434,10 @@ const BUILTIN_PLAYBOOKS = {
       { title: "Proponer videollamada", text: "Want to hop on a quick video call with the team? It's free, about 30 minutes, zero pressure — they'll walk you through everything." },
     ],
     helpWith: "your trip",
-    deposit: { currency: "usd", amountMinor: 100000, label: "Booking Deposit", unit: "rider" },
+    // 50000 = USD 500 por persona. Era 100000 (USD 1.000): el cliente lo bajó a 500 el 24-jul-2026
+    // (mismo playbook de tour que la rama b2k, que ya llevaba el valor correcto — esta rama
+    // se había quedado con la copia de antes de esa bajada. Ver reference_bot_engine_branch_divergence).
+    deposit: { currency: "usd", amountMinor: 50000, label: "Booking Deposit", unit: "rider" },
   },
   rental: {
     closeStyle: "direct",
