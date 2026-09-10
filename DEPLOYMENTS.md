@@ -1,7 +1,7 @@
 # Bots desplegados — mapa único (¿dónde estoy trabajando?)
 
-> **Fuente autoritativa:** `agencia/departamentos/infraestructura/prompt.md` → "Mapa de bots desplegados".
-> Este archivo es la copia dentro del repo del bot. Si divergen, manda el prompt de Infraestructura.
+> **Fuente autoritativa:** `agencia/departamentos/bots/prompt.md` → "Mapa de bots desplegados".
+> Este archivo es la copia dentro del repo del bot. Si divergen, manda el prompt de Bots.
 
 Un **solo repo** (`b2k-bot`), un **solo motor** (`index.js`). Cada bot es un **servicio Railway distinto**
 que despliega de **su propia rama** y elige qué archivos carga con **variables de entorno**
@@ -15,10 +15,11 @@ más parecido.
 |-----|------|-------------------------------|--------------|----------|--------------|------------|-----|
 | **Bali Moto Adventures (B2K)** | `b2k` | b2k-bot (`0347015a-…`) | Bali Moto Adventures | tour *(default)* | `context.md` *(default)* | `panel.html` *(default)* | https://b2k-bot-production.up.railway.app |
 | **Bali Best Motorcycle (BBM)** | `balibest` | bbm-bot (`bcd4b2a6-…`) | BaliBest | `rental` | `context-balibest.md` | `panel-rental.html` | https://b2k-bot-production-5498.up.railway.app |
-| `bnb-bot` (`c26007ad-…`) | ? | **entorno de pruebas del owner — NO tocar** | — | — | — | — | uso interno de testeo |
+| **Lawang + Sumba Hills** (un solo número, dos campañas) | `lawang` | lawang-bot (`1fb884cf-…`, proyecto `18a863ab-…`) | Lawang | *(sin definir — `PLAYBOOK_FILE=playbook-lawang.json`)* | `context-lawang.md` | *(default)* | https://lawang-bot-production.up.railway.app |
+| `bnb-bot` (`c26007ad-…`) | — | **entorno de pruebas del owner — NO tocar**. Contenía hasta el 10-sep el servicio `sumbahills-bot`, que servía de facto el número real de Lawang sin estar documentado aquí — migrado a `lawang-bot` arriba, webhook de Meta pendiente de repuntar (paso manual del owner) | — | — | — | — | uso interno de testeo |
 
 `main` = rama **base común**. NO la despliega ningún servicio; es donde se integran cambios comunes del
-motor que luego se mergean a `b2k` y `balibest`. Ambas van por delante de `main`.
+motor que luego se mergean a `b2k`, `balibest` y `lawang`. Las tres van por delante de `main`.
 
 ## Antes de EDITAR un archivo de bot (preflight — evita tocar el bot equivocado)
 1. **¿Qué bot?** Mira la tabla: su rama y qué `CONTEXT_FILE`/`PANEL_FILE` usa **ese** servicio.
