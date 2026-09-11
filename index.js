@@ -28,6 +28,8 @@ const {
   BOT_MODEL,
   BOT_VERTICAL,            // "tour" (default) o "rental" — selecciona el bloque de cierre en BASE_INSTRUCTIONS
   HUMAN_ONLY,              // "1"/"true": el bot nunca genera respuesta con IA, todo lead entra pausado desde el primer mensaje y se avisa al OWNER_PHONE una vez por lead nuevo. Para bots que arrancan sin persona todavía.
+  BOT_ALLOWLIST,           // modo testing: lista de teléfonos (coma) que SÍ hablan con el bot. El resto entra pausado. Ver MODO TESTING abajo.
+  BOT_MODE,                // "testing" fuerza el modo aunque BOT_ALLOWLIST venga vacía (deniega a todos). Cualquier otro valor no activa nada.
   BOT_PERSONA_NAME,        // nombre de la persona del bot (default "Daniel" = B2K); BBM debe definir el suyo
   OPENAI_API_KEY,          // opcional: activa la transcripción de notas de voz (Whisper); sin ella se pide el texto
   CONTEXT_FILE,            // nombre del archivo de contexto a cargar del repo (default "context.md")
@@ -76,6 +78,51 @@ const SHEET_SYNC = (CRM_SHEET_SYNC === "1" || CRM_SHEET_SYNC === "true") && !!SH
 // aviso al owner: la puerta de pausa asume que un humano YA está mirando esa
 // conversación (la pausó él a mano); en HUMAN_ONLY nadie la está mirando todavía.
 const HUMAN_ONLY_MODE = HUMAN_ONLY === "1" || HUMAN_ONLY === "true";
+
+// ─── MODO TESTING (BOT_ALLOWLIST / BOT_MODE) ───────────────────────────────────
+// Para estrenar un bot sobre un número que YA recibe leads reales: solo los teléfonos
+// de la lista hablan con el bot; cualquier otro entra por la puerta de pausa que ya
+// existe (se guarda, se marca "esperando humano", se avisa al owner). Nace el 11-sep-2026
+// para Lawang, cuya campaña de Australia manda leads reales al número de pruebas.
+//
+//   BOT_ALLOWLIST puesta (≥1 número válido)  → modo testing ON, solo esos números
+//   BOT_MODE=testing + lista vacía/ilegible  → modo testing ON, DENIEGA A TODOS
+//   las dos ausentes                         → comportamiento de siempre (bot abierto)
+//
+// Por qué "las dos ausentes = abierto" y no al revés: este motor es compartido. Si el
+// default fuese "cerrado", el día que esto se fusione a `main` y llegue a las ramas
+// `b2k`/`balibest` dejaría mudos a dos bots en producción sin que nadie tocara nada.
+// La propiedad que sí queremos de fail-closed —que una errata no abra la puerta— se
+// consigue denegando cuando la lista está puesta pero no parsea. Para abrir el bot
+// hacen falta DOS variables desaparecidas a la vez, no un despiste.
+//
+// ⚠️ Salir de testing es un acto explícito del owner (borrar las dos variables), no un
+// efecto colateral de un redeploy. Y el estado se publica en el arranque y en
+// /admin/api/health: un freno mudo es la forma exacta del fallo de LAW-106.
+const ALLOWLIST = new Set(
+  String(BOT_ALLOWLIST || "")
+    .split(",")
+    .map((s) => normalizePhone(s))
+    .filter((s) => s.length >= 8)   // descarta vacíos y restos de formato
+);
+// Entradas escritas en formato local (0811…) NO se adivinan: WhatsApp siempre entrega el
+// número en internacional, así que un "0" inicial nunca casaría y el tester se pasaría la
+// tarde depurando un bot sano. Se avisa fuerte en el arranque y esa entrada no cuenta.
+const ALLOWLIST_BAD = String(BOT_ALLOWLIST || "")
+  .split(",")
+  .map((s) => normalizePhone(s))
+  .filter((s) => s.length >= 8 && s.startsWith("0")).length;
+const TESTING_MODE = ALLOWLIST.size > 0 || String(BOT_MODE || "").toLowerCase() === "testing";
+
+// Comparación EXACTA sobre los dígitos. Nada de "últimos 9" (lo que hace isOwner): dos
+// móviles de países distintos pueden compartir los últimos 9 dígitos, y ahí el fallo es
+// fail-open — un lead real colándose hasta la IA. El owner siempre pasa: es quien prueba
+// y quien recibe los avisos.
+function isAllowed(phone) {
+  if (!TESTING_MODE) return true;
+  if (isOwner(phone)) return true;
+  return ALLOWLIST.has(normalizePhone(phone));
+}
 
 const stripeClient = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
@@ -1340,7 +1387,18 @@ async function sendWhatsAppResult(to, message) {
   }
 }
 
+// ⚠️ INVARIANTE DE ENVÍO (no romper al añadir funciones nuevas):
+//   sendWhatsApp / sendWhatsAppTemplate  → habla el BOT     → pasan por el freno de testing
+//   sendWhatsAppResult / sendWhatsAppMedia → habla un HUMANO → nunca se frenan (panel, relay del owner)
+// Frenar aquí y no en cada sitio de llamada es lo que hace que el modo testing cubra TODAS
+// las bocas del bot de una vez —respuesta de IA, disculpa de media, followupTick,
+// reminderTick, sendIntro— sin una lista a mano de call sites que el día que crezca se
+// quedará corta. Cerrar una salida no cierra las hermanas: por eso se cierra el embudo.
 async function sendWhatsApp(to, message) {
+  if (!isAllowed(to)) {
+    console.log(`[${PROJECT_NAME}] 🧪 TESTING — envío del bot BLOQUEADO a ${normalizePhone(to)} (no está en BOT_ALLOWLIST)`);
+    return;
+  }
   const r = await sendWhatsAppResult(to, message);
   if (!r.ok) console.error(`[${PROJECT_NAME}] Error enviando WhatsApp a ${normalizePhone(to)}:`, r.error);
 }
@@ -1592,6 +1650,10 @@ async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams = [])
   // Cuenta bloqueada → no gastar el intento: rebotaría igual y el lead quedaría marcado
   // como contactado sin haberlo sido. El texto libre SÍ se intenta (ver comentario arriba):
   // más vale fallar contestando a un cliente que callarse.
+  if (!isAllowed(to)) {
+    console.log(`[${PROJECT_NAME}] 🧪 TESTING — plantilla "${templateName}" BLOQUEADA a ${toClean} (no está en BOT_ALLOWLIST)`);
+    return { ok: false, error: "modo testing: destinatario fuera de BOT_ALLOWLIST" };
+  }
   const blocked = await getWaBlocked();
   if (blocked) {
     console.error(`[${PROJECT_NAME}] Plantilla "${templateName}" NO enviada a ${toClean} — cuenta bloqueada (code ${blocked.code})`);
@@ -1666,6 +1728,36 @@ async function notifyOwner(kind, lead) {
       OWNER_PHONE,
       `${label} — ${PROJECT_NAME}\n\n${who}\nÚltimo mensaje: "${msg}"\n\n(Configura ALERT_TEMPLATE_NAME para recibir esto siempre.)`
     );
+  }
+}
+
+// Aviso al owner cuando el modo testing ha frenado a un lead REAL. Va aparte de notifyOwner
+// a propósito: aquel solo dispara con `!prev` ("ficha nueva"), y en este caso los leads que
+// más importan son justo los que YA tienen ficha de la etapa HUMAN_ONLY — los cálidos. Con
+// `!prev` esos no avisarían nunca y se quedarían mudos sin que nadie se entere.
+// Clave propia (`testnotif:`) para no pisar el nivel de NOTIFY_RANK de notifyOwner.
+const fallbackTestNotified = new Set();
+async function notifyOwnerTesting(phone, name, lastMessage) {
+  if (!OWNER_PHONE) return;
+  const clean = normalizePhone(phone);
+  try {
+    if (redisClient) {
+      if (await redisClient.get(`testnotif:${clean}`)) return;
+      await redisClient.setEx(`testnotif:${clean}`, CONV_TTL, "1");
+    } else {
+      if (fallbackTestNotified.has(clean)) return;
+      fallbackTestNotified.add(clean);
+    }
+    await sendWhatsApp(
+      OWNER_PHONE,
+      `🧪 ${PROJECT_NAME} — lead real frenado por el modo testing\n\n` +
+      `${name || "Sin nombre"}\nTel: +${clean}\n` +
+      `Último mensaje: "${String(lastMessage || "").slice(0, 300)}"\n\n` +
+      `El bot NO le ha respondido y NO le ha marcado el mensaje como leído. ` +
+      `Está en el panel marcado como "esperando", listo para que le contestes a mano.`
+    );
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] No se pudo avisar del lead frenado ${clean}:`, e.message);
   }
 }
 
@@ -1840,11 +1932,13 @@ app.post("/webhook", async (req, res) => {
       await setInbound(from, Date.now());
       await resetFollowup(from);
       const prev = await getLead(from);
-      if (HUMAN_ONLY_MODE || await isPaused(from)) {
+      const gatedMedia = TESTING_MODE && !isAllowed(from);
+      if (HUMAN_ONLY_MODE || gatedMedia || await isPaused(from)) {
         await saveConversation(from, history);
         await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "interested", label, "client");
         await setWaiting(from, true);
         if (HUMAN_ONLY_MODE && !prev) await notifyOwner("new", { name: profileName, phone: from, lastMessage: label });
+        if (gatedMedia) await notifyOwnerTesting(from, profileName, label);
         return;
       }
       markRead(message.id); // best-effort
@@ -1879,10 +1973,11 @@ app.post("/webhook", async (req, res) => {
       if (!pending) pending = await escPop();
       if (pending) {
         console.log(`[${PROJECT_NAME}] Owner respondió escalación → reenviando a ${pending.customerName || pending.customerPhone}`);
-        await sendWhatsApp(
-          pending.customerPhone,
-          text
-        );
+        // Va por sendWhatsAppResult, no por sendWhatsApp: esto es el owner hablando por su
+        // propia boca, igual que el panel. Si fuera por el embudo del bot, el modo testing
+        // callaría en silencio la única respuesta humana que sí queremos viva.
+        const rf = await sendWhatsAppResult(pending.customerPhone, text);
+        if (!rf.ok) console.error(`[${PROJECT_NAME}] Error reenviando respuesta del owner a ${normalizePhone(pending.customerPhone)}:`, rf.error);
       } else {
         console.log(`[${PROJECT_NAME}] Mensaje del owner pero no hay escalaciones pendientes`);
       }
@@ -1901,7 +1996,8 @@ app.post("/webhook", async (req, res) => {
     }
 
     // ── Control humano: si el bot está en pausa para este lead (o HUMAN_ONLY_MODE global), guarda y calla ──
-    if (HUMAN_ONLY_MODE || await isPaused(from)) {
+    const gated = TESTING_MODE && !isAllowed(from);
+    if (HUMAN_ONLY_MODE || gated || await isPaused(from)) {
       await saveConversation(from, history);
       const prev = await getLead(from);
       await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "interested", text, "client");
@@ -1909,7 +2005,8 @@ app.post("/webhook", async (req, res) => {
       await resetFollowup(from);    // respondió → reinicia la cadencia de seguimiento
       await setWaiting(from, true); // el cliente espera respuesta humana → marcar en el panel
       if (HUMAN_ONLY_MODE && !prev) await notifyOwner("new", { name: profileName, phone: from, lastMessage: text });
-      console.log(`[${PROJECT_NAME}] Lead ${from} en pausa (${HUMAN_ONLY_MODE ? "HUMAN_ONLY" : "control humano"}) — mensaje guardado, bot NO responde`);
+      if (gated) await notifyOwnerTesting(from, profileName, text);
+      console.log(`[${PROJECT_NAME}] Lead ${from} en pausa (${HUMAN_ONLY_MODE ? "HUMAN_ONLY" : gated ? "modo testing / fuera de BOT_ALLOWLIST" : "control humano"}) — mensaje guardado, bot NO responde`);
       return;
     }
 
@@ -2188,7 +2285,13 @@ app.get("/admin/api/health", async (req, res) => {
     if (redisClient) count = await redisClient.zCard("leads_index");
     else count = Object.keys(fallbackLeads).length;
   } catch (e) { /* best-effort */ }
-  res.json({ storage: redisClient ? "redis" : "ram", leads: count });
+  // `testing` viaja aquí para que el estado del freno se pueda comprobar sin leer logs:
+  // un modo testing olvidado encendido es tan caro como uno apagado por error (LAW-106).
+  res.json({
+    storage: redisClient ? "redis" : "ram",
+    leads: count,
+    testing: { on: TESTING_MODE, allowlist: ALLOWLIST.size, malformados: ALLOWLIST_BAD },
+  });
 });
 
 app.get("/admin/api/conv/:phone", async (req, res) => {
@@ -2801,6 +2904,13 @@ app.listen(PORT, async () => {
   console.log(`[${PROJECT_NAME}] Modelo: ${MODEL}${BOT_MODEL ? "" : "  ⚠️  BOT_MODEL sin definir → default del código"}`);
   console.log(`[${PROJECT_NAME}] OWNER_PHONE: ${OWNER_PHONE ? normalizePhone(OWNER_PHONE) : "⚠️  NO CONFIGURADO"}`);
   if (HUMAN_ONLY_MODE) console.log(`[${PROJECT_NAME}] 🙋 HUMAN_ONLY activo — la IA no responde a ningún lead, todo pasa por el panel${OWNER_PHONE ? "" : " (⚠️ y OWNER_PHONE está vacío: no se avisará de leads nuevos)"}`);
+  if (TESTING_MODE) {
+    console.log(`[${PROJECT_NAME}] 🧪 MODO TESTING ACTIVO — BOT_ALLOWLIST: ${ALLOWLIST.size} número(s) cargado(s) (el owner siempre pasa). Nadie más recibe respuesta del bot.`);
+    if (ALLOWLIST.size === 0) console.log(`[${PROJECT_NAME}] 🧪 ⚠️  La lista está VACÍA: se deniega a TODOS. Si no era la intención, revisa BOT_ALLOWLIST.`);
+    if (ALLOWLIST_BAD) console.log(`[${PROJECT_NAME}] 🧪 ⚠️  ${ALLOWLIST_BAD} número(s) empiezan por 0 (formato local) y NO van a casar nunca: escríbelos en internacional, sin el 0 y con prefijo de país.`);
+  } else {
+    console.log(`[${PROJECT_NAME}] 🌐 Modo abierto — el bot responde a cualquier número (BOT_ALLOWLIST y BOT_MODE sin definir).`);
+  }
   console.log(`[${PROJECT_NAME}] CRM (BD): ${redisClient ? "Redis (persistente)" : "RAM (volátil — configura REDIS_URL)"}`);
   console.log(`[${PROJECT_NAME}] Firma webhook: ${META_APP_SECRET ? "🟢 X-Hub-Signature-256 activa" : "⚠️  SIN verificar — añade META_APP_SECRET en Railway"}`);
   console.log(`[${PROJECT_NAME}] Email (Brevo): ${MAIL_READY ? "🟢 listo" : `⚠️  NO configurado → BREVO_API_KEY=${BREVO_API_KEY ? "ok" : "FALTA"}, MAIL_FROM=${MAIL_FROM ? "ok" : "FALTA"}`}`);
