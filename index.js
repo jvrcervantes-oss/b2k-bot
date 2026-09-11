@@ -264,6 +264,13 @@ async function listLeads() {
   return Promise.all(list.map(async (l) => ({
     ...l,
     paused: await isPaused(l.phone),
+    /* `gated`: el modo testing está frenando a ESTE lead. Va aparte de `paused` porque
+       no es lo mismo —nadie lo pausó a mano— y porque sin él el panel MIENTE: el freno
+       se calcula en cada mensaje (`TESTING_MODE && !isAllowed(from)`) y no se guarda en
+       ningún sitio, así que un lead real al que el bot jamás va a contestar se listaba
+       como `paused:false` y la pestaña lo pintaba «IA activa». Quien mira el panel tiene
+       que poder saber que esa conversación está muerta. */
+    gated: TESTING_MODE && !isAllowed(l.phone),
     waiting: await isWaiting(l.phone),
     lastInboundAt: await getInbound(l.phone),
     notes: await getNotes(l.phone),
