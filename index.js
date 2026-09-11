@@ -28,6 +28,7 @@ const {
   BOT_MODEL,
   BOT_VERTICAL,            // "tour" (default) o "rental" — selecciona el bloque de cierre en BASE_INSTRUCTIONS
   HUMAN_ONLY,              // "1"/"true": el bot nunca genera respuesta con IA, todo lead entra pausado desde el primer mensaje y se avisa al OWNER_PHONE una vez por lead nuevo. Para bots que arrancan sin persona todavía.
+  WHATSAPP_WABA_ID,        // id de la WhatsApp Business Account — solo para LISTAR plantillas aprobadas (/admin/api/templates). Sin él ese endpoint avisa en vez de fallar.
   BOT_ALLOWLIST,           // modo testing: lista de teléfonos (coma) que SÍ hablan con el bot. El resto entra pausado. Ver MODO TESTING abajo.
   BOT_MODE,                // "testing" fuerza el modo aunque BOT_ALLOWLIST venga vacía (deniega a todos). Cualquier otro valor no activa nada.
   BOT_PERSONA_NAME,        // nombre de la persona del bot (default "Daniel" = B2K); BBM debe definir el suyo
@@ -261,8 +262,18 @@ async function listLeads() {
     list = Object.values(fallbackLeads).sort((a, b) => b.updatedAt - a.updatedAt);
   }
   const unsub = await getUnsubSet(); // para marcar quién está dado de baja del newsletter
-  return Promise.all(list.map(async (l) => ({
+  return Promise.all(list.map(async (l) => {
+    const inbound = await getInbound(l.phone);
+    const v = ventanaDe(inbound);
+    return {
     ...l,
+    lastInboundAt: inbound,
+    /* La ventana la resuelve el servidor y viaja ya resuelta: el navegador solo pinta.
+       `ventanaExpira` va en epoch para que la interfaz pueda decir cuánto queda sin
+       volver a calcular nada por su cuenta. */
+    ventanaAbierta: v.abierta,
+    ventanaExpira: v.expira,
+    optOut: await getOptOut(l.phone),
     paused: await isPaused(l.phone),
     /* `gated`: el modo testing está frenando a ESTE lead. Va aparte de `paused` porque
        no es lo mismo —nadie lo pausó a mano— y porque sin él el panel MIENTE: el freno
@@ -272,12 +283,12 @@ async function listLeads() {
        que poder saber que esa conversación está muerta. */
     gated: TESTING_MODE && !isAllowed(l.phone),
     waiting: await isWaiting(l.phone),
-    lastInboundAt: await getInbound(l.phone),
     notes: await getNotes(l.phone),
     status: await getStatus(l.phone),
     followups: await getFollowupCount(l.phone),
     emailUnsub: !!(l.email && unsub.has(String(l.email).toLowerCase().trim())),
-  })));
+    };
+  }));
 }
 
 // Nivel de aviso ya enviado al owner para ese lead (anti-spam).
@@ -341,6 +352,57 @@ async function setInbound(phone, ts) {
 async function getInbound(phone) {
   if (redisClient) { const v = await redisClient.get(`inbound:${phone}`); return v ? parseInt(v) : null; }
   return fallbackInbound[phone] || null;
+}
+
+/* ─── BAJA DEL LEAD (STOP) ────────────────────────────────────────────────────────
+   Si alguien pide no recibir más mensajes, el bloqueo tiene que estar en el CAMINO DE
+   ENVÍO, no en la disciplina de quien escribe. Y SIN TTL, al revés que el resto de
+   claves del bot: una baja no caduca a los 30 días.
+   No es solo cortesía — si los leads marcan como spam, Meta degrada la calidad del
+   número y se acaba sin poder escribir a nadie. La baja protege el canal. */
+const fallbackOptOut = new Set();
+/* Anclado al PRINCIPIO del mensaje a propósito: "¿dónde está el bus stop?" no es una
+   baja. Y `cancelar` NO está en la lista aunque parezca obvia — en español quien escribe
+   "cancelar" casi siempre quiere anular una cita, no dejar de recibir mensajes, y dar de
+   baja en silencio a un lead caliente por esa confusión es de los errores más caros que
+   puede cometer este bot. Las que sí están son las que WhatsApp y el uso han hecho
+   inequívocas. */
+const PALABRAS_BAJA = /^\s*(stop|baja|darme de baja|unsubscribe|berhenti|no more|remove me)\b/i;
+async function setOptOut(phone) {
+  const p = normalizePhone(phone);
+  if (redisClient) await redisClient.set(`optout:${p}`, String(Date.now()));
+  else fallbackOptOut.add(p);
+  console.log(`[${PROJECT_NAME}] 🚫 ${p} pidió la baja (STOP) — no se le enviará nada más`);
+}
+async function getOptOut(phone) {
+  const p = normalizePhone(phone);
+  if (redisClient) return !!(await redisClient.get(`optout:${p}`));
+  return fallbackOptOut.has(p);
+}
+// Acuse de la baja: una sola vez. Si alguien manda "STOP" tres veces seguidas no se le
+// contesta tres veces — eso es justo el ruido del que se está intentando salir.
+const fallbackOptOutAck = new Set();
+async function getOptOutAck(phone) {
+  const p = normalizePhone(phone);
+  if (redisClient) return !!(await redisClient.get(`optoutack:${p}`));
+  return fallbackOptOutAck.has(p);
+}
+async function setOptOutAck(phone) {
+  const p = normalizePhone(phone);
+  if (redisClient) await redisClient.set(`optoutack:${p}`, "1");
+  else fallbackOptOutAck.add(p);
+}
+
+/* La ventana de 24h de WhatsApp, calculada SIEMPRE en el servidor. En el navegador no
+   se puede: no hay contra qué corregir un reloj desfasado, y un portátil 3h adelantado
+   daría por cerrada una ventana abierta (o al revés, ofrecería texto libre que rebota).
+   `lastInboundAt` ausente ⇒ cerrada, explícitamente: un lead de formulario que nunca
+   escribió no tiene ventana, y la clave `inbound:` caduca a los 30 días. */
+const VENTANA_MS = 24 * 60 * 60 * 1000;
+function ventanaDe(lastInboundAt) {
+  if (!lastInboundAt) return { abierta: false, expira: null, motivo: "nunca_escribio" };
+  const expira = lastInboundAt + VENTANA_MS;
+  return { abierta: Date.now() < expira, expira, motivo: null };
 }
 
 // ─── SEGUIMIENTO AUTOMÁTICO TRAS 24h (re-enganche de ventas) ────────
@@ -1370,6 +1432,13 @@ async function createStripeSession(numUnits) {
 // ─── WHATSAPP ─────────────────────────────────────────────────────
 async function sendWhatsAppResult(to, message) {
   const toClean = normalizePhone(to);
+  /* La baja se honra en los DOS nucleos de envio, que es por donde pasa todo — bot,
+     ticks, panel y comercial. Ponerla en los endpoints dejaria fuera a followupTick y
+     reminderTick, que es justo quien mas insiste. */
+  if (await getOptOut(toClean)) {
+    console.log(`[${PROJECT_NAME}] 🚫 Envio BLOQUEADO a ${toClean}: pidio la baja (STOP)`);
+    return { ok: false, error: "el lead pidio la baja (STOP)" };
+  }
   try {
     const resp = await axios.post(
       `https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/messages`,
@@ -1394,9 +1463,14 @@ async function sendWhatsAppResult(to, message) {
   }
 }
 
-// ⚠️ INVARIANTE DE ENVÍO (no romper al añadir funciones nuevas):
-//   sendWhatsApp / sendWhatsAppTemplate  → habla el BOT     → pasan por el freno de testing
-//   sendWhatsAppResult / sendWhatsAppMedia → habla un HUMANO → nunca se frenan (panel, relay del owner)
+// ⚠️ INVARIANTE DE ENVÍO (no romper al añadir funciones nuevas). Clasifica por QUIÉN
+// HABLA, nunca por el tipo de mensaje — texto o plantilla es indiferente:
+//   habla el BOT   → sendWhatsApp · sendWhatsAppTemplate                  → pasan por el freno
+//   habla un HUMANO→ sendWhatsAppResult · sendWhatsAppTemplateResult
+//                    · sendWhatsAppMedia                                  → nunca se frenan
+// Cada par es envoltorio-gateado + núcleo-libre. Al añadir una forma de enviar, crea las
+// DOS mitades; si solo creas una, alguien acabará usándola por el lado equivocado.
+// `getWaBlocked()` va en el núcleo, no en el envoltorio: es estado de la cuenta, no freno.
 // Frenar aquí y no en cada sitio de llamada es lo que hace que el modo testing cubra TODAS
 // las bocas del bot de una vez —respuesta de IA, disculpa de media, followupTick,
 // reminderTick, sendIntro— sin una lista a mano de call sites que el día que crezca se
@@ -1651,15 +1725,18 @@ async function clearWaBlocked() {
   if (redisClient) { try { await redisClient.del("wa:blocked"); } catch (e) { /* best-effort */ } }
 }
 
-// Mensaje de PLANTILLA (única forma de escribir al owner fuera de su ventana de 24h)
-async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams = []) {
+// Mensaje de PLANTILLA — NÚCLEO SIN FRENO DE TESTING.
+// Espejo exacto de sendWhatsAppResult respecto a sendWhatsApp: aquí vive el envío, y el
+// freno vive en el envoltorio de abajo. Por eso `getWaBlocked()` se queda AQUÍ y no sube
+// al envoltorio: no es el freno de testing, es estado de la cuenta de WhatsApp, y aplica
+// hable quien hable — una plantilla contra una cuenta bloqueada rebota seguro, la mande
+// el bot o una persona.
+// Lo usa quien habla por su propia boca: una persona del estudio desde la intranet.
+async function sendWhatsAppTemplateResult(to, templateName, langCode, bodyParams = []) {
   const toClean = normalizePhone(to);
-  // Cuenta bloqueada → no gastar el intento: rebotaría igual y el lead quedaría marcado
-  // como contactado sin haberlo sido. El texto libre SÍ se intenta (ver comentario arriba):
-  // más vale fallar contestando a un cliente que callarse.
-  if (!isAllowed(to)) {
-    console.log(`[${PROJECT_NAME}] 🧪 TESTING — plantilla "${templateName}" BLOQUEADA a ${toClean} (no está en BOT_ALLOWLIST)`);
-    return { ok: false, error: "modo testing: destinatario fuera de BOT_ALLOWLIST" };
+  if (await getOptOut(toClean)) {
+    console.log(`[${PROJECT_NAME}] 🚫 Plantilla "${templateName}" BLOQUEADA a ${toClean}: pidio la baja (STOP)`);
+    return { ok: false, error: "el lead pidio la baja (STOP)" };
   }
   const blocked = await getWaBlocked();
   if (blocked) {
@@ -1671,7 +1748,7 @@ async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams = [])
     ? [{ type: "body", parameters: bodyParams.map((t) => ({ type: "text", text: clean(t) || "-" })) }]
     : [];
   try {
-    await axios.post(
+    const resp = await axios.post(
       `https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/messages`,
       {
         messaging_product: "whatsapp",
@@ -1682,12 +1759,29 @@ async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams = [])
       { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" } }
     );
     console.log(`[${PROJECT_NAME}] Plantilla "${templateName}" enviada a ${toClean}`);
-    return { ok: true };
+    /* El wamid es lo único que permite atar después un `delivery_failed` del webhook de
+       `statuses` a ESTE envío. Una plantilla puede devolver 200 y rebotar segundos más
+       tarde en asíncrono: sin el identificador, el panel dice "enviado" y nadie se entera
+       de lo contrario (24-jul: 13 outreach de B2K, 11 rebotes, cero aviso). */
+    return { ok: true, wamid: resp.data?.messages?.[0]?.id || null };
   } catch (e) {
-    const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
+    const data = e.response?.data;
+    const detail = data ? JSON.stringify(data) : e.message;
     console.error(`[${PROJECT_NAME}] Error enviando plantilla "${templateName}" a ${toClean}:`, detail);
-    return { ok: false, error: detail };
+    // El código viaja aparte del blob: quien llama lo necesita para traducirlo a algo
+    // que un comercial entienda, en vez de enseñarle el JSON crudo de Meta.
+    return { ok: false, error: detail, code: data?.error?.code ?? null };
   }
+}
+
+// Envoltorio con el FRENO DE TESTING: lo usa el BOT (followupTick, reminderTick,
+// sendIntro, aviso al owner). Ver el invariante de envío más arriba.
+async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams = []) {
+  if (!isAllowed(to)) {
+    console.log(`[${PROJECT_NAME}] 🧪 TESTING — plantilla "${templateName}" BLOQUEADA a ${normalizePhone(to)} (no está en BOT_ALLOWLIST)`);
+    return { ok: false, error: "modo testing: destinatario fuera de BOT_ALLOWLIST" };
+  }
+  return sendWhatsAppTemplateResult(to, templateName, langCode, bodyParams);
 }
 
 // ─── OUTREACH: el bot inicia la conversación con un lead del formulario de Meta ──
@@ -2002,6 +2096,29 @@ app.post("/webhook", async (req, res) => {
       console.log(`[${PROJECT_NAME}] Datos de formulario IG capturados para ${from}: ${Object.keys(formFields).join(", ")}`);
     }
 
+    /* ── Baja a petición del lead ──────────────────────────────────────────────
+       Va ANTES de cualquier otra cosa y antes de la IA: quien escribe STOP no quiere
+       una respuesta ingeniosa, quiere dejar de recibir mensajes. Se marca la baja, se
+       pausa para que la IA no vuelva a entrar, y se acusa recibo UNA vez — un silencio
+       total deja al lead sin saber si ha funcionado y acaba marcando como spam, que es
+       justo lo que degrada la calidad del número. */
+    if (PALABRAS_BAJA.test(text)) {
+      /* El acuse va ANTES de marcar la baja, y el orden es deliberado: en cuanto está
+         marcada, el propio camino de envío la bloquea (ver los dos núcleos de envío) y
+         el acuse no saldría. Así no hace falta una excepción para saltarse el bloqueo,
+         y un bloqueo sin excepciones es el que no se rompe al añadir la siguiente. */
+      if (!(await getOptOutAck(from))) {
+        await setOptOutAck(from);
+        await sendWhatsAppResult(from, "Hecho: no volveremos a escribirte. Gracias por tu tiempo. / Done — you won't hear from us again.");
+      }
+      await setOptOut(from);
+      await setPaused(from, true);
+      await saveConversation(from, history);
+      await recordLead(from, profileName, "lost", text, "client");
+      await logEvent(from, "opt_out", { texto: text.slice(0, 80) });
+      return;
+    }
+
     // ── Control humano: si el bot está en pausa para este lead (o HUMAN_ONLY_MODE global), guarda y calla ──
     const gated = TESTING_MODE && !isAllowed(from);
     if (HUMAN_ONLY_MODE || gated || await isPaused(from)) {
@@ -2309,18 +2426,82 @@ app.get("/admin/api/conv/:phone", async (req, res) => {
 // Responder a mano (toma de control). Envía por WhatsApp y pausa el bot para ese lead.
 app.post("/admin/api/send", async (req, res) => {
   if (!adminAuth(req, res)) return;
-  const { phone, text } = req.body || {};
+  const { phone, text, byUser } = req.body || {};
   if (!phone || !text) return res.status(400).json({ error: "phone y text requeridos" });
+  // Baja del lead: un STOP se honra aquí, no en la interfaz. Si depende de que el
+  // comercial se acuerde, no está honrado.
+  if (await getOptOut(phone)) return res.status(409).json({ error: "opt_out", detalle: "Este lead pidió no recibir más mensajes (STOP)." });
   const r = await sendWhatsAppResult(phone, text);
-  if (!r.ok) return res.status(502).json({ error: r.error });
+  if (!r.ok) return res.status(502).json({ error: r.error, code: r.code ?? null });
   const history = await getConversation(phone);
-  history.push({ role: "assistant", content: text, ts: Date.now(), by: "human" });
+  // `byUser` = quién de la intranet escribió esto. Lo inyecta la edge desde el JWT; si
+  // llega vacío queda vacío, nunca se inventa. `by:"human"` solo dice que no fue la IA.
+  history.push({ role: "assistant", content: text, ts: Date.now(), by: "human", byUser: byUser || "", wamid: r.wamid || null });
   await saveConversation(phone, history);
   await setPaused(phone, true); // al responder a mano, el bot deja de contestar a ese lead
   await setWaiting(phone, false); // ya respondido por el estudio → quitar el pendiente
   const prev = await getLead(phone);
   await recordLead(phone, prev && prev.name, (prev && prev.intent) || "interested", text, "human");
-  res.json({ ok: true });
+  await logEvent(phone, "agente_texto", { byUser: byUser || "", wamid: r.wamid || null });
+  res.json({ ok: true, wamid: r.wamid || null });
+});
+
+// ── Plantillas aprobadas del WABA (para la caja de escribir de la intranet) ──
+// Solo lectura y solo APPROVED. La categoría viaja porque es DINERO: una MARKETING se
+// factura por mensaje; una UTILITY dentro de la ventana abierta, no. Quien elige debe verlo.
+app.get("/admin/api/templates", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  if (!WHATSAPP_WABA_ID) return res.status(503).json({ error: "falta WHATSAPP_WABA_ID en el entorno" });
+  try {
+    const r = await axios.get(`https://graph.facebook.com/v21.0/${WHATSAPP_WABA_ID}/message_templates`, {
+      params: { fields: "name,status,category,language,components", limit: 100 },
+      headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` },
+    });
+    const lista = (r.data?.data || [])
+      .filter((t) => t.status === "APPROVED")
+      .map((t) => {
+        const body = (t.components || []).find((c) => c.type === "BODY");
+        const texto = body?.text || "";
+        // Nº de variables = mayor {{n}} del cuerpo. Se manda para poder pedir los
+        // parámetros exactos ANTES de gastar el envío, en vez de cobrar un 132000.
+        const vars = [...texto.matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]));
+        return { name: t.name, language: t.language, category: t.category, body: texto, vars: vars.length ? Math.max(...vars) : 0 };
+      });
+    res.json(lista);
+  } catch (e) {
+    res.status(502).json({ error: e.response?.data ? JSON.stringify(e.response.data) : e.message });
+  }
+});
+
+// ── Enviar una plantilla aprobada COMO PERSONA (no como bot) ──
+// Es la única vía de escribir a un lead cuya ventana de 24h está cerrada. Va por
+// sendWhatsAppTemplateResult (núcleo sin freno): habla una persona, no el bot.
+app.post("/admin/api/send-template", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const { phone, template, lang, params, byUser } = req.body || {};
+  if (!phone || !template) return res.status(400).json({ error: "phone y template requeridos" });
+  // El destinatario tiene que ser un lead que ya existe. Sin esto, este endpoint es una
+  // pasarela para mandar plantillas de la marca a cualquier número del mundo.
+  const lead = await getLead(phone);
+  if (!lead) return res.status(404).json({ error: "lead_desconocido", detalle: "Ese teléfono no es un lead de este bot." });
+  if (await getOptOut(phone)) return res.status(409).json({ error: "opt_out", detalle: "Este lead pidió no recibir más mensajes (STOP)." });
+  const cuerpo = Array.isArray(params) ? params.map((p) => String(p ?? "")) : [];
+  const r = await sendWhatsAppTemplateResult(phone, template, lang || "es", cuerpo);
+  if (!r.ok) return res.status(502).json({ error: r.error, code: r.code ?? null });
+  const history = await getConversation(phone);
+  /* Se guarda la plantilla y sus parámetros REALES, no un texto inventado: sendIntro
+     siembra un saludo fijo en inglés diga lo que diga la plantilla, y eso deja un
+     historial que no es lo que el lead recibió. */
+  history.push({
+    role: "assistant", ts: Date.now(), by: "human", byUser: byUser || "", wamid: r.wamid || null,
+    plantilla: template, content: `[plantilla ${template}] ${cuerpo.join(" · ")}`.trim(),
+  });
+  await saveConversation(phone, history);
+  await setPaused(phone, true);   // igual que el texto libre: el humano toma el mando y
+  await setWaiting(phone, false); // followupTick deja de soltar SU plantilla encima
+  await recordLead(phone, lead.name, lead.intent || "interested", `[plantilla ${template}]`, "human");
+  await logEvent(phone, "agente_plantilla", { byUser: byUser || "", plantilla: template, wamid: r.wamid || null });
+  res.json({ ok: true, wamid: r.wamid || null });
 });
 
 // Enviar una foto/vídeo a mano al cliente (toma de control). Igual que /send: envía, registra y pausa el bot.
