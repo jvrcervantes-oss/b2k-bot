@@ -250,8 +250,9 @@ const CONTEXT = fs.existsSync(contextFileName)
   : BOT_CONTEXT;
 
 // ─── REDIS ────────────────────────────────────────────────────────
-// 30 días: alineado con la cadencia de follow-up (30 días, ver setFollowupCount) — antes
-// eran 7 y el bot podía mandar un recordatorio del día 25 sin memoria de la charla.
+// CONV_TTL ya NO se aplica a `conv:` (el historial de chat es negocio del cliente, no se
+// borra nunca — decisión del owner 16-sep-2026). Sigue usándose para `notified:`/`inbound:`,
+// que son marcas operativas de corta vida, no conversación.
 const CONV_TTL = 30 * 24 * 60 * 60;
 const fallbackMemory = {};
 const fallbackEscQueue = [];
@@ -272,6 +273,18 @@ try {
     new Promise((_, rej) => setTimeout(() => rej(new Error("timeout conectando a Redis")), 5000)),
   ]);
   console.log(`[${PROJECT_NAME}] Redis conectado`);
+  // Migración 16-sep-2026: las claves `conv:` viejas siguen con el TTL de 30 días que tenían
+  // al escribirse — PERSIST las libera de esa cuenta atrás. Idempotente (un `conv:` ya sin
+  // TTL no cambia), corre en cada arranque, barato (un solo SCAN sobre este proyecto).
+  try {
+    let freed = 0;
+    for await (const key of redisClient.scanIterator({ MATCH: "conv:*", COUNT: 100 })) {
+      if (await redisClient.persist(key)) freed++;
+    }
+    console.log(`[${PROJECT_NAME}] Redis: ${freed} conversación(es) liberadas de TTL (retención permanente)`);
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] Error liberando TTL de conversaciones viejas:`, e.message);
+  }
 } catch (e) {
   console.warn(`[${PROJECT_NAME}] Redis no disponible, usando memoria RAM:`, e.message);
   try { redisClient?.destroy(); } catch (_) { /* best-effort: para los reintentos de fondo si el connect() perdió la carrera contra el timeout */ }
@@ -288,10 +301,14 @@ async function getConversation(phone) {
 
 // Se guardan hasta 100 mensajes (historial que ve el panel/CRM en un takeover humano);
 // el prompt del bot usa solo los últimos 20 (slice al construir los messages de Claude).
+// Sin TTL (`set`, no `setEx`): la conversación no se borra nunca — decisión del owner
+// 16-sep-2026. El tope de 100 es solo para no crecer sin límite el JSON guardado; no
+// afecta al coste del bot, que ya solo manda los últimos 20 al modelo (línea del comentario
+// de arriba, ver history.slice(-20) al construir `messages`).
 async function saveConversation(phone, messages) {
   const trimmed = messages.slice(-100);
   if (redisClient) {
-    await redisClient.setEx(`conv:${phone}`, CONV_TTL, JSON.stringify(trimmed));
+    await redisClient.set(`conv:${phone}`, JSON.stringify(trimmed));
   } else {
     fallbackMemory[phone] = trimmed;
   }
