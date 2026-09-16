@@ -53,6 +53,7 @@ const {
   ADMIN_PASSWORD,
   TELEGRAM_BOT_TOKEN,      // vigilante compartido del estudio (mismo bot/chat que B2K) — aviso fuera de WhatsApp
   TELEGRAM_CHAT_ID,
+  WABA_ID,                 // WhatsApp Business Account (distinto de WHATSAPP_PHONE_ID) — solo para leer message_templates (panel, solo lectura)
   ALERT_TEMPLATE_NAME,
   ALERT_TEMPLATE_LANG,
   ALERT_TEMPLATE_VARS,
@@ -3692,6 +3693,99 @@ app.post("/admin/api/note", async (req, res) => {
   writeLeadToSheet(phone, { notes: notes || "" }); // best-effort, no bloquea la respuesta
   logEvent(phone, "note");
   res.json({ ok: true });
+});
+
+// ── KANBAN CONFIGURABLE (portado de B2K, adaptado a alquiler) ──────────────────────────────
+// Las columnas de fábrica de BBM son las 5 que ya usa panel-rental.html (new/quoted/won/lost/
+// noshow) — sin "followup" ni "wait_client", que son de B2K y no existen en el embudo de
+// alquiler. No se pueden borrar, solo renombrar y reordenar (el motor les da semántica); las
+// añadidas son etapas activas de pipeline. Se referencian SIEMPRE por key — la key es estable,
+// la etiqueta es editable. /admin/api/status ya acepta cualquier string de status sin whitelist,
+// así que una columna custom no necesita ningún cambio ahí.
+const KANBAN_BUILTIN = ["new", "quoted", "won", "lost", "noshow"];
+const KANBAN_DEFAULT = KANBAN_BUILTIN.map((key) => ({ key, label: "" }));
+let fallbackKanbanCols = null;
+async function getKanbanCols() {
+  try {
+    if (redisClient) {
+      const raw = await redisClient.get("kanban_cols");
+      if (raw) return JSON.parse(raw);
+    } else if (fallbackKanbanCols) return fallbackKanbanCols;
+  } catch (e) { /* config rota → defaults, nunca un kanban vacío */ }
+  return KANBAN_DEFAULT;
+}
+app.get("/admin/api/kanban-cols", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  res.json(await getKanbanCols());
+});
+app.post("/admin/api/kanban-cols", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const cols = Array.isArray(req.body && req.body.cols) ? req.body.cols : null;
+  if (!cols || cols.length < KANBAN_BUILTIN.length || cols.length > 12) {
+    return res.status(400).json({ error: "cols inválido (mínimo las 5 de fábrica, máximo 12)" });
+  }
+  const clean = [];
+  const seen = new Set();
+  for (const c of cols) {
+    const key = String((c && c.key) || "").trim();
+    const label = String((c && c.label) || "").trim().slice(0, 30);
+    if (!/^[a-z0-9_]{1,24}$/.test(key) || seen.has(key)) return res.status(400).json({ error: `key inválida o repetida: "${key}"` });
+    seen.add(key);
+    clean.push({ key, label });
+  }
+  for (const b of KANBAN_BUILTIN) {
+    if (!seen.has(b)) return res.status(400).json({ error: `falta la columna de fábrica "${b}" (se puede renombrar u ordenar, no borrar)` });
+  }
+  if (redisClient) await redisClient.set("kanban_cols", JSON.stringify(clean));
+  else fallbackKanbanCols = clean;
+  res.json({ ok: true, cols: clean });
+});
+
+// ─── CHAT DE EQUIPO (mini-Slack del panel, portado de B2K) ───────────────────────────────
+// Redis: lista teamchat (cap 500). Solo tras auth admin; el remitente es la identidad "who"
+// que ya escribe el panel. Se pinta siempre con textContent/escape (XSS) — nunca innerHTML crudo.
+let fallbackTeamChat = [];
+app.get("/admin/api/teamchat", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  try {
+    let list;
+    if (redisClient) list = (await redisClient.lRange("teamchat", 0, 149)).map((x) => JSON.parse(x));
+    else list = fallbackTeamChat.slice(0, 150);
+    list.reverse(); // guardado más-reciente-primero (lPush) → se sirve en orden cronológico
+    const after = parseInt(req.query.after, 10);
+    if (after) list = list.filter((msg) => msg.at > after);
+    res.json(list);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/admin/api/teamchat", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  const who = String((req.body && req.body.who) || "").trim().slice(0, 24);
+  const text = String((req.body && req.body.text) || "").trim().slice(0, 1000);
+  if (!who || !text) return res.status(400).json({ error: "who y text requeridos" });
+  const rec = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), at: Date.now(), who, text };
+  try {
+    if (redisClient) { await redisClient.lPush("teamchat", JSON.stringify(rec)); await redisClient.lTrim("teamchat", 0, 499); }
+    else { fallbackTeamChat.unshift(rec); if (fallbackTeamChat.length > 500) fallbackTeamChat.length = 500; }
+    res.json({ ok: true, msg: rec });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Plantillas de WhatsApp (Meta), solo lectura -- las crea/edita Meta Business Manager, aquí solo
+// se listan para ver qué hay de alta y su estado real (approved/pending/rejected).
+app.get("/admin/api/wa-templates", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  if (!WABA_ID || !WHATSAPP_TOKEN) return res.status(400).json({ error: "Falta WABA_ID o WHATSAPP_TOKEN en Railway." });
+  try {
+    const r = await axios.get(`https://graph.facebook.com/v21.0/${WABA_ID}/message_templates?limit=100`,
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, timeout: 15000 });
+    const list = (r.data.data || []).map((tpl) => ({
+      id: tpl.id, name: tpl.name, language: tpl.language, category: tpl.category, status: tpl.status,
+      body: (tpl.components || []).find((c) => c.type === "BODY")?.text || "",
+    }));
+    res.json(list);
+  } catch (e) {
+    res.status(502).json({ error: e.response?.data ? JSON.stringify(e.response.data) : e.message });
+  }
 });
 
 // ── CRM: estado de pipeline manual (new/quoted/won/lost/noshow) ──

@@ -250,6 +250,26 @@
   .flota-badge.rented{background:var(--amber-soft);color:var(--amber)}
   .flota-badge.maintenance{background:var(--violet-soft);color:var(--violet)}
   .flota-badge.retired{background:rgba(107,114,128,.12);color:#6b7280}
+  /* equipo (chat interno + plantillas WhatsApp) — mismo patrón que dbView */
+  #teamView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  #app.teammode #list,#app.teammode #chat,#app.teammode #detail{display:none}
+  #app.teammode #teamView{display:flex}
+  .tc-wrap{max-width:640px;display:flex;flex-direction:column;height:420px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:var(--sh);overflow:hidden}
+  .tc-msgs{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+  .tc-row{max-width:80%;font-size:13.5px;line-height:1.4;padding:8px 11px;border-radius:11px;background:var(--line-2)}
+  .tc-row.mine{align-self:flex-end;background:var(--accent-soft)}
+  .tc-row .tc-who{font-size:11px;font-weight:700;color:var(--ink-soft);margin-bottom:2px}
+  .tc-row .tc-when{font-size:10px;color:var(--ink-soft);margin-left:6px;font-weight:400}
+  .tc-inputrow{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
+  .tc-inputrow input{flex:1;margin:0}
+  .wtpl-card{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--card);max-width:640px}
+  .wtpl-card+.wtpl-card{margin-top:10px}
+  .wtpl-hd{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700}
+  .wtpl-badge{font-size:11px;font-weight:700;border-radius:99px;padding:2px 9px}
+  .wtpl-badge.approved{background:var(--green-soft);color:var(--green)}
+  .wtpl-badge.pending{background:var(--amber-soft);color:var(--amber)}
+  .wtpl-badge.rejected{background:rgba(239,68,68,.12);color:#ef4444}
+  .wtpl-body{font-size:12.5px;color:var(--ink-soft);margin-top:6px;line-height:1.4}
   /* dashboard de métricas — mismo patrón que dbView */
   #dashView{display:none;grid-column:2/-1;flex-direction:column;background:var(--bg);min-height:0}
   #app.dashmode #list,#app.dashmode #chat,#app.dashmode #detail{display:none}
@@ -503,7 +523,7 @@
     nav{position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;flex-direction:row;justify-content:space-around;align-items:center;padding:7px 4px calc(24px + env(safe-area-inset-bottom,0px));gap:0;z-index:60;border-top:1px solid var(--line);border-right:0;box-shadow:0 -4px 16px rgba(16,24,40,.06)}
     .brandrow,nav .spacer,nav .lbl{display:none}
     nav .ic{width:46px;height:40px;justify-content:center;padding:0;gap:0}
-    #dbView,#calView,#mediaView,#nlView,#dashView,#invView,#resView,#flotaView{grid-column:1/-1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+    #dbView,#calView,#mediaView,#nlView,#dashView,#invView,#resView,#flotaView,#teamView{grid-column:1/-1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
     /* Conversaciones: lista por defecto; al abrir un chat = pantalla completa, sin barra */
     #list{display:flex;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
     #chat{display:none}
@@ -702,6 +722,7 @@
     <div class="ic grp" id="navInv" data-ti="nav_inv" title="Facturas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 3h10a1 1 0 0 1 1 1v16l-3-2-2 2-2-2-2 2-2-2-3 2V4a1 1 0 0 1 1-1z"/><path d="M9 8h6M9 12h6M9 16h3" stroke-linecap="round"/></svg><span class="lbl" data-i18n="nav_inv">Facturas</span></div>
     <div class="ic" id="navFlota" data-ti="nav_flota" title="Flota de motos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="M6 17l4-9h4l3 5h2M10 8H8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_flota">Flota</span></div>
     <div class="ic grp" id="navNewsletter" data-ti="nav_nl" title="Newsletter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_nl">Newsletter</span></div>
+    <div class="ic" id="navTeam" data-ti="nav_team" title="Equipo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2.8a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2z"/><path d="M3 13.4c.5-2.6 2.4-4 5-4s4.5 1.4 5 4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16.5" cy="7" r="2"/><path d="M14.7 13.1c.4-1.8 1.8-2.7 3.8-2.7s3.4 1 3.8 2.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_team">Equipo</span></div>
     <div class="spacer"></div>
     <div class="ic" id="langToggle" data-ti="nav_lang">EN</div>
     <div class="ic" data-ti="nav_theme" id="themeToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lbl" data-i18n="nav_theme">Cambiar tema</span></div>
@@ -794,6 +815,7 @@
       <div class="db-viewtoggle">
         <button id="dbViewTable" class="vt on" data-i18n="view_table">Tabla</button>
         <button id="dbViewKanban" class="vt" data-i18n="view_kanban">Kanban</button>
+        <button id="dbKanCols" class="db-ghost" style="display:none;margin-left:8px" data-i18n="kan_cols_btn">⚙ Columnas</button>
       </div>
     </div>
     <div class="db-filters" id="dbFilters"></div>
@@ -826,6 +848,24 @@
     </div>
     <div class="db-metrics" id="flotaMetrics"></div>
     <div class="db-wrap"><div id="flotaTable"></div></div>
+  </div>
+
+  <!-- sección: equipo (chat interno + plantillas de WhatsApp, solo lectura) -->
+  <div id="teamView">
+    <div class="sec-top"><h2 data-i18n="team_hd">Equipo</h2></div>
+    <div class="sec-body">
+      <div class="sec-sub" data-i18n="tc_hd" style="font-weight:600;margin-bottom:8px">Chat del equipo</div>
+      <div class="tc-wrap">
+        <div class="tc-msgs" id="tcMsgs"></div>
+        <div class="tc-inputrow">
+          <input id="tcInput" maxlength="1000" data-ph="tc_ph" placeholder="Escribe un mensaje para el equipo…">
+          <button id="tcSend" class="btn-ghost" data-i18n="tc_send">Enviar</button>
+        </div>
+      </div>
+      <div class="sec-sub" data-i18n="wtpl_hd" style="font-weight:600;margin:22px 0 6px">Plantillas de WhatsApp</div>
+      <p class="media-help" data-i18n="wtpl_help">Plantillas de mensaje de Meta para este número — se crean y aprueban en Meta Business Manager, aquí solo se listan.</p>
+      <div id="wtplList"></div>
+    </div>
   </div>
 
   <!-- sección: fotos y vídeos del bot -->
@@ -881,6 +921,18 @@
     <label><span data-i18n="m_canned_help">Una por línea · formato</span> <b data-i18n="m_canned_fmt">Título | texto</b></label>
     <textarea id="cannedText" style="width:100%;min-height:180px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;resize:vertical;outline:none"></textarea>
     <div class="modal-actions"><button class="btn-ghost" id="cannedCancel" data-i18n="btn_cancel">Cancelar</button><button class="btn-primary" id="cannedSave" data-i18n="btn_save">Guardar</button></div>
+  </div>
+</div>
+
+<!-- modal columnas del kanban -->
+<div id="kanColsModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <h3 data-i18n="kan_cols_hd">Columnas del Kanban</h3>
+    <label style="font-weight:400;color:var(--ink-soft);font-size:12.5px" data-i18n="kan_cols_hint">Las columnas de fábrica se pueden renombrar y reordenar, no borrar. Las que añadas son etapas de pipeline activas.</label>
+    <div id="kcList" style="margin:10px 0"></div>
+    <button id="kcAdd" class="btn-ghost" style="width:100%" data-i18n="kan_col_add">+ Añadir columna</button>
+    <div class="modal-err" id="kcErr"></div>
+    <div class="modal-actions"><button class="btn-ghost" id="kcCancel" data-i18n="btn_cancel">Cancelar</button><button class="btn-primary" id="kcSave" data-i18n="btn_save">Guardar</button></div>
   </div>
 </div>
 
@@ -1041,6 +1093,9 @@
       i_exploring:'explorando', i_interested:'interesado', i_booking:'reserva', i_escalate:'duda',
       c_name:'Nombre', c_phone:'WhatsApp', c_email:'Email', c_country:'País', c_tour:'Modelo', c_package:'Plan', c_delivery:'Entrega', c_travel:'Fecha inicio', c_status:'Estado', c_intent:'Intención', c_lastact:'Últ. act.', c_appt:'Cita',
       s_blank:'—', s_new:'🆕 Nuevo', s_quoted:'💬 Cotizado', s_won:'✅ Ganado', s_lost:'❌ Perdido', s_noshow:'🚫 No-show',
+      nav_team:'Equipo', team_hd:'Equipo', tc_hd:'Chat del equipo', tc_ph:'Escribe un mensaje para el equipo…', tc_send:'Enviar', tc_who_prompt:'¿Cómo te llamas? (se ve en el chat del equipo)', tc_empty:'Aún no hay mensajes.',
+      wtpl_hd:'Plantillas de WhatsApp', wtpl_help:'Plantillas de mensaje de Meta para este número — se crean y aprueban en Meta Business Manager, aquí solo se listan.', wtpl_empty:'Sin plantillas todavía.', wtpl_err:'No se pudieron cargar las plantillas',
+      kan_cols_btn:'⚙ Columnas', kan_cols_hd:'Columnas del Kanban', kan_cols_hint:'Las columnas de fábrica se pueden renombrar y reordenar, no borrar. Las que añadas son etapas de pipeline activas.', kan_col_add:'+ Añadir columna', kan_col_name_ph:'Nombre de la columna', kan_col_del_leads:'Esa columna tiene {n} lead(s). ¿Moverlos a "Nuevo" y borrar la columna?', kan_cols_saved:'Columnas guardadas', kan_cols_err:'No se pudieron guardar las columnas',
       e_status:'Estado', e_name:'Nombre', e_country:'País', e_email:'Email', e_tour:'Modelo de moto', e_package:'Plan de alquiler', e_delivery:'Lugar de entrega', e_insurance:'Seguro', e_payment:'Método de pago', e_value:'Valor del trato (IDR)', e_travel:'Fecha de inicio', e_savecard:'Guardar ficha', e_notes:'Notas internas', ph_notes:'Notas del equipo…', e_savenotes:'Guardar notas',
       ph_pkg:'Semanal / Mensual / Anual', ph_delivery:'ej. Canggu, hotel X', ph_insurance:'Gold / Diamond / ninguno', ph_payment:'Tarjeta / Crypto / Transferencia', ph_egmonth:'ej. 15 agosto 2026',
       f_intent:'Intención', f_lastact:'Última actividad', f_messages:'Mensajes', f_followups:'Seguimientos enviados', f_after24:'tras 24h', f_nextappt:'Próxima cita', wa_open:'Abrir en WhatsApp',
@@ -1093,6 +1148,9 @@
       i_exploring:'exploring', i_interested:'interested', i_booking:'booking', i_escalate:'question',
       c_name:'Name', c_phone:'WhatsApp', c_email:'Email', c_country:'Country', c_tour:'Model', c_package:'Plan', c_delivery:'Delivery', c_travel:'Start date', c_status:'Status', c_intent:'Intent', c_lastact:'Last act.', c_appt:'Call',
       s_blank:'—', s_new:'🆕 New', s_quoted:'💬 Quoted', s_won:'✅ Won', s_lost:'❌ Lost', s_noshow:'🚫 No-show',
+      nav_team:'Team', team_hd:'Team', tc_hd:'Team chat', tc_ph:'Write a message for the team…', tc_send:'Send', tc_who_prompt:'What is your name? (shown in the team chat)', tc_empty:'No messages yet.',
+      wtpl_hd:'WhatsApp templates', wtpl_help:'Meta message templates for this number — created and approved in Meta Business Manager, listed here read-only.', wtpl_empty:'No templates yet.', wtpl_err:'Could not load templates',
+      kan_cols_btn:'⚙ Columns', kan_cols_hd:'Kanban columns', kan_cols_hint:'Factory columns can be renamed and reordered, not deleted. Columns you add are active pipeline stages.', kan_col_add:'+ Add column', kan_col_name_ph:'Column name', kan_col_del_leads:'That column has {n} lead(s). Move them to "New" and delete the column?', kan_cols_saved:'Columns saved', kan_cols_err:'Could not save columns',
       e_status:'Status', e_name:'Name', e_country:'Country', e_email:'Email', e_tour:'Bike model', e_package:'Rental plan', e_delivery:'Delivery location', e_insurance:'Insurance', e_payment:'Payment method', e_value:'Deal value (IDR)', e_travel:'Start date', e_savecard:'Save card', e_notes:'Internal notes', ph_notes:'Team notes…', e_savenotes:'Save notes',
       ph_pkg:'Weekly / Monthly / Annual', ph_delivery:'e.g. Canggu, hotel X', ph_insurance:'Gold / Diamond / none', ph_payment:'Card / Crypto / Transfer', ph_egmonth:'e.g. 15 August 2026',
       f_intent:'Intent', f_lastact:'Last activity', f_messages:'Messages', f_followups:'Follow-ups sent', f_after24:'after 24h', f_nextappt:'Next appointment', wa_open:'Open in WhatsApp',
@@ -1158,14 +1216,14 @@
     if(app.classList.contains('nlmode')) nlUpdateCount();
     if(app.classList.contains('invmode')) renderInvoices();
     if(app.classList.contains('flotamode')) renderFlota();
-    var inSection=['dbmode','calmode','mediamode','nlmode','dashmode','invmode','flotamode'].some(function(m){return app.classList.contains(m);});
+    if(app.classList.contains('teammode')){ renderTeamChat(); renderWaTemplates(); }
+    var inSection=['dbmode','calmode','mediamode','nlmode','dashmode','invmode','flotamode','teammode'].some(function(m){return app.classList.contains(m);});
     if(active && !inSection) open_(active);
   }
   // Reconstruye las estructuras con texto traducido según el idioma activo.
   function rebuildI18nVars(){
     LABEL = {exploring:t('i_exploring'),interested:t('i_interested'),booking:t('i_booking'),escalate:t('i_escalate')};
-    STATUS_LABEL = {'':t('s_blank'),new:t('s_new'),quoted:t('s_quoted'),won:t('s_won'),lost:t('s_lost'),noshow:t('s_noshow')};
-    ST_OPTS = [['',t('s_blank')],['new',t('s_new')],['quoted',t('s_quoted')],['won',t('s_won')],['lost',t('s_lost')],['noshow',t('s_noshow')]];
+    if(typeof rebuildKanMaps==='function') rebuildKanMaps(); // re-traduce STATUS_LABEL/ST_OPTS sin perder las columnas custom
     DB_COLS = [['hot','🔥'],['name',t('c_name')],['phone',t('c_phone')],['email',t('c_email')],['country',t('c_country')],['model',t('c_tour')],['plan',t('c_package')],['deliveryLocation',t('c_delivery')],['owner',t('c_owner')],['appt',t('c_appt')],['nextFollowUp',t('c_followup')],['startDate',t('c_travel')],['endDate',t('c_return')],['status',t('c_status')],['intent',t('c_intent')],['tags',t('c_tags')],['updatedAt',t('c_lastact')]];
   }
 
@@ -1444,7 +1502,7 @@
     if(!h.length) return '<div class="db-dim" style="font-size:12px;padding:6px 0">'+t('tl_empty')+'</div>';
     return '<div class="tl">'+h.slice(0,30).map(function(e){
       var txt=t('tl_'+e.type)||e.type;
-      if(e.type==='status') txt=t('tl_status')+': '+(STATUS_LABEL[e.to]||e.to||'—');
+      if(e.type==='status') txt=t('tl_status')+': '+esc(STATUS_LABEL[e.to]||e.to||'—');
       else if(e.type==='owner') txt=t('tl_owner')+': '+(e.to||'—');
       else if(e.type==='appt') txt=t('tl_appt')+': '+esc(e.title||'');
       else if(e.type==='tag') txt=t('tl_tag')+': '+esc(e.to||'');
@@ -1452,7 +1510,7 @@
       else if(e.type==='payment') txt=t('tl_payment')+': '+esc((e.provider||'').toUpperCase())+' — '+(money(e.amount)||(e.amount+' IDR'));
       else if(e.type==='deal_archived') txt=t('tl_deal_archived')+': '+esc(e.model||'');
       else if(e.type==='deal_new') txt=t('tl_deal_new')+': '+esc(e.model||'');
-      else if(e.type==='deal_status') txt=t('tl_deal_status')+': '+esc(e.model||'')+' → '+(STATUS_LABEL[e.to]||e.to||'—');
+      else if(e.type==='deal_status') txt=t('tl_deal_status')+': '+esc(e.model||'')+' → '+esc(STATUS_LABEL[e.to]||e.to||'—');
       return '<div class="tli"><span class="ic2">'+(TL_ICON[e.type]||'•')+'</span><div><div>'+txt+'</div><div class="tlt">'+fmtWhen(new Date(e.ts).toISOString())+'</div></div></div>';
     }).join('')+'</div>';
   }
@@ -2032,11 +2090,41 @@
     ['model','Modelo'],['plan','Plan'],['deliveryLocation','Entrega'],['owner','Owner'],['appt','Cita'],
     ['nextFollowUp','Seguimiento'],['startDate','Fecha inicio'],['endDate','Devolución'],['status','Estado'],['intent','Intención'],['tags','Tags'],['updatedAt','Últ. act.']
   ];
-  var STATUS_LABEL = {'':'—',new:'🆕 Nuevo',quoted:'💬 Cotizado',won:'✅ Ganado',lost:'❌ Perdido',noshow:'🚫 No-show'};
-  var ST_OPTS = [['','—'],['new','🆕 Nuevo'],['quoted','💬 Cotizado'],['won','✅ Ganado'],['lost','❌ Perdido'],['noshow','🚫 No-show']];
+  // ── Kanban configurable (portado de B2K) ── Las 5 columnas de fábrica del embudo de alquiler
+  // (new/quoted/won/lost/noshow — sin "followup" ni "wait_client", que son de B2K y no existen
+  // aquí) no se pueden borrar, solo renombrar/reordenar; las que se añaden son estados custom.
+  // KAN_COLS se rellena de verdad con loadKanCols() al arrancar; este array es solo el default
+  // mientras llega la respuesta del servidor (o si falla, o sin Redis en local).
+  var KAN_BUILTIN = ['new','quoted','won','lost','noshow'];
+  var KAN_COLS = KAN_BUILTIN.map(function(k){ return {key:k, label:''}; });
+  function kanColOf(key){ var m=KAN_COLS.filter(function(c){return c.key===key;}); return m[0]||null; }
+  // Etiqueta de un status: la custom si se renombró, si no la de fábrica localizada, si no
+  // (huérfano o key sin traducir) la propia key — nunca en blanco.
+  function statusLabelOf(key){
+    var col = kanColOf(key);
+    if(col && col.label) return col.label;
+    var builtin = {'':t('s_blank'), new:t('s_new'), quoted:t('s_quoted'), won:t('s_won'), lost:t('s_lost'), noshow:t('s_noshow')};
+    if(builtin[key]!=null) return builtin[key];
+    return key || t('s_blank');
+  }
+  var STATUS_LABEL = {}, ST_OPTS = [], ORDER = {};
+  function rebuildKanMaps(){
+    var map = {'': statusLabelOf('')}, opts = [['', map['']]], order = {'':0};
+    KAN_COLS.forEach(function(c, i){
+      var lbl = statusLabelOf(c.key);
+      map[c.key] = lbl; opts.push([c.key, lbl]); order[c.key] = i+1;
+    });
+    STATUS_LABEL = map; ST_OPTS = opts; ORDER = order;
+  }
+  rebuildKanMaps();
+  function loadKanCols(){
+    return api('kanban-cols').then(function(r){ return r.json(); }).then(function(cols){
+      if(Array.isArray(cols) && cols.length) KAN_COLS = cols;
+      rebuildKanMaps();
+    }).catch(function(){ /* se queda con el default de fábrica */ });
+  }
   var PKG_OPTS = ['','Bronze','Silver','Gold','Platinum','Titanium','Diamond'];
   var OWNER_OPTS = ['']; // BBM aun no ha confirmado su equipo de closers — no inventar nombres
-  var ORDER = {'':0,new:1,quoted:2,won:3,lost:4,noshow:5};
   // ponytail: sin PKG_PRICE — el precio del alquiler depende de modelo × periodo (tabla completa
   // en context-balibest.md), no es un valor fijo por plan como en el tour. leadValue siempre 0.
   // Valor del trato: lo pone el bot al cotizar ([LEAD value=...]) o el estudio a mano en la ficha.
@@ -2109,7 +2197,7 @@
     }
     if(key==='status'){
       var st=l.status||'';
-      var o=ST_OPTS.map(function(x){return '<option value="'+x[0]+'"'+(st===x[0]?' selected':'')+'>'+x[1]+'</option>';}).join('');
+      var o=ST_OPTS.map(function(x){return '<option value="'+x[0]+'"'+(st===x[0]?' selected':'')+'>'+esc(x[1])+'</option>';}).join('');
       return '<td onclick="event.stopPropagation()"><select class="db-sel st-'+(st||'none')+'" onchange="dbSetStatus(\''+l.phone+'\',this)">'+o+'</select></td>';
     }
     if(key==='plan'){
@@ -2207,6 +2295,7 @@
     document.getElementById('dbKanban').style.display = isK?'flex':'none';
     document.getElementById('dbViewTable').classList.toggle('on', !isK);
     document.getElementById('dbViewKanban').classList.toggle('on', isK);
+    document.getElementById('dbKanCols').style.display = isK?'':'none';
     if(isK){ renderKanban(); document.getElementById('dbFoot').innerHTML=''; return; }
     renderTable();
   }
@@ -2261,7 +2350,7 @@
     var sel=selectedPhones(), bar=document.getElementById('dbBulk');
     if(!sel.length){ bar.style.display='none'; bar.innerHTML=''; return; }
     bar.style.display='flex';
-    var stOpts=ST_OPTS.map(function(x){return '<option value="'+x[0]+'">'+x[1]+'</option>';}).join('');
+    var stOpts=ST_OPTS.map(function(x){return '<option value="'+x[0]+'">'+esc(x[1])+'</option>';}).join('');
     var owOpts=OWNER_OPTS.map(function(v){return '<option value="'+esc(v)+'">'+esc(v||'—')+'</option>';}).join('');
     bar.innerHTML = '<b>'+sel.length+'</b> '+t('bulk_sel')
       + '<select onchange="bulkAct(\'status\',this.value);this.value=\'\'"><option value="">'+t('bulk_status')+'</option>'+stOpts+'</select>'
@@ -2345,7 +2434,7 @@
   window.rowMenu=rowMenu; window.rowArchive=rowArchive; window.rowDelete=rowDelete;
   // ── kanban (drag & drop entre estados) ──
   function renderKanban(){
-    var cols=[['new','s_new'],['quoted','s_quoted'],['won','s_won'],['lost','s_lost'],['noshow','s_noshow']];
+    var cols=KAN_COLS.map(function(c){ return [c.key, statusLabelOf(c.key)]; });
     var data=leads.filter(function(l){ if(l.archived) return false;
       if(dbFilters.intent && (l.intent||'exploring')!==dbFilters.intent) return false;
       if(dbFilters.pkg && (l.plan||'')!==dbFilters.pkg) return false;
@@ -2363,10 +2452,10 @@
           + '<div class="km"><span>'+esc(l.plan||l.model||leadCountry(l))+'</span></div>'
           // Selector de estado (táctil): en móvil el drag&drop no funciona, así se cambia con un toque.
           + '<select class="kstatus" onclick="event.stopPropagation()" onchange="kSetStatus(event,\''+l.phone+'\')">'
-            + ST_OPTS.map(function(x){return '<option value="'+x[0]+'"'+((l.status||'')===x[0]?' selected':'')+'>'+x[1]+'</option>';}).join('')
+            + ST_OPTS.map(function(x){return '<option value="'+x[0]+'"'+((l.status||'')===x[0]?' selected':'')+'>'+esc(x[1])+'</option>';}).join('')
           + '</select></div>';
       }).join('');
-      return '<div class="kcol" data-status="'+c[0]+'" ondragover="kOver(event)" ondragleave="kLeave(event)" ondrop="kDrop(event)"><h4>'+t(c[1])+'<span class="kc">'+items.length+'</span></h4><div class="kcards">'+cards+'</div></div>';
+      return '<div class="kcol" data-status="'+c[0]+'" ondragover="kOver(event)" ondragleave="kLeave(event)" ondrop="kDrop(event)"><h4>'+esc(c[1])+'<span class="kc">'+items.length+'</span></h4><div class="kcards">'+cards+'</div></div>';
     }).join('');
   }
   var kDragPhone=null;
@@ -2386,6 +2475,52 @@
     apiPost('status',{phone:phone,status:v}).catch(function(){ alert(t('al_save')); });
   }
   window.kSetStatus=kSetStatus;
+  // ── editor de columnas del kanban (añadir / renombrar / mover / borrar las custom) ──────
+  var kcDraft = [];
+  function kcPaint(){
+    document.getElementById('kcList').innerHTML = kcDraft.map(function(c, i){
+      var builtin = KAN_BUILTIN.indexOf(c.key) >= 0;
+      var label = c.label || statusLabelOf(c.key);
+      return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">'
+        + '<input style="flex:1;margin:0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px" value="'+esc(label)+'" onchange="kcRename('+i+',this.value)">'
+        + '<button class="btn-ghost" style="padding:6px 9px" '+(i===0?'disabled':'')+' onclick="kcMove('+i+',-1)">↑</button>'
+        + '<button class="btn-ghost" style="padding:6px 9px" '+(i===kcDraft.length-1?'disabled':'')+' onclick="kcMove('+i+',1)">↓</button>'
+        + '<button class="btn-ghost" style="padding:6px 9px'+(builtin?';visibility:hidden':'')+'" onclick="kcDel('+i+')">✕</button>'
+        + '</div>';
+    }).join('');
+  }
+  function kcRename(i, v){ kcDraft[i].label = String(v||'').trim().slice(0,30); }
+  window.kcRename = kcRename;
+  function kcMove(i, d){ var j=i+d; if(j<0||j>=kcDraft.length) return; var tmp=kcDraft[i]; kcDraft[i]=kcDraft[j]; kcDraft[j]=tmp; kcPaint(); }
+  window.kcMove = kcMove;
+  function kcDel(i){
+    var c = kcDraft[i]; if(KAN_BUILTIN.indexOf(c.key) >= 0) return;
+    var n = leads.filter(function(l){ return !l.archived && (l.status||'')===c.key; }).length;
+    if(n && !confirm(t('kan_col_del_leads').replace('{n}', n))) return;
+    kcDraft.splice(i,1); kcPaint();
+  }
+  window.kcDel = kcDel;
+  function openKanColsModal(){
+    kcDraft = KAN_COLS.map(function(c){ return {key:c.key, label:c.label||''}; });
+    document.getElementById('kcErr').textContent = '';
+    kcPaint();
+    document.getElementById('kanColsModal').style.display = 'flex';
+  }
+  document.getElementById('dbKanCols').onclick = openKanColsModal;
+  document.getElementById('kcAdd').onclick = function(){
+    if(kcDraft.length >= 12) return;
+    var name = prompt(t('kan_col_name_ph'), ''); if(!name || !name.trim()) return;
+    kcDraft.push({key:'c_'+Date.now().toString(36), label:name.trim().slice(0,30)}); kcPaint();
+  };
+  document.getElementById('kcCancel').onclick = function(){ document.getElementById('kanColsModal').style.display='none'; };
+  document.getElementById('kcSave').onclick = function(){
+    apiPost('kanban-cols', {cols:kcDraft}).then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); }).then(function(o){
+      if(!o.ok) throw ((o.j&&o.j.error)||'error');
+      KAN_COLS = o.j.cols; rebuildKanMaps();
+      document.getElementById('kanColsModal').style.display='none';
+      renderKanban(); renderMetrics();
+    }).catch(function(e){ document.getElementById('kcErr').textContent = (typeof e==='string'?e:t('kan_cols_err')); });
+  };
   document.getElementById('dbViewTable').onclick=function(){ dbView='table'; renderDb(); };
   document.getElementById('dbViewKanban').onclick=function(){ dbView='kanban'; renderDb(); };
   function openFromDb(phone){
@@ -2635,8 +2770,71 @@
       .then(function(j){ btn.disabled=false; btn.textContent=orig; return j; }, function(e){ btn.disabled=false; btn.textContent=orig; });
   }
 
-  function clearModes(a){ a.classList.remove('calmode','dbmode','mediamode','nlmode','dashmode','invmode','resmode','flotamode'); }
-  function setNav(id){ ['navConv','navCal','navDb','navInv','navRes','navFlota','navMedia','navNewsletter'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
+  // ── CHAT DE EQUIPO (portado de B2K) ── identidad libre (BBM aún no tiene equipo de closers
+  // confirmado, ver OWNER_OPTS más arriba): se pide el nombre una vez y se recuerda en este
+  // navegador. Redis lista teamchat cap 500 en el servidor; aquí solo polling cada 10s mientras
+  // la vista está abierta — nunca en segundo plano.
+  var TC_WHO_KEY = 'bbm_tc_who';
+  var whoAmI = localStorage.getItem(TC_WHO_KEY) || '';
+  var tcTimer = null, tcLast = 0;
+  function ensureWho(){
+    if(whoAmI) return true;
+    var name = prompt(t('tc_who_prompt'));
+    if(!name || !name.trim()) return false;
+    whoAmI = name.trim().slice(0,24);
+    localStorage.setItem(TC_WHO_KEY, whoAmI);
+    return true;
+  }
+  function tcRow(m){
+    var mine = m.who === whoAmI;
+    return '<div class="tc-row'+(mine?' mine':'')+'"><div class="tc-who">'+esc(m.who)+'<span class="tc-when">'+fmtWhen(new Date(m.at).toISOString())+'</span></div>'+esc(m.text)+'</div>';
+  }
+  function renderTeamChat(){
+    api('teamchat').then(function(r){ return r.json(); }).then(function(list){
+      list = Array.isArray(list) ? list : [];
+      tcLast = list.length ? list[list.length-1].at : tcLast;
+      var box = document.getElementById('tcMsgs');
+      box.innerHTML = list.length ? list.map(tcRow).join('') : '<div class="db-dim" style="padding:10px;font-size:12.5px">'+t('tc_empty')+'</div>';
+      box.scrollTop = box.scrollHeight;
+    }).catch(function(){});
+  }
+  function sendTeamChat(){
+    var input = document.getElementById('tcInput'), text = (input.value||'').trim();
+    if(!text) return;
+    if(!ensureWho()) return;
+    input.value = '';
+    apiPost('teamchat', {who:whoAmI, text:text}).then(function(r){ if(!r.ok) throw 0; renderTeamChat(); }).catch(function(){ alert(t('al_save')); input.value = text; });
+  }
+  window.sendTeamChat = sendTeamChat;
+  document.getElementById('tcSend').onclick = sendTeamChat;
+  document.getElementById('tcInput').onkeydown = function(e){ if(e.key==='Enter') sendTeamChat(); };
+  function startTcPoll(){
+    stopTcPoll();
+    tcTimer = setInterval(renderTeamChat, 10000);
+  }
+  function stopTcPoll(){ if(tcTimer){ clearInterval(tcTimer); tcTimer = null; } }
+  // ── PLANTILLAS DE WHATSAPP (Meta, solo lectura, portado de B2K) ──
+  function wtplBadgeClass(status){
+    var s = String(status||'').toLowerCase();
+    return s==='approved' ? 'approved' : (s==='rejected' ? 'rejected' : 'pending');
+  }
+  function renderWaTemplates(){
+    var box = document.getElementById('wtplList');
+    box.innerHTML = '<div class="db-dim" style="padding:10px;font-size:12.5px">'+t('loading')+'</div>';
+    api('wa-templates').then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); }).then(function(o){
+      if(!o.ok) throw ((o.j&&o.j.error)||'error');
+      var list = Array.isArray(o.j) ? o.j : [];
+      box.innerHTML = list.length ? list.map(function(tpl){
+        return '<div class="wtpl-card"><div class="wtpl-hd"><span>'+esc(tpl.name)+'</span>'
+          + '<span class="wtpl-badge '+wtplBadgeClass(tpl.status)+'">'+esc(tpl.status||'—')+'</span>'
+          + '<span class="db-dim" style="font-size:11.5px">'+esc(tpl.category||'')+' · '+esc(tpl.language||'')+'</span></div>'
+          + (tpl.body ? '<div class="wtpl-body">'+esc(tpl.body)+'</div>' : '') + '</div>';
+      }).join('') : '<div class="db-dim" style="padding:10px;font-size:12.5px">'+t('wtpl_empty')+'</div>';
+    }).catch(function(e){ box.innerHTML = '<div class="db-dim" style="padding:10px;font-size:12.5px;color:var(--red)">'+t('wtpl_err')+(typeof e==='string'?': '+esc(e):'')+'</div>'; });
+  }
+
+  function clearModes(a){ a.classList.remove('calmode','dbmode','mediamode','nlmode','dashmode','invmode','resmode','flotamode','teammode'); stopTcPoll(); }
+  function setNav(id){ ['navConv','navCal','navDb','navInv','navRes','navFlota','navMedia','navNewsletter','navTeam'].forEach(function(n){ document.getElementById(n).classList.toggle('on', n===id); }); }
 
   function setUrl(p){ try{ history.replaceState(null,'',p); }catch(e){} }
   document.getElementById('navConv').onclick=function(){ clearModes(document.getElementById('app')); setNav('navConv'); setUrl('/admin'); };
@@ -2648,6 +2846,7 @@
   document.getElementById('navFlota').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('flotamode'); setNav('navFlota'); setUrl('/admin'); loadFlota(); };
   document.getElementById('navMedia').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('mediamode'); setNav('navMedia'); setUrl('/admin'); openMedia(); };
   document.getElementById('navNewsletter').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('nlmode'); setNav('navNewsletter'); setUrl('/admin'); openNewsletter(); };
+  document.getElementById('navTeam').onclick=function(){ var a=document.getElementById('app'); clearModes(a); a.classList.add('teammode'); setNav('navTeam'); setUrl('/admin'); renderTeamChat(); startTcPoll(); renderWaTemplates(); };
   document.getElementById('nlScope').onchange=function(){ nlUpdateCount(); };
   document.getElementById('nlMode').onchange=function(){ nlApplyMode(); };
   document.getElementById('nlWhen').onchange=function(){ nlUpdateCount(); };
@@ -2748,6 +2947,7 @@
     loadAppts();
     loadCanned();
     loadWaStatus();
+    loadKanCols().then(function(){ if(document.getElementById('app').classList.contains('dbmode')) renderDb(); });
     if(timer) clearInterval(timer);
     timer = setInterval(function(){
       loadWaStatus();
