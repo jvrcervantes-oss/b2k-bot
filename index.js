@@ -342,7 +342,11 @@ async function recordLead(phone, name, intent, lastMessage, lastBy) {
   const info = {
     ...prev,                                  // conserva email/package/travelDate/riders… ya capturados
     phone,
-    name: name || prev.name || "",
+    // prev.name manda: la mayoría de llamadas pasan el profileName de WhatsApp (a veces un
+    // apodo/broma, ej. "Nothing"), y un nombre ya capturado en la charla via [LEAD name=] no
+    // debe revertirse a eso en el turno siguiente. Solo se usa `name` para el alta inicial,
+    // cuando el lead todavía no tiene ninguno.
+    name: prev.name || name || "",
     intent: intent || prev.intent || "exploring",
     lastMessage: (lastMessage || "").slice(0, 200),
     lastBy: lastBy || prev.lastBy || "client", // quién mandó el último mensaje (client|bot|human) → preview del panel
@@ -1313,7 +1317,7 @@ setInterval(reminderTick, 5 * 60000); // revisar cada 5 minutos
 // Este tick busca leads "fríos" aún vendibles y les envía la plantilla de seguimiento
 // según la cadencia (FOLLOWUP_SCHEDULE = horas de frío para cada intento), con un tope.
 // Cuando el cliente responde, resetFollowup() reinicia la cadencia y el bot retoma la venta.
-const FOLLOWUP_SKIP_INTENT = new Set(["escalate"]);          // pregunta pendiente del owner
+const FOLLOWUP_SKIP_INTENT = new Set(["escalate", "urgent_service"]); // pregunta o avería pendiente del owner/equipo
 const FOLLOWUP_SKIP_STATUS = new Set(["won", "lost", "noshow"]); // ya cerrado
 async function followupTick() {
   try {
@@ -1518,7 +1522,7 @@ CLOSING — DIRECT IN THE CHAT, THIS IS A RENTAL, NOT A MULTI-DAY TOUR (read car
 - DEPOSIT VS INSURANCE — if the project's context offers both and the customer hasn't picked one yet, ask once, plainly, before totalling. What happens next depends on which they pick:
   - INSURANCE: always goes straight into the online total below, no extra step, no cash option — it's non-refundable so there's nothing to hand back in person.
   - DEPOSIT (refundable): NEVER goes through the payment link — no exceptions, don't offer it online. The refundable security deposit is always collected in CASH at handover and handed straight back in cash when the bike is returned in the same condition, so it never touches the link or the gateway fee. State it plainly (e.g. "the deposit is IDR X, in cash at pickup — you get it straight back when you return the bike in the same shape"). Leave the deposit OUT of [PAY:AMOUNT] entirely, and add \`tags=cash_deposit\` to your [LEAD] tag so the team knows to collect and refund it in person.
-- ONLINE PAYMENT FEE — Xendit and Stripe both charge a real processing fee, and it's passed to the customer, not absorbed by the business: 3% on Xendit (local Indonesian numbers, +62), 4% on Stripe (everyone else — same rule the server itself uses to pick the gateway, so your fee always matches the real one). State it plainly before closing, e.g. "that's 1,800,000 IDR, and since you're paying online there's a 4% card processing fee on top, so 1,872,000 total." This fee applies to whatever actually goes through the payment link (bike + delivery + insurance) — never to the security deposit, which is always collected in cash.
+- ONLINE PAYMENT FEE — Xendit and Stripe both charge a real processing fee, passed to the customer, not absorbed by the business. **Never work out the percentage yourself from the phone number** — read the exact figure from the "GATEWAY FEE FOR THIS CUSTOMER" line injected into this conversation (it's resolved server-side, always correct; a past chat stated "4%" for a customer who was actually charged 3%, from the model reasoning about the +62 prefix instead of reading that line). State it plainly before closing using that number, e.g. "that's 1,800,000 IDR, and since you're paying online there's a 3% card processing fee on top, so 1,854,000 total." This fee applies to whatever actually goes through the payment link (bike + delivery + insurance) — never to the security deposit, which is always collected in cash.
 - DOCUMENTS: the renter needs a valid ID/KTP/passport and a driving licence (international or Indonesian), but they show them AT HANDOVER — at the office if they collect, or to the driver if we deliver. Do NOT ask them to send photos in the chat: it adds friction right at the close and the team sees the documents in person anyway. Mention it once, plainly, so nobody turns up without a licence. If the customer sends a photo or PDF anyway, you DO receive it and it's filed to their record automatically — just confirm you got it and move on. Never claim you can read, verify or approve a document: the team checks it at handover.
 - SENDING THE PAYMENT LINK: once the customer agrees to book, first get their full name (and remind them once to bring ID + licence to the handover). Then, on a NEW LINE at the very end of your message, output [PAY:AMOUNT] where AMOUNT is the PRE-FEE total in IDR digits only — bike + delivery/pickup + insurance (NEVER the deposit — that's always cash at pickup) — the same breakdown you quoted BEFORE adding the online payment fee above. The server adds the exact 3%/4% gateway fee automatically when it creates the real charge — never include the fee yourself in this number. Example: bike 600000 + pickup 100000 → [PAY:700000] (the 1,000,000 deposit is separate, cash at pickup, NOT in this number). Use ONLY the exact numbers you already quoted them; never invent a figure.
 - When you output [PAY:AMOUNT], NEVER type a link, a URL, or the word "https" yourself — you do NOT have the real link. The server creates it and appends it automatically below your message. Just tell them you're sending the payment link now and stop. Any URL you write is FAKE and breaks the payment.
@@ -1549,12 +1553,27 @@ on), but always look for the real opportunity to get BBM the better outcome:
 - One pitch per opening, then respect the answer. If they decline once, don't repeat it or push again in
   the same conversation — direct means efficient, not pushy.
 
+ROADSIDE / BREAKDOWN / ACCIDENT — THIS PAGES A REAL HUMAN, IT'S NOT JUST A CRM TAG:
+16-sep-2026 incident: a customer stranded with a bike that wouldn't start was told "I've flagged
+this to the team, they'll reach out shortly" — three times — but nothing actually paged anyone,
+only a passive tag sat in the CRM. Don't repeat that. When a customer reports their bike broke
+down, won't start, got a flat, or they had an accident:
+- Keep doing exactly what you already do well: ask what's wrong, get their exact location, get
+  their name if you don't have it, reassure them the team is coming. That part of the flow is fine.
+- But set [INTENT:urgent_service] on THAT message (instead of exploring/interested/escalate) — this
+  is what actually sends a real alert. Without it, "the team's been notified" is a promise nobody
+  can keep. Keep using it on later messages in the same incident too; the server only pages once
+  per few hours, so tagging it again does not spam anyone.
+- Only for an actual physical/safety issue with the bike — not for "can I get a discount" or a
+  normal pricing question, those stay [INTENT:escalate] or whatever fits.
+
 INTENT TAGGING (critical):
 At the very end of your response, on a NEW LINE, add ONE intent tag:
 [INTENT:exploring] — just asking general questions, not yet committed
 [INTENT:interested] — showing real interest in a specific bike or plan
 [INTENT:booking] — wants to reserve now
 [INTENT:escalate] — you genuinely don't know the answer and cannot derive it from your context
+[INTENT:urgent_service] — breakdown/accident/stranded bike — see ROADSIDE / BREAKDOWN above
 
 LEAD DATA TAGGING — fill the CRM as you learn things (do this consistently):
 - Whenever you LEARN or CONFIRM a concrete fact about the lead, append a SILENT data tag at the very end of your message, on its own new line:
@@ -1697,8 +1716,16 @@ async function buildOfferHint() {
 // y se había quedado solo con mediaHint (sin stock, precios, delivery ni ofertas), así que toda la
 // QA hecha ahí daba falsos negativos — el bot llegaba a responder "I need the LIVE PRICING block
 // to confirm the weekly rate" porque, en el simulador, era verdad que no lo tenía.
-async function buildSystemBlocks(mediaLib) {
+async function buildSystemBlocks(mediaLib, phone) {
   const mediaHint = buildMediaHint(mediaLib);
+  // % de pasarela real para ESTE teléfono — ver activeGatewayFor arriba. Solo rental (tour usa
+  // otro flujo de pago) y solo si se conoce el teléfono (el simulador del panel puede no pasarlo).
+  const gatewayHint = BOT_VERTICAL === "rental" && phone
+    ? (() => {
+        const g = activeGatewayFor(phone);
+        return `GATEWAY FEE FOR THIS CUSTOMER: exactly ${g.pct}% (via ${g.provider}) — this is the real number for this phone, resolved server-side. If you mention the online payment fee at all, state ${g.pct}% and nothing else. Never say "3%/4%", never pick between them yourself from the phone prefix — this line already did that.`;
+      })()
+    : "";
   // Prompt caching: solo el 1er bloque lleva cache_control (system fijo, ~11.5k tok). Los demás
   // cambian cada pocos minutos y van detrás, así que refrescarlos no invalida la caché.
   const priceHint = await buildPriceHint();
@@ -1712,7 +1739,7 @@ async function buildSystemBlocks(mediaLib) {
       + "a daily rate. Tell the customer you're confirming the exact rate with the team, keep the "
       + "conversation going on everything else (model, dates, delivery), and add `tags: pricing_check`."
     : "";
-  const live = [mediaHint, await buildStockHint(), priceHint, noPrices, await buildDeliveryHint(), await buildOfferHint()];
+  const live = [mediaHint, await buildStockHint(), priceHint, noPrices, gatewayHint, await buildDeliveryHint(), await buildOfferHint()];
   return [
     { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
     { type: "text", text: dateHint() },
@@ -1981,13 +2008,30 @@ async function cancelPaymentLink(provider, refId) {
 // haga bien la multiplicación.
 const GATEWAY_FEE_PCT = { xendit: 0.03, stripe: 0.04 };
 
+// Orden de pasarela por cliente — nº indonesio (+62) → Xendit (QRIS/VA/e-wallet, lo local);
+// extranjero → Stripe (tarjeta). Compartido por createRentalPayLink y activeGatewayFor: una
+// sola fuente para "cuál se usa", así las dos nunca pueden divergir.
+function pickGatewayOrder(phone) {
+  const local = normalizePhone(phone).startsWith("62");
+  return local ? ["xendit", "stripe"] : ["stripe", "xendit"];
+}
+
+// Qué pasarela y qué % se le aplicará DE VERDAD a este cliente si reserva ahora — mismo orden de
+// fallback que createRentalPayLink (incluida la degradación si la preferida no está configurada).
+// 16-sep-2026: un cliente indonesio (Xendit, 3%) se llevó un "4%" DICHO en el chat — el cobro real
+// fue el correcto, pero el modelo falló al razonar "+62 → 3%" con el prompt en la mano. En vez de
+// pedirle que lo calcule cada vez, se le da el número ya resuelto (mismo patrón que LIVE PRICING).
+function activeGatewayFor(phone) {
+  const order = pickGatewayOrder(phone);
+  const configured = { xendit: !!XENDIT_SECRET_KEY, stripe: !!stripeClient };
+  const provider = order.find((p) => configured[p]) || order[0];
+  return { provider, pct: Math.round(GATEWAY_FEE_PCT[provider] * 100) };
+}
+
 // El bot cierra el alquiler en el chat: crea el link de pago por el importe que cotizó.
-// Elige pasarela por el cliente — nº indonesio (+62) → Xendit (QRIS/VA/e-wallet, lo local);
-// extranjero → Stripe (tarjeta). Cae a la otra si la preferida no está configurada.
 async function createRentalPayLink(amountIDR, phone) {
   const desc = `${PROJECT_NAME || "BBM"} — Rental payment`;
-  const local = normalizePhone(phone).startsWith("62");
-  const order = local ? ["xendit", "stripe"] : ["stripe", "xendit"];
+  const order = pickGatewayOrder(phone);
   for (const p of order) {
     const finalAmount = Math.round(amountIDR * (1 + GATEWAY_FEE_PCT[p]));
     const created = p === "xendit"
@@ -2250,6 +2294,29 @@ async function getLastLink(phone) {
   if (redisClient) return (await redisClient.get(`lastlink:${phone}`)) || "";
   return fallbackLastLink[phone] || "";
 }
+
+// Invoice/sesión VIVA por lead (importe+provider+refId) — 16-sep-2026, tras un caso real: el
+// modelo emitió [PAY:AMOUNT] dos veces seguidas para la misma reserva (debía usar [RESEND_LINK]
+// la 2ª vez, como pide el prompt, y no lo hizo) y el servidor, sin este guardián, creó dos
+// invoices de Xendit vivas a la vez para el mismo cliente. Esto es el backstop server-side: el
+// prompt sigue pidiendo [RESEND_LINK], pero si el modelo se equivoca otra vez, ya no genera un
+// cobro duplicado. TTL 24h, igual que `lastlink:` y que la caducidad por defecto de las invoices.
+const fallbackPendingPay = {};
+async function setPendingPay(phone, data) {
+  if (redisClient) await redisClient.setEx(`pendingpay:${phone}`, 24 * 3600, JSON.stringify(data));
+  else fallbackPendingPay[phone] = data;
+}
+async function getPendingPay(phone) {
+  if (redisClient) {
+    const raw = await redisClient.get(`pendingpay:${phone}`);
+    return raw ? JSON.parse(raw) : null;
+  }
+  return fallbackPendingPay[phone] || null;
+}
+async function clearPendingPay(phone) {
+  if (redisClient) await redisClient.del(`pendingpay:${phone}`);
+  else delete fallbackPendingPay[phone];
+}
 // Envía una foto/vídeo por URL (WhatsApp Cloud API acepta media por link público).
 async function sendWhatsAppMedia(to, item) {
   const toClean = normalizePhone(to);
@@ -2379,6 +2446,22 @@ async function notifyTelegram(text) {
   }
 }
 
+// Dedup del aviso de avería/roadside (ver [INTENT:urgent_service] en RENTAL_CLOSE_AND_TAGGING) —
+// 16-sep-2026: hasta hoy una avería solo dejaba tags en el CRM (roadside_issue/urgent/...), sin
+// avisar a nadie de verdad; un cliente varado se quedaba creyendo que "el equipo ya viene" cuando
+// nadie se había enterado. TTL corto (6h, no 30 días como notified:) a propósito: una avería es un
+// incidente puntual, no un "ya lo saben para siempre" — si el mismo lead tiene OTRA avería más
+// tarde, debe poder volver a avisar.
+const fallbackUrgentAlert = {};
+async function wasUrgentAlerted(phone) {
+  if (redisClient) return (await redisClient.get(`urgentalert:${phone}`)) === "1";
+  return !!fallbackUrgentAlert[phone];
+}
+async function markUrgentAlerted(phone) {
+  if (redisClient) await redisClient.setEx(`urgentalert:${phone}`, 6 * 3600, "1");
+  else fallbackUrgentAlert[phone] = true;
+}
+
 async function notifyOwner(kind, lead) {
   const label = kind === "booking" ? "🔔 LEAD CALIENTE — quiere reservar" : "🟡 Nuevo cliente interesado";
   const who = lead.name || lead.phone;
@@ -2496,6 +2579,7 @@ async function markLeadPaid(phone, provider, amountIDR, receiptUrl) {
   const lead = await getLead(phone);
   const prevStatus = await getStatus(phone);
   if (prevStatus !== "won") await setStatus(phone, "won");
+  await clearPendingPay(phone); // ya cobrada — un futuro [PAY] (nueva reserva) no debe toparse con esta
 
   // Si hay deals concurrentes, marca GANADO el abierto que coincide con el que se estaba
   // mostrando (el mirror del lead) — no solo el status del lead entero (deals[], ver arriba).
@@ -2898,7 +2982,7 @@ app.post("/webhook", async (req, res) => {
       thinking: { type: "adaptive" },
       output_config: { effort: "low" },
       max_tokens: 2000,
-      system: await buildSystemBlocks(mediaLib), // mismos bloques que el simulador del panel — ver buildSystemBlocks
+      system: await buildSystemBlocks(mediaLib, from), // mismos bloques que el simulador del panel — ver buildSystemBlocks
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // prompt = últimos 20; el resto es historial del panel
     });
 
@@ -2947,13 +3031,29 @@ app.post("/webhook", async (req, res) => {
       // ponytail: valida el importe en rango sano (10k–100M IDR) para que una cifra alucinada
       // no genere un cobro absurdo; fuera de rango no se cobra y se avisa en el log.
       if (payAmount && payAmount >= 10000 && payAmount <= 100000000) {
-        const link = await createRentalPayLink(payAmount, from);
-        if (link) {
-          reply = reply + "\n\n" + link.url;
-          await setLastLink(from, link.url);
-          await logEvent(from, "paylink", { provider: link.provider, amount: link.amount, preFeeAmount: payAmount, refId: link.id, url: link.url });
-          pushInquiryToERP(from).catch(() => {}); // el ERP quiere la invoice en la inquiry: no esperar al próximo mensaje
-        } else console.error(`[${PROJECT_NAME}] [PAY] sin pasarela configurada (falta STRIPE_SECRET_KEY y XENDIT_SECRET_KEY) — no se envió link a ${from}`);
+        const pending = await getPendingPay(from);
+        if (pending && pending.preFeeAmount === payAmount) {
+          // El modelo debía usar [RESEND_LINK] y no lo hizo — ya hay una invoice viva por el
+          // mismo importe: se reenvía esa, no se crea un cobro nuevo.
+          reply = reply + "\n\n" + pending.url;
+          await setLastLink(from, pending.url);
+          console.warn(`[${PROJECT_NAME}] [PAY] repetido con el mismo importe que un link ya pendiente — reenviado sin crear invoice nueva (${from})`);
+        } else {
+          if (pending) {
+            // Importe distinto al que seguía pendiente (p.ej. cambió de plan): esa invoice queda
+            // obsoleta. Se anula ANTES de crear la nueva para que nunca queden dos vivas a la vez.
+            try { await cancelPaymentLink(pending.provider, pending.refId); }
+            catch (e) { console.warn(`[${PROJECT_NAME}] No se pudo anular la invoice pendiente anterior de ${from} (${pending.provider}/${pending.refId}):`, e.message); }
+          }
+          const link = await createRentalPayLink(payAmount, from);
+          if (link) {
+            reply = reply + "\n\n" + link.url;
+            await setLastLink(from, link.url);
+            await setPendingPay(from, { preFeeAmount: payAmount, url: link.url, provider: link.provider, refId: link.id });
+            await logEvent(from, "paylink", { provider: link.provider, amount: link.amount, preFeeAmount: payAmount, refId: link.id, url: link.url });
+            pushInquiryToERP(from).catch(() => {}); // el ERP quiere la invoice en la inquiry: no esperar al próximo mensaje
+          } else console.error(`[${PROJECT_NAME}] [PAY] sin pasarela configurada (falta STRIPE_SECRET_KEY y XENDIT_SECRET_KEY) — no se envió link a ${from}`);
+        }
       } else console.warn(`[${PROJECT_NAME}] [PAY] importe inválido o fuera de rango (${payMatch[1]}) — no se cobra a ${from}`);
     } else if (resendMatch) {
       // El cliente pidió reenviar el link que YA recibió → mismo link, sin crear un cobro nuevo.
@@ -3052,6 +3152,16 @@ app.post("/webhook", async (req, res) => {
       if (rNotif.ok && rNotif.id && redisClient) await redisClient.setEx(`escmap:${rNotif.id}`, 7 * 86400, entry);
       if (!rNotif.ok) console.error(`[${PROJECT_NAME}] Error enviando escalación al owner: ${rNotif.error}`);
       console.log(`[${PROJECT_NAME}] Escalación registrada — ${profileName || from}: "${text.slice(0, 60)}"`);
+    }
+
+    // ── Avería/roadside: aviso activo, no solo un tag en el CRM ────
+    // Antes de hoy "urgent"/"roadside_issue" eran solo tags de [LEAD] — nadie recibía nada, y el
+    // bot le decía al cliente "ya avisé al equipo" sin que fuera cierto. Dedup 6h por lead (ver
+    // wasUrgentAlerted): una avería nueva del mismo lead más tarde vuelve a avisar.
+    if (intent === "urgent_service" && !(await wasUrgentAlerted(from))) {
+      await markUrgentAlerted(from);
+      await notifyTelegram(`🚨 AVERÍA / URGENTE\n${profileName || from} (+${from})\n"${text}"\n\nEl bot ya le dijo que el equipo va — contactar YA.`);
+      console.log(`[${PROJECT_NAME}] Aviso de avería enviado — ${profileName || from}`);
     }
 
     // ── Aviso al owner: interesado (1ª vez) y caliente (1ª vez) ────
@@ -3253,6 +3363,10 @@ app.post("/admin/api/invoice/cancel", async (req, res) => {
     ev.cancelled = true;
     ev.cancelledAt = Date.now();
     await updateLeadFields(phone, { history });
+    // Si el link que se acaba de anular a mano es el que el bot seguía considerando "vivo",
+    // liberar el guardián — si no, un [PAY] futuro se quedaría reenviando un link ya muerto.
+    const pending = await getPendingPay(phone);
+    if (pending && pending.refId === ev.refId) await clearPendingPay(phone);
     res.json({ ok: true });
   } catch (e) {
     console.error(`[${PROJECT_NAME}] /admin/api/invoice/cancel error:`, e.response ? JSON.stringify(e.response.data) : e.message);
@@ -3656,7 +3770,7 @@ app.get("/admin/api/bot", async (req, res) => {
 // newsletter, dato legal), nl_scheduled, bot_enabled. `sim:*` (simulador) cae dentro de `conv:*`.
 const WIPE_PATTERNS = [
   "conv:*", "lead:*", "notes:*", "status:*", "paused:*", "waiting:*", "inbound:*",
-  "followup:*", "notified:*", "lastlink:*", "doc:*", "escmap:*", "wamid:*",
+  "followup:*", "notified:*", "lastlink:*", "pendingpay:*", "urgentalert:*", "doc:*", "escmap:*", "wamid:*",
   "paidevt:*", "reminded:*", "appt:*",
 ];
 const WIPE_SINGLE = ["leads_index", "appts_index", "esc_queue"];
@@ -3881,7 +3995,7 @@ app.post("/admin/api/archive", async (req, res) => {
 // ── CRM: borrar definitivamente un lead (irreversible) ──
 async function deleteLead(phone) {
   if (redisClient) {
-    await redisClient.del(`lead:${phone}`, `notes:${phone}`, `status:${phone}`, `conv:${phone}`, `paused:${phone}`, `waiting:${phone}`, `inbound:${phone}`, `followup:${phone}`, `notified:${phone}`, `lastlink:${phone}`);
+    await redisClient.del(`lead:${phone}`, `notes:${phone}`, `status:${phone}`, `conv:${phone}`, `paused:${phone}`, `waiting:${phone}`, `inbound:${phone}`, `followup:${phone}`, `notified:${phone}`, `lastlink:${phone}`, `pendingpay:${phone}`, `urgentalert:${phone}`);
     await redisClient.zRem("leads_index", phone);
   } else {
     delete fallbackLeads[phone]; delete fallbackNotes[phone]; delete fallbackStatus[phone];

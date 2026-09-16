@@ -53,7 +53,7 @@
   body.dark .btn-ghost{background:var(--card);color:var(--ink-soft);border-color:var(--line)}
   body.dark .db-sel,body.dark .db-filters select,body.dark .db-bulk select,body.dark .db-bulk button{background:#0d1420;color:var(--ink)}
   body.dark .db-tag{background:rgba(255,255,255,.08)}
-  body.dark .it-booking{color:#f87171}body.dark .it-interested{color:#fbbf24}body.dark .it-exploring{color:#4ade80}body.dark .it-escalate{color:#9aa6bd}
+  body.dark .it-booking{color:#f87171}body.dark .it-interested{color:#fbbf24}body.dark .it-exploring{color:#4ade80}body.dark .it-escalate{color:#9aa6bd}body.dark .it-urgent_service{color:#f87171}
   body.dark .st-lost{color:#f87171}body.dark .st-noshow{color:#9aa6bd}body.dark .pk-none,body.dark .st-none{color:#9aa6bd}
   /* colores de métricas (clases con variante oscura) */
   .m-new{color:#2563eb}.m-quoted{color:#b45309}.m-won{color:#15803d}.m-lost{color:#dc2626}.m-rev{color:#15803d}
@@ -169,6 +169,7 @@
   .i-interested{background:var(--amber-soft);color:var(--amber)}
   .i-booking{background:var(--red-soft);color:var(--red)}
   .i-escalate{background:var(--violet-soft);color:var(--violet)}
+  .i-urgent_service{background:var(--red-soft);color:var(--red)}
 
   /* chat column */
   #chat{display:flex;flex-direction:column;min-width:0;min-height:0;background:#f0f2f5}
@@ -351,6 +352,7 @@
   .it-interested{background:rgba(207,138,23,.15);color:var(--amber)}
   .it-exploring{background:rgba(20,158,106,.13);color:var(--green)}
   .it-escalate{background:rgba(109,84,240,.13);color:var(--violet)}
+  .it-urgent_service{background:rgba(224,81,70,.13);color:var(--red)}
   .st-new{border-color:rgba(47,102,245,.55);background:rgba(47,102,245,.10);color:var(--accent)}
   .st-quoted{border-color:rgba(217,119,6,.55);background:rgba(217,119,6,.12);color:#b45309}
   .st-won{border-color:rgba(22,163,74,.55);background:rgba(22,163,74,.13);color:#15803d}
@@ -1090,7 +1092,7 @@
       m_canned:'Respuestas rápidas', m_canned_help:'Una por línea · formato', m_canned_fmt:'Título | texto', btn_cancel:'Cancelar', btn_save:'Guardar',
       m_appt:'Nueva cita', m_appt_edit:'Editar cita', l_lead:'Lead', ph_lead:'Nombre o teléfono (opcional)', l_datetime:'Fecha y hora', l_title:'Título', ph_call:'Llamada con…', btn_save_appt:'Guardar cita',
       l_closer:'Closer asignado', l_notes_appt:'Notas de la cita', ph_notes_appt:'Contexto de lo hablado, para el closer…', btn_delete_appt:'Eliminar cita', btn_close:'Cerrar', btn_edit_appt:'Editar cita', av_nolead:'Sin lead', av_noone:'Sin asignar', av_nonotes:'Sin notas',
-      i_exploring:'explorando', i_interested:'interesado', i_booking:'reserva', i_escalate:'duda',
+      i_exploring:'explorando', i_interested:'interesado', i_booking:'reserva', i_escalate:'duda', i_urgent_service:'avería',
       c_name:'Nombre', c_phone:'WhatsApp', c_email:'Email', c_country:'País', c_tour:'Modelo', c_package:'Plan', c_delivery:'Entrega', c_travel:'Fecha inicio', c_status:'Estado', c_intent:'Intención', c_lastact:'Últ. act.', c_appt:'Cita',
       s_blank:'—', s_new:'🆕 Nuevo', s_quoted:'💬 Cotizado', s_won:'✅ Ganado', s_lost:'❌ Perdido', s_noshow:'🚫 No-show',
       nav_team:'Equipo', team_hd:'Equipo', tc_hd:'Chat del equipo', tc_ph:'Escribe un mensaje para el equipo…', tc_send:'Enviar', tc_who_prompt:'¿Cómo te llamas? (se ve en el chat del equipo)', tc_empty:'Aún no hay mensajes.',
@@ -1109,7 +1111,7 @@
       ft_loading:'Cargando…', ft_err:'Error al cargar la flota.', ft_total:'Total', ft_available:'Disponibles', ft_rented:'Alquiladas', ft_maint:'Mantenimiento', ft_retired:'Retiradas', ft_none_units:'Sin unidades que coincidan.', ft_none_models:'Sin modelos que coincidan.', ft_models:'Modelos', ft_readonly:'Solo lectura — se edita en el sistema de BBM', ft_source:'Fuente: Supabase', ft_per_day:'/día', ft_per_month:'/mes',
       ft_th_model:'Modelo', ft_th_code:'Código', ft_th_plate:'Matrícula', ft_th_status:'Estado', ft_th_condition:'Condición', ft_th_daily:'Diario', ft_th_weekly:'Semanal', ft_th_fortnight:'Quincena', ft_th_3wlow:'3 sem (baja)', ft_th_3whigh:'3 sem (alta)', ft_th_monthly:'Mensual', ft_th_biannual:'Semestral', ft_th_yearly:'Anual', ft_th_offer:'Oferta',
       ft_offer_active:'Activa', ft_offer_save:'Guardar', ft_offer_saved:'Guardado ✓', ft_offer_bad_pct:'El descuento debe ser un % entre 1 y 90.', ft_offer_err:'No se pudo guardar la oferta.',
-      hw_waiting:'esperando respuesta', hw_booking:'quiere reservar', hw_escalate:'pide humano', hw_interested:'interesado', hw_overdue:'seguimiento vencido', hw_priority:'Prioridad', csv_filename:'clientes_',
+      hw_waiting:'esperando respuesta', hw_booking:'quiere reservar', hw_escalate:'pide humano', hw_urgent_service:'avería / urgente', hw_interested:'interesado', hw_overdue:'seguimiento vencido', hw_priority:'Prioridad', csv_filename:'clientes_',
       al_send:'No se pudo enviar: ', al_send2:'\n\nSi han pasado +24h desde el último mensaje del cliente, WhatsApp no permite texto libre (haría falta plantilla).', cfm_cancel:'¿Cancelar esta cita?',
       notify_wait:'🔔 Lead por responder', notify_hot:'🔴 Lead caliente (reserva)',
       view_table:'Tabla', view_kanban:'Kanban',
@@ -1145,7 +1147,7 @@
       m_canned:'Quick replies', m_canned_help:'One per line · format', m_canned_fmt:'Title | text', btn_cancel:'Cancel', btn_save:'Save',
       m_appt:'New appointment', m_appt_edit:'Edit appointment', l_lead:'Lead', ph_lead:'Name or phone (optional)', l_datetime:'Date & time', l_title:'Title', ph_call:'Call with…', btn_save_appt:'Save appointment',
       l_closer:'Assigned closer', l_notes_appt:'Appointment notes', ph_notes_appt:'What was discussed, for the closer…', btn_delete_appt:'Delete appointment', btn_close:'Close', btn_edit_appt:'Edit appointment', av_nolead:'No lead', av_noone:'Unassigned', av_nonotes:'No notes',
-      i_exploring:'exploring', i_interested:'interested', i_booking:'booking', i_escalate:'question',
+      i_exploring:'exploring', i_interested:'interested', i_booking:'booking', i_escalate:'question', i_urgent_service:'breakdown',
       c_name:'Name', c_phone:'WhatsApp', c_email:'Email', c_country:'Country', c_tour:'Model', c_package:'Plan', c_delivery:'Delivery', c_travel:'Start date', c_status:'Status', c_intent:'Intent', c_lastact:'Last act.', c_appt:'Call',
       s_blank:'—', s_new:'🆕 New', s_quoted:'💬 Quoted', s_won:'✅ Won', s_lost:'❌ Lost', s_noshow:'🚫 No-show',
       nav_team:'Team', team_hd:'Team', tc_hd:'Team chat', tc_ph:'Write a message for the team…', tc_send:'Send', tc_who_prompt:'What is your name? (shown in the team chat)', tc_empty:'No messages yet.',
@@ -1164,7 +1166,7 @@
       ft_loading:'Loading…', ft_err:'Error loading fleet.', ft_total:'Total', ft_available:'Available', ft_rented:'Rented', ft_maint:'Maintenance', ft_retired:'Retired', ft_none_units:'No matching units.', ft_none_models:'No matching models.', ft_models:'Models', ft_readonly:'Read-only — edited in the BBM management system', ft_source:'Source: Supabase', ft_per_day:'/day', ft_per_month:'/month',
       ft_th_model:'Model', ft_th_code:'Code', ft_th_plate:'Plate', ft_th_status:'Status', ft_th_condition:'Condition', ft_th_daily:'Daily', ft_th_weekly:'Weekly', ft_th_fortnight:'Fortnight', ft_th_3wlow:'3wk (low)', ft_th_3whigh:'3wk (high)', ft_th_monthly:'Monthly', ft_th_biannual:'Biannual', ft_th_yearly:'Yearly', ft_th_offer:'Offer',
       ft_offer_active:'Active', ft_offer_save:'Save', ft_offer_saved:'Saved ✓', ft_offer_bad_pct:'Discount must be a % between 1 and 90.', ft_offer_err:'Could not save the offer.',
-      hw_waiting:'awaiting reply', hw_booking:'wants to book', hw_escalate:'asks for human', hw_interested:'interested', hw_overdue:'follow-up overdue', hw_priority:'Priority', csv_filename:'clients_',
+      hw_waiting:'awaiting reply', hw_booking:'wants to book', hw_escalate:'asks for human', hw_urgent_service:'breakdown / urgent', hw_interested:'interested', hw_overdue:'follow-up overdue', hw_priority:'Priority', csv_filename:'clients_',
       al_send:"Couldn't send: ", al_send2:"\n\nIf it's been 24h+ since the customer's last message, WhatsApp blocks free text (a template is required).", cfm_cancel:'Cancel this appointment?',
       notify_wait:'🔔 Lead to reply', notify_hot:'🔴 Hot lead (booking)',
       view_table:'Table', view_kanban:'Kanban',
@@ -1222,7 +1224,7 @@
   }
   // Reconstruye las estructuras con texto traducido según el idioma activo.
   function rebuildI18nVars(){
-    LABEL = {exploring:t('i_exploring'),interested:t('i_interested'),booking:t('i_booking'),escalate:t('i_escalate')};
+    LABEL = {exploring:t('i_exploring'),interested:t('i_interested'),booking:t('i_booking'),escalate:t('i_escalate'),urgent_service:t('i_urgent_service')};
     if(typeof rebuildKanMaps==='function') rebuildKanMaps(); // re-traduce STATUS_LABEL/ST_OPTS sin perder las columnas custom
     DB_COLS = [['hot','🔥'],['name',t('c_name')],['phone',t('c_phone')],['email',t('c_email')],['country',t('c_country')],['model',t('c_tour')],['plan',t('c_package')],['deliveryLocation',t('c_delivery')],['owner',t('c_owner')],['appt',t('c_appt')],['nextFollowUp',t('c_followup')],['startDate',t('c_travel')],['endDate',t('c_return')],['status',t('c_status')],['intent',t('c_intent')],['tags',t('c_tags')],['updatedAt',t('c_lastact')]];
   }
@@ -1322,7 +1324,7 @@
   var PALETTE=['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d'];
   function color(s){ var h=0; s=s||''; for(var i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return PALETTE[h%PALETTE.length]; }
   function ago(ts){ var s=Math.floor((Date.now()-ts)/1000); if(s<60)return t('ago_now'); if(s<3600)return Math.floor(s/60)+'m'; if(s<86400)return Math.floor(s/3600)+'h'; var d=Math.floor(s/86400); return d===1?t('ago_yest'):d+'d'; }
-  var LABEL={exploring:'explorando',interested:'interesado',booking:'reserva',escalate:'duda'};
+  var LABEL={exploring:'explorando',interested:'interesado',booking:'reserva',escalate:'duda',urgent_service:'avería'};
 
   // ── render list ──
   function render(){
@@ -1349,7 +1351,7 @@
     if(!f.length){ box.innerHTML = '<div class="empty">'+(leads.length?t('empty_results'):t('empty_convs'))+'</div>'; return; }
     box.innerHTML = f.map(function(l){
       var c = color(l.name||l.phone), it = l.intent||'exploring';
-      var dotc = it==='booking'?'var(--red)':it==='interested'?'var(--amber)':it==='escalate'?'#9ca3af':'var(--green)';
+      var dotc = it==='urgent_service'?'var(--red)':it==='booking'?'var(--red)':it==='interested'?'var(--amber)':it==='escalate'?'#9ca3af':'var(--green)';
       var pill = l.waiting ? '<span class="wpill">NUEVO</span>' : '<span class="dot" style="background:'+dotc+'"></span>';
       var pre = l.lastBy==='bot' ? '<span class="pre">'+t('pre_bot')+'</span>' : l.lastBy==='human' ? '<span class="pre">'+t('pre_you')+'</span>' : '';
       return '<div class="row'+(l.phone===active?' active':'')+(l.waiting?' wait':'')+'" onclick="open_(\''+l.phone+'\')">'
@@ -2135,7 +2137,7 @@
     var s=0;
     if(l.waiting) s+=150;                                  // cliente escribió y espera respuesta: domina siempre (techo no-waiting = 145)
     var it=l.intent||'exploring';
-    s += it==='booking'?60 : it==='escalate'?50 : it==='interested'?35 : 0;
+    s += it==='urgent_service'?100 : it==='booking'?60 : it==='escalate'?50 : it==='interested'?35 : 0;
     if(isOverdue(l)) s+=25;                                // seguimiento vencido
     var h=(Date.now()-(l.updatedAt||0))/3600000;           // recencia: hasta +20 en las últimas 48h
     if(h>=0 && h<48) s += 20*(1-h/48);
@@ -2143,7 +2145,7 @@
   }
   function hotWhy(l,s){
     var r=[]; if(l.waiting) r.push(t('hw_waiting'));
-    var it=l.intent||''; if(it==='booking') r.push(t('hw_booking')); else if(it==='escalate') r.push(t('hw_escalate')); else if(it==='interested') r.push(t('hw_interested'));
+    var it=l.intent||''; if(it==='urgent_service') r.push(t('hw_urgent_service')); else if(it==='booking') r.push(t('hw_booking')); else if(it==='escalate') r.push(t('hw_escalate')); else if(it==='interested') r.push(t('hw_interested'));
     if(isOverdue(l)) r.push(t('hw_overdue'));
     return t('hw_priority')+' '+s+(r.length?' · '+r.join(' · '):'');
   }
@@ -2332,7 +2334,7 @@
     var countries={}, tags={};
     leads.forEach(function(l){ var cn=leadCountry(l); if(cn) countries[cn]=1; if(Array.isArray(l.tags)) l.tags.forEach(function(x){tags[x]=1;}); });
     function sel(id,cur,opts,ph){ return '<select onchange="dbSetFilter(\''+id+'\',this.value)"><option value="">'+ph+'</option>'+opts.map(function(o){return '<option value="'+esc(o[0])+'"'+(cur===o[0]?' selected':'')+'>'+esc(o[1])+'</option>';}).join('')+'</select>'; }
-    var html = sel('intent',dbFilters.intent,[['exploring',t('i_exploring')],['interested',t('i_interested')],['booking',t('i_booking')],['escalate',t('i_escalate')]],t('f_all_intent'))
+    var html = sel('intent',dbFilters.intent,[['exploring',t('i_exploring')],['interested',t('i_interested')],['booking',t('i_booking')],['escalate',t('i_escalate')],['urgent_service',t('i_urgent_service')]],t('f_all_intent'))
       + sel('pkg',dbFilters.pkg,PKG_OPTS.filter(function(p){return p;}).map(function(p){return [p,p];}),t('f_all_pkg'))
       + sel('source',dbFilters.source,[['meta','Meta'],['chat','Chat']],t('f_all_source'))
       + sel('country',dbFilters.country,Object.keys(countries).sort().map(function(c){return [c,c];}),t('f_all_country'));
