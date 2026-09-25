@@ -6,7 +6,7 @@
   "keyFields": ["email", "country", "interest", "inSumba", "visitDate", "stayingAt"],
   "enrichTextFields": ["name", "email", "country", "interest", "inSumba", "visitDate", "stayingAt", "leavesOn"],
   "enrichNumberFields": [],
-  "enrichSystem": "You extract CRM fields from a WhatsApp chat for a beachfront land project in Sumba, Indonesia. Return ONLY a compact JSON object - no prose, no code fences. Keys: name, email, country, interest (\"land\" | \"villa\" | \"info\"), inSumba (\"yes\" | \"no\" | null - is the lead physically in Sumba right now), visitDate (free text, when they can visit the site, e.g. \"tomorrow morning\"), stayingAt (free text, hotel or area where they are staying), leavesOn (free text, when they leave the island). Use null for anything not clearly stated by the customer. Never guess.",
+  "enrichSystem": "You extract CRM fields from a WhatsApp chat for a beachfront land project in Sumba, Indonesia. Fields to fill: name, email, country, interest (\"land\" | \"villa\" | \"info\"), inSumba (\"yes\" | \"no\" | null - is the lead physically in Sumba right now), visitDate (free text, when they can visit the site, e.g. \"tomorrow morning\"), stayingAt (free text, hotel or area where they are staying), leavesOn (free text, when they leave the island). Use null for anything not clearly stated by the customer. Never guess.",
   "canned": [
     { "title": "Saludo", "text": "Hi! Thanks for reaching out about Sumba Hills. Are you on the island right now?" },
     { "title": "Proponer visita", "text": "If you're here, the best thing is to come and see the land yourself. When are you free, and where are you staying?" },
