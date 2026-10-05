@@ -180,7 +180,7 @@ export function createErpConfig(o = {}) {
     const ficha = limpia(d.ficha.nombre_negocio);
     const raw = d.cliente && typeof d.cliente === "object" ? d.cliente.nombre_negocio : undefined;
     if (raw === undefined || raw === null) return ficha;
-    const alta = typeof raw === "string" ? limpia(raw) : "";
+    const alta = typeof raw === "string" ? limpia(raw).replace(/\s+/g, " ").slice(0, 80).trim() : ""; // una sola línea y con el tope de la ficha (80): la base aún no valida este campo
     if (!alta) { warnOnceKey("alta-vacio", `el nombre del alta llega vacío o con forma inesperada: se usa el de la ficha ("${ficha}")`); return ficha; }
     if (norm(alta) !== norm(ficha)) {
       const k = alta + " " + ficha;
