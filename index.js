@@ -2269,6 +2269,10 @@ app.get("/admin/api/health", async (req, res) => {
     if (redisClient) count = await redisClient.zCard("leads_index");
     else count = Object.keys(fallbackLeads).length;
   } catch (e) { /* best-effort */ }
+  // Modo ERP: la vista del interruptor solo se refresca cuando alguien la usa (un mensaje). Sin esto, /health decía lo que se leyó la última vez
+  // (en un servicio recién creado o sin tráfico, «apagado» tras encenderlo), y el alta automática no podía comprobar que el motor ve el módulo.
+  // resolve() respeta la caché (30 s) y un solo fetch a la vez; no es un uso del contexto para responder (forPrompt=false: sin línea de RESPALDO).
+  if (ERP_MODE) { try { await ERP.resolve(); } catch (e) { /* la vista queda como estaba */ } }
   res.json({ storage: redisClient ? "redis" : "ram", leads: count, ...(ERP_MODE ? { erp: ERP.status() } : {}) });
 });
 
