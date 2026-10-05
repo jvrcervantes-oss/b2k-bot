@@ -128,6 +128,7 @@ export function createErpConfig(o = {}) {
   let last = null;        // { at, data } último dato BUENO del ERP (también «apagado»: es un dato bueno)
   let inflight = null;
   let lastWarnAt = 0;
+  let lastFatal = false;  // el último intento fue un 401/403: durante el reintento diferido tampoco se sirve la caché
   let failAt = 0;         // último intento fallido: no se vuelve a probar durante retryMs (si no, cada mensaje espera el timeout entero)
   let lastView = null;    // lo último que se resolvió, para /admin/api/health sin tocar la red
 
@@ -189,16 +190,17 @@ export function createErpConfig(o = {}) {
       view = desdeDato(last.data, "erp", last.at);
     } else {
       const diferido = failAt && t - failAt < retryMs;
-      const r = diferido ? { ok: false, why: "reintento_diferido" } : await refresh();
+      const r = diferido ? { ok: false, why: "reintento_diferido", fatal: lastFatal } : await refresh();
       if (r.ok) {
-        failAt = 0;
+        failAt = 0; lastFatal = false;
         last = { at: now(), data: r.data };
         view = desdeDato(last.data, "erp", last.at);
       } else if (r.fatal) {
-        failAt = now();
+        if (!diferido) failAt = now();
+        lastFatal = true;
         view = { mode: "mute", reason: "secreto_rechazado", source: "erp", version: null, at: null };
       } else if (!diferido) {
-        failAt = now();
+        failAt = now(); lastFatal = false;
       }
       if (view) { /* resuelto con dato fresco */ }
       else if (last && t - last.at <= maxStaleMs) {
