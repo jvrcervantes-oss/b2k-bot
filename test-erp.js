@@ -11,7 +11,7 @@ import { spawn, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createErpConfig, renderFicha, erpSystemPrompt, isYes, isStop, isPersonRequest, detectLang, aiNotice } from "./erp-config.js";
+import { createErpConfig, renderFicha, erpSystemPrompt, isYes, isStop, isPersonRequest, detectLang, aiNotice, consentAsk } from "./erp-config.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BASE_SHA = "2056488"; // origin/main antes de S2
@@ -69,9 +69,9 @@ console.log("A) erp-config.js");
   ok(isPersonRequest("PERSONA") && isPersonRequest("Human!") && isPersonRequest("orang") && !isPersonRequest("somos 2 personas") && !isPersonRequest("una persona mayor"), "PERSONA solo como mensaje entero (no «somos 2 personas»)");
   ok(isStop("stop") && isStop("BERHENTI") && isStop("Baja") && !isStop("no me des de baja") && !isStop("bajar el precio"), "STOP/BERHENTI/BAJA solo como mensaje entero");
   eq([detectLang("Hola, cuánto cuesta alquilar una moto?"), detectLang("Halo, berapa harga sewa motor?"), detectLang("Hi, how much is it?"), detectLang("Bonjour"), detectLang("???")], ["es", "id", "en", "en", "en"], "idioma del aviso: ES/ID/EN, cualquier otro EN");
-  const n = aiNotice({ lang: "es", nombre: "Casa Test", url: "https://priv.example/x", withConsent: true });
-  ok(n.startsWith("Hola, soy el asistente con inteligencia artificial de Casa Test.") && n.includes("PERSONA") && n.includes("https://priv.example/x") && n.includes("Responde SÍ"), "aviso de IA ES con oferta de persona, enlace y pregunta de consentimiento (textos de Legal)");
-  ok(!aiNotice({ lang: "xx", nombre: "N", url: "u", withConsent: false }).includes("Responde"), "sin plantillas en uso el aviso no pregunta por consentimiento");
+  const n = aiNotice({ lang: "es", nombre: "Casa Test", url: "https://priv.example/x" });
+  ok(n.startsWith("Hola, soy el asistente con inteligencia artificial de Casa Test.") && n.includes("PERSONA") && n.includes("https://priv.example/x") && !n.includes("Responde SÍ"), "aviso de IA ES con oferta de persona y enlace (textos de Legal), SIN la pregunta de consentimiento");
+  ok(consentAsk({ lang: "es", nombre: "Casa Test" }).startsWith("¿Quieres que Casa Test te escriba") && consentAsk({ lang: "id", nombre: "X" }).includes("Balas YA"), "la pregunta 2.4 es un texto aparte (ES/ID)");
 }
 {
   // sin variables → modo de siempre
@@ -141,7 +141,11 @@ console.log("A) erp-config.js");
 {
   const e1 = fakeErp(); e1.mode = "401"; const a = mk(e1);
   const v = await a.cfg.resolve();
-  ok(v.mode === "mute" && a.lg.l.error.some((m) => m.includes("SECRETO RECHAZADO")), "un 401 se trata como inalcanzable pero con log ruidoso");
+  ok(v.mode === "mute" && a.lg.l.error.some((m) => m.includes("SECRETO RECHAZADO")), "un 401 sin caché: solo personas y con log ruidoso");
+  const e4 = fakeErp(); const d = mk(e4);
+  await d.cfg.resolve(); e4.mode = "401"; d.adv(31000);
+  const w4 = await d.cfg.resolve();
+  ok(w4.mode === "mute" && w4.reason === "secreto_rechazado", "un 401 NO se tapa con la caché: rotar el secreto corta el bot");
   const e2 = fakeErp(); e2.mode = "bad"; const b = mk(e2);
   eq((await b.cfg.resolve()).mode, "mute", "una respuesta con forma inesperada no se usa como contexto");
   const e3 = fakeErp(); const c = mk(e3, { privacyUrl: "" });
@@ -315,14 +319,12 @@ const P1 = "34633333333", P2 = "34644444444";
   const out = await e.api("POST", "/admin/api/outreach", { phone: P1 });
   ok(out.status === 502 && /apagado/.test(out.json.error), "una plantilla de outreach desde el panel queda frenada con el módulo apagado");
   const mail = await e.api("POST", "/admin/api/newsletter", { subject: "s", body: "b", testTo: "x@example.com" });
-  ok(mail.status === 502 && /solo personas/.test(mail.json.error) && !e.net().some((n) => /brevo/.test(n.url)), "el correo también queda frenado (y no se llama a Brevo)");
+  ok(mail.status === 200 && e.net().some((n) => /brevo/.test(n.url)), "el correo MANUAL del panel (vía humana) no se frena; el tick automático de newsletters sí");
   // se enciende → vuelve a contestar, y el correo pasa
   erpS.data = DATO(3); await sleep(1300);
   await e.msg(P2, "Hola, ¿tenéis motos?");
   await until(() => e.texts().some((x) => x.to === P2 && x.text.startsWith("Respuesta")), 10000, "responde tras encender");
   ok(true, "encendido de nuevo → el bot contesta");
-  const mail2 = await e.api("POST", "/admin/api/newsletter", { subject: "s", body: "b", testTo: "x@example.com" });
-  ok(mail2.status === 200 && e.net().some((n) => /brevo/.test(n.url)), "encendido: el correo sale");
   await e.stop();
 }
 
@@ -380,12 +382,13 @@ const P1 = "34633333333", P2 = "34644444444";
   const e = await engine("index.js", ERP_ENV({ FOLLOWUP_TEMPLATE_NAME: "seg", INTRO_TEMPLATE_NAME: "intro" }));
   const C = "34655555555";
   await e.msg(C, "ya"); // «ya» sin pregunta previa no es un sí
-  await until(() => e.texts().length >= 2, 10000, "aviso + respuesta");
-  ok(e.texts()[0].text.includes("Reply YES"), "con plantillas en uso, el aviso de IA lleva la pregunta de consentimiento (Legal 2.4)");
+  await until(() => e.texts().length >= 3, 10000, "aviso + respuesta + pregunta");
+  const tt = e.texts();
+  ok(!tt[0].text.includes("Reply YES") && tt[2].text.includes("Reply YES") && tt[1].text.startsWith("Respuesta"), "con plantillas en uso la pregunta 2.4 sale como mensaje PROPIO y ÚLTIMO (tras aviso y respuesta)");
   let r = await e.api("POST", "/admin/api/outreach", { phone: C });
   ok(r.status === 502 && /SÍ/.test(r.json.error) && e.templates().length === 0, "sin SÍ registrado la plantilla NO sale («ya» sin pregunta no cuenta)");
   await e.msg(C, "Yes!");
-  await until(() => e.texts().length >= 3, 10000, "respuesta al SÍ");
+  await until(() => e.texts().length >= 4, 10000, "respuesta al SÍ");
   ok(chatReqs().pop().system.some((b) => /agreed to receive follow-up/.test(b.text)), "el SÍ a la pregunta 2.4 se registra (y la IA lo agradece en una línea)");
   r = await e.api("POST", "/admin/api/outreach", { phone: C });
   ok(r.status === 200 && e.templates().some((t) => t.to === C && t.name === "intro"), "con SÍ registrado la plantilla sale");
@@ -395,7 +398,13 @@ const P1 = "34633333333", P2 = "34644444444";
   r = await e.api("POST", "/admin/api/outreach", { phone: C });
   ok(r.status === 502 && e.templates().length === 1, "STOP retira el SÍ: la plantilla vuelve a quedar frenada");
   eq(chatReqs().length, nA, "STOP no se contesta con IA");
-  // el owner no necesita SÍ
+  // un «yes» que contesta a OTRA pregunta del bot no es consentimiento
+  const C2 = "34688888888";
+  await e.msg(C2, "Hello, price?"); await until(() => e.texts().filter((x) => x.to === C2).length >= 3, 10000, "C2 recibe las tres");
+  await e.msg(C2, "tell me more"); await until(() => e.texts().filter((x) => x.to === C2).length >= 4, 10000, "C2 segunda");
+  await e.msg(C2, "yes"); await until(() => e.texts().filter((x) => x.to === C2).length >= 5, 10000, "C2 tercera");
+  r = await e.api("POST", "/admin/api/outreach", { phone: C2 });
+  ok(r.status === 502, "un «yes» suelto a otra pregunta del bot NO registra consentimiento");
   await e.stop();
 }
 
@@ -406,9 +415,9 @@ const P1 = "34633333333", P2 = "34644444444";
   const clock = path.join(HERE, "_test_clock.txt"); fs.writeFileSync(clock, "0");
   const e = await engine("index.js", ERP_ENV({ FOLLOWUP_TEMPLATE_NAME: "seg", FOLLOWUP_SCHEDULE: "24,72", TEST_FAST_TICKS: "1", TEST_CLOCK_FILE: clock }));
   const Y = "34666666666", N = "34677777777";
-  await e.msg(Y, "Hello, price please?"); await until(() => e.texts().filter((x) => x.to === Y).length >= 2, 10000, "Y recibe aviso+respuesta");
-  await e.msg(Y, "yes"); await until(() => e.texts().filter((x) => x.to === Y).length >= 3, 10000, "Y: SÍ registrado");
-  await e.msg(N, "Hello, price please?"); await until(() => e.texts().filter((x) => x.to === N).length >= 2, 10000, "N recibe aviso+respuesta");
+  await e.msg(Y, "Hello, price please?"); await until(() => e.texts().filter((x) => x.to === Y).length >= 3, 10000, "Y recibe aviso+respuesta+pregunta");
+  await e.msg(Y, "yes"); await until(() => e.texts().filter((x) => x.to === Y).length >= 4, 10000, "Y: SÍ registrado");
+  await e.msg(N, "Hello, price please?"); await until(() => e.texts().filter((x) => x.to === N).length >= 3, 10000, "N recibe aviso+respuesta+pregunta");
   eq(e.templates().length, 0, "recién escritos: ningún seguimiento");
   fs.writeFileSync(clock, String(48 * 3600 * 1000)); // los dos llevan 48 h fríos
   await until(() => e.templates().length >= 1, 12000, "el tick de seguimiento");

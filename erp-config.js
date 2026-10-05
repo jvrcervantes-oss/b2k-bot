@@ -102,11 +102,12 @@ const CONSENT = {
   id: "Apakah Anda ingin {n} mengirim pengingat atau penawaran lewat sini? Balas YA untuk setuju. Anda dapat berhenti kapan saja dengan menulis STOP.",
 };
 const fill = (tpl, n, u) => tpl.replace("{n}", n).replace("{u}", u);
-export function aiNotice({ lang, nombre, url, withConsent }) {
-  const l = NOTICE[lang] ? lang : "en";
-  let t = fill(NOTICE[l], nombre, url);
-  if (withConsent) t += "\n\n" + fill(CONSENT[l], nombre, url);
-  return t;
+export function aiNotice({ lang, nombre, url }) {
+  return fill(NOTICE[NOTICE[lang] ? lang : "en"], nombre, url);
+}
+// La pregunta 2.4 va como mensaje PROPIO y último del turno: el SÍ solo vale si lo que contesta es esta pregunta y no otra del bot.
+export function consentAsk({ lang, nombre }) {
+  return fill(CONSENT[CONSENT[lang] ? lang : "en"], nombre, "");
 }
 
 // ─── Lector con caché ────────────────────────────────────────────────────────────────────────────────────────
@@ -141,13 +142,15 @@ export function createErpConfig(o = {}) {
         signal: AbortSignal.timeout(timeoutMs),
       });
       if (r.status === 401 || r.status === 403) {
+        // Secreto roto o rotado: NO se sirve la caché (rotar el secreto tiene que cortar el bot), solo personas y log ruidoso.
         log.error(p(`SECRETO RECHAZADO por el ERP (HTTP ${r.status}): el bot no puede leer su configuración. Revisa ERP_CONFIG_SECRET.`));
-        return { ok: false, why: `http_${r.status}` };
+        return { ok: false, why: `http_${r.status}`, fatal: true };
       }
       if (r.status === 404) {
         // La edge wab-config va detrás de la puerta del interruptor de módulos: con whatsapp-bot APAGADO contesta 404 (o la edge ni
         // existe, retirada con el módulo). Eso es «apagado», no «caído»: si se tratara como caída, la caché seguiría sirviendo la
         // ficha y apagar el módulo no surtiría efecto. Fallar a «solo personas» es la dirección segura aunque el 404 fuera una URL mal puesta.
+        warnOnce("el ERP contesta 404 (módulo apagado, edge retirada o ERP_CONFIG_URL mal puesta): SOLO PERSONAS");
         return { ok: true, data: { encendido: false, hay_ficha: false, version: null, ficha: null, conexion: null } };
       }
       if (!r.ok) return { ok: false, why: `http_${r.status}` };
@@ -191,6 +194,9 @@ export function createErpConfig(o = {}) {
         failAt = 0;
         last = { at: now(), data: r.data };
         view = desdeDato(last.data, "erp", last.at);
+      } else if (r.fatal) {
+        failAt = now();
+        view = { mode: "mute", reason: "secreto_rechazado", source: "erp", version: null, at: null };
       } else if (!diferido) {
         failAt = now();
       }

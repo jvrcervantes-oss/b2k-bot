@@ -7,7 +7,7 @@ import https from "https";
 import { createClient } from "redis";
 import Stripe from "stripe";
 import crypto from "crypto";
-import { createErpConfig, erpSystemPrompt, aiNotice, detectLang, isYes, isStop, isPersonRequest } from "./erp-config.js";
+import { createErpConfig, erpSystemPrompt, aiNotice, consentAsk, detectLang, isYes, isStop, isPersonRequest } from "./erp-config.js";
 
 const app = express();
 // verify: guarda el body crudo — la firma X-Hub-Signature-256 de Meta se calcula sobre los bytes
@@ -1350,6 +1350,7 @@ async function sendWhatsApp(to, message) {
   }
   const r = await sendWhatsAppResult(to, message);
   if (!r.ok) console.error(`[${PROJECT_NAME}] Error enviando WhatsApp a ${normalizePhone(to)}:`, r.error);
+  return r; // {ok, id|error}: quien necesite saber si salió (el aviso de IA) lo lee; el resto lo ignora como siempre
 }
 
 // ─── ENVÍO HUMANIZADO: 1-3 burbujas con pausa de tecleo, no un párrafo de golpe ─────
@@ -1929,7 +1930,8 @@ app.post("/webhook", async (req, res) => {
       erpMute = erpState.mode !== "on";
       if (!erpStop && await erpFlagGet("consentask", fromClean)) {   // contesta (o ignora) a la pregunta 2.4; solo un SÍ entero cuenta
         await erpFlagDel("consentask", fromClean);
-        if (isYes(text)) {
+        const prevBot = history.length >= 2 ? history[history.length - 2] : null;   // history ya lleva el mensaje de ahora al final
+        if (isYes(text) && prevBot && prevBot.consentAsk) {   // y solo si lo ÚLTIMO que dijo el bot es la pregunta, no otra suya
           await erpFlagSet("consent", fromClean, { at: Date.now(), text: String(text).slice(0, 200), v: "BOT-2026-10-05-v1" });
           erpConsentGiven = true;
           console.log(`[${PROJECT_NAME}] [ERP] SÍ de ${fromClean}: consentimiento comercial registrado`);
@@ -1955,7 +1957,7 @@ app.post("/webhook", async (req, res) => {
     // Aviso de IA en el primer mensaje de la conversación (Legal, parte 3): fijo, no editable por el cliente.
     let erpNotice = null;
     if (ERP_MODE && !(await erpFlagGet("ainotice", fromClean))) {
-      erpNotice = aiNotice({ lang: detectLang(text), nombre: erpState.businessName || PROJECT_NAME, url: ERP_PRIVACY_URL, withConsent: ERP_USES_TEMPLATES });
+      erpNotice = aiNotice({ lang: detectLang(text), nombre: erpState.businessName || PROJECT_NAME, url: ERP_PRIVACY_URL });
     }
 
     await setInbound(from, Date.now()); // reinicia la ventana de 24h de WhatsApp
@@ -2060,12 +2062,13 @@ app.post("/webhook", async (req, res) => {
     history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
     await saveConversation(from, history);
 
+    let erpNoticeSent = false;
     if (erpNotice) {
       const rn = await sendWhatsApp(from, erpNotice);
-      if (!(rn && rn.blocked)) {   // si el interruptor se cerró en mitad del turno no se da por avisado
+      if (rn && rn.ok) {   // solo se da por avisado si Meta lo aceptó; si no, se reintenta en el siguiente mensaje
+        erpNoticeSent = true;
         await erpFlagSet("ainotice", fromClean, { at: Date.now() }, CONV_TTL);
-        if (ERP_USES_TEMPLATES) await erpFlagSet("consentask", fromClean, { at: Date.now() }, CONV_TTL);
-      }
+      } else console.error(`[${PROJECT_NAME}] [ERP] el aviso de IA NO salió a ${fromClean}: se reintentará en su próximo mensaje`);
     }
     await sendHumanized(from, reply, message.id, replyStart);
     // Fotos/vídeos que el bot decidió enviar ([MEDIA:label]) → se buscan en la biblioteca, se mandan y se anotan en el historial.
@@ -2087,6 +2090,16 @@ app.post("/webhook", async (req, res) => {
         const unknown = wanted.filter((w) => !known.has(w));
         console.warn(`[${PROJECT_NAME}] [MEDIA] pedido "${wanted.join(", ")}" NO enviado — `
           + (unknown.length ? `label inexistente en la biblioteca: ${unknown.join(", ")}` : "ya se había enviado en esta conversación (dedup)"));
+      }
+    }
+    // Pregunta de consentimiento 2.4 (Legal): mensaje PROPIO y ÚLTIMO del turno, solo la primera vez y solo si el negocio usa plantillas.
+    if (erpNoticeSent && ERP_USES_TEMPLATES) {
+      const ask = consentAsk({ lang: detectLang(text), nombre: erpState.businessName || PROJECT_NAME });
+      const ra = await sendWhatsApp(from, ask);
+      if (ra && ra.ok) {
+        history.push({ role: "assistant", content: ask, ts: Date.now(), by: "bot", consentAsk: true });
+        await saveConversation(from, history);
+        await erpFlagSet("consentask", fromClean, { at: Date.now() }, CONV_TTL);
       }
     }
     await setWaiting(from, false); // el bot ya respondió → no queda pendiente
@@ -2652,7 +2665,6 @@ function renderEmailHtml(bodyHtml, unsub) {
 // Devuelve {ok} o {ok:false,error}.
 async function sendEmail({ to, name, subject, html, templateId, params }) {
   if (!MAIL_READY) return { ok: false, error: "email no configurado" };
-  if (await erpBlocksBot()) return { ok: false, error: "bot apagado en el ERP (solo personas): no se envía correo" };
   const dest = [{ email: to, ...(name ? { name } : {}) }];
   const payload = templateId
     ? { templateId, to: dest, params: params || {} }
