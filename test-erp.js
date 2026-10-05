@@ -415,6 +415,54 @@ const P1 = "34633333333", P2 = "34644444444";
 
 
 {
+  console.log(" consentimiento: UNA repregunta más tarde si ignora la primera");
+  erpS.mode = "ok"; erpS.data = DATO(1);
+  const e = await engine("index.js", ERP_ENV({ FOLLOWUP_TEMPLATE_NAME: "seg", INTRO_TEMPLATE_NAME: "intro" }));
+  const asks = (to) => e.texts().filter((x) => x.to === to && /Reply YES/.test(x.text)).length;
+  const A = "34611111111";
+  await e.msg(A, "Hello, price?"); await until(() => e.texts().filter((x) => x.to === A).length >= 3, 10000, "A: aviso+respuesta+pregunta");
+  eq(asks(A), 1, "primera pregunta enviada");
+  for (const t of ["tell me more", "and the dates?", "ok thanks"]) {
+    const n = e.texts().filter((x) => x.to === A).length;
+    await e.msg(A, t); await until(() => e.texts().filter((x) => x.to === A).length > n, 10000, "A: " + t);
+  }
+  await until(() => asks(A) === 2, 10000, "A: repregunta");
+  const tA = e.texts().filter((x) => x.to === A);
+  ok(/Reply YES/.test(tA[tA.length - 1].text), "la repregunta sale como mensaje PROPIO y ÚLTIMO del turno");
+  for (const t of ["more info", "and another", "one more", "again"]) {
+    const n = e.texts().filter((x) => x.to === A).length;
+    await e.msg(A, t); await until(() => e.texts().filter((x) => x.to === A).length > n, 10000, "A: " + t);
+  }
+  eq(asks(A), 2, "si ignora también la repregunta, no hay una tercera");
+  let r = await e.api("POST", "/admin/api/outreach", { phone: A });
+  ok(r.status === 502, "sin SÍ registrado sigue sin haber plantilla");
+  // SÍ a la repregunta sí vale
+  const B = "34622222222";
+  await e.msg(B, "Hello, price?"); await until(() => e.texts().filter((x) => x.to === B).length >= 3, 10000, "B: tres");
+  for (const t of ["tell me more", "and the dates?", "ok thanks"]) {
+    const n = e.texts().filter((x) => x.to === B).length;
+    await e.msg(B, t); await until(() => e.texts().filter((x) => x.to === B).length > n, 10000, "B: " + t);
+  }
+  await until(() => asks(B) === 2, 10000, "B: repregunta");
+  await e.msg(B, "Yes");
+  await until(() => chatReqs().some((q) => q.system.some((b) => /agreed to receive follow-up/.test(b.text))), 10000, "B: SÍ a la repregunta");
+  r = await e.api("POST", "/admin/api/outreach", { phone: B });
+  ok(r.status === 200 && e.templates().some((t) => t.to === B), "el SÍ a la repregunta registra el consentimiento");
+  // STOP tras ignorar la primera: no hay repregunta
+  const D = "34633333333";
+  await e.msg(D, "Hello, price?"); await until(() => e.texts().filter((x) => x.to === D).length >= 3, 10000, "D: tres");
+  await e.msg(D, "tell me more"); await until(() => e.texts().filter((x) => x.to === D).length >= 4, 10000, "D: cuarta");
+  await e.msg(D, "STOP"); await settle();
+  for (const t of ["hello?", "and?", "price again", "dates"]) {
+    const n = e.texts().filter((x) => x.to === D).length;
+    await e.msg(D, t); await until(() => e.texts().filter((x) => x.to === D).length > n, 10000, "D: " + t);
+  }
+  eq(asks(D), 1, "tras STOP no se le vuelve a preguntar");
+  await e.stop();
+}
+
+
+{
   console.log(" seguimientos automáticos (followupTick) en modo ERP: solo con SÍ y solo encendido");
   erpS.mode = "ok"; erpS.data = DATO(1);
   const clock = path.join(HERE, "_test_clock.txt"); fs.writeFileSync(clock, "0");

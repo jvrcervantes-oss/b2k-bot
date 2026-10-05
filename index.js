@@ -136,6 +136,7 @@ async function erpBlocksBot(to) {
 // 30 días: alineado con la cadencia de follow-up (30 días, ver setFollowupCount) — antes
 // eran 7 y el bot podía mandar un recordatorio del día 25 sin memoria de la charla.
 const CONV_TTL = 30 * 24 * 60 * 60;
+const CONSENT_RETRY_AFTER = 3; // mensajes del contacto desde la pregunta (el que la ignora cuenta) hasta la ÚNICA repregunta
 const fallbackMemory = {};
 const fallbackEscQueue = [];
 let redisClient = null;
@@ -1918,12 +1919,13 @@ app.post("/webhook", async (req, res) => {
     // ── Modo ERP (solo si ERP_MODE): interruptor del módulo, STOP, SÍ de consentimiento y PERSONA ──
     // Todo detrás de ERP_MODE: sin ERP_CONFIG_URL/ERP_CONFIG_SECRET nada de esto se ejecuta y el flujo es el de siempre.
     const fromClean = normalizePhone(from);
-    let erpState = null, erpMute = false, erpStop = false, erpPerson = false, erpConsentGiven = false;
+    let erpState = null, erpMute = false, erpStop = false, erpPerson = false, erpConsentGiven = false, erpRetryAsk = false;
     if (ERP_MODE) {
       erpStop = isStop(text);
       if (erpStop) {   // retirar el consentimiento no depende de nada: ni del interruptor ni de la pausa
         await erpFlagDel("consent", fromClean);
         await erpFlagDel("consentask", fromClean);
+        await erpFlagSet("consentre", fromClean, { done: true }, CONV_TTL);   // quien dice STOP no vuelve a recibir la pregunta
         console.log(`[${PROJECT_NAME}] [ERP] STOP de ${fromClean}: consentimiento comercial retirado`);
       }
       erpState = await ERP.resolve({ forPrompt: true });
@@ -1935,6 +1937,16 @@ app.post("/webhook", async (req, res) => {
           await erpFlagSet("consent", fromClean, { at: Date.now(), text: String(text).slice(0, 200), v: "BOT-2026-10-05-v1" });
           erpConsentGiven = true;
           console.log(`[${PROJECT_NAME}] [ERP] SÍ de ${fromClean}: consentimiento comercial registrado`);
+        } else {   // ignoró la pregunta: UNA repregunta más tarde (decisión del owner 5-oct-2026); si ignora también esa, nunca más
+          const re = await erpFlagGet("consentre", fromClean);
+          await erpFlagSet("consentre", fromClean, re ? { done: true } : { left: CONSENT_RETRY_AFTER - 1 }, CONV_TTL);
+        }
+      } else if (!erpStop && !(await hasConsent(fromClean))) {   // sin pregunta pendiente: cuenta mensajes hasta la repregunta
+        const re = await erpFlagGet("consentre", fromClean);
+        if (re && !re.done) {
+          const left = Math.max(0, (re.left ?? CONSENT_RETRY_AFTER) - 1);
+          await erpFlagSet("consentre", fromClean, { left }, CONV_TTL);
+          erpRetryAsk = left === 0;
         }
       }
       erpPerson = !erpMute && !erpStop && isPersonRequest(text);
@@ -2093,13 +2105,14 @@ app.post("/webhook", async (req, res) => {
       }
     }
     // Pregunta de consentimiento 2.4 (Legal): mensaje PROPIO y ÚLTIMO del turno, solo la primera vez y solo si el negocio usa plantillas.
-    if (erpNoticeSent && ERP_USES_TEMPLATES) {
+    if ((erpNoticeSent || erpRetryAsk) && ERP_USES_TEMPLATES) {
       const ask = consentAsk({ lang: detectLang(text), nombre: erpState.businessName || PROJECT_NAME });
       const ra = await sendWhatsApp(from, ask);
       if (ra && ra.ok) {
         history.push({ role: "assistant", content: ask, ts: Date.now(), by: "bot", consentAsk: true });
         await saveConversation(from, history);
         await erpFlagSet("consentask", fromClean, { at: Date.now() }, CONV_TTL);
+        if (erpRetryAsk) await erpFlagSet("consentre", fromClean, { done: true }, CONV_TTL);   // la repregunta es la última
       }
     }
     await setWaiting(from, false); // el bot ya respondió → no queda pendiente
