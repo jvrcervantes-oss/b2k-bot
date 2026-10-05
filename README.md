@@ -113,3 +113,22 @@ Activa el envío de newsletters desde el panel (`/admin` → icono del sobre). S
   Para producción seria, considerar persistencia en base de datos.
 - El bot responde de forma automática total. Para casos de reserva, avisa al dueño.
 - Coste estimado: céntimos al mes con bajo volumen de leads.
+
+## Modo «configuración del ERP» (módulo whatsapp-bot, 5-oct-2026)
+
+Opt-in: sin estas variables el motor se comporta exactamente como siempre (lo demuestra `node test-erp.js`, que pasa los mismos
+mensajes por el index.js anterior y por el actual y compara cada petición a Meta y a Anthropic).
+
+| Variable | Qué hace |
+|---|---|
+| `ERP_CONFIG_URL` + `ERP_CONFIG_SECRET` | Las dos activan el modo. URL de la edge `wab-config` de la instancia del cliente y su secreto propio (cabecera `x-wab-config`). La instancia sale del secreto, nunca del cuerpo |
+| `WAB_PRIVACY_URL` | Enlace de privacidad del aviso de IA. Sin él el bot no contesta (solo personas): Legal no permite el primer mensaje sin enlace |
+| `ERP_FILE_BACKUP=1` | Opcional. Si el ERP no contesta y no hay caché, usa el archivo del repo como contexto y deja una línea `RESPALDO` en el log **cada vez** que lo usa. Sin la variable, ERP caído y sin caché = solo personas |
+| `WAB_CACHE_TTL_S` (30) · `WAB_CACHE_MAX_H` (24) | Cuánto vive la lectura del ERP; y cuánto vale la caché si el ERP no contesta |
+
+En modo ERP: la ficha del cliente va en un bloque de datos y las reglas fijas DESPUÉS · el interruptor (módulo apagado) y «sin ficha» = **solo personas**
+(el lead se guarda, la IA no contesta, el panel lo marca «por responder») · apagado manda sobre la caché; la caché solo tapa «el ERP no contesta» ·
+el primer mensaje lleva el aviso fijo de IA con oferta de persona (ES/EN/ID) · PERSONA pasa el hilo a una persona · STOP retira el consentimiento ·
+seguimientos y plantillas solo a contactos con SÍ registrado · envíos del bot, plantillas y correo pasan por el interruptor; las vías humanas (panel, relay del owner) y los avisos al owner no.
+Estado visible en `/admin/api/health` (campo `erp`).
+

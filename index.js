@@ -7,6 +7,7 @@ import https from "https";
 import { createClient } from "redis";
 import Stripe from "stripe";
 import crypto from "crypto";
+import { createErpConfig, erpSystemPrompt, aiNotice, detectLang, isYes, isStop, isPersonRequest } from "./erp-config.js";
 
 const app = express();
 // verify: guarda el body crudo — la firma X-Hub-Signature-256 de Meta se calcula sobre los bytes
@@ -100,6 +101,36 @@ const contextFileName = CONTEXT_FILE || "context.md";
 const CONTEXT = fs.existsSync(contextFileName)
   ? fs.readFileSync(contextFileName, "utf8")
   : BOT_CONTEXT;
+
+// ─── MODO «CONFIGURACIÓN DEL ERP» (módulo whatsapp-bot, S2 del encargo 20261005) ──────────────
+// Se activa SOLO con ERP_CONFIG_URL + ERP_CONFIG_SECRET (edge wab-config de la instancia del cliente, secreto propio de
+// esa instancia). Sin las dos, ERP_MODE=false y nada de lo que cuelga de él se ejecuta: el motor es el de siempre.
+// En modo ERP: el contexto sale de la ficha del cliente (no del archivo), el interruptor del módulo manda sobre TODOS los
+// envíos del bot, hay aviso de IA en el primer mensaje, PERSONA/STOP y los seguimientos/plantillas exigen SÍ registrado.
+// Variables: ERP_CONFIG_URL, ERP_CONFIG_SECRET, WAB_PRIVACY_URL (enlace de privacidad del aviso de IA; sin él, solo personas),
+// ERP_FILE_BACKUP=1 (opcional: usar el archivo del repo si el ERP no contesta y no hay caché), WAB_CACHE_TTL_S (30),
+// WAB_CACHE_MAX_H (24: pasado ese tiempo sin hablar con el ERP, la caché deja de valer).
+const _envNum = (v, d) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : d; };
+const ERP = createErpConfig({
+  url: (process.env.ERP_CONFIG_URL || "").trim(),
+  secret: (process.env.ERP_CONFIG_SECRET || "").trim(),
+  privacyUrl: (process.env.WAB_PRIVACY_URL || "").trim(),
+  fileContext: CONTEXT || null,
+  allowFileBackup: process.env.ERP_FILE_BACKUP === "1",
+  ttlMs: _envNum(process.env.WAB_CACHE_TTL_S, 30) * 1000,
+  maxStaleMs: _envNum(process.env.WAB_CACHE_MAX_H, 24) * 3600 * 1000,
+  project: PROJECT_NAME,
+});
+const ERP_MODE = ERP.enabled;
+const ERP_PRIVACY_URL = (process.env.WAB_PRIVACY_URL || "").trim();
+// ¿el negocio usa seguimientos/plantillas comerciales? Entonces el aviso de IA lleva la pregunta de consentimiento (Legal, 2.4).
+const ERP_USES_TEMPLATES = !!(process.env.FOLLOWUP_TEMPLATE_NAME || process.env.REMINDER_TEMPLATE_NAME || process.env.INTRO_TEMPLATE_NAME);
+// true = el bot NO debe hablar a `to` ahora. El owner siempre pasa: en «solo personas» es justo cuando más falta que le lleguen avisos.
+async function erpBlocksBot(to) {
+  if (!ERP_MODE) return false;
+  if (to && isOwner(to)) return false;
+  return (await ERP.resolve()).mode !== "on";
+}
 
 // ─── REDIS ────────────────────────────────────────────────────────
 // 30 días: alineado con la cadencia de follow-up (30 días, ver setFollowupCount) — antes
@@ -297,6 +328,24 @@ async function resetFollowup(phone) {
   if (redisClient) await redisClient.del(`followup:${phone}`);
   else delete fallbackFollowup[phone];
 }
+
+// ─── CONSENTIMIENTO Y AVISO DE IA (solo modo ERP; ver erp-config.js y Legal BOT-2026-10-05-v1) ───
+// consent:<tel> = {at, text, v}: el SÍ del contacto, con fecha y el mensaje literal (la prueba). Sin SÍ no hay seguimientos ni
+// plantillas comerciales. consentask:<tel> = la pregunta 2.4 está pendiente de respuesta; ainotice:<tel> = ya se le avisó de que es una IA.
+const fallbackErpFlags = {};
+async function erpFlagGet(kind, phone) {
+  if (redisClient) { const v = await redisClient.get(`${kind}:${phone}`); return v ? JSON.parse(v) : null; }
+  return fallbackErpFlags[`${kind}:${phone}`] || null;
+}
+async function erpFlagSet(kind, phone, val, ttlSec) {
+  if (redisClient) { if (ttlSec) await redisClient.setEx(`${kind}:${phone}`, ttlSec, JSON.stringify(val)); else await redisClient.set(`${kind}:${phone}`, JSON.stringify(val)); }
+  else fallbackErpFlags[`${kind}:${phone}`] = val;
+}
+async function erpFlagDel(kind, phone) {
+  if (redisClient) await redisClient.del(`${kind}:${phone}`);
+  else delete fallbackErpFlags[`${kind}:${phone}`];
+}
+const hasConsent = async (phone) => !!(await erpFlagGet("consent", normalizePhone(phone)));
 
 async function getLead(phone) {
   if (redisClient) {
@@ -851,10 +900,12 @@ async function reminderTick() {
       const lastIn = await getInbound(a.phone);
       const within24h = lastIn && (now - lastIn) < 24 * 3600000;
       if (within24h) {
-        await sendWhatsApp(a.phone, `Hey! Quick reminder about our call: ${a.title}. Talk soon.`);
+        const rr = await sendWhatsApp(a.phone, `Hey! Quick reminder about our call: ${a.title}. Talk soon.`);
+        if (rr && rr.blocked) continue; // frenado por el ERP: no se da por avisado, se reintenta mientras la cita siga en ventana
         await setReminded(a.id);
       } else if (REMINDER_TEMPLATE_NAME) {
-        await sendWhatsAppTemplate(a.phone, REMINDER_TEMPLATE_NAME, REMINDER_TEMPLATE_LANG, [a.title]);
+        const rr = await sendWhatsAppTemplate(a.phone, REMINDER_TEMPLATE_NAME, REMINDER_TEMPLATE_LANG, [a.title]);
+        if (rr && rr.blocked) continue;
         await setReminded(a.id);
       } else {
         await setReminded(a.id); // sin forma de enviar (ventana cerrada y sin plantilla) → no reintentar en bucle
@@ -877,6 +928,7 @@ const FOLLOWUP_SKIP_STATUS = new Set(["won", "lost", "noshow"]); // ya cerrado
 async function followupTick() {
   try {
     if (!FOLLOWUP_TEMPLATE_NAME) return; // sin plantilla aprobada no se puede contactar fuera de 24h
+    if (await erpBlocksBot()) return;    // modo ERP apagado / sin ficha: ni un seguimiento (en modo de siempre, nunca frena)
     const schedule = (FOLLOWUP_SCHEDULE || "24,72").split(",").map((s) => parseFloat(s)).filter((n) => !isNaN(n) && n >= 24);
     if (!schedule.length) return;
     const maxN = parseInt(FOLLOWUP_MAX) || schedule.length;
@@ -888,6 +940,7 @@ async function followupTick() {
     for (const l of leads) {
       if (isOwner(l.phone)) continue;
       if (l.paused) continue;                              // humano al mando
+      if (ERP_MODE && !(await hasConsent(l.phone))) continue; // modo ERP: solo a quien dijo SÍ (Legal 2.4)
       if (FOLLOWUP_SKIP_STATUS.has(l.status)) continue;    // cerrado (ganado/perdido/no-show)
       if (FOLLOWUP_SKIP_INTENT.has(l.intent)) continue;    // hay una duda escalada al owner
       // Seguimiento AGENDADO a futuro (p.ej. waitlist "avísame cuando abráis 2027"):
@@ -903,7 +956,8 @@ async function followupTick() {
       if (coldH < dueH) continue;                          // aún no toca el siguiente intento
       const firstName = (l.name || "").trim().split(/\s+/)[0] || "there";
       const params = nVars >= 1 ? [firstName] : [];
-      await sendWhatsAppTemplate(l.phone, FOLLOWUP_TEMPLATE_NAME, FOLLOWUP_TEMPLATE_LANG, params);
+      const fr = await sendWhatsAppTemplate(l.phone, FOLLOWUP_TEMPLATE_NAME, FOLLOWUP_TEMPLATE_LANG, params);
+      if (fr && fr.blocked) continue;                      // frenado por el ERP: no cuenta como intento
       await setFollowupCount(l.phone, sent + 1);
       console.log(`[${PROJECT_NAME}] Follow-up ${sent + 1}/${maxN} enviado a ${l.phone} (frío ${coldH.toFixed(0)}h)`);
     }
@@ -1119,7 +1173,9 @@ const PERSONA_BIO = (process.env.PERSONA_BIO || "").trim();
 const PERSONA_BLOCK = PERSONA_BIO
   ? `\n\nWHO YOU ARE (${PERSONA_NAME}) — draw on this naturally, never recite it or invent beyond it:\n${PERSONA_BIO}`
   : "";
-function buildSystemPrompt() {
+function buildSystemPrompt(erpCtx) {
+  // Modo ERP: la ficha va en un bloque de DATOS y las reglas fijas DESPUÉS. Modo de siempre: idéntico byte a byte a antes.
+  if (ERP_MODE) return erpSystemPrompt({ ctx: erpCtx, persona: PERSONA_BLOCK, base: BASE_INSTRUCTIONS });
   return `${CONTEXT}${PERSONA_BLOCK}\n\n${BASE_INSTRUCTIONS}`;
 }
 
@@ -1286,6 +1342,12 @@ async function sendWhatsAppResult(to, message) {
 }
 
 async function sendWhatsApp(to, message) {
+  // Habla el BOT → pasa por el interruptor del ERP (en modo de siempre erpBlocksBot es siempre false). Las vías humanas
+  // (sendWhatsAppResult: panel, relay del owner) no se frenan nunca.
+  if (await erpBlocksBot(to)) {
+    console.log(`[${PROJECT_NAME}] [ERP] envío del bot BLOQUEADO a ${normalizePhone(to)} (solo personas: ${(await ERP.resolve()).reason})`);
+    return { blocked: true };
+  }
   const r = await sendWhatsAppResult(to, message);
   if (!r.ok) console.error(`[${PROJECT_NAME}] Error enviando WhatsApp a ${normalizePhone(to)}:`, r.error);
 }
@@ -1534,6 +1596,15 @@ async function clearWaBlocked() {
 // Mensaje de PLANTILLA (única forma de escribir al owner fuera de su ventana de 24h)
 async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams = []) {
   const toClean = normalizePhone(to);
+  // Modo ERP: una plantilla a un contacto exige módulo encendido Y su SÍ registrado (al owner, que son avisos nuestros, no).
+  if (ERP_MODE && !isOwner(to)) {
+    const st = await ERP.resolve();
+    const why = st.mode !== "on" ? `bot apagado (solo personas: ${st.reason})` : !(await hasConsent(toClean)) ? "el contacto no ha dicho SÍ a recibir mensajes comerciales" : null;
+    if (why) {
+      console.log(`[${PROJECT_NAME}] [ERP] plantilla "${templateName}" BLOQUEADA a ${toClean}: ${why}`);
+      return { ok: false, blocked: true, error: why };
+    }
+  }
   // Cuenta bloqueada → no gastar el intento: rebotaría igual y el lead quedaría marcado
   // como contactado sin haberlo sido. El texto libre SÍ se intenta (ver comentario arriba):
   // más vale fallar contestando a un cliente que callarse.
@@ -1785,7 +1856,7 @@ app.post("/webhook", async (req, res) => {
       await setInbound(from, Date.now());
       await resetFollowup(from);
       const prev = await getLead(from);
-      if (await isPaused(from)) {
+      if ((ERP_MODE && await erpBlocksBot(from)) || await isPaused(from)) { // modo ERP en «solo personas»: se guarda y se calla, como en pausa
         await saveConversation(from, history);
         await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "interested", label, "client");
         await setWaiting(from, true);
@@ -1823,10 +1894,9 @@ app.post("/webhook", async (req, res) => {
       if (!pending) pending = await escPop();
       if (pending) {
         console.log(`[${PROJECT_NAME}] Owner respondió escalación → reenviando a ${pending.customerName || pending.customerPhone}`);
-        await sendWhatsApp(
-          pending.customerPhone,
-          text
-        );
+        // Vía humana (habla el owner, no el bot): nunca pasa por el interruptor del ERP.
+        const rf = await sendWhatsAppResult(pending.customerPhone, text);
+        if (!rf.ok) console.error(`[${PROJECT_NAME}] Error enviando WhatsApp a ${normalizePhone(pending.customerPhone)}:`, rf.error);
       } else {
         console.log(`[${PROJECT_NAME}] Mensaje del owner pero no hay escalaciones pendientes`);
       }
@@ -1844,16 +1914,48 @@ app.post("/webhook", async (req, res) => {
       console.log(`[${PROJECT_NAME}] Datos de formulario IG capturados para ${from}: ${Object.keys(formFields).join(", ")}`);
     }
 
+    // ── Modo ERP (solo si ERP_MODE): interruptor del módulo, STOP, SÍ de consentimiento y PERSONA ──
+    // Todo detrás de ERP_MODE: sin ERP_CONFIG_URL/ERP_CONFIG_SECRET nada de esto se ejecuta y el flujo es el de siempre.
+    const fromClean = normalizePhone(from);
+    let erpState = null, erpMute = false, erpStop = false, erpPerson = false, erpConsentGiven = false;
+    if (ERP_MODE) {
+      erpStop = isStop(text);
+      if (erpStop) {   // retirar el consentimiento no depende de nada: ni del interruptor ni de la pausa
+        await erpFlagDel("consent", fromClean);
+        await erpFlagDel("consentask", fromClean);
+        console.log(`[${PROJECT_NAME}] [ERP] STOP de ${fromClean}: consentimiento comercial retirado`);
+      }
+      erpState = await ERP.resolve({ forPrompt: true });
+      erpMute = erpState.mode !== "on";
+      if (!erpStop && await erpFlagGet("consentask", fromClean)) {   // contesta (o ignora) a la pregunta 2.4; solo un SÍ entero cuenta
+        await erpFlagDel("consentask", fromClean);
+        if (isYes(text)) {
+          await erpFlagSet("consent", fromClean, { at: Date.now(), text: String(text).slice(0, 200), v: "BOT-2026-10-05-v1" });
+          erpConsentGiven = true;
+          console.log(`[${PROJECT_NAME}] [ERP] SÍ de ${fromClean}: consentimiento comercial registrado`);
+        }
+      }
+      erpPerson = !erpMute && !erpStop && isPersonRequest(text);
+      if (erpPerson) await setPaused(from, true); // PERSONA: la IA se apaga en este hilo y atiende una persona
+    }
+
     // ── Control humano: si el bot está en pausa para este lead, guarda y calla ──
-    if (await isPaused(from)) {
+    if (erpMute || erpStop || erpPerson || await isPaused(from)) {
       await saveConversation(from, history);
       const prev = await getLead(from);
       await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "interested", text, "client");
       await setInbound(from, Date.now());
       await resetFollowup(from);    // respondió → reinicia la cadencia de seguimiento
       await setWaiting(from, true); // el cliente espera respuesta humana → marcar en el panel
-      console.log(`[${PROJECT_NAME}] Lead ${from} en pausa (control humano) — mensaje guardado, bot NO responde`);
+      if (erpPerson && OWNER_PHONE) await sendWhatsApp(OWNER_PHONE, `🙋 ${PROJECT_NAME} — ${profileName || from} pide hablar con una persona (escribió PERSONA). Tel: +${fromClean}. La IA queda apagada en ese chat.`);
+      console.log(`[${PROJECT_NAME}] Lead ${from} ${erpMute ? `en SOLO PERSONAS (ERP: ${erpState.reason})` : erpStop ? "STOP (consentimiento retirado)" : erpPerson ? "pidió PERSONA" : "en pausa (control humano)"} — mensaje guardado, bot NO responde`);
       return;
+    }
+
+    // Aviso de IA en el primer mensaje de la conversación (Legal, parte 3): fijo, no editable por el cliente.
+    let erpNotice = null;
+    if (ERP_MODE && !(await erpFlagGet("ainotice", fromClean))) {
+      erpNotice = aiNotice({ lang: detectLang(text), nombre: erpState.businessName || PROJECT_NAME, url: ERP_PRIVACY_URL, withConsent: ERP_USES_TEMPLATES });
     }
 
     await setInbound(from, Date.now()); // reinicia la ventana de 24h de WhatsApp
@@ -1888,9 +1990,11 @@ app.post("/webhook", async (req, res) => {
       //
       // mediaHint va en bloque aparte tras el prefijo cacheado (cambia solo al editar la media library).
       system: [
-        { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
+        { type: "text", text: buildSystemPrompt(erpState && erpState.context), cache_control: { type: "ephemeral" } },
         { type: "text", text: dateHint() },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
+        ...(erpNotice ? [{ type: "text", text: "NOTE: the system sends this contact, right before your reply, an automatic notice presenting you as the business's AI assistant. Do not introduce yourself again and do not repeat the notice." }] : []),
+        ...(erpConsentGiven ? [{ type: "text", text: "NOTE: the contact just agreed to receive follow-up messages from the business. Acknowledge it in one short sentence and carry on with the conversation." }] : []),
       ],
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // prompt = últimos 20; el resto es historial del panel
     });
@@ -1952,16 +2056,24 @@ app.post("/webhook", async (req, res) => {
       if (rescued.length) console.warn(`[${PROJECT_NAME}] [MEDIA] RESCATE: el modelo escribió los títulos sin etiqueta (${rescued.map((r) => r.label).join(", ")}) — se envían de verdad`);
     }
 
+    if (erpNotice) history.push({ role: "assistant", content: erpNotice, ts: Date.now(), by: "bot" }); // sale ANTES que la respuesta
     history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
     await saveConversation(from, history);
 
+    if (erpNotice) {
+      const rn = await sendWhatsApp(from, erpNotice);
+      if (!(rn && rn.blocked)) {   // si el interruptor se cerró en mitad del turno no se da por avisado
+        await erpFlagSet("ainotice", fromClean, { at: Date.now() }, CONV_TTL);
+        if (ERP_USES_TEMPLATES) await erpFlagSet("consentask", fromClean, { at: Date.now() }, CONV_TTL);
+      }
+    }
     await sendHumanized(from, reply, message.id, replyStart);
     // Fotos/vídeos que el bot decidió enviar ([MEDIA:label]) → se buscan en la biblioteca, se mandan y se anotan en el historial.
     if (mediaMatch || rescued.length) {
       const wanted = mediaMatch
         ? mediaMatch[1].split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
         : rescued.map((r) => String(r.label).toLowerCase());
-      const toSend = mediaToSend({ wanted, mediaLib, history, askedAgain: customerAskedAgain(text), narrated: rescued.length > 0 });
+      const toSend = (ERP_MODE && await erpBlocksBot(from)) ? [] : mediaToSend({ wanted, mediaLib, history, askedAgain: customerAskedAgain(text), narrated: rescued.length > 0 });
       for (const item of toSend) {
         await sendWhatsAppMedia(from, item);
         history.push({ role: "assistant", content: item.caption || (item.type === "video" ? "[vídeo]" : "[foto]"), ts: Date.now(), by: "bot", media: { type: item.type, url: item.url, caption: item.caption || "" } });
@@ -2131,7 +2243,7 @@ app.get("/admin/api/health", async (req, res) => {
     if (redisClient) count = await redisClient.zCard("leads_index");
     else count = Object.keys(fallbackLeads).length;
   } catch (e) { /* best-effort */ }
-  res.json({ storage: redisClient ? "redis" : "ram", leads: count });
+  res.json({ storage: redisClient ? "redis" : "ram", leads: count, ...(ERP_MODE ? { erp: ERP.status() } : {}) });
 });
 
 app.get("/admin/api/conv/:phone", async (req, res) => {
@@ -2204,6 +2316,9 @@ app.post("/admin/api/simulate", async (req, res) => {
   if (!text) return res.status(400).json({ error: "text requerido" });
   const phone = `sim:${session || "default"}`;
   try {
+    // Modo ERP: el simulador prueba lo que de verdad corre (la ficha del ERP) y respeta el interruptor.
+    const erpSim = ERP_MODE ? await ERP.resolve({ forPrompt: true }) : null;
+    if (erpSim && erpSim.mode !== "on") return res.status(409).json({ error: `el bot está en solo personas (ERP: ${erpSim.reason})` });
     const history = await getConversation(phone);
     history.push({ role: "user", content: text, ts: Date.now() });
     const mediaLib = await getMediaLib();
@@ -2214,7 +2329,7 @@ app.post("/admin/api/simulate", async (req, res) => {
       output_config: { effort: "low" },
       max_tokens: 2000,
       system: [
-        { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
+        { type: "text", text: buildSystemPrompt(erpSim && erpSim.context), cache_control: { type: "ephemeral" } },
         { type: "text", text: dateHint() },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
       ],
@@ -2537,6 +2652,7 @@ function renderEmailHtml(bodyHtml, unsub) {
 // Devuelve {ok} o {ok:false,error}.
 async function sendEmail({ to, name, subject, html, templateId, params }) {
   if (!MAIL_READY) return { ok: false, error: "email no configurado" };
+  if (await erpBlocksBot()) return { ok: false, error: "bot apagado en el ERP (solo personas): no se envía correo" };
   const dest = [{ email: to, ...(name ? { name } : {}) }];
   const payload = templateId
     ? { templateId, to: dest, params: params || {} }
@@ -2690,6 +2806,7 @@ app.post("/admin/api/newsletter/cancel", async (req, res) => {
 let nlSending = false;
 async function newsletterTick() {
   if (nlSending || !MAIL_READY) return; // no solapar; sin email configurado, dejarlas en cola
+  if (await erpBlocksBot()) return;     // modo ERP apagado: las campañas se quedan en cola, no se pierden
   try {
     const list = await getScheduled();
     const due = list.find((c) => c.when <= Date.now());
@@ -2744,6 +2861,12 @@ app.listen(PORT, async () => {
   console.log(`[${PROJECT_NAME}] Modelo: ${MODEL}${BOT_MODEL ? "" : "  ⚠️  BOT_MODEL sin definir → default del código"}`);
   console.log(`[${PROJECT_NAME}] OWNER_PHONE: ${OWNER_PHONE ? normalizePhone(OWNER_PHONE) : "⚠️  NO CONFIGURADO"}`);
   console.log(`[${PROJECT_NAME}] CRM (BD): ${redisClient ? "Redis (persistente)" : "RAM (volátil — configura REDIS_URL)"}`);
+  if (ERP_MODE) {
+    console.log(`[${PROJECT_NAME}] [ERP] Modo configuración del ERP: ACTIVO — enlace de privacidad: ${ERP_PRIVACY_URL ? "ok" : "⚠️  FALTA WAB_PRIVACY_URL → el bot NO contestará (solo personas)"} · respaldo de archivo: ${process.env.ERP_FILE_BACKUP === "1" ? "permitido (con log en cada uso)" : "no"}`);
+    ERP.resolve().then((v) => console.log(`[${PROJECT_NAME}] [ERP] primera lectura: ${v.mode === "on" ? `ficha v${v.version} (${v.source})` : `SOLO PERSONAS — ${v.reason}`}`)).catch(() => {});
+  } else {
+    console.log(`[${PROJECT_NAME}] [ERP] Modo configuración del ERP: desactivado (contexto = archivo del repo)`);
+  }
   console.log(`[${PROJECT_NAME}] Firma webhook: ${META_APP_SECRET ? "🟢 X-Hub-Signature-256 activa" : "⚠️  SIN verificar — añade META_APP_SECRET en Railway"}`);
   console.log(`[${PROJECT_NAME}] Email (Brevo): ${MAIL_READY ? "🟢 listo" : `⚠️  NO configurado → BREVO_API_KEY=${BREVO_API_KEY ? "ok" : "FALTA"}, MAIL_FROM=${MAIL_FROM ? "ok" : "FALTA"}`}`);
   if (!MAIL_READY) {
