@@ -170,13 +170,35 @@ export function createErpConfig(o = {}) {
     return inflight;
   }
 
+  // Dos datos distintos con el mismo nombre de campo: el del ALTA (wab_cliente.nombre_negocio: el que las Condiciones y el aviso de
+  // privacidad nombran) y el de la FICHA (wab_ficha.nombre_negocio: el que el cliente escribe para el bot). Manda el del alta, en el
+  // aviso de IA y en la línea BUSINESS NAME del prompt (si no, el bot se presentaría con un nombre y el aviso legal nombraría otro).
+  // La base lo entrega como `cliente.nombre_negocio` (wab_config_motor aún NO lo expone: sin él, se usa el de la ficha, como hasta ahora).
+  // Si difieren se avisa en el log UNA vez por par (no cada 30 s).
+  let warnedNames = "";
+  function nombreDelNegocio(d) {
+    const ficha = limpia(d.ficha.nombre_negocio);
+    const raw = d.cliente && typeof d.cliente === "object" ? d.cliente.nombre_negocio : undefined;
+    if (raw === undefined || raw === null) return ficha;
+    const alta = typeof raw === "string" ? limpia(raw) : "";
+    if (!alta) { warnOnceKey("alta-vacio", `el nombre del alta llega vacío o con forma inesperada: se usa el de la ficha ("${ficha}")`); return ficha; }
+    if (norm(alta) !== norm(ficha)) {
+      const k = alta + " " + ficha;
+      if (k !== warnedNames) { warnedNames = k; log.warn(p(`el nombre del negocio del ALTA ("${alta}") y el de la FICHA ("${ficha}") difieren: el bot usa el del alta`)); }
+    }
+    return alta;
+  }
+  const warnedKeys = new Set();
+  function warnOnceKey(k, msg) { if (!warnedKeys.has(k)) { warnedKeys.add(k); log.warn(p(msg)); } }
+
   function desdeDato(d, source, at) {
     if (!d.encendido) return { mode: "mute", reason: "apagado", source, version: null, at };
     if (!d.hay_ficha) return { mode: "mute", reason: "sin_ficha", source, version: null, at };
     if (!privacyUrl) return { mode: "mute", reason: "sin_enlace_privacidad", source, version: d.version, at };
+    const name = nombreDelNegocio(d);
     return {
       mode: "on", reason: null, source, version: d.version, at,
-      businessName: limpia(d.ficha.nombre_negocio), context: sinEtiquetas(renderFicha(d.ficha)),
+      businessName: name, context: sinEtiquetas(renderFicha({ ...d.ficha, nombre_negocio: name })),
     };
   }
 

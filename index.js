@@ -132,6 +132,24 @@ async function erpBlocksBot(to) {
   return (await ERP.resolve()).mode !== "on";
 }
 
+// Modo ERP: un webhook cuyo metadata.phone_number_id no es el de ESTE bot no es para él. Con override_callback_uri (S4) una app de
+// Meta puede apuntar varios números a servicios distintos, y un número ajeno que llegara aquí contestaría con el token y el
+// contexto equivocados. Sin ERP_MODE no se toca nada (la prueba diferencial de test-erp.js lo fija). Falta de metadata = ajeno:
+// Meta siempre la manda. Sin WHATSAPP_PHONE_ID no hay con qué comparar (y el bot tampoco podría enviar): no se filtra, y el arranque lo avisa.
+const _wrongNumberSeen = new Map(); // phone_number_id ajeno → { at, n } para no inundar el log
+function erpForeignNumber(value) {
+  if (!ERP_MODE || !WHATSAPP_PHONE_ID) return false;
+  const got = String(value?.metadata?.phone_number_id ?? "").trim();
+  const mine = String(WHATSAPP_PHONE_ID).trim();
+  if (got && got === mine) return false;
+  const key = got || "(sin metadata)", t = Date.now(), r = _wrongNumberSeen.get(key);
+  if (!r || t - r.at > 60000) {
+    console.warn(`[${PROJECT_NAME}] [ERP] webhook IGNORADO: es del número ${key}, este bot es ${mine}${r && r.n ? ` (+${r.n} más en el último minuto)` : ""}`);
+    _wrongNumberSeen.set(key, { at: t, n: 0 });
+  } else r.n++;
+  return true;
+}
+
 // ─── REDIS ────────────────────────────────────────────────────────
 // 30 días: alineado con la cadencia de follow-up (30 días, ver setFollowupCount) — antes
 // eran 7 y el bot podía mandar un recordatorio del día 25 sin memoria de la charla.
@@ -1791,6 +1809,7 @@ app.post("/webhook", async (req, res) => {
   try {
     const entry = req.body.entry?.[0];
     const change = entry?.changes?.[0];
+    if (erpForeignNumber(change?.value)) return; // antes de nada: ni estados, ni deduplicación, ni guardar nada
 
     // ── Estados de entrega de Meta (sent/delivered/read/FAILED) ──────────────
     // Meta los manda por ESTE MISMO webhook, sin `messages`. Antes caían en el
@@ -2892,6 +2911,7 @@ app.listen(PORT, async () => {
   console.log(`[${PROJECT_NAME}] CRM (BD): ${redisClient ? "Redis (persistente)" : "RAM (volátil — configura REDIS_URL)"}`);
   if (ERP_MODE) {
     console.log(`[${PROJECT_NAME}] [ERP] Modo configuración del ERP: ACTIVO — enlace de privacidad: ${ERP_PRIVACY_URL ? "ok" : "⚠️  FALTA WAB_PRIVACY_URL → el bot NO contestará (solo personas)"} · respaldo de archivo: ${process.env.ERP_FILE_BACKUP === "1" ? "permitido (con log en cada uso)" : "no"}`);
+    console.log(`[${PROJECT_NAME}] [ERP] Filtro de número: ${WHATSAPP_PHONE_ID ? `solo atiende webhooks del número ${WHATSAPP_PHONE_ID}` : "⚠️  SIN WHATSAPP_PHONE_ID → no se puede filtrar por número"}`);
     ERP.resolve().then((v) => console.log(`[${PROJECT_NAME}] [ERP] primera lectura: ${v.mode === "on" ? `ficha v${v.version} (${v.source})` : `SOLO PERSONAS — ${v.reason}`}`)).catch(() => {});
   } else {
     console.log(`[${PROJECT_NAME}] [ERP] Modo configuración del ERP: desactivado (contexto = archivo del repo)`);
