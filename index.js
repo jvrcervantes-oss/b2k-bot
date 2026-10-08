@@ -338,6 +338,7 @@ async function getBotCfg(force = false) {
     const raw = await redisClient.get("botcfg:v1");
     _cfgCache = { v: raw ? { ...CFG_VACIA, ...JSON.parse(raw) } : { ...CFG_VACIA }, ts: Date.now() };
   } catch (e) {
+    _cfgCache.ts = Date.now(); // sin esto cada mensaje reintentaría Redis y escribiría este log mientras dure el fallo
     console.error(`[${PROJECT_NAME}] botcfg: no se pudo leer la config, uso la última buena: ${e.message}`);
   }
   return _cfgCache.v;
@@ -2622,9 +2623,12 @@ async function guardaCfg(valor, byUser) {
   const prevRaw = await redisClient.get("botcfg:v1");
   const prev = prevRaw ? { ...CFG_VACIA, ...JSON.parse(prevRaw) } : { ...CFG_VACIA };
   const next = { ...valor, updatedAt: Date.now(), updatedBy: String(byUser || "").slice(0, 120) };
-  await redisClient.set("botcfg:v1", JSON.stringify(next));
-  await redisClient.lPush("botcfg:log", JSON.stringify({ ts: next.updatedAt, by: next.updatedBy, prev, next }));
-  await redisClient.lTrim("botcfg:log", 0, 49);
+  // Una sola transacción: la config nueva y su entrada de registro entran juntas o no entra ninguna.
+  await redisClient.multi()
+    .set("botcfg:v1", JSON.stringify(next))
+    .lPush("botcfg:log", JSON.stringify({ ts: next.updatedAt, by: next.updatedBy, prev, next }))
+    .lTrim("botcfg:log", 0, 49)
+    .exec();
   _cfgCache = { v: next, ts: Date.now() }; // este proceso aplica el cambio ya, sin esperar los 10 s
   return next;
 }
@@ -2646,7 +2650,8 @@ app.post("/admin/api/config", async (req, res) => {
   if (!v.ok) return res.status(400).json({ error: v.error });
   try {
     const actual = await getBotCfg(true);
-    if (typeof expectedUpdatedAt === "number" && expectedUpdatedAt !== (actual.updatedAt || 0)) {
+    if (typeof expectedUpdatedAt !== "number") return res.status(400).json({ error: "expectedUpdatedAt requerido (la versión que estabas viendo)" });
+    if (expectedUpdatedAt !== (actual.updatedAt || 0)) {
       return res.status(409).json({ error: "otra persona ha cambiado la configuración mientras la editabas", config: actual });
     }
     const next = await guardaCfg(v.value, byUser);
@@ -2660,7 +2665,10 @@ app.post("/admin/api/config", async (req, res) => {
 app.post("/admin/api/config/revert", async (req, res) => {
   if (!adminAuth(req, res)) return;
   if (!redisClient) return res.status(503).json({ error: "sin Redis" });
+  const esperada = req.body && req.body.expectedUpdatedAt;
+  if (typeof esperada !== "number") return res.status(400).json({ error: "expectedUpdatedAt requerido (la versión que estabas viendo)" });
   try {
+    if (esperada !== ((await getBotCfg(true)).updatedAt || 0)) return res.status(409).json({ error: "otra persona ha cambiado la configuración mientras la mirabas" });
     const [ultimo] = await leeLogCfg(1);
     if (!ultimo || !ultimo.prev) return res.status(404).json({ error: "no hay un cambio anterior al que volver" });
     const v = validaConfig({ extra: ultimo.prev.extra, bienvenida: ultimo.prev.bienvenida, pausaHoras: ultimo.prev.pausaHoras });

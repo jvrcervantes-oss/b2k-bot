@@ -30,6 +30,12 @@ test("validaConfig: rechaza teléfonos y correos (los verían todos los leads)",
   assert.strictEqual(validaConfig({ extra: "Escribe a ana@lawang.com" }).ok, false);
   assert.strictEqual(validaConfig({ bienvenida: "Llama al +62 811-3830-5237" }).ok, false);
   assert.strictEqual(validaConfig({ extra: "Precio desde 120.000 USD en 2026" }).ok, true);
+  for (const t of ["Precio 1.200.000.000 IDR", "Parcelas de 450 - 600 m2", "Entrega 2026-10-08", "de 2.500 - 3.000 m²", "Rp 850.000.000", "unos 120 000 000 IDR"]) {
+    assert.strictEqual(validaConfig({ extra: t }).ok, true, t);
+  }
+  for (const t of ["Llama al +62 811-3830-5237", "0811 3830 5237", "081138305237", "WhatsApp 62 811 3830 5237"]) {
+    assert.strictEqual(validaConfig({ extra: t }).ok, false, t);
+  }
 });
 
 test("validaConfig: neutraliza los delimitadores del bloque", () => {

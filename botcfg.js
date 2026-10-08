@@ -14,7 +14,19 @@ const VACIA = Object.freeze({ extra: "", bienvenida: "", pausaHoras: 0, updatedA
 
 // Datos de personas: el system prompt lo ven TODAS las conversaciones, así que un teléfono o un
 // correo pegados aquí se enseñarían a cualquier lead.
-const RE_TELEFONO = /(?:\+|00)?\d[\d\s().-]{7,}\d/;
+// Teléfono = 9+ dígitos con solo un espacio o guion entre grupos (o con prefijo + / 00). Los precios con
+// punto (1.200.000.000), los rangos " - " (450 - 600 m2), las fechas ISO y los miles con espacio
+// (120 000 000) no lo son.
+const RE_TELEFONO_CAND = /(?:\+|00)?\d(?:[ -]?\d){8,}/g;
+function pareceTelefono(t) {
+  for (const m of String(t).matchAll(RE_TELEFONO_CAND)) {
+    const c = m[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(c)) continue;
+    if (/^[1-9]\d{0,2}(?: \d{3})+$/.test(c)) continue; // miles con espacio
+    return true;
+  }
+  return false;
+}
 const RE_CORREO = /[^\s@]+@[^\s@]+\.[^\s@]+/;
 
 function neutraliza(t) {
@@ -39,7 +51,7 @@ function validaConfig(input) {
   }
   for (const [campo, t] of [["extra", extra], ["bienvenida", bienvenida]]) {
     if (RE_CORREO.test(t)) return { ok: false, error: `${campo}: no pongas correos (lo ve el bot en todas las conversaciones)` };
-    if (RE_TELEFONO.test(t)) return { ok: false, error: `${campo}: no pongas teléfonos (lo ve el bot en todas las conversaciones)` };
+    if (pareceTelefono(t)) return { ok: false, error: `${campo}: no pongas teléfonos (lo ve el bot en todas las conversaciones)` };
   }
   return { ok: true, value: { extra: neutraliza(extra), bienvenida: neutraliza(bienvenida), pausaHoras } };
 }
