@@ -11,6 +11,7 @@
 // · caido ("CATÁLOGO NO DISPONIBLE, no cites precios"). Vacío y caído son cosas distintas a propósito: no inventar.
 
 export const MAX_EDAD_MS = 6 * 3600 * 1000;   // pasadas 6 h sin catálogo bueno, no se cita ni el último bueno
+export const MAX_UNIDADES = 200;
 export const TTL_MS = 60 * 1000;              // caché si todo va bien
 export const TTL_ERROR_MS = 15 * 1000;        // tras un fallo no se reintenta en cada mensaje (la edge tiene tope de ritmo)
 
@@ -127,7 +128,7 @@ export function creaCatalogo({ pide, ahora = Date.now, tz = "Asia/Makassar", ttl
     try {
       const filas = await pide();
       if (!Array.isArray(filas)) throw new Error("respuesta sin lista");
-      const unidades = filas.map(normalizaFila).filter(Boolean);
+      const unidades = filas.map(normalizaFila).filter(Boolean).slice(0, MAX_UNIDADES); // tope: un ERP que publique de más no crea un prompt gigante
       bueno = { unidades, ts: ahora() };
       ultimo = { ts: t0, ok: true };
     } catch (e) {

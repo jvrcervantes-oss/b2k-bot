@@ -359,3 +359,9 @@ test("index.js: aplicaCrm va después de los avisos al owner (una edge lenta no 
   assert.ok(SRC.indexOf("await aplicaCrm(crmTags") > SRC.indexOf("await notifyOwner(intent"));
   assert.ok(SRC.indexOf("await aplicaCrm(crmTags") > SRC.indexOf("const entry = await escPush"));
 });
+
+test("tope de unidades: un catálogo desmesurado se recorta", async () => {
+  const muchas = Array.from({ length: 500 }, (_, i) => ({ ...FILA_VILLA, codigo: "V-" + i }));
+  const b = await creaCatalogo({ pide: async () => muchas, ahora: reloj().ahora, tz: TZ }).bloque();
+  assert.strictEqual(b.unidades.length, 200);
+});

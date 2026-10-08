@@ -401,7 +401,7 @@ function postCheckPrecios(reply, cat, history, from) {
   try {
     const delCliente = history.filter((m) => m.role === "user").slice(-6).map((m) => m.content).join(" | ");
     const raras = postCheckCifras({ respuesta: reply, permitidas: cat ? cifrasPermitidas(cat.unidades) : [], delCliente });
-    if (raras.length) console.warn(`[${PROJECT_NAME}] [CATALOGO] POST-CHECK: cifra(s) fuera del bloque (${cat ? cat.estado : "sin bloque"}) para ${from}: ${raras.map((c) => c.texto + (c.eco ? " [eco_cliente]" : "")).join(" | ")}`);
+    if (raras.length) console.warn(`[${PROJECT_NAME}] [CATALOGO] POST-CHECK: cifra(s) fuera del bloque (${cat ? cat.estado : "sin bloque"}) para …${String(from).slice(-4)}: ${raras.map((c) => c.texto + (c.eco ? " [eco_cliente]" : "")).join(" | ")}`);
   } catch (e) { console.error(`[${PROJECT_NAME}] post-check falló: ${e.message}`); }
 }
 
