@@ -8,6 +8,8 @@ import { createClient } from "redis";
 import Stripe from "stripe";
 import crypto from "crypto";
 import { VACIA as CFG_VACIA, validaConfig, bloqueEquipo, ttlPausaHumana } from "./botcfg.js";
+import { creaCatalogo, cifrasPermitidas, postCheckCifras } from "./botcat.js";
+import { extraeEtiquetas, bloquesSistema, contenidoParaModelo, creaTopes, ejecutaCrm } from "./botcrm.js";
 
 const app = express();
 // verify: guarda el body crudo — la firma X-Hub-Signature-256 de Meta se calcula sobre los bytes
@@ -342,6 +344,86 @@ async function getBotCfg(force = false) {
     console.error(`[${PROJECT_NAME}] botcfg: no se pudo leer la config, uso la última buena: ${e.message}`);
   }
   return _cfgCache.v;
+}
+
+// ─── CATÁLOGO EN VIVO Y CRM DEL ERP (S6 del encargo 20261008_lawang_bot_catalogo_crm) ──
+// Dos interruptores, APAGADOS por defecto: con los dos apagados el `system`, los mensajes y las respuestas son
+// idénticos a los de siempre (lo fija test-botcat.js). Otras ramas del motor no los ponen y no notan nada.
+//   BOT_CATALOGO = off | on        on: bloque de catálogo en el system (lee la edge bot-api, ruta /catalogo)
+//   BOT_CRM      = off | sombra | on   sombra: solo escribe el log de lo que haría; on: llama a la edge (ruta /crm)
+//   BOT_API_URL  = https://<ref>.supabase.co/functions/v1/bot-api        (sin barra final)
+//   BOT_API_SECRET_CATALOGO / BOT_API_SECRET_CRM = un secreto por ruta (cabecera X-Bot-Secret)
+// Valor desconocido = off. `on` sin URL o sin su secreto: el catálogo se ve "no disponible" (no cita precios) y el
+// CRM no escribe; ambos gritan en el arranque, nunca rompen la conversación.
+const _modo = (v, validos) => { const x = String(v || "").trim().toLowerCase(); return validos.includes(x) ? x : "off"; };
+const BOT_CATALOGO_MODE = _modo(process.env.BOT_CATALOGO, ["off", "on"]);
+const BOT_CRM_MODE = _modo(process.env.BOT_CRM, ["off", "sombra", "on"]);
+const BOT_API_URL = String(process.env.BOT_API_URL || "").trim().replace(/\/+$/, "");
+const BOT_API_SECRET_CATALOGO = String(process.env.BOT_API_SECRET_CATALOGO || "").trim();
+const BOT_API_SECRET_CRM = String(process.env.BOT_API_SECRET_CRM || "").trim();
+const CRM_EFECTIVO = BOT_CRM_MODE === "on" && (!BOT_API_URL || !BOT_API_SECRET_CRM) ? "off" : BOT_CRM_MODE;
+console.log(`[${PROJECT_NAME}] catálogo=${BOT_CATALOGO_MODE} crm=${BOT_CRM_MODE}${CRM_EFECTIVO !== BOT_CRM_MODE ? " (EFECTIVO off: falta BOT_API_URL o BOT_API_SECRET_CRM)" : ""}`);
+if (BOT_CATALOGO_MODE === "on" && (!BOT_API_URL || !BOT_API_SECRET_CATALOGO)) console.error(`[${PROJECT_NAME}] BOT_CATALOGO=on pero falta BOT_API_URL o BOT_API_SECRET_CATALOGO: el bot verá "catálogo no disponible" y no citará precios`);
+
+async function _llamaEdge(ruta, secreto, cuerpo) {
+  const r = await axios.post(`${BOT_API_URL}/${ruta}`, cuerpo, {
+    headers: { "X-Bot-Secret": secreto, "content-type": "application/json" },
+    timeout: 5000, validateStatus: () => true, maxContentLength: 1024 * 1024,
+  });
+  if (r.status !== 200 || !r.data || r.data.ok !== true) throw new Error(`bot-api/${ruta} HTTP ${r.status}`); // sin cuerpo: no se vuelca nada ajeno al log
+  return r.data;
+}
+
+const catalogoSvc = BOT_CATALOGO_MODE === "on"
+  ? creaCatalogo({
+      tz: CALENDAR_TZ || "Asia/Makassar",
+      log: (m) => console.error(`[${PROJECT_NAME}] ${m}`),
+      pide: async () => {
+        if (!BOT_API_URL || !BOT_API_SECRET_CATALOGO) throw new Error("sin URL o secreto");
+        return (await _llamaEdge("catalogo", BOT_API_SECRET_CATALOGO, {})).unidades;
+      },
+    })
+  : null;
+
+// Bloque de catálogo para el system de ESTE turno ({texto, unidades, estado}) o null con el interruptor apagado.
+async function getCatalogoBlock() {
+  if (!catalogoSvc) return null;
+  try { return await catalogoSvc.bloque(); }
+  catch (e) { console.error(`[${PROJECT_NAME}] catálogo: error inesperado (${e.message})`); return null; }
+}
+
+// Los bloques `system` de catálogo y CRM, en su sitio (tras el prefijo cacheado, antes de la fecha). Sin interruptores = [].
+const bloquesCatalogoCrm = (cat) => bloquesSistema({ catalogo: BOT_CATALOGO_MODE, crm: BOT_CRM_MODE, cat });
+
+// Solo LOG (medida legal: no se recorta a bloqueo sin que Legal vea los casos de la semana de solo log).
+function postCheckPrecios(reply, cat, history, from) {
+  if (!catalogoSvc) return;
+  try {
+    const delCliente = history.filter((m) => m.role === "user").slice(-6).map((m) => m.content).join(" | ");
+    const raras = postCheckCifras({ respuesta: reply, permitidas: cat ? cifrasPermitidas(cat.unidades) : [], delCliente });
+    if (raras.length) console.warn(`[${PROJECT_NAME}] [CATALOGO] POST-CHECK: cifra(s) fuera del bloque (${cat ? cat.estado : "sin bloque"}) para ${from}: ${raras.map((c) => c.texto).join(" | ")}`);
+  } catch (e) { console.error(`[${PROJECT_NAME}] post-check falló: ${e.message}`); }
+}
+
+// El texto del cliente que ve el modelo: con el CRM activo se sanean las `[XXX:`; apagado = tal cual.
+const paraModelo = (m) => contenidoParaModelo(m, BOT_CRM_MODE);
+
+const _topesMem = new Map();
+const topesCrm = creaTopes({
+  incr: async (k) => {
+    if (redisClient) { const n = await redisClient.incr(k); if (n === 1) await redisClient.expire(k, 86400); return n; }
+    const n = (_topesMem.get(k) || 0) + 1; _topesMem.set(k, n); return n;
+  },
+});
+
+// Ejecuta las etiquetas [NOTA]/[CITA] de la respuesta SOBRE EL TELÉFONO DEL WEBHOOK. Nunca lanza.
+async function aplicaCrm(tags, from, msgId, nombre) {
+  if (CRM_EFECTIVO === "off" || !tags) return;
+  await ejecutaCrm({
+    modo: CRM_EFECTIVO, tel: normalizePhone(from), msgId, nombre, notas: tags.notas, citas: tags.citas, topes: topesCrm,
+    log: (m) => console.log(`[${PROJECT_NAME}] ${m}`),
+    llama: async (accion, cuerpo) => (await _llamaEdge("crm", BOT_API_SECRET_CRM, cuerpo)).resultado,
+  });
 }
 
 // "Una persona tomó el mando" (escribió desde la app o desde el panel): pausa con la caducidad
@@ -1579,7 +1661,7 @@ async function sendHumanized(to, text, messageId, startedAt) {
 function cleanReply(reply) {
   return reply
     .replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "")
-    .replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").trim()
+    .replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").replace(/\[(?:NOTA|CITA):[^\]]*\]/gi, "").trim()
     .replace(/[ \t]*(—|–|--)[ \t]*$/gm, ".").replace(/[ \t]*(—|–|--)[ \t]*/g, ", ")
     .replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1")  // **URL** → URL
     .replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
@@ -2221,6 +2303,7 @@ app.post("/webhook", async (req, res) => {
     const mediaHint = buildMediaHint(mediaLib);
     // Notas del equipo (CRM → botcfg): bloque aparte SIN cache_control, para que editarlo no invalide el prefijo cacheado.
     const teamBlock = bloqueEquipo(await getBotCfg(), { primerTurno: !history.some((m) => m.role === "assistant") });
+    const cat = await getCatalogoBlock(); // null con BOT_CATALOGO=off (system idéntico al de siempre)
     // Streaming (no create): evita el "Premature close" en respuestas no-stream y mantiene viva la conexión.
     const response = await claudeMessage({
       model: MODEL,
@@ -2246,11 +2329,12 @@ app.post("/webhook", async (req, res) => {
       // mediaHint va en bloque aparte tras el prefijo cacheado (cambia solo al editar la media library).
       system: [
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
+        ...bloquesCatalogoCrm(cat),
         { type: "text", text: dateHint() },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
         ...(teamBlock ? [{ type: "text", text: teamBlock }] : []),
       ],
-      messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // prompt = últimos 20; el resto es historial del panel
+      messages: history.slice(-20).map((m) => ({ role: m.role, content: paraModelo(m) })), // prompt = últimos 20; el resto es historial del panel
     });
 
     const _textBlock = response.content.find((b) => b.type === "text");
@@ -2267,7 +2351,9 @@ app.post("/webhook", async (req, res) => {
     const mediaMatch = reply.match(/\[MEDIA:([^\]]+)\]/i);
     const resendMatch = /\[RESEND_LINK\]/i.test(reply); // el cliente pide reenviar el link que ya recibió
     let leadFields = parseLeadTag(reply); // datos confirmados en la charla → ficha/BD
+    const crmTags = BOT_CRM_MODE !== "off" ? extraeEtiquetas(reply) : null; // [NOTA]/[CITA] del modelo: se ejecutan con el teléfono del webhook, tras responder
     reply = cleanReply(reply); // etiquetas internas + guion + markdown de WhatsApp (helper compartido)
+    postCheckPrecios(reply, cat, history, from); // solo log
 
     // ── Stripe checkout session dinámica ──────────────────────────
     // SIEMPRE quitar cualquier link de pago que el modelo haya alucinado.
@@ -2374,6 +2460,9 @@ app.post("/webhook", async (req, res) => {
         }
       } catch (e) { console.error(`[${PROJECT_NAME}] Error creando cita:`, e.message); }
     }
+
+    // ── CRM del ERP (BOT_CRM): notas y citas etiquetadas por el modelo; nunca rompe la conversación ──
+    await aplicaCrm(crmTags, from, message.id, profileName);
 
     // ── Escalación: notificar al dueño en silencio ────────────────
     if (intent === "escalate" && OWNER_PHONE) {
@@ -2495,6 +2584,13 @@ app.get("/admin/api/health", async (req, res) => {
     storage: redisClient ? "redis" : "ram",
     leads: count,
     testing: { on: TESTING_MODE, allowlist: ALLOWLIST.size, malformados: ALLOWLIST_BAD },
+    // Catálogo y CRM del ERP (S6): modos y estado, sin precios ni teléfonos. Un interruptor mudo sería otro LAW-106.
+    catalogo: await (async () => {
+      if (BOT_CATALOGO_MODE !== "on") return { modo: "off" };
+      const c = await getCatalogoBlock();
+      return { modo: "on", estado: c ? c.estado : "error", unidades: c ? c.unidades.length : 0, desde: c && c.ts ? new Date(c.ts).toISOString() : null };
+    })(),
+    crm: { modo: BOT_CRM_MODE, efectivo: CRM_EFECTIVO },
   });
 });
 
@@ -2709,6 +2805,7 @@ app.post("/admin/api/simulate", async (req, res) => {
     const mediaHint = buildMediaHint(mediaLib);
     // Notas del equipo (CRM → botcfg): bloque aparte SIN cache_control, para que editarlo no invalide el prefijo cacheado.
     const teamBlock = bloqueEquipo(await getBotCfg(), { primerTurno: !history.some((m) => m.role === "assistant") });
+    const cat = await getCatalogoBlock(); // null con BOT_CATALOGO=off (system idéntico al de siempre)
     const response = await claudeMessage({
       model: MODEL,
       thinking: { type: "adaptive" }, // espejo del webhook real (paridad simulador/producción)
@@ -2716,15 +2813,17 @@ app.post("/admin/api/simulate", async (req, res) => {
       max_tokens: 2000,
       system: [
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
+        ...bloquesCatalogoCrm(cat),
         { type: "text", text: dateHint() },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
         ...(teamBlock ? [{ type: "text", text: teamBlock }] : []),
       ],
-      messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // mismo recorte que el webhook real
+      messages: history.slice(-20).map((m) => ({ role: m.role, content: paraModelo(m) })), // mismo recorte que el webhook real
     });
     const textBlock = response.content.find((b) => b.type === "text");
     let reply = (textBlock && textBlock.text) || "(sin respuesta — revisa logs)";
     reply = cleanReply(reply); // mismo limpiado que el webhook real (helper compartido)
+    postCheckPrecios(reply, cat, history, phone); // solo log (el simulador no escribe en el CRM)
     history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
     await saveConversation(phone, history);
     res.json({ reply });
