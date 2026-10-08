@@ -1998,6 +1998,24 @@ app.post("/webhook", async (req, res) => {
       return; // un webhook de estado no trae mensaje que procesar
     }
 
+    // ── Coexistence: una persona escribe desde la app WhatsApp Business del mismo número ──
+    // Meta lo manda como `smb_message_echoes` (campo aparte de `messages`). Si una persona
+    // ya habla con este lead, el bot se calla en ese chat para no responder por encima. Es la
+    // misma pausa que el panel (`setPaused`), así que se reactiva desde el panel. Solo ecos
+    // con `to` conocido: los que manda el propio bot por API no llegan por aquí.
+    if (change?.field === "smb_message_echoes") {
+      for (const echo of change.value?.message_echoes || []) {
+        const to = String(echo?.to || "").replace(/\D/g, "");
+        if (!to || isOwner(to)) continue;
+        if (!(await isPaused(to))) {
+          await setPaused(to, true);
+          if (await getLead(to)) await logEvent(to, "human_takeover", { via: "whatsapp_business_app" }); // sin ficha no se crea una vacía
+          console.log(`[${PROJECT_NAME}] Persona escribió desde la app a ${to} — bot en pausa para ese chat`);
+        }
+      }
+      return;
+    }
+
     const message = change?.value?.messages?.[0];
     if (!message) return;
     if (await alreadyProcessed(message.id)) {
