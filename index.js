@@ -7,6 +7,7 @@ import https from "https";
 import { createClient } from "redis";
 import Stripe from "stripe";
 import crypto from "crypto";
+import { VACIA as CFG_VACIA, validaConfig, bloqueEquipo, ttlPausaHumana } from "./botcfg.js";
 
 const app = express();
 // verify: guarda el body crudo — la firma X-Hub-Signature-256 de Meta se calcula sobre los bytes
@@ -322,6 +323,36 @@ async function setPaused(phone, val) {
 async function isPaused(phone) {
   if (redisClient) return (await redisClient.get(`paused:${phone}`)) === "1";
   return !!fallbackPaused[phone];
+}
+
+// ─── CONFIGURACIÓN EDITABLE DESDE EL CRM (botcfg:v1) ──
+// Instrucciones extra, saludo de bienvenida y horas de pausa. Se lee con caché de 10 s y, si Redis
+// falla, se devuelve la ÚLTIMA buena (no la vacía: un parpadeo de Redis no puede quitarle al bot sus
+// instrucciones). Clave ausente = config vacía = el bot de siempre. `config_set` guarda en
+// `botcfg:log` (últimos 50) quién, cuándo y el valor anterior, para poder volver atrás.
+let _cfgCache = { v: { ...CFG_VACIA }, ts: 0 };
+async function getBotCfg(force = false) {
+  if (!force && Date.now() - _cfgCache.ts < 10000) return _cfgCache.v;
+  if (!redisClient) return _cfgCache.v;
+  try {
+    const raw = await redisClient.get("botcfg:v1");
+    _cfgCache = { v: raw ? { ...CFG_VACIA, ...JSON.parse(raw) } : { ...CFG_VACIA }, ts: Date.now() };
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] botcfg: no se pudo leer la config, uso la última buena: ${e.message}`);
+  }
+  return _cfgCache.v;
+}
+
+// "Una persona tomó el mando" (escribió desde la app o desde el panel): pausa con la caducidad
+// configurada (0 = no caduca). Una pausa manual sin caducidad no se vuelve caducable por esto, y
+// cada nuevo mensaje de la persona renueva el plazo. El interruptor del panel y la baja NO pasan por aquí.
+async function setPausedHumano(phone) {
+  const cfg = await getBotCfg();
+  if (!redisClient) return setPaused(phone, true);
+  const t = ttlPausaHumana(cfg.pausaHoras, await redisClient.ttl(`paused:${phone}`));
+  if (!t.poner) return;
+  if (t.segundos) await redisClient.set(`paused:${phone}`, "1", { EX: t.segundos });
+  else await redisClient.set(`paused:${phone}`, "1");
 }
 
 // ─── "POR RESPONDER" (el cliente escribió y nadie le ha contestado) ──
@@ -2008,8 +2039,9 @@ app.post("/webhook", async (req, res) => {
         const to = String(echo?.to || "").replace(/\D/g, "");
         if (!to || isOwner(to)) continue;
         // 1º la pausa: lo que importa es que el bot se calle; el historial es un extra y no puede impedirlo.
-        if (!(await isPaused(to))) {
-          await setPaused(to, true);
+        const yaPausado = await isPaused(to);
+        await setPausedHumano(to); // cada mensaje de la persona renueva el plazo de la pausa
+        if (!yaPausado) {
           if (await getLead(to)) await logEvent(to, "human_takeover", { via: "whatsapp_business_app" }); // sin ficha no se crea una vacía
           console.log(`[${PROJECT_NAME}] Persona escribió desde la app a ${to} — bot en pausa para ese chat`);
         }
@@ -2186,6 +2218,8 @@ app.post("/webhook", async (req, res) => {
     // Media disponible (gestionada desde el panel): se inyecta para que el bot solo ofrezca lo que existe.
     const mediaLib = await getMediaLib();
     const mediaHint = buildMediaHint(mediaLib);
+    // Notas del equipo (CRM → botcfg): bloque aparte SIN cache_control, para que editarlo no invalide el prefijo cacheado.
+    const teamBlock = bloqueEquipo(await getBotCfg(), { primerTurno: !history.some((m) => m.role === "assistant") });
     // Streaming (no create): evita el "Premature close" en respuestas no-stream y mantiene viva la conexión.
     const response = await claudeMessage({
       model: MODEL,
@@ -2213,6 +2247,7 @@ app.post("/webhook", async (req, res) => {
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
         { type: "text", text: dateHint() },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
+        ...(teamBlock ? [{ type: "text", text: teamBlock }] : []),
       ],
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // prompt = últimos 20; el resto es historial del panel
     });
@@ -2482,7 +2517,7 @@ app.post("/admin/api/send", async (req, res) => {
   // llega vacío queda vacío, nunca se inventa. `by:"human"` solo dice que no fue la IA.
   history.push({ role: "assistant", content: text, ts: Date.now(), by: "human", byUser: byUser || "", wamid: r.wamid || null });
   await saveConversation(phone, history);
-  await setPaused(phone, true); // al responder a mano, el bot deja de contestar a ese lead
+  await setPausedHumano(phone); // al responder a mano, el bot deja de contestar a ese lead (el tiempo lo fija botcfg)
   await setWaiting(phone, false); // ya respondido por el estudio → quitar el pendiente
   const prev = await getLead(phone);
   await recordLead(phone, prev && prev.name, (prev && prev.intent) || "interested", text, "human");
@@ -2541,7 +2576,7 @@ app.post("/admin/api/send-template", async (req, res) => {
     plantilla: template, content: `[plantilla ${template}] ${cuerpo.join(" · ")}`.trim(),
   });
   await saveConversation(phone, history);
-  await setPaused(phone, true);   // igual que el texto libre: el humano toma el mando y
+  await setPausedHumano(phone);   // igual que el texto libre: el humano toma el mando y
   await setWaiting(phone, false); // followupTick deja de soltar SU plantilla encima
   await recordLead(phone, lead.name, lead.intent || "interested", `[plantilla ${template}]`, "human");
   await logEvent(phone, "agente_plantilla", { byUser: byUser || "", plantilla: template, wamid: r.wamid || null });
@@ -2559,7 +2594,7 @@ app.post("/admin/api/send-media", async (req, res) => {
   const history = await getConversation(phone);
   history.push({ role: "assistant", content: (caption || "").trim() || (mtype === "video" ? "[vídeo]" : "[foto]"), ts: Date.now(), by: "human", media: { type: mtype, url, caption: caption || "" } });
   await saveConversation(phone, history);
-  await setPaused(phone, true);
+  await setPausedHumano(phone);
   await setWaiting(phone, false);
   const prev = await getLead(phone);
   await recordLead(phone, prev && prev.name, (prev && prev.intent) || "interested", caption || "[media]", "human");
@@ -2573,6 +2608,70 @@ app.post("/admin/api/pause", async (req, res) => {
   if (!phone) return res.status(400).json({ error: "phone requerido" });
   await setPaused(phone, !!paused);
   res.json({ ok: true, paused: !!paused });
+});
+
+// ── CRM: configuración del bot (instrucciones extra, saludo, horas de pausa) ──
+// Llamador con nombre: la pantalla «Configurar bot» de la intranet, vía lawang-bot-proxy
+// (config_get / config_set / config_revert, permiso bot_configurar). La edge pone `byUser` desde la
+// sesión; aquí se valida OTRA VEZ todo (la edge es la primera puerta, no la única).
+async function leeLogCfg(n = 20) {
+  const raw = await redisClient.lRange("botcfg:log", 0, n - 1);
+  return raw.map((r) => { try { return JSON.parse(r); } catch { return null; } }).filter(Boolean);
+}
+async function guardaCfg(valor, byUser) {
+  const prevRaw = await redisClient.get("botcfg:v1");
+  const prev = prevRaw ? { ...CFG_VACIA, ...JSON.parse(prevRaw) } : { ...CFG_VACIA };
+  const next = { ...valor, updatedAt: Date.now(), updatedBy: String(byUser || "").slice(0, 120) };
+  await redisClient.set("botcfg:v1", JSON.stringify(next));
+  await redisClient.lPush("botcfg:log", JSON.stringify({ ts: next.updatedAt, by: next.updatedBy, prev, next }));
+  await redisClient.lTrim("botcfg:log", 0, 49);
+  _cfgCache = { v: next, ts: Date.now() }; // este proceso aplica el cambio ya, sin esperar los 10 s
+  return next;
+}
+app.get("/admin/api/config", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  if (!redisClient) return res.status(503).json({ error: "sin Redis: la configuración no se puede guardar" });
+  try {
+    res.json({ config: await getBotCfg(true), log: (await leeLogCfg()).map((e) => ({ ts: e.ts, by: e.by })) });
+  } catch (e) {
+    res.status(500).json({ error: "no se pudo leer la configuración" });
+  }
+});
+app.post("/admin/api/config", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  if (!redisClient) return res.status(503).json({ error: "sin Redis: la configuración no se guardaría" });
+  const { config, byUser, expectedUpdatedAt } = req.body || {};
+  if (JSON.stringify(req.body || {}).length > 10000) return res.status(413).json({ error: "cuerpo demasiado grande" });
+  const v = validaConfig(config);
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  try {
+    const actual = await getBotCfg(true);
+    if (typeof expectedUpdatedAt === "number" && expectedUpdatedAt !== (actual.updatedAt || 0)) {
+      return res.status(409).json({ error: "otra persona ha cambiado la configuración mientras la editabas", config: actual });
+    }
+    const next = await guardaCfg(v.value, byUser);
+    console.log(`[${PROJECT_NAME}] Configuración del bot cambiada por ${next.updatedBy || "?"}`);
+    res.json({ ok: true, config: next });
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] botcfg: no se pudo guardar: ${e.message}`);
+    res.status(500).json({ error: "no se pudo guardar la configuración" });
+  }
+});
+app.post("/admin/api/config/revert", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  if (!redisClient) return res.status(503).json({ error: "sin Redis" });
+  try {
+    const [ultimo] = await leeLogCfg(1);
+    if (!ultimo || !ultimo.prev) return res.status(404).json({ error: "no hay un cambio anterior al que volver" });
+    const v = validaConfig({ extra: ultimo.prev.extra, bienvenida: ultimo.prev.bienvenida, pausaHoras: ultimo.prev.pausaHoras });
+    if (!v.ok) return res.status(409).json({ error: `la versión anterior ya no es válida: ${v.error}` });
+    const next = await guardaCfg(v.value, (req.body && req.body.byUser) || "");
+    console.log(`[${PROJECT_NAME}] Configuración del bot revertida por ${next.updatedBy || "?"}`);
+    res.json({ ok: true, config: next });
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] botcfg: no se pudo revertir: ${e.message}`);
+    res.status(500).json({ error: "no se pudo volver a la versión anterior" });
+  }
 });
 
 // ── CRM: notas internas del lead (se escriben también en el Sheet, col. Javier Notes) ──
@@ -2600,6 +2699,8 @@ app.post("/admin/api/simulate", async (req, res) => {
     history.push({ role: "user", content: text, ts: Date.now() });
     const mediaLib = await getMediaLib();
     const mediaHint = buildMediaHint(mediaLib);
+    // Notas del equipo (CRM → botcfg): bloque aparte SIN cache_control, para que editarlo no invalide el prefijo cacheado.
+    const teamBlock = bloqueEquipo(await getBotCfg(), { primerTurno: !history.some((m) => m.role === "assistant") });
     const response = await claudeMessage({
       model: MODEL,
       thinking: { type: "adaptive" }, // espejo del webhook real (paridad simulador/producción)
@@ -2609,6 +2710,7 @@ app.post("/admin/api/simulate", async (req, res) => {
         { type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } },
         { type: "text", text: dateHint() },
         ...(mediaHint ? [{ type: "text", text: mediaHint }] : []),
+        ...(teamBlock ? [{ type: "text", text: teamBlock }] : []),
       ],
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // mismo recorte que el webhook real
     });
