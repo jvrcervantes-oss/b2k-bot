@@ -161,7 +161,7 @@ const MON = String.raw`(?:IDR|Rp\.?|USD|US\$|AUD|A\$|EUR|€|£|\$)`;
 const SUF = String.raw`(?:\s?(?:billion|bn|miliar|milyar|million|mn|juta|jt|thousand|k|ribu|rb|m(?![²2a-z])))?`;
 const NUM = String.raw`\d[\d.,]*\d|\d`;
 const RE_ANTES = new RegExp(String.raw`(?<![A-Za-z])${MON}\s?(${NUM})(${SUF})`, "gi");
-const RE_DESPUES = new RegExp(String.raw`(${NUM})(${SUF})\s?(?:IDR|USD|AUD|EUR)\b`, "gi");
+const RE_DESPUES = new RegExp(String.raw`(${NUM})(${SUF})\s?(?:IDR|USD|AUD|EUR|rupiah|rupees|dollars?|euros?|pounds?)\b`, "gi");
 const MULT = { billion: 1e9, bn: 1e9, miliar: 1e9, milyar: 1e9, million: 1e6, mn: 1e6, juta: 1e6, jt: 1e6, m: 1e6, thousand: 1e3, k: 1e3, ribu: 1e3, rb: 1e3 };
 
 function aNumero(s, suf) {
@@ -198,11 +198,14 @@ export function cifrasConMoneda(texto) {
 }
 
 /**
- * Cifras de la respuesta que NO están en el bloque (ni las dijo el propio cliente: repetir su presupuesto no es cotizar).
- * Devuelve la lista de las no respaldadas. Solo para log.
+ * Cifras con moneda de la respuesta que NO están en el bloque. Legal (§c): TODA cifra debe estar en el bloque, también
+ * cuando el cliente la dijo antes («¿son IDR 1 billion, verdad?» y el bot lo confirma es justo el caso caro). Las que el
+ * cliente había dicho van marcadas `eco: true` para que Legal las vea aparte en la semana de solo log. Solo para log.
  */
 export function postCheckCifras({ respuesta, permitidas = [], delCliente = "" }) {
-  const ok = [...permitidas, ...cifrasConMoneda(delCliente).map((c) => c.valor)];
-  const cerca = (v) => ok.some((a) => Math.abs(v - a) <= Math.max(0.5, a * 0.002));
-  return cifrasConMoneda(respuesta).filter((c) => !cerca(c.valor));
+  const cerca = (v, lista) => lista.some((a) => Math.abs(v - a) <= Math.max(0.5, a * 0.002));
+  const dichas = cifrasConMoneda(delCliente).map((c) => c.valor);
+  return cifrasConMoneda(respuesta)
+    .filter((c) => !cerca(c.valor, permitidas))
+    .map((c) => ({ ...c, eco: cerca(c.valor, dichas) }));
 }

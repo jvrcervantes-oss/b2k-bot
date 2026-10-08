@@ -158,9 +158,17 @@ test("post-check: superficies, fechas y números sueltos no son cifras con moned
   assert.deepStrictEqual(cifrasConMoneda("500 m2 plot, call on 12 Oct at 10:00, 3 bedrooms, 120 sqm"), []);
 });
 
-test("post-check: repetir lo que dijo el cliente (su presupuesto) no es cotizar", () => {
-  assert.deepStrictEqual(postCheckCifras({ respuesta: "With your IDR 3 billion budget I can show options.", permitidas: PERMITIDAS, delCliente: "my budget is IDR 3 billion" }), []);
-  assert.strictEqual(postCheckCifras({ respuesta: "With your IDR 3 billion budget", permitidas: PERMITIDAS, delCliente: "hi" }).length, 1);
+test("post-check: lo que dijo el cliente TAMBIÉN se marca (Legal §c), con eco_cliente para verlo aparte", () => {
+  const r = postCheckCifras({ respuesta: "Yes, IDR 3 billion works for that.", permitidas: PERMITIDAS, delCliente: "is it IDR 3 billion?" });
+  assert.strictEqual(r.length, 1);
+  assert.strictEqual(r[0].eco, true);
+  assert.strictEqual(postCheckCifras({ respuesta: "IDR 3 billion", permitidas: PERMITIDAS, delCliente: "hi" })[0].eco, false);
+});
+
+test("post-check: moneda escrita en prosa detrás de la cifra", () => {
+  assert.strictEqual(postCheckCifras({ respuesta: "about 5 billion rupiah", permitidas: [] }).length, 1);
+  assert.strictEqual(postCheckCifras({ respuesta: "around 350,000 dollars", permitidas: [] }).length, 1);
+  assert.deepStrictEqual(postCheckCifras({ respuesta: "5 billion rupiah", permitidas: PERMITIDAS }), []);
 });
 
 test("post-check: parseo de separadores y sufijos", () => {
@@ -325,4 +333,29 @@ test("index.js: las etiquetas se ejecutan con el teléfono del webhook y nunca c
   assert.match(SRC, /await aplicaCrm\(crmTags, from, message\.id, profileName\)/);
   assert.match(SRC, /tel: normalizePhone\(from\)/);
   assert.ok(!/extraeEtiquetas\([^)]*\)[^;]*tel/.test(SRC));
+});
+
+// Los cuerpos que manda el bot deben pasar la validación REAL de la edge (esquema cerrado de bot-api/index.ts).
+test("los cuerpos de ejecutaCrm encajan en el esquema cerrado de la edge (claves, tel, msg_id, longitudes)", async () => {
+  const ts = fs.readFileSync(new URL("../../proyectos/Lawang/supabase/functions/bot-api/index.ts", import.meta.url), "utf8");
+  const claves = {};
+  for (const m of ts.matchAll(/^\s+(lead_\w+): \[('accion'[^\]]*)\],?$/gm)) claves[m[1]] = m[2].replace(/'/g, "").split(",").map((x) => x.trim());
+  assert.deepStrictEqual(Object.keys(claves).sort(), ["lead_cita", "lead_nota", "lead_upsert"]);
+  const reTel = new RegExp(ts.match(/RE_TEL = \/(.+)\/;/)[1]);
+  const reMsg = new RegExp(ts.match(/RE_MSG = \/(.+)\/;/)[1]);
+  const visto = [];
+  await ejecutaCrm({ modo: "on", tel: "34661569373", msgId: "wamid.HBgLMzQ2NjE1NjkzNzMVAgASGBQzQTAx", nombre: "", notas: ["x"],
+    citas: [{ tipo: "llamada", cuando: "2026-10-12T10:00", zona: "AEST" }], llama: async (a, c) => { visto.push(c); return a === "lead_upsert" ? "creado" : "ok"; } });
+  assert.strictEqual(visto.length, 3);
+  for (const c of visto) {
+    assert.ok(Object.keys(c).every((k) => claves[c.accion].includes(k)), c.accion + " claves " + Object.keys(c));
+    assert.ok(reTel.test(c.tel)); assert.ok(reMsg.test(c.msg_id));
+    if (c.cuando) assert.ok(c.cuando.length <= 40);
+    if (c.nombre !== undefined) assert.ok(typeof c.nombre === "string" && c.nombre.length <= 200);
+  }
+});
+
+test("index.js: aplicaCrm va después de los avisos al owner (una edge lenta no retrasa la escalación)", () => {
+  assert.ok(SRC.indexOf("await aplicaCrm(crmTags") > SRC.indexOf("await notifyOwner(intent"));
+  assert.ok(SRC.indexOf("await aplicaCrm(crmTags") > SRC.indexOf("const entry = await escPush"));
 });

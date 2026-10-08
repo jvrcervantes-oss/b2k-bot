@@ -401,7 +401,7 @@ function postCheckPrecios(reply, cat, history, from) {
   try {
     const delCliente = history.filter((m) => m.role === "user").slice(-6).map((m) => m.content).join(" | ");
     const raras = postCheckCifras({ respuesta: reply, permitidas: cat ? cifrasPermitidas(cat.unidades) : [], delCliente });
-    if (raras.length) console.warn(`[${PROJECT_NAME}] [CATALOGO] POST-CHECK: cifra(s) fuera del bloque (${cat ? cat.estado : "sin bloque"}) para ${from}: ${raras.map((c) => c.texto).join(" | ")}`);
+    if (raras.length) console.warn(`[${PROJECT_NAME}] [CATALOGO] POST-CHECK: cifra(s) fuera del bloque (${cat ? cat.estado : "sin bloque"}) para ${from}: ${raras.map((c) => c.texto + (c.eco ? " [eco_cliente]" : "")).join(" | ")}`);
   } catch (e) { console.error(`[${PROJECT_NAME}] post-check falló: ${e.message}`); }
 }
 
@@ -2461,9 +2461,6 @@ app.post("/webhook", async (req, res) => {
       } catch (e) { console.error(`[${PROJECT_NAME}] Error creando cita:`, e.message); }
     }
 
-    // ── CRM del ERP (BOT_CRM): notas y citas etiquetadas por el modelo; nunca rompe la conversación ──
-    await aplicaCrm(crmTags, from, message.id, profileName);
-
     // ── Escalación: notificar al dueño en silencio ────────────────
     if (intent === "escalate" && OWNER_PHONE) {
       const entry = await escPush(from, profileName, text);
@@ -2487,6 +2484,10 @@ app.post("/webhook", async (req, res) => {
         await setNotifiedLevel(from, intent);
       }
     }
+
+    // ── CRM del ERP (BOT_CRM): notas y citas etiquetadas por el modelo. Va DESPUÉS de los avisos al owner: con la edge
+    //    lenta son hasta 4 llamadas de 5 s y no deben retrasar la escalación. Nunca rompe la conversación. ──
+    await aplicaCrm(crmTags, from, message.id, profileName);
 
     // ── Enriquecimiento oportunista (no bloquea): si a la ficha le faltan datos
     //    que el chat ya tiene, los extrae en segundo plano. Debounce 15 min. ──
