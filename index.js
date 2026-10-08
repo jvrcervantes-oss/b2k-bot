@@ -2007,18 +2007,28 @@ app.post("/webhook", async (req, res) => {
       for (const echo of change.value?.message_echoes || []) {
         const to = String(echo?.to || "").replace(/\D/g, "");
         if (!to || isOwner(to)) continue;
-        // Lo que dijo la persona entra al historial como mensaje humano (igual que desde el panel):
-        // sin esto, al reanudar la IA no sabe qué se le prometió al cliente y se contradice.
-        if (!(await alreadyProcessed(echo.id))) {
-          const body = echo.type === "text" ? String(echo.text?.body || "").trim() : "";
-          const history = await getConversation(to);
-          history.push({ role: "assistant", content: body || `[${echo.type || "mensaje"}]`, ts: Date.now(), by: "human", byUser: "whatsapp_business_app", wamid: echo.id || null });
-          await saveConversation(to, history);
-        }
+        // 1º la pausa: lo que importa es que el bot se calle; el historial es un extra y no puede impedirlo.
         if (!(await isPaused(to))) {
           await setPaused(to, true);
           if (await getLead(to)) await logEvent(to, "human_takeover", { via: "whatsapp_business_app" }); // sin ficha no se crea una vacía
           console.log(`[${PROJECT_NAME}] Persona escribió desde la app a ${to} — bot en pausa para ese chat`);
+        }
+        // 2º lo que dijo la persona entra al historial como mensaje humano (igual que desde el panel):
+        // sin esto, al reanudar la IA no sabe qué se le prometió al cliente y se contradice.
+        // Dentro del turno del lead: un turno de IA en vuelo guardaría su historial viejo encima.
+        let releaseEcho = null;
+        try {
+          if (!(await alreadyProcessed(echo.id))) {
+            releaseEcho = await waitMyTurn(to);
+            const body = echo.type === "text" ? String(echo.text?.body || "").trim() : "";
+            const history = await getConversation(to);
+            history.push({ role: "assistant", content: body || `[${echo.type || "mensaje"}]`, ts: Date.now(), by: "human", byUser: "whatsapp_business_app", wamid: echo.id || null });
+            await saveConversation(to, history);
+          }
+        } catch (e) {
+          console.error(`[${PROJECT_NAME}] No se pudo guardar en el historial lo que escribió la persona a ${to}: ${e.message}`);
+        } finally {
+          if (releaseEcho) releaseEcho();
         }
       }
       return;
