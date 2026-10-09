@@ -10,7 +10,7 @@ import { inventario as inventarioRedis, importar as importarRedis } from "./impo
 import { creaTransporte as creaTransporteImportar } from "./import_transporte.js"; // TEMPORAL (S5/LAW-507): se retira en S9
 import { VACIA as CFG_VACIA, validaConfig, bloqueEquipo, ttlPausaHumana } from "./botcfg.js";
 import {
-  initRedis, redisActivo, almacenNombre, lectorImportacion,
+  initRedis, bloqueaRedis, redisActivo, almacenNombre, lectorImportacion,
   getConversation, saveConversation, escPush, escPop, escMapGuardar, escRutaPorCita,
   getLead, leadGuardar, leadsListar, leadsContar, leadBorrar, getNotifiedLevel, setNotifiedLevel,
   setPaused, isPaused, setPausedHumano as setPausedHumanoStore, cfgRawLeer, cfgLogRaw, cfgGuardarConLog, incrTope,
@@ -180,9 +180,19 @@ const CONTEXT = fs.existsSync(contextFileName)
   ? fs.readFileSync(contextFileName, "utf8")
   : BOT_CONTEXT;
 
+// ─── ALMACÉN: BOT_STORE=redis (por defecto) | postgres (S4b del encargo 20261009_lawang_bot_sin_redis) ──────────
+// redis: el bot de siempre, sin ningún cambio de comportamiento. postgres: el estado vive en Postgres de Lawang a través de la edge `bot-api`;
+// el módulo de Redis queda BLOQUEADO (cualquier acceso lanza) y el webhook es el de turno-pg.js. Un valor desconocido NO abre nada nuevo: cae a redis, gritando.
+const BOT_STORE_RAW = String(process.env.BOT_STORE || "redis").trim().toLowerCase();
+if (!["redis", "postgres"].includes(BOT_STORE_RAW)) console.error(`[${PROJECT_NAME}] BOT_STORE="${BOT_STORE_RAW}" no es válido (redis | postgres): se usa redis`);
+const STORE_PG = BOT_STORE_RAW === "postgres";
+const turnoMod = STORE_PG ? await import("./turno-pg.js") : null;     // en modo redis estos módulos ni se cargan
+const autorizaciones = STORE_PG ? turnoMod.creaAutorizaciones({ esOwner: (t) => esOwnerExacto(t) }) : null;
+
 // ─── REDIS ────────────────────────────────────────────────────────
 // Todo el acceso a Redis (y la memoria de respaldo sin Redis) vive en store/redis.js; aquí solo se conecta.
-await initRedis({ url: REDIS_URL, projectName: PROJECT_NAME });
+if (STORE_PG) bloqueaRedis();
+else await initRedis({ url: REDIS_URL, projectName: PROJECT_NAME });
 
 
 // ─── ÍNDICE DE LEADS (para el panel web) ──────────────────────────
@@ -969,7 +979,7 @@ async function reminderTick() {
     console.error(`[${PROJECT_NAME}] reminderTick error: ${e.message}`);
   }
 }
-setInterval(reminderTick, 5 * 60000); // revisar cada 5 minutos
+if (!STORE_PG) setInterval(reminderTick, 5 * 60000); // revisar cada 5 minutos (BOT_STORE=postgres: su reloj es turno-pg.js → recordatorioTick)
 
 // ─── RE-ENGANCHE DE VENTAS TRAS LA VENTANA DE 24h ──────────────────
 // Pasadas las 24h, WhatsApp solo permite PLANTILLAS aprobadas (no texto libre).
@@ -1015,7 +1025,7 @@ async function followupTick() {
     console.error(`[${PROJECT_NAME}] followupTick error: ${e.message}`);
   }
 }
-setInterval(followupTick, 30 * 60000); // revisar cada 30 minutos
+if (!STORE_PG) setInterval(followupTick, 30 * 60000); // revisar cada 30 minutos (BOT_STORE=postgres: apagado hasta S12)
 
 // ─── RECORDATORIOS DE SEGUIMIENTO MANUAL ───────────────────────────
 // Cuando un lead llega a su fecha "Próximo seguimiento" (nextFollowUp), avisa al OWNER
@@ -1044,7 +1054,7 @@ async function followUpReminderTick() {
     console.error(`[${PROJECT_NAME}] followUpReminderTick error: ${e.message}`);
   }
 }
-setInterval(followUpReminderTick, 30 * 60000); // revisar cada 30 minutos
+if (!STORE_PG) setInterval(followUpReminderTick, 30 * 60000); // revisar cada 30 minutos (BOT_STORE=postgres: apagado)
 
 // ─── INSTRUCCIONES BASE ───────────────────────────────────────────
 const BASE_INSTRUCTIONS_HEAD = `
@@ -1374,12 +1384,22 @@ async function createStripeSession(numUnits) {
 }
 
 // ─── WHATSAPP ─────────────────────────────────────────────────────
+// Solo BOT_STORE=postgres: un envío sin autorización de turno se RECHAZA y se grita (es un fallo de programación, no del cliente).
+function rechazoDeEnvio(toClean, motivo) {
+  const n = autorizaciones.cuentaRechazo();
+  console.error(`[${PROJECT_NAME}] 🚫 ENVÍO RECHAZADO a …${String(toClean).slice(-4)}: ${motivo} (rechazos desde el arranque: ${n})`);
+  return { ok: false, error: `envío rechazado: ${motivo}` };
+}
 async function sendWhatsAppResult(to, message) {
   const toClean = normalizePhone(to);
   /* La baja se honra en los DOS nucleos de envio, que es por donde pasa todo — bot,
      ticks, panel y comercial. Ponerla en los endpoints dejaria fuera a followupTick y
      reminderTick, que es justo quien mas insiste. */
-  if (await getOptOut(toClean)) {
+  if (STORE_PG) {
+    // BOT_STORE=postgres: no se envía a un cliente sin haber consultado ANTES su estado (baja incluida). Ver turno-pg.js → creaAutorizaciones.
+    const motivo = autorizaciones.motivo(toClean, message);
+    if (motivo) return rechazoDeEnvio(toClean, motivo);
+  } else if (await getOptOut(toClean)) {
     console.log(`[${PROJECT_NAME}] 🚫 Envio BLOQUEADO a ${toClean}: pidio la baja (STOP)`);
     return { ok: false, error: "el lead pidio la baja (STOP)" };
   }
@@ -1422,10 +1442,11 @@ async function sendWhatsAppResult(to, message) {
 async function sendWhatsApp(to, message) {
   if (!isAllowed(to)) {
     console.log(`[${PROJECT_NAME}] 🧪 TESTING — envío del bot BLOQUEADO a ${normalizePhone(to)} (no está en BOT_ALLOWLIST)`);
-    return;
+    return false;
   }
   const r = await sendWhatsAppResult(to, message);
   if (!r.ok) console.error(`[${PROJECT_NAME}] Error enviando WhatsApp a ${normalizePhone(to)}:`, r.error);
+  return !!r.ok;   // el valor solo lo lee BOT_STORE=postgres (¿salió algo?); el modo redis lo ignora, como siempre
 }
 
 // ─── ENVÍO HUMANIZADO: 1-3 burbujas con pausa de tecleo, no un párrafo de golpe ─────
@@ -1460,8 +1481,9 @@ function typingDelay(len, cap) {
   return Math.round(Math.min(READ_MS + len * TYPE_MS_PER_CHAR, cap) * jitter);
 }
 async function sendHumanized(to, text, messageId, startedAt) {
-  if (!HUMANIZE_CHUNKS || !text) { await sendWhatsApp(to, text); return; }
+  if (!HUMANIZE_CHUNKS || !text) return await sendWhatsApp(to, text);
   const chunks = splitBubbles(text);
+  let algunaSalio = false;
   for (let i = 0; i < chunks.length; i++) {
     // La 1ª descuenta lo que ya tardó Claude; las siguientes son pausa completa, con tope más bajo
     // (una persona encadena sus propios mensajes rápido) — pero nunca instantáneas.
@@ -1472,8 +1494,9 @@ async function sendHumanized(to, text, messageId, startedAt) {
       if (messageId) markRead(messageId, true);                    // "escribiendo…" mientras espera
       await sleep(wait);
     }
-    await sendWhatsApp(to, chunks[i]);
+    if (await sendWhatsApp(to, chunks[i])) algunaSalio = true;
   }
+  return algunaSalio;
 }
 
 // Limpia la respuesta del modelo para el cliente: quita las etiquetas internas ([INTENT], [LEAD]…),
@@ -1586,6 +1609,7 @@ function buildMediaHint(mediaLib) {
 // Envía una foto/vídeo por URL (WhatsApp Cloud API acepta media por link público).
 async function sendWhatsAppMedia(to, item) {
   const toClean = normalizePhone(to);
+  if (STORE_PG) { const motivo = autorizaciones.motivo(toClean, null); if (motivo) return rechazoDeEnvio(toClean, motivo); }
   const type = item.type === "video" ? "video" : "image";
   const payload = { messaging_product: "whatsapp", to: toClean, type };
   payload[type] = { link: item.url };
@@ -1634,7 +1658,10 @@ function classifyDeliveryStatus(st) {
 // Lo usa quien habla por su propia boca: una persona del estudio desde la intranet.
 async function sendWhatsAppTemplateResult(to, templateName, langCode, bodyParams = []) {
   const toClean = normalizePhone(to);
-  if (await getOptOut(toClean)) {
+  if (STORE_PG) {
+    const motivo = autorizaciones.motivo(toClean, null);
+    if (motivo) return rechazoDeEnvio(toClean, motivo);
+  } else if (await getOptOut(toClean)) {
     console.log(`[${PROJECT_NAME}] 🚫 Plantilla "${templateName}" BLOQUEADA a ${toClean}: pidio la baja (STOP)`);
     return { ok: false, error: "el lead pidio la baja (STOP)" };
   }
@@ -1739,11 +1766,11 @@ async function notifyOwner(kind, lead) {
 // más importan son justo los que YA tienen ficha de la etapa HUMAN_ONLY — los cálidos. Con
 // `!prev` esos no avisarían nunca y se quedarían mudos sin que nadie se entere.
 // Clave propia (`testnotif:`) para no pisar el nivel de NOTIFY_RANK de notifyOwner.
-async function notifyOwnerTesting(phone, name, lastMessage) {
+async function notifyOwnerTesting(phone, name, lastMessage, { yaDecidido = false } = {}) {
   if (!OWNER_PHONE) return;
   const clean = normalizePhone(phone);
   try {
-    if (await testNotifYaAvisado(clean)) return;
+    if (!yaDecidido && await testNotifYaAvisado(clean)) return;
     await sendWhatsApp(
       OWNER_PHONE,
       `🧪 ${PROJECT_NAME} — lead real frenado por el modo testing\n\n` +
@@ -1769,6 +1796,13 @@ function isOwner(from) {
   return ownerClean.slice(-9) === fromClean.slice(-9);
 }
 
+// Comparación EXACTA de dígitos (BOT_STORE=postgres): lo que decide quién puede tomar una escalación y reenviar su respuesta a un cliente no puede
+// ser «los últimos 9 dígitos» (dos móviles de países distintos los comparten y el fallo sería fail-open). OWNER_PHONE debe llevar prefijo de país.
+function esOwnerExacto(from) {
+  const o = normalizePhone(OWNER_PHONE);
+  return !!o && o === normalizePhone(from);
+}
+
 // ─── HEALTH (monitor externo) ──────────────────────────────────────
 // Para UptimeRobot / Better Stack: paso 1 del apartado 4 de contexto/infraestructura_2026.md,
 // que estuvo escrito sin construir hasta el 28-jul-2026. Antes de esto la única señal de vida era
@@ -1784,7 +1818,7 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     project: PROJECT_NAME,
-    storage: almacenNombre(),
+    storage: STORE_PG ? "postgres" : almacenNombre(),
     uptime_s: Math.round(process.uptime()),
   });
 });
@@ -1816,6 +1850,12 @@ function validSignature(req) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+// BOT_STORE=postgres: sin META_APP_SECRET no se acepta NADA (el modo redis conserva su compatibilidad de siempre). Se comprueba ANTES de cualquier llamada a la base.
+function validSignatureEstricta(req) {
+  if (!META_APP_SECRET) return false;
+  return validSignature(req);
+}
+
 // Dedup por wamid: Meta reintenta la entrega si no confirma rápido → el mismo mensaje
 // puede llegar 2+ veces y el bot respondería doble. TTL 24h (los reintentos son de minutos).
 
@@ -1838,7 +1878,7 @@ async function waitMyTurn(phone) {
   };
 }
 
-app.post("/webhook", async (req, res) => {
+const webhookRedis = async (req, res) => {
   if (!validSignature(req)) {
     console.warn(`[${PROJECT_NAME}] Webhook POST con firma inválida — descartado`);
     return res.sendStatus(403);
@@ -2291,7 +2331,107 @@ app.post("/webhook", async (req, res) => {
   } finally {
     if (releaseTurn) releaseTurn();   // sin esto, un fallo deja al lead sin poder volver a escribir
   }
-});
+};
+// ─── BOT_STORE=postgres: webhook, rutas del panel y recordatorio de turno-pg.js ─────────────────────────────
+// El handler de arriba (webhookRedis) no se ha tocado: con BOT_STORE=redis el comportamiento es el de siempre. S9 lo borra.
+let webhookPg = null, turnoPg = null;
+if (STORE_PG) {
+  const { creaPg } = await import("./store/postgres.js");
+  const logPg = (m) => console.log(`[${PROJECT_NAME}] ${m}`);
+  const edgeSecret = (n) => String(process.env[n] || "").trim();
+  // Plazos de fiabilidad (valores por defecto del plan; las variables existen para poder ajustarlos sin tocar código y para las pruebas).
+  const listaMs = (v, def) => { const l = String(v || "").split(",").map((x) => parseInt(x, 10)).filter((n) => Number.isFinite(n) && n >= 0 && n <= 600000); return l.length ? l : def; };
+  const numMs = (v, def, max) => { const n = parseInt(v, 10); return Number.isFinite(n) && n > 0 && n <= max ? n : def; };
+  const pgCli = creaPg({
+    url: BOT_API_URL, log: logPg,
+    timeoutMs: numMs(process.env.BOT_API_TIMEOUT_MS, 10000, 60000), pausaReintentoMs: numMs(process.env.BOT_API_PAUSA_REINTENTO_MS, 300, 10000),
+    secretos: { estado: edgeSecret("BOT_API_SECRET_ESTADO"), recordatorio: edgeSecret("BOT_API_SECRET_RECORDATORIO"), humano: edgeSecret("BOT_API_SECRET_HUMANO") },
+    // El aviso al dueño NO depende de la base: va directo a WhatsApp.
+    onAlarma: async ({ fallos, accion, tipo, status }) => {
+      console.error(`[${PROJECT_NAME}] 🚨 bot-api SIN RESPUESTA: ${fallos} fallos seguidos (último: ${accion} ${tipo}${status ? " HTTP " + status : ""})`);
+      if (OWNER_PHONE) await sendWhatsAppResult(OWNER_PHONE, `🚨 ${PROJECT_NAME}: la base de datos del bot no responde (${fallos} fallos seguidos). Mientras dure, el bot NO contesta a los clientes; sus mensajes se guardan si la base los acepta y se reintenta contestarlos. Revisa la edge bot-api.`);
+    },
+    onRecuperado: async () => {
+      console.log(`[${PROJECT_NAME}] bot-api vuelve a responder`);
+      if (OWNER_PHONE) await sendWhatsAppResult(OWNER_PHONE, `✅ ${PROJECT_NAME}: la base de datos del bot vuelve a responder.`);
+    },
+  });
+  // Cita que el cliente cree agendada y no se guardó: mismo aviso al dueño que en modo redis.
+  const avisoCitaSinRegistrar = async ({ apptMatch, from, profileName }) => {
+    const texto = avisoCita({ proyecto: PROJECT_NAME, nombre: profileName, tel: String(from),
+      hecho: { accion: "lead_cita", resultado: apptMatch ? "etiqueta_antigua" : "etiqueta_ilegible", tipo: "llamada", cuando: apptMatch ? apptMatch[1].trim() : "?", zona: "" } });
+    if (texto) await sendWhatsApp(OWNER_PHONE, texto);
+  };
+  turnoPg = turnoMod.creaTurnoPg({
+    pg: pgCli, autoriza: autorizaciones, log: logPg, projectName: PROJECT_NAME, ownerPhone: OWNER_PHONE || "",
+    esOwner: esOwnerExacto, isAllowed, testingMode: TESTING_MODE, humanOnly: HUMAN_ONLY_MODE,
+    firmaValida: validSignatureEstricta, waitMyTurn, palabrasBaja: PALABRAS_BAJA, acuse: ACUSE_DERECHOS,
+    claude: (params) => claudeMessage({ model: MODEL, ...params }),
+    systemBlocks: (cat) => [{ type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } }, ...bloquesCatalogoCrm(cat), { type: "text", text: dateHint() }],
+    paraModelo: (m) => paraModelo(m), cleanReply, extraeEtiquetas, citasIlegibles, pideTraspaso,
+    botCrmMode: BOT_CRM_MODE, crmEfectivo: CRM_EFECTIVO, aplicaCrm, getCatalogoBlock, postCheckPrecios,
+    sendBot: sendWhatsApp, sendHumanized, sendOwner: (t) => sendWhatsAppResult(OWNER_PHONE, t),
+    sendCliente: sendWhatsAppResult, sendClienteTemplate: sendWhatsAppTemplateResult,
+    notifyOwner, notifyOwnerTesting: (p, n, m) => notifyOwnerTesting(p, n, m, { yaDecidido: true }), markRead, transcribeAudio,
+    avisoCitaSinRegistrar, notaDerechos, avisoDerechos, clasificaEntrega: classifyDeliveryStatus, setWaBlocked, clearWaBlocked,
+    resume: async ({ system, user }) => {
+      const r = await claudeMessage({ model: EXTRACT_MODEL, max_tokens: 500, system, messages: [{ role: "user", content: user }] });
+      const b = r.content.find((x) => x.type === "text");
+      return (b && b.text) || "";
+    },
+    reintentosEstadoMs: listaMs(process.env.BOT_TURNO_REINTENTOS_MS, [20000, 90000]), reintentosCierreMs: listaMs(process.env.BOT_CIERRE_REINTENTOS_MS, [1000, 3000, 8000]),
+    modoRecordatorio: String(process.env.BOT_RECORDATORIO || "off").trim().toLowerCase() === "postgres" ? "postgres" : "off",
+    tz: CALENDAR_TZ || "Asia/Makassar",
+  });
+  webhookPg = turnoPg.webhook;
+  // Lo que el bot ya no tiene (lo vacío o sin configurar en Lawang, decisión 7 del owner) responde 410 en vez de tocar un almacén que no existe.
+  const PG_ADMIN_VIVO = new Set(["/admin/api/health", "/admin/api/wa-status", "/admin/api/templates", "/admin/api/send", "/admin/api/send-template", "/admin/api/pause", "/admin/api/simulate", "/admin/api/simulate/reset"]);
+  app.use(["/admin/api", "/media", "/unsubscribe"], (req, res, next) => (PG_ADMIN_VIVO.has(req.baseUrl + req.path) ? next() : res.status(410).json({ error: "retirado_con_postgres" })));
+  turnoPg.rutasAdmin(app, { adminAuth });
+  // /admin/api/health y el simulador, con su memoria de proceso
+  const simulaciones = new Map();
+  app.get("/admin/api/health", async (req, res) => {
+    if (!adminAuth(req, res)) return;
+    res.json({
+      storage: "postgres",
+      edge: { fallos_seguidos: pgCli.fallosSeguidos, umbral_alarma: pgCli.umbral, llamadas: pgCli.llamadas },
+      firma: !!META_APP_SECRET,
+      envios_rechazados: autorizaciones.rechazos,
+      testing: { on: TESTING_MODE, allowlist: ALLOWLIST.size, malformados: ALLOWLIST_BAD },
+      catalogo: BOT_CATALOGO_MODE !== "on" ? { modo: "off" } : await (async () => { const c = await getCatalogoBlock(); return { modo: "on", estado: c ? c.estado : "error", unidades: c ? c.unidades.length : 0, desde: c && c.ts ? new Date(c.ts).toISOString() : null }; })(),
+      crm: { modo: BOT_CRM_MODE, efectivo: CRM_EFECTIVO },
+      recordatorio: String(process.env.BOT_RECORDATORIO || "off"),
+    });
+  });
+  app.post("/admin/api/simulate", async (req, res) => {
+    if (!adminAuth(req, res)) return;
+    const { session, text } = req.body || {};
+    if (!text) return res.status(400).json({ error: "text requerido" });
+    const clave = String(session || "default").slice(0, 60);
+    try {
+      const history = simulaciones.get(clave) || [];
+      history.push({ role: "user", content: String(text).slice(0, 4000) });
+      const cat = await getCatalogoBlock();
+      const response = await claudeMessage({
+        model: MODEL, thinking: { type: "adaptive" }, output_config: { effort: "low" }, max_tokens: 2000,
+        system: [{ type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } }, ...bloquesCatalogoCrm(cat), { type: "text", text: dateHint() }],
+        messages: history.slice(-20).map((m) => ({ role: m.role, content: paraModelo(m) })),
+      });
+      const tb = response.content.find((b) => b.type === "text");
+      const reply = cleanReply((tb && tb.text) || "(sin respuesta — revisa logs)");
+      history.push({ role: "assistant", content: reply });
+      simulaciones.set(clave, history.slice(-100));
+      if (simulaciones.size > 200) simulaciones.delete(simulaciones.keys().next().value);
+      res.json({ reply });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  app.post("/admin/api/simulate/reset", (req, res) => {
+    if (!adminAuth(req, res)) return;
+    simulaciones.delete(String((req.body && req.body.session) || "default").slice(0, 60));
+    res.json({ ok: true });
+  });
+}
+app.post("/webhook", (req, res) => (STORE_PG ? webhookPg(req, res) : webhookRedis(req, res)));
 
 // ─── PANEL WEB (control de chats del bot) ─────────────────────────
 // HTML del panel en panel.html (estilo HighLevel). Respaldo mínimo si falta el archivo.
@@ -3106,7 +3246,7 @@ async function newsletterTick() {
     nlSending = false;
   }
 }
-setInterval(newsletterTick, 60000); // revisar cada minuto
+if (!STORE_PG) setInterval(newsletterTick, 60000); // revisar cada minuto (BOT_STORE=postgres: sin newsletter)
 
 // ── Citas / calendario ──
 app.get("/admin/api/appts", async (req, res) => {
@@ -3154,7 +3294,13 @@ app.listen(PORT, async () => {
   } else {
     console.log(`[${PROJECT_NAME}] 🌐 Modo abierto — el bot responde a cualquier número (BOT_ALLOWLIST y BOT_MODE sin definir).`);
   }
-  console.log(`[${PROJECT_NAME}] CRM (BD): ${redisActivo() ? "Redis (persistente)" : "RAM (volátil — configura REDIS_URL)"}`);
+  console.log(`[${PROJECT_NAME}] CRM (BD): ${STORE_PG ? "Postgres de Lawang vía la edge bot-api (BOT_STORE=postgres; Redis BLOQUEADO)" : redisActivo() ? "Redis (persistente)" : "RAM (volátil — configura REDIS_URL)"}`);
+  if (STORE_PG) {
+    const faltan = [["BOT_API_URL", BOT_API_URL], ["BOT_API_SECRET_ESTADO", process.env.BOT_API_SECRET_ESTADO], ["BOT_API_SECRET_HUMANO", process.env.BOT_API_SECRET_HUMANO], ["META_APP_SECRET", META_APP_SECRET], ["OWNER_PHONE", OWNER_PHONE]].filter(([, v]) => !String(v || "").trim()).map(([k]) => k);
+    if (faltan.length) console.error(`[${PROJECT_NAME}] 🚨 BOT_STORE=postgres con variables VACÍAS: ${faltan.join(", ")}. ${faltan.includes("META_APP_SECRET") ? "SIN META_APP_SECRET todo POST del webhook se rechaza con 403. " : ""}El bot no podrá contestar hasta ponerlas.`);
+    if (String(process.env.BOT_RECORDATORIO || "").trim().toLowerCase() === "postgres" && !String(process.env.BOT_API_SECRET_RECORDATORIO || "").trim()) console.error(`[${PROJECT_NAME}] 🚨 BOT_RECORDATORIO=postgres pero falta BOT_API_SECRET_RECORDATORIO`);
+    if (OWNER_PHONE && normalizePhone(OWNER_PHONE).length < 10) console.error(`[${PROJECT_NAME}] ⚠️ OWNER_PHONE parece sin prefijo de país: con BOT_STORE=postgres el dueño se reconoce por dígitos EXACTOS`);
+  }
   console.log(`[${PROJECT_NAME}] Firma webhook: ${META_APP_SECRET ? "🟢 X-Hub-Signature-256 activa" : "⚠️  SIN verificar — añade META_APP_SECRET en Railway"}`);
   console.log(`[${PROJECT_NAME}] Email (Brevo): ${MAIL_READY ? "🟢 listo" : `⚠️  NO configurado → BREVO_API_KEY=${BREVO_API_KEY ? "ok" : "FALTA"}, MAIL_FROM=${MAIL_FROM ? "ok" : "FALTA"}`}`);
   if (!MAIL_READY) {
@@ -3177,6 +3323,7 @@ app.listen(PORT, async () => {
   }
 
   // Auto-relleno de la BD: barrido inicial (tras conectar Redis) + periódico cada 30 min.
-  setTimeout(() => enrichSweep(20), 8000);
-  setInterval(() => enrichSweep(10), 30 * 60 * 1000);
+  if (!STORE_PG) setTimeout(() => enrichSweep(20), 8000);
+  if (!STORE_PG) setInterval(() => enrichSweep(10), 30 * 60 * 1000);
+  if (STORE_PG && turnoPg && String(process.env.BOT_RECORDATORIO || "").trim().toLowerCase() === "postgres") setInterval(() => turnoPg.recordatorioTick(), 5 * 60000);
 });

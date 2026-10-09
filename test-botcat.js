@@ -325,7 +325,8 @@ test("index.js: ambos interruptores nacen apagados y solo aceptan sus valores", 
 test("index.js: los dos system (webhook y simulador) usan el mismo cableado y el catálogo va tras el prefijo cacheado", () => {
   const sistemas = SRC.match(/system: \[\n\s+\{ type: "text", text: buildSystemPrompt\(\), cache_control: \{ type: "ephemeral" \} \},\n\s+\.\.\.bloquesCatalogoCrm\(cat\),\n\s+\{ type: "text", text: dateHint\(\) \},/g);
   assert.strictEqual((sistemas || []).length, 2);
-  assert.strictEqual((SRC.match(/content: paraModelo\(m\)/g) || []).length, 2);
+  // webhook de redis, simulador de redis y simulador de BOT_STORE=postgres (S4b); el webhook de postgres lo recibe inyectado (paraModelo) en turno-pg.js
+  assert.strictEqual((SRC.match(/content: paraModelo\(m\)/g) || []).length, 3);
   assert.ok(!/content: m\.content \}\)\)/.test(SRC.slice(SRC.indexOf("messages: history.slice(-20)"), SRC.indexOf("messages: history.slice(-20)") + 200)));
 });
 

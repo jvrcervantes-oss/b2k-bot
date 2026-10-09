@@ -43,3 +43,18 @@ se avisa una vez al `OWNER_PHONE` por lead nuevo. Se quita cuando el owner quier
 ## Regla de oro
 El archivo que edites tiene que ser el que la **variable del servicio** carga de verdad, no el que se
 llama parecido. *(Gotcha real 27-jul-2026: el botón se puso en `panel.html` y BBM sirve `panel-rental.html`.)*
+
+## Rama `lawang`: almacén Redis o Postgres (`BOT_STORE`, S4b del encargo `20261009_lawang_bot_sin_redis`)
+Solo en la rama `lawang` (`b2k` y `balibest` no lo tienen y siguen en Redis).
+
+| Variable | Valores | Efecto |
+|---|---|---|
+| `BOT_STORE` | `redis` (por defecto) · `postgres` | `redis`: el bot de siempre, sin cambios. `postgres`: el estado vive en Postgres de Lawang vía la edge `bot-api`; el módulo de Redis queda **bloqueado** (cualquier acceso lanza) y el webhook es el de `turno-pg.js`. Un valor desconocido cae a `redis` y lo grita en el log. |
+| `BOT_API_URL` | URL de la edge | La misma de catálogo/CRM. |
+| `BOT_API_SECRET_ESTADO` · `_RECORDATORIO` · `_HUMANO` | secretos | Un secreto por ruta de la edge (`/estado`, `/recordatorio`, `/humano`). Cada uno abre solo su ruta. |
+| `BOT_RECORDATORIO` | `off` (por defecto) · `postgres` | Recordatorio de cita 1 h antes desde Postgres (`/recordatorio`). Sin plantilla de Meta cableada: ventana cerrada = `sin_ventana` + aviso al dueño. |
+| `META_APP_SECRET` | obligatorio con `postgres` | Sin él **todo POST del webhook es 403** (el modo redis conserva su compatibilidad: sin la variable acepta todo). |
+| `BOT_TURNO_REINTENTOS_MS` · `BOT_CIERRE_REINTENTOS_MS` · `BOT_API_TIMEOUT_MS` | opcionales | Plazos de fiabilidad (por defecto `20000,90000` · `1000,3000,8000` · `10000`). |
+
+Con `postgres` el bot ya no tiene `/admin/api/leads`, `conv`, `config*`, `note`, `status`, media, newsletter… (responden 410). Siguen: `health`, `wa-status`, `templates`, `simulate`, y `pause` / `send` / `send-template`, que **exigen la cabecera `X-User-Jwt`** con la sesión de la persona (la reenvía el proxy; el usuario sale de ahí, nunca del cuerpo).
+Pruebas: `node --test test-store-bloqueo.js test-store-postgres.js test-turno-pg.js test-pg-estructura.js test-pg-e2e.js` (la última arranca el bot de verdad con una edge, un Meta y un Anthropic falsos: sin secretos ni red).
