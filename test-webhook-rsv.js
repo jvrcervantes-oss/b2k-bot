@@ -10,7 +10,7 @@ let n = 0;
 const ok = (m) => { n++; console.log("ok -", m); };
 
 function mkReq({ token = TOKEN, body, raw }) {
-  const rawBody = raw !== undefined ? Buffer.from(raw) : Buffer.from(JSON.stringify(body));
+  const rawBody = raw !== undefined ? Buffer.from(raw) : Buffer.from(JSON.stringify(body ?? {}));
   return { get: (h) => (h.toLowerCase() === "x-callback-token" ? token : undefined), body, rawBody };
 }
 function mkRes() { const r = { code: null, sendStatus(c) { r.code = c; return r; } }; return r; }
