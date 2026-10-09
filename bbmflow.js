@@ -281,7 +281,7 @@ export function createCierreErp({ erp, quotes, pendingRsv, indice, backend, crea
 
     // 5) Cliente (nombre y país) ANTES del enlace
     const c = await erp.cliente({ reserva_id: rs.reserva_id, nombre, pais });
-    if (!c.ok) return fallo("generico", `cliente:${c.motivo}`);   // la reserva queda guardada en la cotización: el siguiente [PAY] reintenta SOLO cliente y enlace   // la cotización se gasta: el siguiente intento recotiza y la base devuelve la MISMA reserva viva (teléfono+moto+fechas)
+    if (!c.ok) return fallo("generico", `cliente:${c.motivo}`);   // la reserva queda guardada en la cotización: el siguiente [PAY] reintenta SOLO cliente y enlace
     if (!c.cliente_identificado) log.warn(p(`cliente no identificado (${c.motivo || "?"}): lo decide una persona; el cobro sigue`));
 
     // 6) Enlace de pago con EL cobro de la base
