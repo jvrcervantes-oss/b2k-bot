@@ -1,0 +1,83 @@
+{
+  "_": "Contrato CONGELADO entre bbmerp.js y las edges reservas-bot / reservas-pago del ERP (repo Agencia). Copiado a mano el 9-oct-2026 de erp/funciones/reservas-bot/index.ts (ultimo commit de esa edge en el repo Agencia: 4a498272) y de las migraciones 20261008136000_f8_totales_impuesto.sql, 20261008137000_f8_puerta_emision.sql y 20261008137500_f8_entrega_km.sql. Si una edge cambia de forma, cambia AQUI y en test-bbmerp.js a la vez: el test valida que el mock de la edge (los `ejemplos`) cumple la `forma` y que bbmerp.js interpreta cada uno. Tipos de `forma`: uuid, string, int, number, bool, date, timestamp, any; `?` al final = puede faltar o ser null; [x] = lista de x; {..} = objeto (se ignoran campos de más, que la base puede añadir).",
+  "peticion": {
+    "cabecera": "x-bot-secret (variable BBM_RESERVAS_SECRET del bot)",
+    "url": "${BBM_ERP_URL}/functions/v1/reservas-bot",
+    "metodo": "POST",
+    "campos_admitidos": {
+      "catalogo": ["accion"],
+      "entrega": ["accion", "direccion"],
+      "cotiza": ["accion", "producto_id", "desde", "hasta", "entrega_direccion", "recogida_direccion"],
+      "reserva": ["accion", "producto_id", "desde", "hasta", "contacto_telefono", "contacto_nombre", "entrega_direccion", "recogida_direccion", "conversacion_ref", "notas"],
+      "cliente": ["accion", "reserva_id", "nombre", "pais"]
+    },
+    "pendiente_en_la_edge": "El campo `clave` (idempotencia por id de mensaje) lo acepta la funcion SQL reserva_producto_bot_crea pero NO esta en la lista TEXTOS de la edge: hoy la edge lo rechazaria con 400 campo_no_admitido. bbmerp.js lo manda solo con enviaClave=true (BBM_ERP_ENVIA_CLAVE=1)."
+  },
+  "errores": {
+    "400": {"error": "json|accion|producto_id|fechas|campo_no_admitido|reserva_id|nombre|pais|direccion|contacto_telefono|..."},
+    "401": {"error": "no_autorizado"},
+    "404": {"error": "modulo_no_activo"},
+    "409": {"error": "entrega_a_confirmar|entrega_no_configurada|sin_disponibilidad|nombre|pais|telefono|no_aplica|datos", "mensaje": "string"},
+    "413": {"error": "demasiado_grande"},
+    "429": {"error": "tope_telefono|tope_global", "mensaje": "string"},
+    "502": {"error": "base"}
+  },
+  "acciones": {
+    "catalogo": {
+      "forma": {"r": [{"id": "uuid", "numero_producto": "any?", "nombre": "string", "descripcion": "string?", "unidad": "string?", "tarifas": [{"dias": "int", "precio": "number", "moneda": "string", "etiqueta": "string?"}], "unidades": "int"}]},
+      "ejemplos": {
+        "ok": {"r": [{"id": "3f0c1b1e-7b1a-4c53-9a53-2a6f0f5c1111", "numero_producto": "P-0001", "nombre": "Honda Scoopy", "descripcion": "Automatica 110cc", "unidad": "moto", "tarifas": [{"dias": 1, "precio": 100000, "moneda": "IDR", "etiqueta": null}, {"dias": 7, "precio": 600000, "moneda": "IDR", "etiqueta": "semana"}], "unidades": 3}]}
+      }
+    },
+    "entrega": {
+      "forma": {"r": {"estado": "string", "km": "number?"}},
+      "estados": ["ok", "sin_resultado", "ambigua", "tope", "pausado", "ocupado", "error"],
+      "nota": "km solo con estado ok. Es informativo: el precio lo calcula la base con SU cache, el bot nunca manda km a cotiza ni a reserva.",
+      "ejemplos": {
+        "ok": {"r": {"estado": "ok", "km": 12.34}},
+        "sin_resultado": {"r": {"estado": "sin_resultado", "km": null}},
+        "ambigua": {"r": {"estado": "ambigua"}},
+        "tope": {"r": {"estado": "tope"}},
+        "pausado": {"r": {"estado": "pausado"}},
+        "ocupado": {"r": {"estado": "ocupado"}},
+        "error": {"r": {"estado": "error"}}
+      }
+    },
+    "cotiza": {
+      "forma": {"r": {"dias": "int", "precio": "number", "total": "number", "moneda": "string", "precio_alquiler": "number?", "desglose": "any?", "base": "number?", "impuestos": "number?", "incluye_impuesto": "bool", "impuesto": {"nombre": "string", "porcentaje": "number"}, "lineas": [{"descripcion": "string", "concepto": "string?", "base": "number", "cuota": "number", "bruto": "number"}], "producto_id": "uuid", "desde": "date", "hasta": "date", "disponibles": "int"}},
+      "nota": "`impuesto` puede ser null (sin impuesto). `total` = lo que se cobra con impuesto. NO incluye el deposito (se paga en la entrega) ni la comision de la pasarela. Con direccion, `lineas` trae tambien la linea de entrega. 409 entrega_a_confirmar (sin km resuelto: el bot NO da precio y avisa al equipo) y 409 entrega_no_configurada (sin tarifa/sede): ambos SIN bloqueo ni precio.",
+      "ejemplos": {
+        "ok": {"r": {"dias": 3, "precio": 330000, "total": 330000, "moneda": "IDR", "precio_alquiler": 300000, "desglose": [{"dias": 3, "precio": 300000}], "base": 300000, "impuestos": 30000, "incluye_impuesto": false, "impuesto": {"nombre": "PB1", "porcentaje": 10}, "lineas": [{"descripcion": "Honda Scoopy", "concepto": "alquiler", "base": 300000, "cuota": 30000, "bruto": 330000}], "producto_id": "3f0c1b1e-7b1a-4c53-9a53-2a6f0f5c1111", "desde": "2026-11-01", "hasta": "2026-11-04", "disponibles": 2}},
+        "sin_impuesto_con_entrega": {"r": {"dias": 2, "precio": 275000, "total": 275000, "moneda": "IDR", "precio_alquiler": 200000, "desglose": null, "base": 275000, "impuestos": 0, "incluye_impuesto": false, "impuesto": null, "lineas": [{"descripcion": "Honda Scoopy", "concepto": "alquiler", "base": 200000, "cuota": 0, "bruto": 200000}, {"descripcion": "Entrega", "concepto": "entrega", "base": 75000, "cuota": 0, "bruto": 75000}], "producto_id": "3f0c1b1e-7b1a-4c53-9a53-2a6f0f5c1111", "desde": "2026-11-01", "hasta": "2026-11-03", "disponibles": 0}}
+      }
+    },
+    "reserva": {
+      "forma": {"r": {"id": "uuid", "numero_reserva": "any?", "estado": "string", "caduca_en": "timestamp", "desde": "date", "hasta": "date", "dias": "int", "precio_total": "number", "moneda": "string", "desglose": "any?", "base": "number?", "impuestos": "number?", "incluye_impuesto": "bool", "lineas": [{"descripcion": "string", "base": "number"}], "cobro": {"external_id": "string", "importe": "int", "moneda": "string", "segundos_hasta_caducar": "int"}, "repetida": "bool?"}},
+      "nota": "cobro.importe = precio_total = el ENTERO que cobra Xendit: sin la comision del 3 % de la pasarela y SIN deposito (el deposito se paga en la entrega; el bot lo muestra aparte). cobro.external_id = 'rsv:' + id. Con la misma clave (o el mismo telefono+moto+fechas) la reserva viva se devuelve con repetida:true. 429 tope_telefono|tope_global; la base puede devolver {rechazada:'tope_global'} en un 200, que bbmerp trata igual.",
+      "ejemplos": {
+        "ok": {"r": {"id": "9a1e6c1a-0d52-4e0e-8a77-7f0b6f3a2222", "numero_reserva": "RSV-000123", "estado": "bloqueo", "caduca_en": "2026-10-20T10:00:00+00:00", "desde": "2026-11-01", "hasta": "2026-11-04", "dias": 3, "precio_total": 330000, "moneda": "IDR", "desglose": null, "base": 300000, "impuestos": 30000, "incluye_impuesto": false, "lineas": [{"descripcion": "Honda Scoopy", "base": 300000}], "cobro": {"external_id": "rsv:9a1e6c1a-0d52-4e0e-8a77-7f0b6f3a2222", "importe": 330000, "moneda": "IDR", "segundos_hasta_caducar": 3540}}},
+        "repetida": {"r": {"id": "9a1e6c1a-0d52-4e0e-8a77-7f0b6f3a2222", "numero_reserva": "RSV-000123", "estado": "bloqueo", "caduca_en": "2026-10-20T10:00:00+00:00", "desde": "2026-11-01", "hasta": "2026-11-04", "dias": 3, "precio_total": 330000.00, "moneda": "IDR", "desglose": null, "base": 300000, "impuestos": 30000, "incluye_impuesto": false, "lineas": [{"descripcion": "Honda Scoopy", "base": 300000}], "cobro": {"external_id": "rsv:9a1e6c1a-0d52-4e0e-8a77-7f0b6f3a2222", "importe": 330000, "moneda": "IDR", "segundos_hasta_caducar": 3000}, "repetida": true}}
+      }
+    },
+    "cliente": {
+      "forma": {"r": {"ok": "bool", "cliente_identificado": "bool", "creado": "bool", "motivo": "string?"}},
+      "nota": "El telefono NO viaja: la base lo lee de la reserva. motivo = 'telefono_ambiguo' cuando hay varios clientes con ese telefono (lo decide una persona). 409 no_aplica si la reserva ya no esta en bloqueo o ya tiene cliente.",
+      "ejemplos": {
+        "nuevo": {"r": {"ok": true, "cliente_identificado": true, "creado": true, "motivo": null}},
+        "ambiguo": {"r": {"ok": true, "cliente_identificado": false, "creado": false, "motivo": "telefono_ambiguo"}}
+      }
+    }
+  },
+  "reservas_pago": {
+    "_": "El bot NO interpreta la respuesta de reservas-pago (solo su codigo HTTP, ver xendit-rsv.js). Se documenta para el texto del cobro del modo erp (pieza posterior).",
+    "peticion": "cuerpo EXACTO del callback de Xendit + cabecera x-callback-token, tal cual",
+    "respuestas": {
+      "200": ["{ok:true, factura?:{...}, factura_espera?:'codigo'}", "{revisar:true}", "{ignorado:true}"],
+      "400": "cuerpo/external_id/id invalidos (el bot lo devuelve tal cual: Xendit no reintenta)",
+      "401": "token no coincide (el bot devuelve 502: es configuracion, no el cuerpo)",
+      "413": "cuerpo demasiado grande",
+      "502": "Xendit, almacenamiento o base no disponibles (Xendit reintenta)",
+      "503": "edge sin configurar"
+    }
+  }
+}
