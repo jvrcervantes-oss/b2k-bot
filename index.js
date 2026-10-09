@@ -82,6 +82,12 @@ const {
   MAIL_LOGO,               // (opcional) URL del logo para la cabecera del email; si no, se usa el nombre en texto
 } = process.env;
 
+// Base de la API de Meta. SOLO las pruebas locales la apuntan a un servidor falso (http://127.0.0.1:…); cualquier otro valor se ignora,
+// así que ni un descuido de configuración ni un atacante con acceso a las variables puede desviar el token de WhatsApp a otro host.
+const GRAPH_BASE = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(process.env.WHATSAPP_API_BASE || "")
+  ? String(process.env.WHATSAPP_API_BASE).replace(/\/+$/, "")
+  : "https://graph.facebook.com/v21.0";
+
 // La BD del CRM es Redis (lead:phone + leads_index). El Google Sheet era un espejo
 // heredado y queda DESACTIVADO salvo que se ponga CRM_SHEET_SYNC=1 en Railway.
 // Una sola condición para las 3 puertas (saveLead / writeLeadToSheet / log de arranque):
@@ -1379,7 +1385,7 @@ async function sendWhatsAppResult(to, message) {
   }
   try {
     const resp = await axios.post(
-      `https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/messages`,
+      `${GRAPH_BASE}/${WHATSAPP_PHONE_ID}/messages`,
       {
         messaging_product: "whatsapp",
         to: toClean,
@@ -1490,7 +1496,7 @@ function cleanReply(reply) {
 async function transcribeAudio(mediaId) {
   if (!OPENAI_API_KEY || !mediaId) return null;
   try {
-    const meta = await axios.get(`https://graph.facebook.com/v21.0/${mediaId}`,
+    const meta = await axios.get(`${GRAPH_BASE}/${mediaId}`,
       { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, timeout: 15000 });
     const bin = await axios.get(meta.data.url,
       { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` }, responseType: "arraybuffer", timeout: 30000, maxContentLength: 25 * 1024 * 1024 });
@@ -1515,7 +1521,7 @@ async function markRead(messageId, typing = false) {
   const payload = { messaging_product: "whatsapp", status: "read", message_id: messageId };
   if (typing) payload.typing_indicator = { type: "text" };
   try {
-    await axios.post(`https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/messages`, payload,
+    await axios.post(`${GRAPH_BASE}/${WHATSAPP_PHONE_ID}/messages`, payload,
       { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" } });
   } catch (e) { /* best-effort */ }
 }
@@ -1585,7 +1591,7 @@ async function sendWhatsAppMedia(to, item) {
   payload[type] = { link: item.url };
   if (item.caption) payload[type].caption = item.caption;
   try {
-    await axios.post(`https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/messages`, payload,
+    await axios.post(`${GRAPH_BASE}/${WHATSAPP_PHONE_ID}/messages`, payload,
       { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" } });
     console.log(`[${PROJECT_NAME}] Media "${item.label}" (${type}) enviada a ${toClean}`);
     return { ok: true };
@@ -1643,7 +1649,7 @@ async function sendWhatsAppTemplateResult(to, templateName, langCode, bodyParams
     : [];
   try {
     const resp = await axios.post(
-      `https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/messages`,
+      `${GRAPH_BASE}/${WHATSAPP_PHONE_ID}/messages`,
       {
         messaging_product: "whatsapp",
         to: toClean,
@@ -2444,7 +2450,7 @@ app.get("/admin/api/templates", async (req, res) => {
   if (!adminAuth(req, res)) return;
   if (!WHATSAPP_WABA_ID) return res.status(503).json({ error: "falta WHATSAPP_WABA_ID en el entorno" });
   try {
-    const r = await axios.get(`https://graph.facebook.com/v21.0/${WHATSAPP_WABA_ID}/message_templates`, {
+    const r = await axios.get(`${GRAPH_BASE}/${WHATSAPP_WABA_ID}/message_templates`, {
       params: { fields: "name,status,category,language,components", limit: 100 },
       headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` },
     });

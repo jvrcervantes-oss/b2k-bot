@@ -20,8 +20,16 @@ const fallbackMemory = {};
 const fallbackEscQueue = [];
 let redisClient = null;
 
+// BOT_STORE=postgres (S4b): tras llamar a bloqueaRedis() cualquier función de este módulo que toque Redis o la memoria de
+// respaldo LANZA. Es lo que garantiza que, con Postgres como almacén, un STOP o una pausa no acaben guardados aquí por un sitio
+// olvidado. Quedan fuera del bloqueo solo lo que no puede tocar Redis (apptTs, redisActivo, almacenNombre) y lo que en ese modo
+// es memoria del proceso por diseño (cuenta de WhatsApp bloqueada y topes del CRM: el cliente de Redis nunca se crea).
+let bloqueado = false;
+export function bloqueaRedis() { bloqueado = true; }
+function guardia(nombre) { if (bloqueado) throw new Error("Redis bloqueado (BOT_STORE=postgres): " + nombre); }
+
 // Conexión: se llama UNA vez desde el arranque de index.js, en el mismo punto donde antes vivía este bloque.
-export async function initRedis({ url, projectName, crear = createClient }) {  // `crear`: solo lo cambian los tests (cliente falso)
+export async function initRedis({ url, projectName, crear = createClient }) { guardia("initRedis");  // `crear`: solo lo cambian los tests (cliente falso)
   try {
     if (!url) throw new Error("REDIS_URL no configurado");
     // reconnectStrategy acotado (máx. 10 intentos, hasta 3s entre ellos): tras una caída
@@ -49,7 +57,7 @@ export function redisActivo() { return !!redisClient; }
 export function almacenNombre() { return redisClient ? "redis" : "ram"; }
 
 // ─── CONVERSACIÓN ──────────────────────────────────────────────────
-export async function getConversation(phone) {
+export async function getConversation(phone) { guardia("getConversation");
   if (redisClient) {
     const data = await redisClient.get(`conv:${phone}`);
     return data ? JSON.parse(data) : [];
@@ -59,7 +67,7 @@ export async function getConversation(phone) {
 
 // Se guardan hasta 100 mensajes (historial que ve el panel/CRM en un takeover humano);
 // el prompt del bot usa solo los últimos 20 (slice al construir los messages de Claude).
-export async function saveConversation(phone, messages) {
+export async function saveConversation(phone, messages) { guardia("saveConversation");
   const trimmed = messages.slice(-100);
   if (redisClient) {
     await redisClient.setEx(`conv:${phone}`, CONV_TTL, JSON.stringify(trimmed));
@@ -69,7 +77,7 @@ export async function saveConversation(phone, messages) {
 }
 
 // ─── ESCALACIONES AL OWNER ─────────────────────────────────────────
-export async function escPush(customerPhone, customerName, question) {
+export async function escPush(customerPhone, customerName, question) { guardia("escPush");
   const entry = JSON.stringify({ customerPhone, customerName, question });
   if (redisClient) {
     await redisClient.lPush("esc_queue", entry);
@@ -79,7 +87,7 @@ export async function escPush(customerPhone, customerName, question) {
   return entry; // string exacto encolado → permite lRem selectivo si el owner responde citando
 }
 
-export async function escPop() {
+export async function escPop() { guardia("escPop");
   if (redisClient) {
     const raw = await redisClient.rPop("esc_queue");
     return raw ? JSON.parse(raw) : null;
@@ -89,12 +97,12 @@ export async function escPop() {
 }
 
 // Mapa wamid del aviso → escalación: si el owner responde citando, se enruta a este cliente exacto.
-export async function escMapGuardar(wamid, entry) {
+export async function escMapGuardar(wamid, entry) { guardia("escMapGuardar");
   if (redisClient) await redisClient.setEx(`escmap:${wamid}`, 7 * 86400, entry);
 }
 
 // El owner respondió citando el aviso `ctxId`: devuelve esa escalación (y la saca de la cola y del mapa) o null.
-export async function escRutaPorCita(ctxId) {
+export async function escRutaPorCita(ctxId) { guardia("escRutaPorCita");
   if (!(ctxId && redisClient)) return null;
   const raw = await redisClient.get(`escmap:${ctxId}`);
   if (!raw) return null;
@@ -108,7 +116,7 @@ export async function escRutaPorCita(ctxId) {
 const fallbackLeads = {};      // phone → { phone, name, intent, lastMessage, updatedAt }
 const fallbackNotified = {};   // phone → "interested" | "booking"
 
-export async function getLead(phone) {
+export async function getLead(phone) { guardia("getLead");
   if (redisClient) {
     const d = await redisClient.get(`lead:${phone}`);
     return d ? JSON.parse(d) : null;
@@ -117,7 +125,7 @@ export async function getLead(phone) {
 }
 
 // Guarda la ficha del lead en el almacén y en el índice (ordenado por `score`).
-export async function leadGuardar(phone, info, score) {
+export async function leadGuardar(phone, info, score) { guardia("leadGuardar");
   if (redisClient) {
     await redisClient.set(`lead:${phone}`, JSON.stringify(info));
     await redisClient.zAdd("leads_index", { score, value: phone });
@@ -127,7 +135,7 @@ export async function leadGuardar(phone, info, score) {
 }
 
 // Todas las fichas, la más reciente primero. `null` = el índice de Redis está vacío (el llamador devuelve [] sin más).
-export async function leadsListar() {
+export async function leadsListar() { guardia("leadsListar");
   if (redisClient) {
     const phones = await redisClient.zRange("leads_index", 0, -1, { REV: true });
     if (!phones.length) return null;
@@ -137,13 +145,13 @@ export async function leadsListar() {
   return Object.values(fallbackLeads).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-export async function leadsContar() {
+export async function leadsContar() { guardia("leadsContar");
   if (redisClient) return await redisClient.zCard("leads_index");
   return Object.keys(fallbackLeads).length;
 }
 
 // Borrado definitivo de TODO lo que el bot guarda de un teléfono.
-export async function leadBorrar(phone) {
+export async function leadBorrar(phone) { guardia("leadBorrar");
   if (redisClient) {
     await redisClient.del(`lead:${phone}`, `notes:${phone}`, `status:${phone}`, `conv:${phone}`, `paused:${phone}`, `waiting:${phone}`, `inbound:${phone}`, `followup:${phone}`, `notified:${phone}`, `lastlink:${phone}`);
     await redisClient.zRem("leads_index", phone);
@@ -155,12 +163,12 @@ export async function leadBorrar(phone) {
   }
 }
 
-export async function getNotifiedLevel(phone) {
+export async function getNotifiedLevel(phone) { guardia("getNotifiedLevel");
   if (redisClient) return (await redisClient.get(`notified:${phone}`)) || null;
   return fallbackNotified[phone] || null;
 }
 
-export async function setNotifiedLevel(phone, level) {
+export async function setNotifiedLevel(phone, level) { guardia("setNotifiedLevel");
   if (redisClient) {
     await redisClient.setEx(`notified:${phone}`, CONV_TTL, level);
   } else {
@@ -170,7 +178,7 @@ export async function setNotifiedLevel(phone, level) {
 
 // ─── PAUSA DEL BOT POR LEAD ────────────────────────────────────────
 const fallbackPaused = {};
-export async function setPaused(phone, val) {
+export async function setPaused(phone, val) { guardia("setPaused");
   if (redisClient) {
     if (val) await redisClient.set(`paused:${phone}`, "1");
     else await redisClient.del(`paused:${phone}`);
@@ -179,14 +187,14 @@ export async function setPaused(phone, val) {
     else delete fallbackPaused[phone];
   }
 }
-export async function isPaused(phone) {
+export async function isPaused(phone) { guardia("isPaused");
   if (redisClient) return (await redisClient.get(`paused:${phone}`)) === "1";
   return !!fallbackPaused[phone];
 }
 
 // "Una persona tomó el mando": pausa con la caducidad configurada (0 = no caduca). Una pausa manual sin
 // caducidad no se vuelve caducable por esto, y cada nuevo mensaje de la persona renueva el plazo.
-export async function setPausedHumano(phone, pausaHoras) {
+export async function setPausedHumano(phone, pausaHoras) { guardia("setPausedHumano");
   if (!redisClient) return setPaused(phone, true);
   const t = ttlPausaHumana(pausaHoras, await redisClient.ttl(`paused:${phone}`));
   if (!t.poner) return;
@@ -196,10 +204,10 @@ export async function setPausedHumano(phone, pausaHoras) {
 
 // ─── CONFIGURACIÓN EDITABLE DESDE EL CRM (botcfg:v1 y su registro) ──
 // Texto crudo de la config guardada (o null). Lanza si Redis falla: el llamador decide qué hacer.
-export async function cfgRawLeer() { return await redisClient.get("botcfg:v1"); }
-export async function cfgLogRaw(n) { return await redisClient.lRange("botcfg:log", 0, n - 1); }
+export async function cfgRawLeer() { guardia("cfgRawLeer"); return await redisClient.get("botcfg:v1"); }
+export async function cfgLogRaw(n) { guardia("cfgLogRaw"); return await redisClient.lRange("botcfg:log", 0, n - 1); }
 // Una sola transacción: la config nueva y su entrada de registro entran juntas o no entra ninguna.
-export async function cfgGuardarConLog(nextJson, entryJson) {
+export async function cfgGuardarConLog(nextJson, entryJson) { guardia("cfgGuardarConLog");
   await redisClient.multi()
     .set("botcfg:v1", nextJson)
     .lPush("botcfg:log", entryJson)
@@ -216,7 +224,7 @@ export async function incrTope(k) {
 
 // ─── "POR RESPONDER" ───────────────────────────────────────────────
 const fallbackWaiting = {};
-export async function setWaiting(phone, val) {
+export async function setWaiting(phone, val) { guardia("setWaiting");
   if (redisClient) {
     if (val) await redisClient.set(`waiting:${phone}`, "1");
     else await redisClient.del(`waiting:${phone}`);
@@ -225,18 +233,18 @@ export async function setWaiting(phone, val) {
     else delete fallbackWaiting[phone];
   }
 }
-export async function isWaiting(phone) {
+export async function isWaiting(phone) { guardia("isWaiting");
   if (redisClient) return (await redisClient.get(`waiting:${phone}`)) === "1";
   return !!fallbackWaiting[phone];
 }
 
 // ─── ÚLTIMO MENSAJE ENTRANTE (ventana de 24h de WhatsApp) ──────────
 const fallbackInbound = {};
-export async function setInbound(phone, ts) {
+export async function setInbound(phone, ts) { guardia("setInbound");
   if (redisClient) await redisClient.setEx(`inbound:${phone}`, CONV_TTL, String(ts));
   else fallbackInbound[phone] = ts;
 }
-export async function getInbound(phone) {
+export async function getInbound(phone) { guardia("getInbound");
   if (redisClient) { const v = await redisClient.get(`inbound:${phone}`); return v ? parseInt(v) : null; }
   return fallbackInbound[phone] || null;
 }
@@ -245,66 +253,66 @@ export async function getInbound(phone) {
 // SIN TTL, al revés que el resto de claves del bot: una baja no caduca a los 30 días.
 // Reciben el teléfono YA normalizado (la normalización es del bot, no del almacén).
 const fallbackOptOut = new Set();
-export async function optOutPoner(p) {
+export async function optOutPoner(p) { guardia("optOutPoner");
   if (redisClient) await redisClient.set(`optout:${p}`, String(Date.now()));
   else fallbackOptOut.add(p);
 }
-export async function optOutLeer(p) {
+export async function optOutLeer(p) { guardia("optOutLeer");
   if (redisClient) return !!(await redisClient.get(`optout:${p}`));
   return fallbackOptOut.has(p);
 }
 // Acuse de la baja: una sola vez.
 const fallbackOptOutAck = new Set();
-export async function optOutAckLeer(p) {
+export async function optOutAckLeer(p) { guardia("optOutAckLeer");
   if (redisClient) return !!(await redisClient.get(`optoutack:${p}`));
   return fallbackOptOutAck.has(p);
 }
-export async function optOutAckPoner(p) {
+export async function optOutAckPoner(p) { guardia("optOutAckPoner");
   if (redisClient) await redisClient.set(`optoutack:${p}`, "1");
   else fallbackOptOutAck.add(p);
 }
 
 // ─── SEGUIMIENTO AUTOMÁTICO TRAS 24h ───────────────────────────────
 const fallbackFollowup = {};
-export async function getFollowupCount(phone) {
+export async function getFollowupCount(phone) { guardia("getFollowupCount");
   if (redisClient) { const v = await redisClient.get(`followup:${phone}`); return v ? parseInt(v) : 0; }
   return fallbackFollowup[phone] || 0;
 }
-export async function setFollowupCount(phone, n) {
+export async function setFollowupCount(phone, n) { guardia("setFollowupCount");
   if (redisClient) await redisClient.setEx(`followup:${phone}`, 30 * 24 * 3600, String(n));
   else fallbackFollowup[phone] = n;
 }
-export async function resetFollowup(phone) {
+export async function resetFollowup(phone) { guardia("resetFollowup");
   if (redisClient) await redisClient.del(`followup:${phone}`);
   else delete fallbackFollowup[phone];
 }
 
 // ─── CRM MANUAL DESDE EL PANEL: notas y estado de pipeline ─────────
 const fallbackNotes = {}, fallbackStatus = {};
-export async function setNotes(phone, notes) {
+export async function setNotes(phone, notes) { guardia("setNotes");
   if (redisClient) await redisClient.set(`notes:${phone}`, notes || "");
   else fallbackNotes[phone] = notes || "";
 }
-export async function getNotes(phone) {
+export async function getNotes(phone) { guardia("getNotes");
   if (redisClient) return (await redisClient.get(`notes:${phone}`)) || "";
   return fallbackNotes[phone] || "";
 }
-export async function setStatus(phone, status) {
+export async function setStatus(phone, status) { guardia("setStatus");
   if (redisClient) await redisClient.set(`status:${phone}`, status || "");
   else fallbackStatus[phone] = status || "";
 }
-export async function getStatus(phone) {
+export async function getStatus(phone) { guardia("getStatus");
   if (redisClient) return (await redisClient.get(`status:${phone}`)) || "";
   return fallbackStatus[phone] || "";
 }
 
 // ─── RESPUESTAS RÁPIDAS (canned replies, compartidas por proyecto) ──
 let fallbackCanned = null;
-export async function cannedLeer(porDefecto) {
+export async function cannedLeer(porDefecto) { guardia("cannedLeer");
   if (redisClient) { const v = await redisClient.get("canned"); return v ? JSON.parse(v) : porDefecto; }
   return fallbackCanned || porDefecto;
 }
-export async function setCanned(list) {
+export async function setCanned(list) { guardia("setCanned");
   if (redisClient) await redisClient.set("canned", JSON.stringify(list));
   else fallbackCanned = list;
 }
@@ -313,7 +321,7 @@ export async function setCanned(list) {
 const fallbackAppts = {};
 export function apptTs(when) { const t = Date.parse(when); return isNaN(t) ? Date.now() : t; }
 
-export async function persistAppt(appt) {
+export async function persistAppt(appt) { guardia("persistAppt");
   if (redisClient) {
     await redisClient.set(`appt:${appt.id}`, JSON.stringify(appt));
     await redisClient.zAdd("appts_index", { score: apptTs(appt.when), value: appt.id });
@@ -322,12 +330,12 @@ export async function persistAppt(appt) {
   }
 }
 // Reindexa la cita por su fecha (solo hay índice con Redis).
-export async function apptReindexar(appt) {
+export async function apptReindexar(appt) { guardia("apptReindexar");
   if (redisClient) {
     await redisClient.zAdd("appts_index", { score: apptTs(appt.when), value: appt.id });
   }
 }
-export async function listAppts() {
+export async function listAppts() { guardia("listAppts");
   if (redisClient) {
     const ids = await redisClient.zRange("appts_index", 0, -1);
     if (!ids.length) return [];
@@ -336,11 +344,11 @@ export async function listAppts() {
   }
   return Object.values(fallbackAppts).sort((x, y) => apptTs(x.when) - apptTs(y.when));
 }
-export async function getAppt(id) {
+export async function getAppt(id) { guardia("getAppt");
   if (redisClient) { const r = await redisClient.get(`appt:${id}`); return r ? JSON.parse(r) : null; }
   return fallbackAppts[id] || null;
 }
-export async function apptBorrar(id) {
+export async function apptBorrar(id) { guardia("apptBorrar");
   if (redisClient) {
     await redisClient.del(`appt:${id}`);
     await redisClient.zRem("appts_index", id);
@@ -351,22 +359,22 @@ export async function apptBorrar(id) {
 
 // ─── RECORDATORIO AUTOMÁTICO AL CLIENTE (antes de la videollamada) ──
 const fallbackReminded = {};
-export async function isReminded(id) {
+export async function isReminded(id) { guardia("isReminded");
   if (redisClient) return (await redisClient.get(`reminded:${id}`)) === "1";
   return !!fallbackReminded[id];
 }
-export async function setReminded(id) {
+export async function setReminded(id) { guardia("setReminded");
   if (redisClient) await redisClient.setEx(`reminded:${id}`, 7 * 24 * 3600, "1");
   else fallbackReminded[id] = true;
 }
 
 // ─── BIBLIOTECA DE MEDIA (fotos/vídeos que el bot puede enviar; se gestiona desde el panel) ──
 let fallbackMediaLib = [];
-export async function getMediaLib() {
+export async function getMediaLib() { guardia("getMediaLib");
   if (redisClient) { const r = await redisClient.get("media_lib"); return r ? JSON.parse(r) : []; }
   return fallbackMediaLib;
 }
-export async function setMediaLib(list) {
+export async function setMediaLib(list) { guardia("setMediaLib");
   const arr = Array.isArray(list) ? list.slice(0, 50) : [];
   if (redisClient) await redisClient.set("media_lib", JSON.stringify(arr));
   else fallbackMediaLib = arr;
@@ -376,27 +384,27 @@ export async function setMediaLib(list) {
 // Archivos subidos desde el panel (foto/vídeo local) → se guardan como blob y se sirven por /media/:id,
 // para que el bot los envíe por link sin hosting externo.
 const fallbackBlobs = {};
-export async function setBlob(id, mime, b64) {
+export async function setBlob(id, mime, b64) { guardia("setBlob");
   const payload = JSON.stringify({ mime, data: b64 });
   if (redisClient) await redisClient.set(`mediablob:${id}`, payload);
   else fallbackBlobs[id] = payload;
 }
-export async function getBlob(id) {
+export async function getBlob(id) { guardia("getBlob");
   const raw = redisClient ? await redisClient.get(`mediablob:${id}`) : fallbackBlobs[id];
   return raw ? JSON.parse(raw) : null;
 }
-export async function delBlob(id) {
+export async function delBlob(id) { guardia("delBlob");
   if (redisClient) await redisClient.del(`mediablob:${id}`);
   else delete fallbackBlobs[id];
 }
 
 // Último link de pago generado por lead (para reenviarlo sin crear un cobro nuevo).
 const fallbackLastLink = {};
-export async function setLastLink(phone, url) {
+export async function setLastLink(phone, url) { guardia("setLastLink");
   if (redisClient) await redisClient.setEx(`lastlink:${phone}`, 24 * 3600, url);
   else fallbackLastLink[phone] = url;
 }
-export async function getLastLink(phone) {
+export async function getLastLink(phone) { guardia("getLastLink");
   if (redisClient) return (await redisClient.get(`lastlink:${phone}`)) || "";
   return fallbackLastLink[phone] || "";
 }
@@ -421,7 +429,7 @@ export async function clearWaBlocked() {
 // Clave propia (`testnotif:`) para no pisar el nivel de NOTIFY_RANK de notifyOwner.
 // Devuelve true si ya se había avisado; si no, lo deja marcado y devuelve false.
 const fallbackTestNotified = new Set();
-export async function testNotifYaAvisado(clean) {
+export async function testNotifYaAvisado(clean) { guardia("testNotifYaAvisado");
   if (redisClient) {
     if (await redisClient.get(`testnotif:${clean}`)) return true;
     await redisClient.setEx(`testnotif:${clean}`, CONV_TTL, "1");
@@ -436,7 +444,7 @@ export async function testNotifYaAvisado(clean) {
 // Meta reintenta la entrega si no confirma rápido → el mismo mensaje puede llegar 2+ veces y el bot
 // respondería doble. TTL 24h (los reintentos son de minutos).
 const fallbackSeenWamids = new Set();
-export async function alreadyProcessed(wamid) {
+export async function alreadyProcessed(wamid) { guardia("alreadyProcessed");
   if (!wamid) return false;
   if (redisClient) {
     const first = await redisClient.set(`wamid:${wamid}`, "1", { NX: true, EX: 86400 });
@@ -450,20 +458,20 @@ export async function alreadyProcessed(wamid) {
 
 // ─── NEWSLETTER: bajas de email y campañas programadas ─────────────
 const fallbackUnsub = new Set();
-export async function unsubAgregar(e) {
+export async function unsubAgregar(e) { guardia("unsubAgregar");
   if (redisClient) await redisClient.sAdd("unsub_emails", e); else fallbackUnsub.add(e);
 }
-export async function unsubLeer() {
+export async function unsubLeer() { guardia("unsubLeer");
   if (redisClient) return new Set((await redisClient.sMembers("unsub_emails")).map((s) => s.toLowerCase()));
   return new Set(fallbackUnsub);
 }
 
 let fallbackScheduled = [];
-export async function getScheduled() {
+export async function getScheduled() { guardia("getScheduled");
   if (redisClient) { const r = await redisClient.get("nl_scheduled"); return r ? JSON.parse(r) : []; }
   return fallbackScheduled;
 }
-export async function setScheduled(list) {
+export async function setScheduled(list) { guardia("setScheduled");
   if (redisClient) await redisClient.set("nl_scheduled", JSON.stringify(list)); else fallbackScheduled = list;
 }
 
