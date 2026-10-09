@@ -224,4 +224,40 @@ export function bloquesSistema({ catalogo = "off", crm = "off", cat = null }) {
 }
 
 /** Contenido de un mensaje del historial tal como lo ve el modelo: el del cliente se sanea si el CRM está activo; si no, idéntico. */
-export const contenidoParaModelo = (m, crm) => (crm !== "off" && m.role === "user" ? saneaEntrante(m.content) : m.content);
+export const contenidoParaModelo = (m, crm) => {
+  if (m.role !== "user") return m.content;
+  const t = saneaHumano(m.content);                 // [HUMANO] se sanea SIEMPRE: el traspaso no depende de BOT_CRM
+  return crm !== "off" ? saneaEntrante(t) : t;
+};
+
+// ─── TRASPASO A UNA PERSONA ([HUMANO]) ───────────────────────────
+// Etiqueta de SOLO el modelo: el bot cierra con la frase de traspaso y pasa el chat al equipo. Sin parámetros: el teléfono es siempre el del
+// webhook, igual que en [NOTA]/[CITA]. El texto del cliente no puede dispararla: se le quita antes de que el modelo lo vea.
+
+/** Texto del cliente → ninguna `[HUMANO]` (con o sin `:`) sobrevive; se queda como "(HUMANO)". */
+export function saneaHumano(texto) {
+  if (typeof texto !== "string") return texto;
+  return texto.replace(/\[(\s*HUMANO\s*)(?=[\]:])/gi, "($1");
+}
+
+/** ¿Ha escrito el modelo la etiqueta de traspaso en SU respuesta? */
+export const pideTraspaso = (respuesta) => /\[\s*HUMANO\s*\]/i.test(String(respuesta || ""));
+
+/**
+ * Ejecuta el traspaso SOBRE `tel` (el del webhook). Idempotente: si el chat ya estaba en pausa (otro traspaso, la operadora, el panel,
+ * un reintento del webhook) no hace nada ni vuelve a avisar. Cada paso es independiente y ninguno lanza: lo primero y lo que importa
+ * es que el bot se calle; el aviso y la nota son extras.
+ *   estaPausado() → bool · pausa() · avisa() · nota() (esta última solo si hay CRM; en sombra solo log)
+ */
+export async function ejecutaTraspaso({ tel, estaPausado, pausa, avisa, nota = null, log = () => {} }) {
+  const me = enmascara(tel);
+  const res = { hecho: false, pausa: false, aviso: false, nota: false };
+  try {
+    if (await estaPausado()) { log(`[HUMANO] ${me} ya estaba en pausa: traspaso ignorado (idempotente)`); return res; }
+  } catch (e) { log(`[HUMANO] ${me} no se pudo leer la pausa (${e && e.message ? e.message : "error"}): se pausa igualmente`); }
+  try { await pausa(); res.pausa = true; res.hecho = true; log(`[HUMANO] ${me} traspasado a una persona: bot en pausa`); }
+  catch (e) { log(`[HUMANO] ${me} FALLÓ la pausa (${e && e.message ? e.message : "error"})`); }
+  try { await avisa(); res.aviso = true; } catch (e) { log(`[HUMANO] ${me} aviso al owner falló (${e && e.message ? e.message : "error"})`); }
+  if (nota) { try { await nota(); res.nota = true; } catch (e) { log(`[HUMANO] ${me} nota CRM falló (${e && e.message ? e.message : "error"})`); } }
+  return res;
+}

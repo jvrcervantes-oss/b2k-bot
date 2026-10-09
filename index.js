@@ -9,7 +9,7 @@ import Stripe from "stripe";
 import crypto from "crypto";
 import { VACIA as CFG_VACIA, validaConfig, bloqueEquipo, ttlPausaHumana } from "./botcfg.js";
 import { creaCatalogo, cifrasPermitidas, postCheckCifras } from "./botcat.js";
-import { extraeEtiquetas, bloquesSistema, contenidoParaModelo, creaTopes, ejecutaCrm, avisoCita, adaptaCierreACita, isoConZona, citasIlegibles } from "./botcrm.js";
+import { extraeEtiquetas, bloquesSistema, contenidoParaModelo, creaTopes, ejecutaCrm, avisoCita, adaptaCierreACita, isoConZona, citasIlegibles, pideTraspaso, ejecutaTraspaso } from "./botcrm.js";
 
 const app = express();
 // verify: guarda el body crudo — la firma X-Hub-Signature-256 de Meta se calcula sobre los bytes
@@ -1683,7 +1683,7 @@ async function sendHumanized(to, text, messageId, startedAt) {
 function cleanReply(reply) {
   return reply
     .replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "")
-    .replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").replace(/\[(?:NOTA|CITA):[^\]]*\]/gi, "").trim()
+    .replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").replace(/\[(?:NOTA|CITA):[^\]]*\]/gi, "").replace(/\[\s*HUMANO[^\]]*\]/gi, "").trim()
     .replace(/[ \t]*(—|–|--)[ \t]*$/gm, ".").replace(/[ \t]*(—|–|--)[ \t]*/g, ", ")
     .replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1")  // **URL** → URL
     .replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
@@ -1956,7 +1956,9 @@ async function sendIntro(phone) {
 // Avisa al owner. Usa plantilla si está configurada; si no, texto libre (solo llega si su ventana 24h está abierta).
 async function notifyOwner(kind, lead) {
   if (!OWNER_PHONE) return;
-  const label = kind === "booking" ? "🔔 LEAD CALIENTE — quiere reservar" : "🟡 Nuevo cliente interesado";
+  const label = kind === "booking" ? "🔔 LEAD CALIENTE — quiere reservar"
+    : kind === "handoff" ? "🙋 TRASPASO A PERSONA — el bot ha callado en este chat"
+    : "🟡 Nuevo cliente interesado";
   const who = lead.name || lead.phone;
   const msg = lead.lastMessage || "";
 
@@ -2373,9 +2375,11 @@ app.post("/webhook", async (req, res) => {
     const mediaMatch = reply.match(/\[MEDIA:([^\]]+)\]/i);
     const resendMatch = /\[RESEND_LINK\]/i.test(reply); // el cliente pide reenviar el link que ya recibió
     let leadFields = parseLeadTag(reply); // datos confirmados en la charla → ficha/BD
+    const traspaso = pideTraspaso(reply); // [HUMANO]: solo la escribe el modelo (al cliente se le sanea en paraModelo); se ejecuta tras responder
     const crmTags = BOT_CRM_MODE !== "off" ? extraeEtiquetas(reply) : null; // [NOTA]/[CITA] del modelo: se ejecutan con el teléfono del webhook, tras responder
     const crmIlegibles = CRM_EFECTIVO === "on" ? citasIlegibles(reply) : 0; // [CITA:...] mal escritas: sin esto cleanReply las borra y la cita queda muda
     reply = cleanReply(reply); // etiquetas internas + guion + markdown de WhatsApp (helper compartido)
+    if (traspaso && !reply.trim()) reply = "I'll pass you to a team member who can help you personally."; // solo escribió la etiqueta: el cliente no puede quedarse sin la frase de cierre
     postCheckPrecios(reply, cat, history, from); // solo log
 
     // ── Stripe checkout session dinámica ──────────────────────────
@@ -2519,6 +2523,21 @@ app.post("/webhook", async (req, res) => {
         await notifyOwner(intent, { name: profileName, phone: from, lastMessage: text });
         await setNotifiedLevel(from, intent);
       }
+    }
+
+    // ── Traspaso a una persona ([HUMANO]): el bot ya ha dicho la frase de cierre; ahora se calla en este chat (misma pausa que la operadora),
+    //    avisa al owner y deja una nota en el CRM. Sobre el teléfono del webhook, idempotente, nunca rompe la conversación. ──
+    if (traspaso) {
+      await ejecutaTraspaso({
+        tel: from,
+        estaPausado: () => isPaused(from),
+        pausa: async () => { await setPausedHumano(from); await setWaiting(from, true); },
+        avisa: () => notifyOwner("handoff", { name: profileName, phone: from, lastMessage: text }),
+        nota: CRM_EFECTIVO === "off" ? null : () => aplicaCrm( // sombra: aplicaCrm solo escribe el log
+          { notas: [`Handed over to a team member by the assistant. Customer's last message: "${String(text).slice(0, 200)}"`], citas: [] },
+          from, `${message.id}h`, profileName),
+        log: (m) => console.log(`[${PROJECT_NAME}] ${m}`),
+      });
     }
 
     // ── CRM del ERP (BOT_CRM): notas y citas etiquetadas por el modelo. Va DESPUÉS de los avisos al owner: con la edge
