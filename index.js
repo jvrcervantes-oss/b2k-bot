@@ -10,6 +10,7 @@ import crypto from "crypto";
 import { createSeguimientoConfig } from "./seguimiento-config.js";
 import { createFollowupRunner } from "./seguimiento-tick.js";
 import { createRsvForwarder, createXenditGate } from "./xendit-rsv.js";
+import { createBackendSwitch } from "./bbmerp.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -2650,6 +2651,9 @@ async function markLeadPaid(phone, provider, amountIDR, receiptUrl) {
   }
 }
 
+// Interruptor de backend de BBM (F8-7c, parte segura): `dion` (hoy) o `erp`. Por defecto Redis `bbm:backend` (editable SIN redeploy) > BBM_BACKEND > dion.
+// Todavía NO lo lee ninguna rama de la conversación: solo está cableado y visible en /admin/api/health. Con `dion` (o sin variables) nada cambia.
+const bbmBackendSw = createBackendSwitch({ redis: () => redisClient, envValue: process.env.BBM_BACKEND, project: PROJECT_NAME });
 // Puerta del webhook (xendit-rsv.js): valida el token (503 si falta, 403 si no coincide, tiempo constante) y, si el aviso es de una reserva del ERP
 // (`rsv:`), lo reenvía a la edge reservas-pago y ACABA ahí (F8-7b, independiente de BBM_BACKEND); el resto sigue a la rama `paylink_` de siempre.
 // Solo necesita BBM_ERP_URL: el token que reenvía es el del propio aviso de Xendit. Sin esa URL un `rsv:` recibe 503 (Xendit reintenta, no se pierde).
@@ -3623,7 +3627,11 @@ app.get("/admin/api/health", async (req, res) => {
   } catch (e) { /* best-effort */ }
   // Seguimiento: con variables del ERP, health fuerza una lectura (caché 30 s) para que el estado sea visible sin esperar al primer tick (30 min).
   if (seguimientoCfg.enabled) { try { await seguimientoCfg.resolve(); } catch (e) { /* best-effort */ } }
-  res.json({ storage: redisClient ? "redis" : "ram", leads: count, seguimiento: seguimientoCfg.enabled ? seguimientoCfg.status() : { enabled: false, source: "env (FOLLOWUP_*)" } });
+  // F8-7: estado visible del puente al ERP (un freno mudo es la forma exacta del fallo de LAW-106). Sin secretos ni URLs.
+  let bbmBackend = "dion";
+  try { bbmBackend = await bbmBackendSw.porDefecto(); } catch (e) { /* best-effort */ }
+  const bbm = { backend: bbmBackend, erp_configurado: !!(process.env.BBM_ERP_URL && process.env.BBM_RESERVAS_SECRET), webhook_rsv: !!process.env.BBM_ERP_URL };
+  res.json({ storage: redisClient ? "redis" : "ram", leads: count, bbm, seguimiento: seguimientoCfg.enabled ? seguimientoCfg.status() : { enabled: false, source: "env (FOLLOWUP_*)" } });
 });
 
 // Inventario de motos (Supabase, catálogo BBM): un catálogo por producto con su tarifa
