@@ -117,3 +117,32 @@ test("el endpoint temporal existe, exige x-admin-key, admite dry y se marca para
   assert.ok(!/req\.query\.key/.test(cuerpo));
   assert.match(src.slice(i - 700, i), /S9/);
 });
+
+// ── Conformidad con el esquema CERRADO de la edge (claves copiadas de bot-api/index.ts: CLAVES_CHAT, mensajeImportado, escalacionImportada, ajustesDe) ──
+import { leerTodo } from "./import_redis.js";
+const K = { chat: ["nombre_perfil", "intent", "ultimo_mensaje", "ultimo_por", "creado_ms", "actualizado_ms", "archivado", "ultimo_entrante_ms", "esperando", "pausado", "pausa_hasta_ms", "baja_ms", "baja_acuse", "seguimientos", "aviso_nivel", "aviso_testing"],
+  msg: ["rol", "por", "por_usuario", "contenido", "media", "wamid", "ts_ms"], esc: ["nombre", "pregunta", "aviso_wamid", "creada_ms"], cfg: ["extra", "bienvenida", "pausa_horas", "updated_by"], cfgLog: ["extra", "bienvenida", "pausa_horas"] };
+const mismas = (o, ks) => assert.deepStrictEqual(Object.keys(o).sort(), [...ks].sort());
+
+test("lo que sale del transporte pasa el esquema cerrado de la edge (sin claves de más; wamid/media ilegibles pasan a null)", async () => {
+  const T = "628111111111", AHORA = 1790000000000;
+  const m = new Map([
+    [`conv:${T}`, { v: JSON.stringify([{ role: "user", content: "Hola", ts: AHORA - 5000, wamid: "wamid.ok=" }, { role: "user", content: "foto", ts: AHORA - 4000, wamid: "malo wamid con espacios", media: { id: "mediaID1", type: "image" } },
+      { role: "user", content: "foto2", ts: AHORA - 3000, media: { id: "id con espacio", type: "Image/PNG" } }]) }],
+    ["esc_queue", { tipo: "list", v: [JSON.stringify({ customerPhone: T, customerName: "Ana", question: "¿precio?" })] }],
+    ["botcfg:v1", { v: JSON.stringify({ extra: "x", bienvenida: "hola", pausaHoras: 12, updatedAt: AHORA, updatedBy: "a@b.c" }) }],
+    ["botcfg:log", { tipo: "list", v: [JSON.stringify({ ts: AHORA, by: "a@b.c", prev: { extra: "", bienvenida: "", pausaHoras: 0 }, next: { extra: "x", bienvenida: "hola", pausaHoras: 12 } })] }]]);
+  const lector = { async *escanear() { for (const k of m.keys()) yield k; }, async tipo(k) { return m.get(k).tipo || "string"; }, async pttl() { return -1; }, async get(k) { return m.get(k).v; },
+    async lista(k) { return m.get(k).v; }, async dbsize() { return m.size; }, async keyspace() { return { dbs: [{ db: 0, keys: m.size }] }; } };
+  const lectura = await leerTodo(lector, { ahora: AHORA });
+  const enviados = [];
+  const t = creaTransporte({ url: "https://x/y", secreto: "s", http: { post: async (_u, b) => { enviados.push(b); return { status: 200, headers: {}, data: { ok: true } }; } }, espera: async () => {} });
+  await t.chat(lectura.chats[0]); await t.config({ config: lectura.config, log: lectura.config_log });
+  const c = enviados[0], g = enviados[1];
+  mismas(c.chat, K.chat); c.mensajes.forEach((x) => mismas(x, K.msg)); c.escalaciones.forEach((x) => mismas(x, K.esc));
+  assert.equal(c.mensajes.length, 3); assert.equal(c.escalaciones.length, 1);
+  assert.equal(c.mensajes[0].wamid, "wamid.ok="); assert.equal(c.mensajes[1].wamid, null);
+  assert.deepStrictEqual(c.mensajes[1].media, { tipo: "image", id: "mediaID1" }); assert.equal(c.mensajes[2].media, null);
+  mismas(g.config, K.cfg); g.log.forEach((e) => { mismas(e, ["ts_ms", "by", "prev", "next"]); mismas(e.prev, K.cfgLog); mismas(e.next, K.cfgLog); });
+  assert.equal(g.config.pausa_horas, 12);
+});

@@ -7,6 +7,23 @@
 // escribe jamás en un error ni en el log: los errores llevan solo la acción y el código HTTP.
 import axios from "axios";
 
+// La edge tiene el esquema CERRADO: una clave de más (p. ej. `_media_descartada`, `updated_ms`) o un wamid/media con caracteres fuera de su
+// patrón tumbaría el teléfono entero con un 400. Aquí se deja pasar SOLO lo que la edge reconoce, y un wamid o media ilegible se vuelve null
+// (el contenido del mensaje no depende de ellos). Patrones copiados de bot-api/index.ts (RE_MSG, RE_ID_MEDIA, RE_TIPO_MEDIA).
+const RE_MSG = /^[A-Za-z0-9._:=@+\/-]{1,120}$/;
+const RE_ID_MEDIA = /^[A-Za-z0-9._:=@+/-]{1,200}$/;
+const RE_TIPO_MEDIA = /^[a-z_]{1,20}$/;
+export function mensajeParaEdge(m) {
+  const md = m.media && typeof m.media === "object" && typeof m.media.id === "string" && RE_ID_MEDIA.test(m.media.id) && RE_TIPO_MEDIA.test(String(m.media.tipo ?? "otro"))
+    ? { tipo: String(m.media.tipo ?? "otro"), id: m.media.id } : null;
+  return { rol: m.rol, por: m.por, por_usuario: m.por_usuario ?? null, contenido: m.contenido, media: md,
+    wamid: typeof m.wamid === "string" && RE_MSG.test(m.wamid) ? m.wamid : null, ts_ms: m.ts_ms };
+}
+export function escalacionParaEdge(e) {
+  return { nombre: e.nombre ?? null, pregunta: e.pregunta ?? "", aviso_wamid: typeof e.aviso_wamid === "string" && RE_MSG.test(e.aviso_wamid) ? e.aviso_wamid : null, creada_ms: e.creada_ms ?? null };
+}
+export function configParaEdge(c) { return { extra: c.extra, bienvenida: c.bienvenida, pausa_horas: c.pausa_horas, updated_by: c.updated_by ?? null }; }
+
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function creaTransporte({ url, secreto, http = axios, timeoutMs = 25000, espera = dormir, max429 = 5, tope429Ms = 30000 } = {}) {
@@ -43,8 +60,8 @@ export function creaTransporte({ url, secreto, http = axios, timeoutMs = 25000, 
 
   return {
     // un teléfono: { tel, chat, mensajes, escalaciones } → { ok, ... } (ok:false con error = fallo de ese teléfono)
-    chat: (p) => llama("chat", { tel: p.tel, chat: p.chat, mensajes: p.mensajes, escalaciones: p.escalaciones }),
-    config: (p) => llama("config", { config: p.config, log: p.log }),
+    chat: (p) => llama("chat", { tel: p.tel, chat: p.chat, mensajes: p.mensajes.map(mensajeParaEdge), escalaciones: p.escalaciones.map(escalacionParaEdge) }),
+    config: (p) => llama("config", { config: configParaEdge(p.config), log: p.log }),
     cuadre: async (tel) => {
       const d = await llama("cuadre", { tel });
       if (d.ok !== true) throw new Error("importar/cuadre: respuesta no ok");
