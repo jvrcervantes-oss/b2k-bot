@@ -59,7 +59,8 @@ export function clasificarClave(k) {
 
 // Forma enmascarada de una clave desconocida: el nombre real puede llevar un teléfono o un id. Solo se enseña la FORMA.
 export function enmascarar(k) {
-  return String(k).replace(/\d{5,}/g, "<n>").replace(/[A-Za-z0-9_\-=+/.]{16,}/g, "<id>").slice(0, 60);
+  // Solo sobreviven segmentos de pura palabra minúscula (p. ej. «raro:<x>:cola»); cualquier otra cosa (dígitos, @, +, -, mayúsculas) se tapa.
+  return String(k).split(":").map((x) => (/^[a-z_]{1,20}$/.test(x) ? x : "<x>")).join(":").slice(0, 60);
 }
 
 // ── Teléfonos: el bot guarda dígitos (normalizePhone), pero el importador NO se fía: agrupa por los dígitos ya normalizados. ──
@@ -120,11 +121,11 @@ export async function inventario(lector, { maxClaves = 200000 } = {}) {
 }
 
 // ── 2. LECTURA Y TRADUCCIÓN (A.2) ──────────────────────────────────────────────────────────────
-const CONTROL = /[\x01-\x08\x0b\x0c\x0e-\x1f\x7f]/g;
+const CONTROL = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g;
 // MISMA forma canónica que public._bot_limpia: quita controles, recorta SOLO ESPACIOS (btrim de Postgres) y corta a n CARACTERES.
 export function limpia(t, n) {
   const s = String(t ?? "").replace(CONTROL, "").replace(/^ +| +$/g, "");
-  return Array.from(s).slice(0, n).join("");
+  return Array.from(s).slice(0, n).join("").replace(/ +$/, "");   // el corte puede dejar un espacio al final: así el resultado es un punto fijo
 }
 
 const POR_DE = { client: "cliente", bot: "bot", human: "humano" };
@@ -168,7 +169,7 @@ function mensajeAPayload(m, fallaTs) {
 // `ahora` se fija una vez: el PTTL restante se convierte en un instante absoluto en el momento de leer.
 export async function leerTodo(lector, { ahora = Date.now() } = {}) {
   const tels = new Map();
-  const anom = { tel_invalido: 0, json_roto: 0, optoutack_sin_optout: 0, rol_raro: 0, escmap_sin_cola: 0, cola_sin_escmap: 0, clave_caducada_al_leer: 0, tel_normalizado_distinto: 0 };
+  const anom = { tel_invalido: 0, json_roto: 0, optoutack_sin_optout: 0, baja_sin_tel: 0, pausa_sin_tel: 0, rol_raro: 0, escmap_sin_cola: 0, cola_sin_escmap: 0, clave_caducada_al_leer: 0, tel_normalizado_distinto: 0 };
   const desc = { lead_ficha_enriquecida: 0, lead_history_eventos: 0, lead_nextFollowUp: 0, mensajes_media_sin_id: 0, claves_ram_o_eliminadas: 0 };
   const escmap = [];                      // {entry, pttl}
   let cola = [];
@@ -210,8 +211,9 @@ export async function leerTodo(lector, { ahora = Date.now() } = {}) {
         break;
       }
       case "paused": {
-        const t = veTel(k, "paused:"); if (!t) break;
+        const t = veTel(k, "paused:");
         const v = await lector.get(k); if (v !== "1") break;
+        if (!t) { anom.pausa_sin_tel++; break; }
         // PTTL -1 = pausa que no caduca; > 0 = instante absoluto en que caduca
         acc(tels, t).pausa = pausaMas(acc(tels, t).pausa, pttl > 0 ? { hasta: ahora + pttl } : { hasta: null });
         break;
@@ -224,7 +226,7 @@ export async function leerTodo(lector, { ahora = Date.now() } = {}) {
         break;
       }
       case "optout": {
-        const t = veTel(k, "optout:"); if (!t) break;
+        const t = veTel(k, "optout:"); if (!t) { anom.baja_sin_tel++; break; }
         const n = parseInt(await lector.get(k), 10);
         const x = acc(tels, t);
         const ms = Number.isFinite(n) && n > 1e11 ? n : ahora;           // una baja sin fecha válida SIGUE siendo una baja
@@ -408,6 +410,9 @@ export async function cuadre(lectura, transporte, { holguraMs = 5000 } = {}) {
   }
   return {
     campos: r, bajas, pausas, telefonos_sin_fila_en_postgres: sinFila,
-    ninguna_baja_ni_pausa_vigente_falta: bajas.faltan === 0 && pausas.faltan === 0 && sinFila === 0,
+    // una baja o pausa de Redis cuyo teléfono no se pudo leer NO se importó: cuenta como falta
+    bajas_sin_telefono: lectura.anomalias.baja_sin_tel, pausas_sin_telefono: lectura.anomalias.pausa_sin_tel,
+    ninguna_baja_ni_pausa_vigente_falta: bajas.faltan === 0 && pausas.faltan === 0 && sinFila === 0
+      && lectura.anomalias.baja_sin_tel === 0 && lectura.anomalias.pausa_sin_tel === 0,
   };
 }

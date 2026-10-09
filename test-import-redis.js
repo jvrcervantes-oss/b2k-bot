@@ -59,8 +59,10 @@ test("clasificador: el orden de los prefijos importa y todo grupo tiene destino"
 });
 
 test("enmascarar: ni un teléfono ni un id largo sobreviven en la forma", () => {
-  assert.equal(enmascarar("raro:628111111111:x"), "raro:<n>:x");
-  assert.ok(!/[0-9]{5}/.test(enmascarar("k:12345678901234:AbCdEfGhIjKlMnOpQr")));
+  assert.equal(enmascarar("raro:628111111111:x"), "raro:<x>:x");
+  assert.equal(enmascarar("foo:+62-812-3456-7890"), "foo:<x>");
+  assert.equal(enmascarar("x:maria@mail.com"), "x:<x>");
+  assert.ok(!/[0-9]{2}/.test(enmascarar("k:12345678901234:AbCdEfGhIjKlMnOpQr")));
 });
 
 test("inventario: solo conteos; una clave desconocida bloquea S9 y sale enmascarada", async () => {
@@ -70,7 +72,7 @@ test("inventario: solo conteos; una clave desconocida bloquea S9 y sale enmascar
   assert.ok(!txt.includes(T1) && !txt.includes(T2) && !txt.includes("secreto-no-debe-salir") && !txt.includes("Hola"), "el inventario no debe llevar teléfonos ni valores");
   assert.equal(inv.sin_clasificar, 1);
   assert.equal(inv.bloquea_s9, true);
-  assert.deepEqual(Object.keys(inv.desconocidas), ["raro:<n>"]);
+  assert.deepEqual(Object.keys(inv.desconocidas), ["raro:<x>"]);
   assert.equal(inv.grupos.conv.n, 2);
   assert.equal(inv.grupos.paused.sin_ttl, 1);
   assert.equal(inv.grupos.paused.con_ttl, 1);
@@ -299,3 +301,14 @@ test("lectorImportacion (store/redis.js): sin Redis es null; con Redis solo lee 
   assert.equal(inv.bloquea_s9, false);
   await store.initRedis({ url: "", projectName: "T" });             // deja el almacén como estaba
 });
+
+test("una baja o pausa cuyo teléfono no se lee NO desaparece en silencio: el veredicto pasa a falso", async () => {
+  const k = mundo(); k["optout:123"] = { v: String(AHORA) }; k["paused:+"] = { v: "1" };
+  const pg = pgFalso();
+  const inf = await importar(lectorFalso(k), pg, { ahora: AHORA });
+  assert.equal(inf.cuadre.bajas_sin_telefono, 1);
+  assert.equal(inf.cuadre.pausas_sin_telefono, 1);
+  assert.equal(inf.cuadre.ninguna_baja_ni_pausa_vigente_falta, false);
+});
+
+test("limpia quita también NUL", () => { assert.equal(limpia("a\x00b", 10), "ab"); });
