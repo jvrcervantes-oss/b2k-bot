@@ -9,7 +9,7 @@ import Stripe from "stripe";
 import crypto from "crypto";
 import { VACIA as CFG_VACIA, validaConfig, bloqueEquipo, ttlPausaHumana } from "./botcfg.js";
 import { creaCatalogo, cifrasPermitidas, postCheckCifras } from "./botcat.js";
-import { extraeEtiquetas, bloquesSistema, contenidoParaModelo, creaTopes, ejecutaCrm } from "./botcrm.js";
+import { extraeEtiquetas, bloquesSistema, contenidoParaModelo, creaTopes, ejecutaCrm, avisoCita, adaptaCierreACita, isoConZona } from "./botcrm.js";
 
 const app = express();
 // verify: guarda el body crudo — la firma X-Hub-Signature-256 de Meta se calcula sobre los bytes
@@ -419,11 +419,26 @@ const topesCrm = creaTopes({
 // Ejecuta las etiquetas [NOTA]/[CITA] de la respuesta SOBRE EL TELÉFONO DEL WEBHOOK. Nunca lanza.
 async function aplicaCrm(tags, from, msgId, nombre) {
   if (CRM_EFECTIVO === "off" || !tags) return;
-  await ejecutaCrm({
+  const tel = normalizePhone(from);
+  const hechos = await ejecutaCrm({
     modo: CRM_EFECTIVO, tel: normalizePhone(from), msgId, nombre, notas: tags.notas, citas: tags.citas, topes: topesCrm,
     log: (m) => console.log(`[${PROJECT_NAME}] ${m}`),
     llama: async (accion, cuerpo) => (await _llamaEdge("crm", BOT_API_SECRET_CRM, cuerpo)).resultado,
   });
+  // Cada cita etiquetada llega al owner, se guardara o no: el cliente ya ha oido «queda agendada». Sin esto, una cita rechazada (fuera de horario,
+  // lead ambiguo, base caída…) sería un fallo mudo. Nunca rompe la conversación.
+  for (const h of hechos || []) {
+    if (h.accion !== "lead_cita") continue;
+    try {
+      if ((h.resultado === "propuesta" || h.resultado === "reprogramada") && h.cuando) {
+        // La ficha del chat (panel «Setter IA») pinta las citas del historial de la conversación: se deja la marca ahí, que NO es la cita (esa vive en la base).
+        const iso = isoConZona(h.cuando, h.zona);
+        if (iso) logEvent(tel, "appt", { title: h.tipo === "visita" ? "Visita" : "Llamada", when: iso });
+      }
+      const texto = avisoCita({ proyecto: PROJECT_NAME, nombre, tel, hecho: h });
+      if (texto && OWNER_PHONE) await sendWhatsApp(OWNER_PHONE, texto);
+    } catch (e) { console.error(`[${PROJECT_NAME}] aviso de cita al owner falló: ${e.message}`); }
+  }
 }
 
 // "Una persona tomó el mando" (escribió desde la app o desde el panel): pausa con la caducidad
@@ -1403,7 +1418,14 @@ All tags are stripped before sending. NEVER mention them to the customer.
 // tal cual; si no, se eligen los bloques built-in por closeStyle. tour/rental no los traen → idéntico.
 const _gathering = PLAYBOOK.gathering || (PLAYBOOK.closeStyle === "direct" ? RENTAL_GATHERING : TOUR_GATHERING);
 const _close = PLAYBOOK.close || (PLAYBOOK.closeStyle === "direct" ? RENTAL_CLOSE_AND_TAGGING : TOUR_CLOSE_AND_TAGGING);
-const BASE_INSTRUCTIONS = BASE_INSTRUCTIONS_HEAD + _gathering + BASE_INSTRUCTIONS_MIDDLE + _close;
+// Con BOT_CRM=on (efectivo) el modelo agenda con [CITA:...] y la base guarda la cita (S5): ni se le enseña [APPT:...] ni el bot la guarda en Redis. Apagado o en sombra, el
+// texto es EXACTAMENTE el de siempre (test: "BOT_CRM off/sombra: el prompt de cierre no cambia").
+let BASE_INSTRUCTIONS = BASE_INSTRUCTIONS_HEAD + _gathering + BASE_INSTRUCTIONS_MIDDLE + _close;
+if (CRM_EFECTIVO === "on") {
+  const adaptado = adaptaCierreACita(BASE_INSTRUCTIONS);
+  BASE_INSTRUCTIONS = adaptado.texto;
+  if (adaptado.restantes) console.error(`[${PROJECT_NAME}] CRM=on: quedan ${adaptado.restantes} menciones de APPT en las instrucciones de cierre: el modelo recibirá dos etiquetas de cita. Revisar adaptaCierreACita.`);
+}
 
 // Profundidad de persona opcional por config (PERSONA_BIO en Railway): trasfondo humano del
 // que el bot puede tirar de forma natural, sin que cada proyecto lo escriba a mano en su contexto.
@@ -2447,7 +2469,17 @@ app.post("/webhook", async (req, res) => {
     }
 
     // ── Cita agendada por el bot en la conversación ───────────────
-    if (apptMatch) {
+    // Con BOT_CRM=on las citas van por [CITA:...] (la base es su único dueño): una [APPT] que el modelo emita igualmente NO se guarda en Redis,
+    // y se avisa al owner con los datos, porque el cliente ya cree que está agendada.
+    if (apptMatch && CRM_EFECTIVO === "on") {
+      console.error(`[${PROJECT_NAME}] [APPT] ignorada con BOT_CRM=on (el modelo debía usar [CITA]): …${String(from).slice(-4)} ${apptMatch[1].trim()}`);
+      if (OWNER_PHONE) {
+        try {
+          await sendWhatsApp(OWNER_PHONE,
+            `⚠️ ${PROJECT_NAME} — CITA NO REGISTRADA\n\n*${profileName || from}*\nTel: ${from}\nPedida para: ${apptMatch[1].trim()} (${apptMatch[2].trim()})\nEl cliente cree que está agendada, pero el bot usó una etiqueta antigua y no se guardó.\n\nAgéndala a mano o escríbele.`);
+        } catch (e) { console.error(`[${PROJECT_NAME}] aviso de [APPT] ignorada falló: ${e.message}`); }
+      }
+    } else if (apptMatch) {
       try {
         const appt = await createAppt({ phone: from, name: profileName, when: apptMatch[1].trim(), title: apptMatch[2].trim() });
         console.log(`[${PROJECT_NAME}] Cita agendada por el bot: ${appt.when} — ${appt.title} (${from})`);
@@ -3316,8 +3348,11 @@ app.get("/admin/api/appts", async (req, res) => {
   if (!adminAuth(req, res)) return;
   try { res.json(await listAppts()); } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// Con BOT_CRM=on las citas viven en Postgres (la intranet): este panel viejo deja de ESCRIBIRLAS para que haya un solo escritor. Leer sigue funcionando.
+const citasEnLaIntranet = (res) => res.status(409).json({ error: "Las citas se gestionan ahora en la intranet (Agenda de cierre)" });
 app.post("/admin/api/appts", async (req, res) => {
   if (!adminAuth(req, res)) return;
+  if (CRM_EFECTIVO === "on") return citasEnLaIntranet(res);
   const { id, phone, name, title, when, closer, notes } = req.body || {};
   if (id) {
     try {
@@ -3330,6 +3365,7 @@ app.post("/admin/api/appts", async (req, res) => {
 });
 app.delete("/admin/api/appts/:id", async (req, res) => {
   if (!adminAuth(req, res)) return;
+  if (CRM_EFECTIVO === "on") return citasEnLaIntranet(res);
   try { await deleteAppt(req.params.id); res.json({ ok: true }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

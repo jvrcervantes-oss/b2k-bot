@@ -109,21 +109,27 @@ export async function ejecutaCrm({ modo, tel, msgId, nombre = "", notas = [], ci
     }
     if (modo !== "on" || typeof llama !== "function") return hechos;
 
-    const paso = async (accion, cuerpo, etiqueta) => {
+    const paso = async (accion, cuerpo, etiqueta, extra = {}) => {
       try {
         const r = await llama(accion, cuerpo);
         log(`[CRM] ${accion} tel=${me} ${etiqueta} → ${r}`);
-        hechos.push({ accion, resultado: r });
+        hechos.push({ accion, resultado: r, ...extra });
         return r;
       } catch (e) {
         log(`[CRM] ${accion} tel=${me} ${etiqueta} FALLÓ (${e && e.message ? e.message : "error"}) — la conversación sigue`);
-        hechos.push({ accion, resultado: "error" });
+        hechos.push({ accion, resultado: "error", ...extra });
         return "error";
       }
     };
+    // Una cita que no llega a la base NO puede quedar muda: el cliente ya cree que está agendada. Cada cita pedida deja su entrada
+    // (con el motivo) para que quien llama avise a una persona.
+    const sinIntentar = (c, motivo) => hechos.push({ accion: "lead_cita", resultado: motivo, tipo: c.tipo, cuando: c.cuando, zona: c.zona });
 
     const alta = await paso("lead_upsert", { accion: "lead_upsert", tel, msg_id: `${msgId}:u`, nombre: nombreLimpio, origen: "bot-whatsapp-lawang" }, "alta");
-    if (alta !== "creado" && alta !== "existente") return hechos;   // ambiguo / tope / error: nada más se aplica
+    if (alta !== "creado" && alta !== "existente") {                 // ambiguo / tope / error: nada más se aplica
+      citas.forEach((c) => sinIntentar(c, "sin_alta:" + alta));
+      return hechos;
+    }
 
     for (let i = 0; i < notas.length; i++) {
       if (topes && !(await topes.permite(tel, "nota"))) { log(`[CRM] tope diario de notas alcanzado tel=${me}`); break; }
@@ -131,14 +137,65 @@ export async function ejecutaCrm({ modo, tel, msgId, nombre = "", notas = [], ci
     }
     for (let i = 0; i < citas.length; i++) {
       const iso = isoConZona(citas[i].cuando, citas[i].zona);
-      if (!iso) { log(`[CRM] cita descartada: zona no entendida ("${citas[i].zona}") tel=${me}`); continue; }
-      if (topes && !(await topes.permite(tel, "cita"))) { log(`[CRM] tope diario de citas alcanzado tel=${me}`); break; }
-      await paso("lead_cita", { accion: "lead_cita", tel, msg_id: `${msgId}:c${i + 1}`, cuando: iso, tipo: citas[i].tipo }, `cita${i + 1}`);
+      if (!iso) { log(`[CRM] cita descartada: zona no entendida ("${citas[i].zona}") tel=${me}`); sinIntentar(citas[i], "zona_no_entendida"); continue; }
+      if (topes && !(await topes.permite(tel, "cita"))) { log(`[CRM] tope diario de citas alcanzado tel=${me}`); citas.slice(i).forEach((c) => sinIntentar(c, "tope_local")); break; }
+      await paso("lead_cita", { accion: "lead_cita", tel, msg_id: `${msgId}:c${i + 1}`, cuando: iso, tipo: citas[i].tipo }, `cita${i + 1}`,
+        { tipo: citas[i].tipo, cuando: citas[i].cuando, zona: citas[i].zona });
     }
   } catch (e) {
     try { log(`[CRM] error inesperado: ${e && e.message ? e.message : e}`); } catch { /* el log no puede romper nada */ }
   }
   return hechos;
+}
+
+const MOTIVOS_CITA = {
+  fuera_horario: "esa hora está fuera del horario (lunes a sábado, 9:00 a 17:30 hora de Bali)",
+  pasada: "esa hora ya pasó",
+  lejana: "está a más de 60 días",
+  ya_hay_cita: "el lead ya tiene otra cita viva (confirmada por el equipo)",
+  ambiguo: "hay más de un lead con ese teléfono y el bot no elige",
+  sin_lead: "no hay lead con ese teléfono",
+  tope: "se alcanzó el tope de citas del lead",
+  tope_local: "se alcanzó el tope de citas del día",
+  zona_no_entendida: "la zona horaria no se entendió",
+  fecha_invalida: "la fecha no era válida",
+  tipo_invalido: "el tipo de cita no era válido",
+  telefono_invalido: "el teléfono no era válido",
+  error: "la base no respondió",
+};
+
+/**
+ * Texto del aviso al owner por UNA cita etiquetada. Las que la base acepta ("propuesta", "reprogramada") avisan de que hay que
+ * confirmarla; todas las demás avisan de que NO quedó registrada aunque el cliente crea que sí. Devuelve null si no hay nada que decir.
+ */
+export function avisoCita({ proyecto = "Bot", nombre = "", tel = "", hecho }) {
+  if (!hecho || hecho.accion !== "lead_cita") return null;
+  const quien = `*${limpiaNota(nombre) || tel}*\nTel: ${tel}`;
+  const tipo = hecho.tipo === "visita" ? "Visita" : "Llamada";
+  const cuando = `${hecho.cuando || "?"} ${hecho.zona ? hecho.zona : "(hora de Bali)"}`;
+  if (hecho.resultado === "propuesta" || hecho.resultado === "reprogramada") {
+    return `📞 ${proyecto} — ${tipo.toUpperCase()} PROPUESTA (pendiente de confirmar)\n\n${quien}\nCuándo: ${cuando}\n\nConfírmala o cancélala en la intranet, Agenda de cierre.`;
+  }
+  const motivo = hecho.resultado.startsWith("sin_alta:") ? "no se pudo dar de alta o localizar al lead (" + hecho.resultado.slice(9) + ")" : (MOTIVOS_CITA[hecho.resultado] || "motivo desconocido: " + hecho.resultado);
+  return `⚠️ ${proyecto} — CITA NO REGISTRADA\n\n${quien}\n${tipo} pedida para: ${cuando}\nEl cliente cree que está agendada, pero no se guardó: ${motivo}.\n\nAgéndala a mano o escríbele.`;
+}
+
+/**
+ * Con BOT_CRM=on el modelo agenda con [CITA:...] y la base guarda la cita: el bloque de cierre del playbook (que enseña [APPT:...]) se reescribe para
+ * que no le lleguen las dos instrucciones. Reemplazo LITERAL de frases conocidas; devuelve cuántos "APPT" quedan (debe ser 0) para que quien llama lo grite.
+ */
+const CAMBIOS_CITA = [
+  ["that is exactly what the APPT tag records for the team", "that is exactly what the CITA tag records for the team"],
+  ["from the timezone label you put in the APPT tag", "from the timezone label you put in the CITA tag"],
+  ["put that timezone label in the APPT title", "put that timezone label as the third field of the CITA tag (no label means Bali time)"],
+  ["  [APPT:YYYY-MM-DDTHH:MM|Short title incl. timezone]", "  [CITA:llamada|YYYY-MM-DDTHH:MM|TZ]   (use [CITA:visita|...] for an in-person visit; TZ is optional and means Bali time when omitted)"],
+  ["  Example: [APPT:2026-07-15T10:00|Call w/ John re Bali-Komodo — 10:00 AEST]", "  Example: [CITA:llamada|2026-07-15T10:00|AEST]"],
+  ["Output the APPT tag only when", "Output the CITA tag only when"],
+];
+export function adaptaCierreACita(texto) {
+  let t = String(texto);
+  for (const [de, a] of CAMBIOS_CITA) t = t.split(de).join(a);
+  return { texto: t, restantes: (t.match(/APPT/g) || []).length };
 }
 
 /** Bloques `system` de catálogo y CRM. Con los dos interruptores apagados devuelve [] (el system es el de siempre). */
