@@ -9,6 +9,7 @@ import Stripe from "stripe";
 import crypto from "crypto";
 import { createSeguimientoConfig } from "./seguimiento-config.js";
 import { createFollowupRunner } from "./seguimiento-tick.js";
+import { createRsvForwarder, createXenditGate } from "./xendit-rsv.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -2649,13 +2650,13 @@ async function markLeadPaid(phone, provider, amountIDR, receiptUrl) {
   }
 }
 
-// Xendit verifica con un token estático en la cabecera (Dashboard → Developers → Callbacks),
-// no es una firma HMAC — comparación en tiempo constante igual que el resto de tokens del bot.
-app.post("/webhook/xendit", async (req, res) => {
-  if (!XENDIT_CALLBACK_TOKEN) { console.warn(`[${PROJECT_NAME}] /webhook/xendit recibido pero falta XENDIT_CALLBACK_TOKEN — ignorado`); return res.sendStatus(503); }
-  const token = req.get("x-callback-token") || "";
-  const a = Buffer.from(token), b = Buffer.from(XENDIT_CALLBACK_TOKEN);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) { console.warn(`[${PROJECT_NAME}] /webhook/xendit token inválido`); return res.sendStatus(403); }
+// Puerta del webhook (xendit-rsv.js): valida el token (503 si falta, 403 si no coincide, tiempo constante) y, si el aviso es de una reserva del ERP
+// (`rsv:`), lo reenvía a la edge reservas-pago y ACABA ahí (F8-7b, independiente de BBM_BACKEND); el resto sigue a la rama `paylink_` de siempre.
+// Solo necesita BBM_ERP_URL: el token que reenvía es el del propio aviso de Xendit. Sin esa URL un `rsv:` recibe 503 (Xendit reintenta, no se pierde).
+const xenditGate = createXenditGate({
+  token: XENDIT_CALLBACK_TOKEN, forwarder: createRsvForwarder({ erpUrl: process.env.BBM_ERP_URL, project: PROJECT_NAME }), project: PROJECT_NAME,
+});
+app.post("/webhook/xendit", xenditGate, async (req, res) => {
   try {
     const { status, external_id, amount, id } = req.body || {};
     if (status !== "PAID" && status !== "EXPIRED") return res.sendStatus(200); // pago confirmado o invoice caducada
