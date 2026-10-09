@@ -9,7 +9,7 @@ import Stripe from "stripe";
 import crypto from "crypto";
 import { VACIA as CFG_VACIA, validaConfig, bloqueEquipo, ttlPausaHumana } from "./botcfg.js";
 import { creaCatalogo, cifrasPermitidas, postCheckCifras } from "./botcat.js";
-import { extraeEtiquetas, bloquesSistema, contenidoParaModelo, creaTopes, ejecutaCrm, avisoCita, adaptaCierreACita, isoConZona } from "./botcrm.js";
+import { extraeEtiquetas, bloquesSistema, contenidoParaModelo, creaTopes, ejecutaCrm, avisoCita, adaptaCierreACita, isoConZona, citasIlegibles } from "./botcrm.js";
 
 const app = express();
 // verify: guarda el body crudo — la firma X-Hub-Signature-256 de Meta se calcula sobre los bytes
@@ -2374,6 +2374,7 @@ app.post("/webhook", async (req, res) => {
     const resendMatch = /\[RESEND_LINK\]/i.test(reply); // el cliente pide reenviar el link que ya recibió
     let leadFields = parseLeadTag(reply); // datos confirmados en la charla → ficha/BD
     const crmTags = BOT_CRM_MODE !== "off" ? extraeEtiquetas(reply) : null; // [NOTA]/[CITA] del modelo: se ejecutan con el teléfono del webhook, tras responder
+    const crmIlegibles = CRM_EFECTIVO === "on" ? citasIlegibles(reply) : 0; // [CITA:...] mal escritas: sin esto cleanReply las borra y la cita queda muda
     reply = cleanReply(reply); // etiquetas internas + guion + markdown de WhatsApp (helper compartido)
     postCheckPrecios(reply, cat, history, from); // solo log
 
@@ -2471,13 +2472,16 @@ app.post("/webhook", async (req, res) => {
     // ── Cita agendada por el bot en la conversación ───────────────
     // Con BOT_CRM=on las citas van por [CITA:...] (la base es su único dueño): una [APPT] que el modelo emita igualmente NO se guarda en Redis,
     // y se avisa al owner con los datos, porque el cliente ya cree que está agendada.
-    if (apptMatch && CRM_EFECTIVO === "on") {
-      console.error(`[${PROJECT_NAME}] [APPT] ignorada con BOT_CRM=on (el modelo debía usar [CITA]): …${String(from).slice(-4)} ${apptMatch[1].trim()}`);
-      if (OWNER_PHONE) {
+    if (CRM_EFECTIVO === "on" && (apptMatch || crmIlegibles > 0)) {
+      console.error(`[${PROJECT_NAME}] cita sin registrar con BOT_CRM=on: …${String(from).slice(-4)} appt=${apptMatch ? apptMatch[1].trim().slice(0, 40) : "no"} ilegibles=${crmIlegibles}`);
+      // Si además hay una [CITA] legible, esa ya avisa por su cuenta: no se duplica el aviso por la [APPT].
+      const yaAvisa = crmTags && crmTags.citas.length > 0;
+      if (OWNER_PHONE && !(apptMatch && !crmIlegibles && yaAvisa)) {
         try {
-          await sendWhatsApp(OWNER_PHONE,
-            `⚠️ ${PROJECT_NAME} — CITA NO REGISTRADA\n\n*${profileName || from}*\nTel: ${from}\nPedida para: ${apptMatch[1].trim()} (${apptMatch[2].trim()})\nEl cliente cree que está agendada, pero el bot usó una etiqueta antigua y no se guardó.\n\nAgéndala a mano o escríbele.`);
-        } catch (e) { console.error(`[${PROJECT_NAME}] aviso de [APPT] ignorada falló: ${e.message}`); }
+          const texto = avisoCita({ proyecto: PROJECT_NAME, nombre: profileName, tel: String(from),
+            hecho: { accion: "lead_cita", resultado: apptMatch ? "etiqueta_antigua" : "etiqueta_ilegible", tipo: "llamada", cuando: apptMatch ? apptMatch[1].trim() : "?", zona: "" } });
+          if (texto) await sendWhatsApp(OWNER_PHONE, texto);
+        } catch (e) { console.error(`[${PROJECT_NAME}] aviso de cita sin registrar falló: ${e.message}`); }
       }
     } else if (apptMatch) {
       try {

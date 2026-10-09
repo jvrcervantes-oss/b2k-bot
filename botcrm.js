@@ -65,6 +65,14 @@ export function extraeEtiquetas(respuesta) {
   return { notas: notas.slice(0, MAX_NOTAS_RESPUESTA), citas: citas.slice(0, MAX_CITAS_RESPUESTA) };
 }
 
+/** Cuántas etiquetas [CITA:...] de la respuesta NO se pueden leer (segundos, zona larga, fecha rara…). Cada una es una cita que el cliente cree agendada. */
+export function citasIlegibles(respuesta) {
+  const r = String(respuesta || "");
+  const total = (r.match(/\[CITA:/gi) || []).length;
+  const buenas = (r.match(/\[CITA:\s*(?:llamada|visita|call|visit)\s*\|\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?:\s*\|\s*[^\]|]{1,12})?\s*\]/gi) || []).length;
+  return Math.max(0, total - buenas);
+}
+
 /** Quita de la respuesta TODA etiqueta [NOTA:..] / [CITA:..], bien formada o no (el cliente nunca las ve). */
 export const quitaEtiquetasCrm = (s) => String(s || "").replace(/\[(?:NOTA|CITA):[^\]]*\]/gi, "");
 
@@ -161,6 +169,8 @@ const MOTIVOS_CITA = {
   fecha_invalida: "la fecha no era válida",
   tipo_invalido: "el tipo de cita no era válido",
   telefono_invalido: "el teléfono no era válido",
+  etiqueta_antigua: "el bot usó una etiqueta antigua ([APPT]) y no se guardó",
+  etiqueta_ilegible: "la etiqueta de cita salió mal escrita y no se pudo leer",
   error: "la base no respondió",
 };
 
@@ -170,9 +180,9 @@ const MOTIVOS_CITA = {
  */
 export function avisoCita({ proyecto = "Bot", nombre = "", tel = "", hecho }) {
   if (!hecho || hecho.accion !== "lead_cita") return null;
-  const quien = `*${limpiaNota(nombre) || tel}*\nTel: ${tel}`;
+  const quien = `*${limpiaNota(nombre).slice(0, 80).replace(/\*/g, "") || tel}*\nTel: ${tel}`;
   const tipo = hecho.tipo === "visita" ? "Visita" : "Llamada";
-  const cuando = `${hecho.cuando || "?"} ${hecho.zona ? hecho.zona : "(hora de Bali)"}`;
+  const cuando = `${limpiaNota(hecho.cuando || "?").slice(0, 60)} ${hecho.zona ? limpiaNota(hecho.zona).slice(0, 20) : "(hora de Bali)"}`;
   if (hecho.resultado === "propuesta" || hecho.resultado === "reprogramada") {
     return `📞 ${proyecto} — ${tipo.toUpperCase()} PROPUESTA (pendiente de confirmar)\n\n${quien}\nCuándo: ${cuando}\n\nConfírmala o cancélala en la intranet, Agenda de cierre.`;
   }

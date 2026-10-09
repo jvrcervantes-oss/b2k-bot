@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { adaptaCierreACita, avisoCita, ejecutaCrm, creaTopes, extraeEtiquetas } from "./botcrm.js";
+import { adaptaCierreACita, avisoCita, ejecutaCrm, creaTopes, extraeEtiquetas, citasIlegibles } from "./botcrm.js";
 
 const SRC = fs.readFileSync(new URL("./index.js", import.meta.url), "utf8").split(String.fromCharCode(13)).join("");
 const plantilla = (nombre) => {
@@ -39,7 +39,7 @@ test("BOT_CRM off/sombra: el prompt de cierre no cambia (la adaptación solo cor
 });
 
 test("index.js: con CRM on la [APPT] no se guarda en Redis y avisa al owner; el panel viejo no escribe citas", () => {
-  assert.match(SRC, /if \(apptMatch && CRM_EFECTIVO === "on"\) \{[\s\S]*?CITA NO REGISTRADA[\s\S]*?\} else if \(apptMatch\) \{\s*try \{\s*const appt = await createAppt/);
+  assert.match(SRC, /if \(CRM_EFECTIVO === "on" && \(apptMatch \|\| crmIlegibles > 0\)\) \{[\s\S]*?etiqueta_antigua[\s\S]*?\} else if \(apptMatch\) \{\s*try \{\s*const appt = await createAppt/);
   assert.match(SRC, /app\.post\("\/admin\/api\/appts"[\s\S]*?if \(CRM_EFECTIVO === "on"\) return citasEnLaIntranet\(res\);/);
   assert.match(SRC, /app\.delete\("\/admin\/api\/appts\/:id"[\s\S]*?if \(CRM_EFECTIVO === "on"\) return citasEnLaIntranet\(res\);/);
   // y ningún otro sitio crea citas en Redis
@@ -84,8 +84,21 @@ test("avisoCita: propuesta pide confirmar; cualquier otro resultado dice que NO 
   assert.ok(!/\[NOTA/.test(avisoCita({ ...base, nombre: "Ana [NOTA:x]", hecho: { accion: "lead_cita", resultado: "pasada", tipo: "llamada", cuando: "x" } })));
 });
 
-test("avisoCita cubre TODOS los resultados que bot_lead_cita puede devolver (leídos del SQL real)", () => {
-  const sql = fs.readFileSync(new URL("../../proyectos/Lawang/supabase/migrations/20261010080000_bot_catalogo_crm_s3.sql", import.meta.url), "utf8");
+test("citasIlegibles: una [CITA] mal escrita se cuenta (si no, cleanReply la borra y la cita queda muda); las buenas no", () => {
+  assert.strictEqual(citasIlegibles("ok [CITA:llamada|2026-10-12T10:00|AEST]"), 0);
+  assert.strictEqual(citasIlegibles("[CITA:visita|2026-10-12T10:00]"), 0);
+  assert.strictEqual(citasIlegibles("[CITA:llamada|2026-10-12T10:00:30]"), 1);
+  assert.strictEqual(citasIlegibles("[CITA:llamada|2026-10-12 10:00]"), 1);
+  assert.strictEqual(citasIlegibles("[CITA:llamada|2026-10-12T10:00|UNA ZONA MUY LARGA]"), 1);
+  assert.strictEqual(citasIlegibles("sin etiquetas"), 0);
+  const t = avisoCita({ proyecto: "L", nombre: "Ana\n*URGENTE*", tel: "1", hecho: { accion: "lead_cita", resultado: "etiqueta_ilegible", tipo: "llamada", cuando: "?" } });
+  assert.match(t, /mal escrita/); assert.ok(!/\*URGENTE\*/.test(t) && !/Ana\n/.test(t));
+  assert.match(SRC, /const crmIlegibles = CRM_EFECTIVO === "on" \? citasIlegibles\(reply\) : 0;\s*[^\n]*\n\s*reply = cleanReply\(reply\)/);
+});
+
+const SQL_CITA = new URL("../../proyectos/Lawang/supabase/migrations/20261010080000_bot_catalogo_crm_s3.sql", import.meta.url);
+test("avisoCita cubre TODOS los resultados que bot_lead_cita puede devolver (leídos del SQL real)", { skip: !fs.existsSync(SQL_CITA) && "el SQL de Lawang no está en este clon" }, () => {
+  const sql = fs.readFileSync(SQL_CITA, "utf8");
   const cuerpo = sql.match(/create or replace function public\.bot_lead_cita[\s\S]*?end \$f\$;/)[0];
   const resultados = new Set([...cuerpo.matchAll(/return '(\w+)'/g)].map((m) => m[1]));
   for (const r of ["propuesta", "reprogramada", "fuera_horario", "pasada", "lejana", "sin_lead", "ambiguo", "tope", "ya_hay_cita", "fecha_invalida", "tipo_invalido", "telefono_invalido"]) {
