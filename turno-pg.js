@@ -498,13 +498,16 @@ export function creaTurnoPg(d) {
     try {
       // habla una PERSONA (el dueño), pero la baja del cliente se honra igual: hace falta el estado de ESE teléfono
       const est = await pg.estado({ tel });
-      if (est.error) { log(`no se pudo reenviar la respuesta del dueño: ${est.error}`); return; }
+      if (est.error) { log(`no se pudo reenviar la respuesta del dueño: ${est.error}`); await avisaDueno("estado-dueno:" + tel, `⚠️ ${projectName}: no pude reenviar tu respuesta a …${tel.slice(-4)} (no se pudo leer el estado del chat: ${est.error}). Escríbele tú directamente.`); return; }
       if (est.baja) { log(`la respuesta del dueño NO se reenvió a …${tel.slice(-4)}: pidió la baja`); await avisaDueno("baja-dueno:" + tel, `🚫 ${projectName}: ese cliente pidió la baja (STOP); no le he reenviado tu respuesta.`); return; }
       token = autoriza.concede(tel, "turno");
       const rf = await sendCliente(tel, String((message.text && message.text.body) || ""));
       if (!rf.ok) log(`error reenviando la respuesta del dueño a …${tel.slice(-4)}: ${rf.error}`);
       else log(`respuesta del dueño reenviada a …${tel.slice(-4)}`);
-    } catch (e) { log(`respuesta del dueño NO reenviada: ${e && e.message}`); }
+    } catch (e) {
+      log(`respuesta del dueño NO reenviada: ${e && e.message}`);
+      if (!token) { try { await avisaDueno("estado-dueno:" + tel, `⚠️ ${projectName}: no pude reenviar tu respuesta a …${tel.slice(-4)} (la base no contestó). La escalación ya estaba consumida: escríbele tú directamente.`); } catch (_) { /* sin más vías */ } }
+    }
     finally { autoriza.revoca(tel, token); }
   }
 
@@ -606,6 +609,15 @@ export function creaTurnoPg(d) {
 
   // ═══ ACCIONES HUMANAS DEL PANEL (vía el proxy; el usuario sale del JWT, nunca del cuerpo) ═══
   const jwtDe = (req) => String(req.get("x-user-jwt") || "").trim();
+  // Comprobación ESTRUCTURAL (tres segmentos base64url, tamaño razonable). No sustituye a la de la edge contra Auth: la edge no tiene hoy
+  // una acción de solo verificación, así que un JWT con forma válida pero falso/caducado se descubre al REGISTRAR (envío ya hecho).
+  // Pendiente de edge: una acción inocua en /humano (p. ej. `verificar`) que devuelva {ok:true} si Auth acepta el JWT; entonces se llama aquí ANTES de enviar.
+  const jwtEstructural = (j) => j.length <= 4096 && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(j);
+  const sesionMala = (res, jwt) => {
+    if (!jwt) { res.status(400).json({ error: "falta_sesion", detalle: "El proxy debe reenviar la sesión de la persona en X-User-Jwt." }); return true; }
+    if (!jwtEstructural(jwt)) { res.status(401).json({ error: "sesion_invalida", detalle: "X-User-Jwt no tiene forma de JWT." }); return true; }
+    return false;
+  };
   const quedaCorto = (e) => (e instanceof ErrorEdge ? e.status || 502 : 500);
   function rutasAdmin(app, { adminAuth }) {
     app.post("/admin/api/pause", async (req, res) => {
@@ -613,7 +625,7 @@ export function creaTurnoPg(d) {
       const { phone, paused } = req.body || {};
       if (!phone) return res.status(400).json({ error: "phone requerido" });
       const jwt = jwtDe(req);
-      if (!jwt) return res.status(400).json({ error: "falta_sesion", detalle: "El proxy debe reenviar la sesión de la persona en X-User-Jwt." });
+      if (sesionMala(res, jwt)) return;
       try {
         const r = await pg.humanoPausar({ tel: digitos(phone), modo: paused ? "pausar" : "quitar", jwt });
         if (r.error) return res.status(r.error === "sin_chat" ? 404 : 400).json({ error: r.error });
@@ -626,7 +638,7 @@ export function creaTurnoPg(d) {
       const { phone } = req.body || {};
       if (!phone) return res.status(400).json({ error: "phone requerido" });
       const jwt = jwtDe(req);
-      if (!jwt) return res.status(400).json({ error: "falta_sesion", detalle: "El proxy debe reenviar la sesión de la persona en X-User-Jwt." });
+      if (sesionMala(res, jwt)) return;
       const tel = digitos(phone);
       let token = null;
       try {

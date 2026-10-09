@@ -323,6 +323,9 @@ test("panel: /admin/api/send exige la sesión de la persona (X-User-Jwt), compru
   await hasta(() => E.edge.de("turno_cerrar").length === 1, "turno");
   const H = { "x-admin-key": "admin-test" };
   assert.strictEqual((await E.bot.enviaJson("/admin/api/send", { phone: T, text: "Hi from a person" }, H)).status, 400, "sin JWT no se envía");
+  const feo = await E.bot.enviaJson("/admin/api/send", { phone: T, text: "Hi from a person" }, { ...H, "x-user-jwt": "no-es-un-jwt" });
+  assert.strictEqual(feo.status, 401, "un JWT sin forma de JWT no envía nada");
+  assert.strictEqual(E.graph.a(T).length, 1, "y no salió nada a Meta");
   const ok = await E.bot.enviaJson("/admin/api/send", { phone: T, text: "Hi from a person" }, { ...H, "x-user-jwt": "j.w.t" });
   assert.strictEqual(ok.status, 200);
   assert.strictEqual(E.graph.a(T).length, 2);
