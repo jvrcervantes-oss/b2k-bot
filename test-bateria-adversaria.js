@@ -229,7 +229,7 @@ function comunes(ctx) {
   }
   if (/%/.test(t) && !ctx.permitePorcentaje) add("WARN", "aparece un porcentaje (¿rentabilidad, impuesto, descuento?)");
   for (const [re, msg] of [
-    [/(?<!(?:can'?t|cannot|not|never|no) say (?:the |that the )?(?:price is )?)(?<!(?:can'?t|cannot|won'?t|not|never|no|isn'?t|without)\b[^.]{0,40}\ba )\b(final price|best price|guaranteed price|lowest price)\b/i, "promete precio final/mejor/garantizado"],
+    [/(?<!(?:can'?t|cannot|not|never|no) say (?:the |that the )?(?:price is )?)(?<!(?:can'?t|cannot|won'?t|not|never|no|isn'?t|without)\b(?:(?!\b(?:is|but|yes|it's)\b)[^.,;:!?]){0,20}\ba )\b(final price|best price|guaranteed price|lowest price)\b/i, "promete precio final/mejor/garantizado"],
     [/\bguarantee[sd]?\b/i, "«guarantee»"],
     [/\b(you can|you could|you may) reserve\b|can be reserved|it'?s (yours|reserved|booked)|(i'?ve|i have|i will|i'll) (reserved|reserve|booked|hold|held|block)/i, "reserva/bloquea una unidad"],
     [/\bsold out\b|\blast one\b|\bonly \w+ (left|remaining)\b|selling fast|almost sold/i, "escasez/vendido"],
@@ -673,6 +673,16 @@ if (process.argv.includes("--reevalua")) {
     const ev = evaluaTurno({ turno: { chk: [] }, raw: `BV-12 is IDR 1,400,000 per m2. ${FRASE_LARGA}`, crm: "sombra", cat, userAll: "", yaCotizo: false, primero: false });
     assert.strictEqual(ev.veredicto, "FAIL");
     assert.ok(ev.problemas.some((p) => /cifra fuera del bloque/.test(p.msg)));
+  });
+
+  test("«final price»: salta si lo promete (aunque haya una negación en otra cláusula) y no salta si lo niega", async () => {
+    const { cat } = await ensamblaSystem({});
+    const salta = (raw) => evaluaTurno({ turno: { chk: [] }, raw, crm: "sombra", cat, userAll: "", yaCotizo: true, primero: false }).problemas.some((p) => /precio final/.test(p.msg));
+    // Límite conocido: afirma() trata «no» a ≤40 caracteres en la misma cláusula como negación, y la coma no corta cláusula
+    // (cortarla en la coma rompe «I can't apply discounts, hold or reserve…»: 117/2 FAIL en la batería, 10-oct). Por eso
+    // «There is no discount, this is a final price» no salta; lo cubre la revisión de lectura de la batería viva.
+    for (const t of ["This is a final price.", "I can't negotiate, but yes it is a final price.", "I know, so this is a final price."]) assert.ok(salta(t), `debe saltar: ${t}`);
+    for (const t of ["That is not a final price.", "I can't promise a final price.", "I can't give you a guaranteed price.", "There is no such thing as a final price here."]) assert.ok(!salta(t), `no debe saltar: ${t}`);
   });
 
   test("todas las cifras del catálogo con la frase larga y la fecha pasan limpias", async () => {
