@@ -1,5 +1,5 @@
 // ─── ALMACÉN POSTGRES DEL BOT (S4b del encargo 20261009_lawang_bot_sin_redis) ───────────────────
-// Cliente de la edge `bot-api` de Lawang (rutas /estado, /recordatorio y /humano). El bot NO se conecta a la base: habla con la edge,
+// Cliente de la edge `bot-api` de Lawang (rutas /estado y /recordatorio; /humano la llama el proxy, no el bot). El bot NO se conecta a la base: habla con la edge,
 // que ejecuta UNA función SQL por acción (lista cerrada). Este módulo es SOLO la puerta; la lógica del turno vive en turno-pg.js.
 //
 // Reglas de fiabilidad (plan, «Fiabilidad de la llamada a la edge»):
@@ -26,9 +26,9 @@ const RUTA_DE = {
   mensaje_recibir: "estado", turno_estado: "estado", turno_cerrar: "estado", eco_operadora: "estado", pausar: "estado", baja: "estado",
   entrega_fallida: "estado", escalar: "estado", escalacion_tomar: "estado", lead_resumen: "estado",
   citas_recordar: "recordatorio", cita_recordatorio_res: "recordatorio",
-  humano_pausar: "humano", humano_enviar: "humano",
 };
-const ACCION_EDGE = { humano_pausar: "pausar", humano_enviar: "enviar" };   // en /humano la acción se llama como en la lista cerrada de la edge
+// /humano NO está aquí a propósito: su secreto vive solo en la edge y en lawang-bot-proxy (que reenvía el JWT de la persona y registra pausas y envíos).
+// El bot no lo lee, no lo tiene en Railway y no puede llamar a esa ruta.
 
 export const enmascara = (tel) => { const d = String(tel || "").replace(/\D/g, ""); return d.length > 4 ? "…" + d.slice(-4) : "…"; };
 
@@ -60,13 +60,12 @@ export function creaPg({
   }
 
   // Devuelve { data, intentos }. Lanza ErrorEdge si la edge no contesta como debe.
-  async function llama(accion, cuerpo, { jwt = null } = {}) {
+  async function llama(accion, cuerpo) {
     const ruta = RUTA_DE[accion];
     const secreto = ruta ? secretos[ruta] : "";
     if (!base || !secreto) { const e = new ErrorEdge(accion, "sin_configurar", 0); falloContado(accion, e); throw e; }   // sin URL o sin secreto no se sale: fallo cerrado y ruidoso
     const headers = { "X-Bot-Secret": secreto, "content-type": "application/json" };
-    if (jwt) headers.authorization = "Bearer " + jwt;
-    const cuerpoFinal = { accion: ACCION_EDGE[accion] || accion, ...cuerpo };
+    const cuerpoFinal = { accion, ...cuerpo };
     estado.llamadas += 1;
     let ultimo = null;
     for (let intento = 1; intento <= 1 + reintentos; intento++) {
@@ -148,9 +147,6 @@ export function creaPg({
     // EXCEPCIÓN 2 (reloj de recordatorios).
     async citasRecordar() { return cuerpoDe(await llama("citas_recordar", {})); },
     async citaRecordatorioRes({ accionId, resultado }) { return cuerpoDe(await llama("cita_recordatorio_res", { accion_id: accionId, resultado })); },
-    // /humano — lo que hace una PERSONA. El usuario sale del JWT que reenvía el proxy, nunca del cuerpo.
-    async humanoPausar({ tel, modo, jwt }) { return cuerpoDe(await llama("humano_pausar", { tel, modo }, { jwt })); },
-    async humanoEnviar({ tel, texto = "", wamid, media = null, jwt }) { return cuerpoDe(await llama("humano_enviar", { tel, texto, wamid, media: media || undefined }, { jwt })); },
   };
   return api;
 }

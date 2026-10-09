@@ -186,6 +186,12 @@ const CONTEXT = fs.existsSync(contextFileName)
 const BOT_STORE_RAW = String(process.env.BOT_STORE || "redis").trim().toLowerCase();
 if (!["redis", "postgres"].includes(BOT_STORE_RAW)) console.error(`[${PROJECT_NAME}] BOT_STORE="${BOT_STORE_RAW}" no es válido (redis | postgres): se usa redis`);
 const STORE_PG = BOT_STORE_RAW === "postgres";
+// Sin META_APP_SECRET la firma X-Hub-Signature-256 no se puede comprobar (en modo redis es fail-open por compatibilidad). Con Postgres el bot se NIEGA A ARRANCAR:
+// un webhook sin firma deja a cualquiera escribir mensajes «de clientes» en la base y disparar respuestas de pago.
+if (STORE_PG && !String(process.env.META_APP_SECRET || "").trim()) {
+  console.error("FATAL: BOT_STORE=postgres exige META_APP_SECRET (firma del webhook). Arranque denegado.");
+  process.exit(1);
+}
 const turnoMod = STORE_PG ? await import("./turno-pg.js") : null;     // en modo redis estos módulos ni se cargan
 const autorizaciones = STORE_PG ? turnoMod.creaAutorizaciones({ esOwner: (t) => esOwnerExacto(t) }) : null;
 
@@ -2347,7 +2353,7 @@ if (STORE_PG) {
   const pgCli = creaPg({
     url: BOT_API_URL, log: logPg,
     timeoutMs: numMs(process.env.BOT_API_TIMEOUT_MS, 10000, 60000), pausaReintentoMs: numMs(process.env.BOT_API_PAUSA_REINTENTO_MS, 300, 10000),
-    secretos: { estado: edgeSecret("BOT_API_SECRET_ESTADO"), recordatorio: edgeSecret("BOT_API_SECRET_RECORDATORIO"), humano: edgeSecret("BOT_API_SECRET_HUMANO") },
+    secretos: { estado: edgeSecret("BOT_API_SECRET_ESTADO"), recordatorio: edgeSecret("BOT_API_SECRET_RECORDATORIO") },
     // El aviso al dueño NO depende de la base: va directo a WhatsApp.
     onAlarma: async ({ fallos, accion, tipo, status }) => {
       console.error(`[${PROJECT_NAME}] 🚨 bot-api SIN RESPUESTA: ${fallos} fallos seguidos (último: ${accion} ${tipo}${status ? " HTTP " + status : ""})`);
@@ -3299,7 +3305,7 @@ app.listen(PORT, async () => {
   }
   console.log(`[${PROJECT_NAME}] CRM (BD): ${STORE_PG ? "Postgres de Lawang vía la edge bot-api (BOT_STORE=postgres; Redis BLOQUEADO)" : redisActivo() ? "Redis (persistente)" : "RAM (volátil — configura REDIS_URL)"}`);
   if (STORE_PG) {
-    const faltan = [["BOT_API_URL", BOT_API_URL], ["BOT_API_SECRET_ESTADO", process.env.BOT_API_SECRET_ESTADO], ["BOT_API_SECRET_HUMANO", process.env.BOT_API_SECRET_HUMANO], ["META_APP_SECRET", META_APP_SECRET], ["OWNER_PHONE", OWNER_PHONE]].filter(([, v]) => !String(v || "").trim()).map(([k]) => k);
+    const faltan = [["BOT_API_URL", BOT_API_URL], ["BOT_API_SECRET_ESTADO", process.env.BOT_API_SECRET_ESTADO], ["META_APP_SECRET", META_APP_SECRET], ["OWNER_PHONE", OWNER_PHONE]].filter(([, v]) => !String(v || "").trim()).map(([k]) => k);
     if (faltan.length) console.error(`[${PROJECT_NAME}] 🚨 BOT_STORE=postgres con variables VACÍAS: ${faltan.join(", ")}. ${faltan.includes("META_APP_SECRET") ? "SIN META_APP_SECRET todo POST del webhook se rechaza con 403. " : ""}El bot no podrá contestar hasta ponerlas.`);
     if (String(process.env.BOT_RECORDATORIO || "").trim().toLowerCase() === "postgres" && !String(process.env.BOT_API_SECRET_RECORDATORIO || "").trim()) console.error(`[${PROJECT_NAME}] 🚨 BOT_RECORDATORIO=postgres pero falta BOT_API_SECRET_RECORDATORIO`);
     if (OWNER_PHONE && normalizePhone(OWNER_PHONE).length < 10) console.error(`[${PROJECT_NAME}] ⚠️ OWNER_PHONE parece sin prefijo de país: con BOT_STORE=postgres el dueño se reconoce por dígitos EXACTOS`);

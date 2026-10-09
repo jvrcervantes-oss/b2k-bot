@@ -35,26 +35,19 @@ test("recibir: va a /estado con el secreto de esa ruta, quita ok/accion y reenv�
   assert.strictEqual(e.pg.llamadas, 1);
 });
 
-test("cada acción usa el secreto de SU ruta: estado, recordatorio y humano no se mezclan", async () => {
+test("cada acción usa el secreto de SU ruta: estado y recordatorio no se mezclan", async () => {
   const e = edge([ok({ citas: [] })]);
   await e.pg.citasRecordar();
   await e.pg.citaRecordatorioRes({ accionId: "11111111-1111-1111-1111-111111111111", resultado: "enviado" });
-  await e.pg.humanoPausar({ tel: T, modo: "pausar", jwt: "j.w.t" });
   await e.pg.baja({ tel: T, wamid: "w" });
   assert.deepStrictEqual(e.peticiones.map((p) => [p.url.split("/").pop(), p.headers["X-Bot-Secret"]]),
-    [["recordatorio", "se-recordatorio"], ["recordatorio", "se-recordatorio"], ["humano", "se-humano"], ["estado", "se-estado"]]);
+    [["recordatorio", "se-recordatorio"], ["recordatorio", "se-recordatorio"], ["estado", "se-estado"]]);
 });
 
-test("/humano: la acción se llama pausar/enviar, el JWT va en Authorization y el cuerpo NO lleva usuario", async () => {
+test("el cliente de la edge NO sabe llamar a /humano (su secreto es del proxy) y sus rutas nunca llevan Authorization", async () => {
   const e = edge([ok({ pausado: true, hasta: null })]);
-  await e.pg.humanoPausar({ tel: T, modo: "pausar", jwt: "abc.def.ghi" });
-  await e.pg.humanoEnviar({ tel: T, texto: "hola", wamid: "wamid.H1", jwt: "abc.def.ghi" });
-  assert.strictEqual(e.peticiones[0].cuerpo.accion, "pausar");
-  assert.strictEqual(e.peticiones[1].cuerpo.accion, "enviar");
-  for (const p of e.peticiones) {
-    assert.strictEqual(p.headers.authorization, "Bearer abc.def.ghi");
-    assert.ok(!("usuario" in p.cuerpo) && !("jwt" in p.cuerpo));
-  }
+  assert.strictEqual(typeof e.pg.humanoPausar, "undefined");
+  assert.strictEqual(typeof e.pg.humanoEnviar, "undefined");
   // las rutas del bot nunca llevan Authorization
   const e2 = edge([ok({ baja: "nueva", pausado: true })]);
   await e2.pg.baja({ tel: T, wamid: "w" });

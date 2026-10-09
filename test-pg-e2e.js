@@ -315,29 +315,26 @@ test("resumen: cuando el cierre lo pide, el bot llama al modelo DESPUÉS de cont
   assert.match(pr.messages[0].content, /<<<CONVERSATION/);
 });
 
-test("panel: /admin/api/send exige la sesión de la persona (X-User-Jwt), comprueba la baja y registra por /humano; lo retirado da 410", async (t) => {
+test("panel: /admin/api/send comprueba la baja, envía y devuelve lo que el proxy registrará por /humano (el bot NO llama a /humano); pausa y lo retirado dan 410", async (t) => {
   const E = await entorno();
   t.after(() => E.cierra());
   const T = tel(21);
   await E.bot.post(payloadTexto(T, "Hello", wamid()));
   await hasta(() => E.edge.de("turno_cerrar").length === 1, "turno");
   const H = { "x-admin-key": "admin-test" };
-  assert.strictEqual((await E.bot.enviaJson("/admin/api/send", { phone: T, text: "Hi from a person" }, H)).status, 400, "sin JWT no se envía");
-  const feo = await E.bot.enviaJson("/admin/api/send", { phone: T, text: "Hi from a person" }, { ...H, "x-user-jwt": "no-es-un-jwt" });
-  assert.strictEqual(feo.status, 401, "un JWT sin forma de JWT no envía nada");
-  assert.strictEqual(E.graph.a(T).length, 1, "y no salió nada a Meta");
-  const ok = await E.bot.enviaJson("/admin/api/send", { phone: T, text: "Hi from a person" }, { ...H, "x-user-jwt": "j.w.t" });
+  const ok = await E.bot.enviaJson("/admin/api/send", { phone: T, text: "Hi from a person" }, H);
   assert.strictEqual(ok.status, 200);
   assert.strictEqual(E.graph.a(T).length, 2);
-  const reg = E.edge.de("enviar_humano")[0];
-  assert.strictEqual(reg.jwt, "j.w.t");
-  assert.ok(!("usuario" in reg.cuerpo));
-  assert.strictEqual(reg.cuerpo.wamid, E.graph.a(T)[1].id);
+  assert.strictEqual(E.edge.de("enviar_humano").length, 0, "el bot no escribe como persona");
+  assert.strictEqual(ok.json.registrar.texto, "Hi from a person");
+  assert.strictEqual(ok.json.registrar.wamid, E.graph.a(T)[1].id);
+  assert.strictEqual((await E.bot.enviaJson("/admin/api/pause", { phone: T, paused: true }, H)).status, 410);
+  assert.strictEqual(E.edge.de("pausar_humano").length, 0);
   // baja → 409, no se envía
   await E.bot.post(payloadTexto(T, "stop", wamid()));
   await hasta(() => E.edge.de("baja").length === 1, "baja");
   const antes = E.graph.a(T).length;
-  const r409 = await E.bot.enviaJson("/admin/api/send", { phone: T, text: "again" }, { ...H, "x-user-jwt": "j.w.t" });
+  const r409 = await E.bot.enviaJson("/admin/api/send", { phone: T, text: "again" }, H);
   assert.strictEqual(r409.status, 409);
   assert.strictEqual(E.graph.a(T).length, antes);
   assert.strictEqual((await E.bot.get("/admin/api/leads", H)).status, 410);
@@ -355,15 +352,14 @@ test("el simulador del panel sigue funcionando en postgres, con su memoria de pr
 });
 
 // ═════════ BLOQUE 2: sin META_APP_SECRET ═════════
-test("postgres SIN META_APP_SECRET: todo POST es 403 y la edge no recibe ninguna llamada; el arranque lo grita", async (t) => {
-  const E = await entorno({ appSecret: "" });
-  t.after(() => E.cierra());
-  const T = tel(30);
-  assert.strictEqual(await E.bot.post(payloadTexto(T, "Hello", wamid()), { cabecera: "sha256=00" }), 403);
-  assert.strictEqual(await E.bot.post(payloadTexto(T, "Hello", wamid()), { cabecera: null }), 403);
-  await esperar(150);
-  assert.strictEqual(E.edge.llamadas.length, 0);
-  assert.match(E.bot.texto(), /META_APP_SECRET/);
+test("postgres SIN META_APP_SECRET: el bot se NIEGA A ARRANCAR (sale con código 1, sin escuchar ni llamar a la edge)", async () => {
+  const edge = await creaEdgeFalsa({ secretos: SEC });
+  const graph = await creaGraphFalso();
+  const anthropic = await creaAnthropicFalso();
+  try {
+    await assert.rejects(lanzaBot({ edge, graph, anthropic, secretos: SEC, appSecret: "" }), /el bot salió al arrancar \(código 1\)[\s\S]*Arranque denegado/);
+    assert.strictEqual(edge.llamadas.length, 0);
+  } finally { await edge.cierra(); await graph.cierra(); await anthropic.cierra(); }
 });
 
 // ═════════ BLOQUE 3: modo testing ═════════
@@ -532,7 +528,7 @@ test("el envío del panel y el turno del bot sobre el MISMO teléfono no se canc
   await E.bot.post(payloadTexto(T, "Hello", wamid()));
   await hasta(() => E.graph.a(T).length >= 1, "primera burbuja");
   // mientras el bot sigue escribiendo sus burbujas, una persona envía por el panel al mismo teléfono
-  const r = await E.bot.enviaJson("/admin/api/send", { phone: T, text: "A person here" }, { "x-admin-key": "admin-test", "x-user-jwt": "j.w.t" });
+  const r = await E.bot.enviaJson("/admin/api/send", { phone: T, text: "A person here" }, { "x-admin-key": "admin-test" });
   assert.strictEqual(r.status, 200);
   await hasta(() => E.edge.de("turno_cerrar").length === 1, "turno cerrado", 15000);
   const texto = E.graph.a(T).map((m) => m.texto).join(" | ");

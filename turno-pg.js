@@ -607,38 +607,20 @@ export function creaTurnoPg(d) {
     } catch (e) { log(`recordatorioTick: ${e && e.message}`); }
   }
 
-  // ═══ ACCIONES HUMANAS DEL PANEL (vía el proxy; el usuario sale del JWT, nunca del cuerpo) ═══
-  const jwtDe = (req) => String(req.get("x-user-jwt") || "").trim();
-  // Comprobación ESTRUCTURAL (tres segmentos base64url, tamaño razonable). No sustituye a la de la edge contra Auth: la edge no tiene hoy
-  // una acción de solo verificación, así que un JWT con forma válida pero falso/caducado se descubre al REGISTRAR (envío ya hecho).
-  // Pendiente de edge: una acción inocua en /humano (p. ej. `verificar`) que devuelva {ok:true} si Auth acepta el JWT; entonces se llama aquí ANTES de enviar.
-  const jwtEstructural = (j) => j.length <= 4096 && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(j);
-  const sesionMala = (res, jwt) => {
-    if (!jwt) { res.status(400).json({ error: "falta_sesion", detalle: "El proxy debe reenviar la sesión de la persona en X-User-Jwt." }); return true; }
-    if (!jwtEstructural(jwt)) { res.status(401).json({ error: "sesion_invalida", detalle: "X-User-Jwt no tiene forma de JWT." }); return true; }
-    return false;
-  };
+  // ═══ ACCIONES HUMANAS DEL PANEL (vía el proxy) ═══
+  // El bot SOLO envía a WhatsApp (tiene el token) tras comprobar la baja; NO escribe en la base como persona: pausar y registrar el envío
+  // los hace lawang-bot-proxy por la ruta /humano de la edge (secreto y JWT de la persona que solo el proxy tiene; el bot no los ve).
   const quedaCorto = (e) => (e instanceof ErrorEdge ? e.status || 502 : 500);
   function rutasAdmin(app, { adminAuth }) {
-    app.post("/admin/api/pause", async (req, res) => {
+    app.post("/admin/api/pause", (req, res) => {
       if (!adminAuth(req, res)) return;
-      const { phone, paused } = req.body || {};
-      if (!phone) return res.status(400).json({ error: "phone requerido" });
-      const jwt = jwtDe(req);
-      if (sesionMala(res, jwt)) return;
-      try {
-        const r = await pg.humanoPausar({ tel: digitos(phone), modo: paused ? "pausar" : "quitar", jwt });
-        if (r.error) return res.status(r.error === "sin_chat" ? 404 : 400).json({ error: r.error });
-        res.json({ ok: true, paused: !!r.pausado });
-      } catch (e) { res.status(quedaCorto(e) === 401 ? 401 : 502).json({ error: "bot-api" }); }
+      res.status(410).json({ error: "retirado_con_postgres", detalle: "La pausa de una persona la escribe lawang-bot-proxy por /humano; el bot ya no la guarda." });
     });
 
     async function enviaComoPersona(req, res, { construye }) {
       if (!adminAuth(req, res)) return;
       const { phone } = req.body || {};
       if (!phone) return res.status(400).json({ error: "phone requerido" });
-      const jwt = jwtDe(req);
-      if (sesionMala(res, jwt)) return;
       const tel = digitos(phone);
       let token = null;
       try {
@@ -651,12 +633,8 @@ export function creaTurnoPg(d) {
         const r = await plan.envia(tel);
         if (!r.ok) return res.status(502).json({ error: r.error, code: r.code ?? null });
         const wamid = r.wamid || r.id || null;
-        let registro = true;
-        try {
-          const g = await pg.humanoEnviar({ tel, texto: plan.registro, wamid: wamid || `h-${tel}-${ahora()}`, jwt });
-          if (g.error) registro = false;
-        } catch (e) { registro = false; log(`envío humano NO registrado en la base: ${e && e.message}`); }
-        res.json({ ok: true, wamid, registrado: registro });
+        // El proxy registra el envío en la base con este wamid y este texto (por /humano, con la persona del JWT).
+        res.json({ ok: true, wamid, registrar: { texto: plan.registro, wamid: wamid || null } });
       } catch (e) { res.status(quedaCorto(e) === 401 ? 401 : 502).json({ error: "bot-api" }); }
       finally { autoriza.revoca(tel, token); }
     }

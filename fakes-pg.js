@@ -298,7 +298,7 @@ export async function lanzaBot({ env = {}, graph, anthropic, edge, secretos, app
     OWNER_PHONE: "6281100000000", CONTEXT_FILE: "context-lawang.md", PLAYBOOK_FILE: "playbook-lawang.json",
     HUMANIZE_CHUNKS: "off", ADMIN_PASSWORD: "admin-test", BOT_MODEL: "claude-test",
     BOT_STORE: modo, ...(modo === "postgres" ? {
-      BOT_API_URL: edge.url, BOT_API_SECRET_ESTADO: secretos.estado, BOT_API_SECRET_RECORDATORIO: secretos.recordatorio, BOT_API_SECRET_HUMANO: secretos.humano,
+      BOT_API_URL: edge.url, BOT_API_SECRET_ESTADO: secretos.estado, BOT_API_SECRET_RECORDATORIO: secretos.recordatorio,
       BOT_TURNO_REINTENTOS_MS: "30,30", BOT_CIERRE_REINTENTOS_MS: "30,30,30", BOT_API_PAUSA_REINTENTO_MS: "20",
     } : {}),
     ...(appSecret ? { META_APP_SECRET: appSecret } : {}),
