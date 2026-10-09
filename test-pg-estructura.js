@@ -71,13 +71,30 @@ test("la firma estricta (sin META_APP_SECRET = 403) es la que usa el webhook de 
   assert.match(IDX, /function validSignature\(req\) \{\n  if \(!META_APP_SECRET\) return true;/);
 });
 
-test("el handler de Redis es EXACTAMENTE el de antes (S4a, commit 4b30403): solo cambian la primera y la última línea", () => {
+test("el handler de Redis es EXACTAMENTE el de S4b (2a008f2 = S4a 4b30403) más las diferencias DECLARADAS de la batería S8", () => {
   let antes;
   try { antes = quitaCR(execFileSync("git", ["show", "4b30403:index.js"], { cwd: new URL(".", import.meta.url), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 20_000_000 })); }
   catch { return; }          // sin el historial (copia suelta del repo) no se puede comparar: las pruebas e2e en modo redis siguen cubriendo
   const cuerpoViejo = antes.slice(antes.indexOf('app.post("/webhook", async (req, res) => {') + 'app.post("/webhook", async (req, res) => {'.length, antes.indexOf("\n});\n\n// ─── PANEL WEB"));
   const ini = IDX.indexOf("const webhookRedis = async (req, res) => {") + "const webhookRedis = async (req, res) => {".length;
-  const cuerpoNuevo = IDX.slice(ini, IDX.indexOf("\n};\n// ─── BOT_STORE=postgres"));
+  const FIN = "\n};\n// ─── BOT_STORE=postgres";
+  let cuerpoNuevo = IDX.slice(ini, IDX.indexOf(FIN));
   assert.ok(cuerpoViejo.length > 10000, "no se extrajo el handler antiguo");
+  // Referencia vigente: 2a008f2 (origin/lawang, handler de redis ya con S4b). Debe seguir siendo idéntico al de S4a.
+  let s4b;
+  try { s4b = quitaCR(execFileSync("git", ["show", "2a008f2:index.js"], { cwd: new URL(".", import.meta.url), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 20_000_000 })); }
+  catch { return; }
+  const iniB = s4b.indexOf("const webhookRedis = async (req, res) => {") + "const webhookRedis = async (req, res) => {".length;
+  const cuerpoS4b = s4b.slice(iniB, s4b.indexOf(FIN));
+  assert.strictEqual(cuerpoS4b, cuerpoViejo, "2a008f2 ya no coincide con el handler de S4a");
+  // DIFERENCIAS DECLARADAS respecto a 2a008f2 (batería S8, 9-oct-2026). Cualquier otra línea tocada o movida rompe este test.
+  //  1) aviso de asistente (IA) de Legal: lo pone el SERVIDOR (aplicaAviso) justo tras generar la respuesta; solo actúa con PLAYBOOK.avisoIA (Lawang).
+  const DECLARADAS = [
+    '    reply = aplicaAviso(reply, { enviar: PLAYBOOK.avisoIA === true && debeAvisar(history), cliente: history.filter((m) => m.role === "user").slice(-3).map((m) => m.content) }); // aviso de asistente (IA) de Legal: lo pone el SERVIDOR (primer mensaje y tras 24 h); solo con avisoIA en el playbook (Lawang)',
+  ];
+  for (const l of DECLARADAS) {
+    assert.strictEqual(cuerpoNuevo.split("\n").filter((x) => x === l).length, 1, "línea declarada ausente o repetida: " + l.slice(0, 70));
+    cuerpoNuevo = cuerpoNuevo.replace("\n" + l, "");
+  }
   assert.strictEqual(cuerpoNuevo, cuerpoViejo);
 });
