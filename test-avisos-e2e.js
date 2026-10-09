@@ -74,7 +74,7 @@ for (const modo of ["supabase", "redis"]) {
   });
 }
 
-test("[postgres] ventana ABIERTA (el lead acaba de escribir) → texto libre con aviso de asistente, no plantilla", async (t) => {
+test("[supabase] ventana ABIERTA (el lead acaba de escribir) → texto libre con aviso de asistente, no plantilla", async (t) => {
   const E = await entorno("supabase", { ...PLANTILLAS, BOT_AVISOS_CLIENTE: "on" });
   t.after(() => E.cierra());
   const T = tel(6);
@@ -90,7 +90,7 @@ test("[postgres] ventana ABIERTA (el lead acaba de escribir) → texto libre con
   assert.match(ultimo.texto, /Responde STOP/);
 });
 
-test("[postgres] un lead que pidió la baja (STOP) no recibe ningún aviso", async (t) => {
+test("[supabase] un lead que pidió la baja (STOP) no recibe ningún aviso", async (t) => {
   const E = await entorno("supabase", { ...PLANTILLAS, BOT_AVISOS_CLIENTE: "on" });
   t.after(() => E.cierra());
   const T = tel(7);

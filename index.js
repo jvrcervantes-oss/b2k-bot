@@ -3380,7 +3380,7 @@ app.listen(PORT, async () => {
       console.error(`[${PROJECT_NAME}] Google Sheets sync: ❌ HTTP ${e.code || '?'} — ${e.message}`);
     }
   } else {
-    console.log(`[${PROJECT_NAME}] Google Sheets sync: desactivado (CRM = Redis)`);
+    console.log(`[${PROJECT_NAME}] Google Sheets sync: desactivado (el CRM vive en ${STORE_PG ? "Postgres de Lawang" : "Redis"})`);
   }
 
   // Auto-relleno de la BD: barrido inicial (tras conectar Redis) + periódico cada 30 min.
