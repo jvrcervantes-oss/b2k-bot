@@ -1,7 +1,7 @@
 // S4b: las piezas puras y el guardián de turno-pg.js, con piezas falsas (sin red, sin proceso hijo).
 import test from "node:test";
 import assert from "node:assert";
-import { creaAutorizaciones, preparaHistorial, avisoAsistente, bloqueAviso, contenidoEntrante, promptResumen, limpiaResumen, textoRecordatorio, creaTurnoPg } from "./turno-pg.js";
+import { creaAutorizaciones, preparaHistorial, avisoAsistente, bloqueAviso, contenidoEntrante, promptResumen, limpiaResumen, filtraSensibles, TEXTO_RESUMEN_OMITIDO, textoRecordatorio, creaTurnoPg } from "./turno-pg.js";
 
 const M = (role, content, ts, por = role === "user" ? "cliente" : "bot") => ({ role, content, ts, por });   // forma que ya sale de preparaHistorial
 const H = (rol, texto, ts, por = rol === "user" ? "cliente" : "bot", media = null) => ({ rol, texto, ts, por, media });
@@ -154,6 +154,40 @@ test("limpiaResumen: fuera correos y números largos, tope de longitud, sin cara
   assert.match(t, /Visit 14 Oct/);
   assert.ok(limpiaResumen("x".repeat(5000)).length <= 1200);
   assert.strictEqual(limpiaResumen(""), "");
+});
+
+test("filtraSensibles: salta con salud, religión, orientación, origen, documentos y datos financieros (en, es, id) y solo devuelve CONTEOS", () => {
+  const positivos = {
+    salud: ["The customer mentioned a medical condition.", "Tiene una enfermedad y está embarazada.", "Dia sedang sakit dan butuh operasi.", "He has cancer and is pregnant"],
+    religion: ["She is Muslim and needs a mosque nearby.", "Es católico practicante.", "Mereka beragama Kristen dan ke gereja."],
+    orientacion: ["They are a gay couple.", "Su orientación sexual no importa."],
+    origen_migratorio: ["Asked about his immigration status and a KITAS.", "Su situación migratoria es irregular."],
+    politica_judicial: ["He has a criminal record.", "Tiene antecedentes penales."],
+    menores: ["The buyer is a minor.", "Es menor de edad.", "Pembeli masih di bawah umur."],
+    identidad_financiero: ["Passport number was shared.", "NIK 3173 0123 4567 8901", "Card 4111 1111 1111 1111", "Account NL91ABNA0417164300", "passport X1234567", "Mi cuenta bancaria es", "nomor rekening BCA", "his password is"],
+  };
+  for (const [cat, frases] of Object.entries(positivos)) {
+    for (const f of frases) {
+      const r = filtraSensibles(f);
+      assert.ok(r.sensible && r.cuentas[cat] >= 1, `debería saltar ${cat}: «${f}» → ${JSON.stringify(r.cuentas)}`);
+      assert.ok(Object.values(r.cuentas).every((n) => Number.isInteger(n)), "solo conteos, nunca el fragmento");
+    }
+  }
+});
+
+test("filtraSensibles: un resumen comercial normal NO salta (precios, fechas, citas, proyectos, niños en general)", () => {
+  const negativos = [
+    "The customer asks about plots at Bonian Village with a budget of IDR 1.5 billion, wants a call on 14 Oct at 10:30 Bali time.",
+    "Presupuesto de 120.000 USD, quiere una visita el martes. Pendiente: enviar la lista de precios.",
+    "Pelanggan tertarik pada kavling Palm Field, anggaran Rp 2.500.000.000, ingin kunjungan hari Senin.",
+    "Family with two kids looking for a villa near the beach; replied quickly and will decide next week.",
+    "Quoted Rp1500000000 on 2026-10-09. A swift reply was promised by the team. Phone call pending.",
+    "Prefiere el contrato en inglés y menor precio por parcela.",
+  ];
+  for (const f of negativos) assert.deepStrictEqual(filtraSensibles(f), { sensible: false, cuentas: {} }, `no debería saltar: «${f}»`);
+  assert.strictEqual(filtraSensibles("").sensible, false);
+  assert.strictEqual(filtraSensibles(null).sensible, false);
+  assert.ok(TEXTO_RESUMEN_OMITIDO.length < 200);
 });
 
 // ─── recordatorio ───

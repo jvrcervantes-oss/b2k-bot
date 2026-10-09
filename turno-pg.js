@@ -13,6 +13,8 @@
 // Un STOP hace baja → (acuse solo si es nueva) → cerrar, sin turno_estado: el acuse es la ÚNICA salida autorizada sin él.
 import { bloqueEquipo } from "./botcfg.js";
 import { ErrorEdge, enmascara } from "./store/postgres.js";
+import { filtraSensibles, TEXTO_RESUMEN_OMITIDO } from "./resumen-filtro.js";
+export { filtraSensibles, TEXTO_RESUMEN_OMITIDO };
 
 const VENTANA_MS = 24 * 3600 * 1000;
 export const digitos = (p) => String(p || "").replace(/\D/g, "");
@@ -422,7 +424,10 @@ export function creaTurnoPg(d) {
 
     // ── CIERRE (paso 3) ──
     const aviso = NIVEL_AVISO[intent] && ownerPhone ? intent : null;
-    const cierre = await cierra(ctx, { salida: [{ texto: reply }], intent, aviso, esperando: traspaso && pausado });
+    // «Cambio de tema» sin que el modelo lo marque (no hay etiqueta para eso): el cliente vuelve tras más de 24 h de silencio, el mismo corte que el
+    // aviso de asistente. Con material suficiente (≥4 mensajes sin resumir) la base pide resumen aunque no se haya llegado a N.
+    const cambioTema = nivel === "completo" && !est.primer_turno;
+    const cierre = await cierra(ctx, { salida: [{ texto: reply }], intent, aviso, esperando: traspaso && pausado, cambioTema });
 
     // ── lo demás, después de cerrar: nada de esto retrasa ni bloquea el cierre ──
     if ((crmEfectivo === "on" && (apptMatch || crmIlegibles > 0)) || (crmEfectivo === "sombra" && crmIlegibles > 0 && !apptMatch) || (crmEfectivo !== "on" && apptMatch)) {
@@ -455,16 +460,32 @@ export function creaTurnoPg(d) {
   }
 
   // ── resumen (fuera del turno: no retrasa a nadie; idempotente por hasta_id) ──
+  const resumenStats = { pedidos: 0, guardados: 0, omitidos_sensible: 0, vacios: 0, rechazados: 0, fallos: 0, tokens_in: 0, tokens_out: 0, tokens_cache_lectura: 0, tokens_cache_escritura: 0 };
   async function generaResumen(tel, resumir) {
     try {
       if (!resumir || !Array.isArray(resumir.mensajes) || !resumir.mensajes.length) return;
-      const p = promptResumen(resumir.mensajes);
-      const crudo = await resume(p);
-      const limpio = limpiaResumen(crudo);
-      if (!limpio) return;
+      resumenStats.pedidos++;
+      const salida = await resume(promptResumen(resumir.mensajes));
+      // `resume` devuelve el texto, o {texto, usage} para poder medir el gasto de Anthropic por resumen.
+      const crudo = salida && typeof salida === "object" ? salida.texto : salida;
+      const u = salida && typeof salida === "object" && salida.usage ? salida.usage : null;
+      if (u) {
+        resumenStats.tokens_in += u.input_tokens || 0; resumenStats.tokens_out += u.output_tokens || 0;
+        resumenStats.tokens_cache_lectura += u.cache_read_input_tokens || 0; resumenStats.tokens_cache_escritura += u.cache_creation_input_tokens || 0;
+      }
+      let limpio = limpiaResumen(crudo);
+      if (!limpio) { resumenStats.vacios++; return; }
+      // Filtro de datos sensibles (LAW-509.4) sobre lo que escribió el modelo, sin limpiar antes («[number removed]» taparía un NIK).
+      // Si salta, el resumen no se guarda: va una nota fija que también avanza el cursor. Solo se registra el conteo, nunca el fragmento.
+      const f = filtraSensibles(crudo);
+      if (f.sensible) {
+        limpio = TEXTO_RESUMEN_OMITIDO; resumenStats.omitidos_sensible++;
+        log(`resumen de …${String(tel).slice(-4)}: dato sensible detectado (${Object.entries(f.cuentas).map(([c, n]) => `${c}=${n}`).join(", ")}); se guarda la nota de omisión`);
+      }
       const r = await pg.leadResumen({ tel, texto: limpio, hastaId: resumir.hasta_id });
-      log(`resumen de …${String(tel).slice(-4)}: ${r.error ? r.error : r.resultado || "ok"}`);
-    } catch (e) { log(`resumen de …${String(tel).slice(-4)} falló: ${e && e.message}`); }
+      if (r.error) resumenStats.rechazados++; else if (!f.sensible && (r.resultado || "ok") === "ok") resumenStats.guardados++;
+      log(`resumen de …${String(tel).slice(-4)}: ${r.error ? r.error : r.resultado || "ok"}${u ? ` · tokens in=${u.input_tokens || 0} out=${u.output_tokens || 0}` : ""}`);
+    } catch (e) { resumenStats.fallos++; log(`resumen de …${String(tel).slice(-4)} falló: ${e && e.message}`); }
   }
 
   async function atiende(ctx) {
@@ -652,5 +673,5 @@ export function creaTurnoPg(d) {
     }));
   }
 
-  return { webhook, recordatorioTick, rutasAdmin, atiende, turno, generaResumen, procesaEstados, mensajeDelDueno, _vistos: vistos };
+  return { webhook, recordatorioTick, rutasAdmin, atiende, turno, generaResumen, resumenStats, procesaEstados, mensajeDelDueno, _vistos: vistos };
 }

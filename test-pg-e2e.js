@@ -317,6 +317,25 @@ test("resumen: cuando el cierre lo pide, el bot llama al modelo DESPUÉS de cont
   assert.match(pr.messages[0].content, /<<<CONVERSATION/);
 });
 
+test("resumen S11: si el modelo mete un dato sensible NO se guarda su texto: va la nota de omisión (el cursor avanza) y se mide el gasto", async (t) => {
+  const E = await entorno();
+  t.after(() => E.cierra());
+  const T = tel(22);
+  E.edge.estado.resumirSiempre = true;
+  E.anthropic.guion.push("Sure! [INTENT:exploring]", "The customer asks about plots, has a medical condition and shared passport X1234567. A call is pending.");
+  await E.bot.post(payloadTexto(T, "Hi, plots at Bonian Village?", wamid()));
+  await hasta(() => E.edge.resumenes.length === 1, "nota de omisión guardada");
+  const txt = E.edge.resumenes[0].texto;
+  assert.match(txt, /^Summary omitted: sensitive data detected/);
+  assert.ok(!/passport|medical|X1234567/i.test(txt), "el texto sensible no llega a la ficha");
+  assert.ok(E.edge.resumenes[0].hasta_id > 0, "lleva el hasta_id para que el cursor avance");
+  const h = await E.bot.get("/admin/api/health", { "x-admin-key": "admin-test" });
+  const R = h.json.resumenes;
+  assert.strictEqual(R.pedidos, 1); assert.strictEqual(R.omitidos_sensible, 1); assert.strictEqual(R.guardados, 0);
+  assert.ok(R.tokens_in > 0 && R.tokens_out > 0, "el gasto de Anthropic por resumen queda medido: " + JSON.stringify(R));
+  assert.strictEqual(E.edge.de("turno_cerrar")[0].cuerpo.cambio_tema, false, "primer mensaje: no es un cambio de tema");
+});
+
 test("panel: /admin/api/send comprueba la baja, envía y devuelve lo que el proxy registrará por /humano (el bot NO llama a /humano); pausa y lo retirado dan 410", async (t) => {
   const E = await entorno();
   t.after(() => E.cierra());

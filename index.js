@@ -2385,7 +2385,7 @@ if (STORE_PG) {
     resume: async ({ system, user }) => {
       const r = await claudeMessage({ model: EXTRACT_MODEL, max_tokens: 500, system, messages: [{ role: "user", content: user }] });
       const b = r.content.find((x) => x.type === "text");
-      return (b && b.text) || "";
+      return { texto: (b && b.text) || "", usage: r.usage || null };          // usage: para medir el gasto de Anthropic por resumen
     },
     reintentosEstadoMs: listaMs(process.env.BOT_TURNO_REINTENTOS_MS, [20000, 90000]), reintentosCierreMs: listaMs(process.env.BOT_CIERRE_REINTENTOS_MS, [1000, 3000, 8000]),
     modoRecordatorio: String(process.env.BOT_RECORDATORIO || "off").trim().toLowerCase() === "postgres" ? "postgres" : "off",
@@ -2409,6 +2409,7 @@ if (STORE_PG) {
       catalogo: BOT_CATALOGO_MODE !== "on" ? { modo: "off" } : await (async () => { const c = await getCatalogoBlock(); return { modo: "on", estado: c ? c.estado : "error", unidades: c ? c.unidades.length : 0, desde: c && c.ts ? new Date(c.ts).toISOString() : null }; })(),
       crm: { modo: BOT_CRM_MODE, efectivo: CRM_EFECTIVO },
       recordatorio: String(process.env.BOT_RECORDATORIO || "off"),
+      resumenes: { modelo: EXTRACT_MODEL, ...turnoPg.resumenStats },
     });
   });
   app.post("/admin/api/simulate", async (req, res) => {
