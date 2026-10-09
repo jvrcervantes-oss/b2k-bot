@@ -1032,7 +1032,7 @@ async function followupTick() {
     console.error(`[${PROJECT_NAME}] followupTick error: ${e.message}`);
   }
 }
-if (!STORE_PG) setInterval(followupTick, 30 * 60000); // revisar cada 30 minutos (BOT_STORE=postgres: apagado hasta S12)
+if (!STORE_PG) setInterval(followupTick, 30 * 60000); // revisar cada 30 minutos (BOT_STORE=postgres: su reenganche es turno-pg.js → seguimientoTick, con consentimiento)
 
 // ─── RECORDATORIOS DE SEGUIMIENTO MANUAL ───────────────────────────
 // Cuando un lead llega a su fecha "Próximo seguimiento" (nextFollowUp), avisa al OWNER
@@ -1513,7 +1513,7 @@ async function sendHumanized(to, text, messageId, startedAt) {
 function cleanReply(reply) {
   return reply
     .replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "")
-    .replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").replace(/\[(?:NOTA|CITA):[^\]]*\]/gi, "").replace(/\[\s*HUMANO[^\]]*\]/gi, "").trim()
+    .replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").replace(/\[(?:NOTA|CITA):[^\]]*\]/gi, "").replace(/\[\s*HUMANO[^\]]*\]/gi, "").replace(/\[\s*CONSENT[^\]]*\]/gi, "").trim()
     .replace(/[ \t]*(—|–|--)[ \t]*$/gm, ".").replace(/[ \t]*(—|–|--)[ \t]*/g, ", ")
     .replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1")  // **URL** → URL
     .replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
@@ -2394,6 +2394,13 @@ if (STORE_PG) {
     // El indonesio no se usa hasta la lectura de un hablante nativo (LAW-507): BOT_RECORDATORIO_ID=on lo habilita.
     plantillaRecordatorio: String(REMINDER_TEMPLATE_NAME || "").trim(),
     idiomaIndonesioAprobado: String(process.env.BOT_RECORDATORIO_ID || "").trim().toLowerCase() === "on",
+    // S12 (LAW-507): APAGADAS por defecto. BOT_CONSENTIMIENTO=on → pregunta de seguimiento; BOT_SEGUIMIENTO=postgres → reenganche 48 h / 7 d. Encender fuera de testing = OK del owner.
+    consentimientoOn: String(process.env.BOT_CONSENTIMIENTO || "").trim().toLowerCase() === "on",
+    modoSeguimiento: String(process.env.BOT_SEGUIMIENTO || "").trim().toLowerCase() === "postgres" ? "postgres" : "off",
+    // ventana de envío (hora de Bali, "9-20" por defecto: no se escribe a un lead de madrugada). BOT_SEGUIMIENTO_HORAS="0-24" la abre (pruebas).
+    pausaPreguntaMs: (() => { const n = parseInt(process.env.BOT_PREGUNTA_PAUSA_MS, 10); return Number.isFinite(n) && n >= 0 && n <= 20000 ? n : 2500; })(),   // pausa de «tecleo» entre la respuesta y la pregunta
+    horaSeguimiento: (() => { const m = /^(\d{1,2})-(\d{1,2})$/.exec(String(process.env.BOT_SEGUIMIENTO_HORAS || "").trim()); return m && +m[1] < +m[2] && +m[2] <= 24 ? [+m[1], +m[2]] : [9, 20]; })(),
+    plantillasSeguimiento: { "48h": String(process.env.BOT_SEGUIMIENTO_PLANTILLA_48H || "lawang_reenganche_48h").trim(), "7d": String(process.env.BOT_SEGUIMIENTO_PLANTILLA_7D || "lawang_reenganche_7d").trim() },
   });
   webhookPg = turnoPg.webhook;
   // Lo que el bot ya no tiene (lo vacío o sin configurar en Lawang, decisión 7 del owner) responde 410 en vez de tocar un almacén que no existe.
@@ -2413,6 +2420,7 @@ if (STORE_PG) {
       catalogo: BOT_CATALOGO_MODE !== "on" ? { modo: "off" } : await (async () => { const c = await getCatalogoBlock(); return { modo: "on", estado: c ? c.estado : "error", unidades: c ? c.unidades.length : 0, desde: c && c.ts ? new Date(c.ts).toISOString() : null }; })(),
       crm: { modo: BOT_CRM_MODE, efectivo: CRM_EFECTIVO },
       recordatorio: String(process.env.BOT_RECORDATORIO || "off"),
+      consentimiento: { pregunta: String(process.env.BOT_CONSENTIMIENTO || "").trim().toLowerCase() === "on", seguimiento: String(process.env.BOT_SEGUIMIENTO || "").trim().toLowerCase() === "postgres" ? "postgres" : "off" },
       resumenes: { modelo: EXTRACT_MODEL, ...turnoPg.resumenStats },
     });
   });
@@ -3340,4 +3348,10 @@ app.listen(PORT, async () => {
   if (!STORE_PG) setTimeout(() => enrichSweep(20), 8000);
   if (!STORE_PG) setInterval(() => enrichSweep(10), 30 * 60 * 1000);
   if (STORE_PG && turnoPg && String(process.env.BOT_RECORDATORIO || "").trim().toLowerCase() === "postgres") setInterval(() => turnoPg.recordatorioTick(), 5 * 60000);
+  // S12: reenganche a las 48 h / 7 d (cada 30 min; solo con consentimiento `si` vigente). Apagado salvo BOT_SEGUIMIENTO=postgres.
+  if (STORE_PG && turnoPg && String(process.env.BOT_SEGUIMIENTO || "").trim().toLowerCase() === "postgres") {
+    console.log(`[${PROJECT_NAME}] Seguimiento (reenganche 48 h / 7 d): ENCENDIDO${TESTING_MODE ? " — con el freno de BOT_MODE=testing" : ""}`);
+    const cadaMs = parseInt(process.env.BOT_SEGUIMIENTO_CADA_MS, 10);
+    if (STORE_PG) setInterval(() => turnoPg.seguimientoTick(), Number.isFinite(cadaMs) && cadaMs >= 100 && cadaMs <= 3600000 ? cadaMs : 30 * 60000);
+  }
 });

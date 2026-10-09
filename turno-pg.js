@@ -14,6 +14,7 @@
 import { bloqueEquipo } from "./botcfg.js";
 import { ErrorEdge, enmascara } from "./store/postgres.js";
 import { filtraSensibles, TEXTO_RESUMEN_OMITIDO } from "./resumen-filtro.js";
+import { VERSION as CONSENT_VERSION, PREGUNTA, REPREGUNTA, PLANTILLAS, idiomaPregunta, decidePregunta, bloqueRespuesta } from "./consentimiento.js";
 export { filtraSensibles, TEXTO_RESUMEN_OMITIDO };
 
 const VENTANA_MS = 24 * 3600 * 1000;
@@ -259,6 +260,8 @@ export function creaTurnoPg(d) {
     clasificaEntrega, setWaBlocked, clearWaBlocked, resume, projectName = "Bot", ahora = Date.now,
     reintentosEstadoMs = [20_000, 90_000], reintentosCierreMs = [1_000, 3_000, 8_000], minAvisoMs = 10 * 60_000, tz = "Asia/Makassar",
     modoRecordatorio = "off", plantillaRecordatorio = "", idiomaIndonesioAprobado = false,
+    // S12 (LAW-507): ambas APAGADAS por defecto. consentimientoOn = hacer la pregunta de seguimiento; modoSeguimiento = enviar las dos plantillas de reenganche.
+    consentimientoOn = false, modoSeguimiento = "off", plantillasSeguimiento = PLANTILLAS, pausaPreguntaMs = 2500, horaSeguimiento = [9, 20],
   } = d;
   const esperaMs = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -407,6 +410,16 @@ export function creaTurnoPg(d) {
       content: m.role === "user" ? paraModelo({ role: "user", content: textoModelo && i === a.length - 1 ? textoModelo : m.content }) : m.content,
     }));
 
+    // S12 — ¿este mensaje contesta a la pregunta de seguimiento? Lo decide LA BASE (listas cerradas de Legal §2; regla cita / turno siguiente). El bot manda el
+    // texto literal y el context.id; no manda ni lee ningún «estado» del modelo. Si la base no contesta, el turno sigue y no se registra nada (el fallo seguro).
+    let resultadoConsent = null;
+    if (esTexto && est.consentimiento && est.consentimiento.estado === "preguntado") {
+      try {
+        const rc = await pg.consentimientoResponder({ tel, wamid: ctx.wamid, texto, cita: (message.context && message.context.id) || null });
+        if (rc && rc.error) log(`consentimiento de …${String(tel).slice(-4)}: ${rc.error}`); else resultadoConsent = rc ? rc.resultado : null;
+      } catch (e) { log(`consentimiento de …${String(tel).slice(-4)} no se pudo interpretar: ${e && e.message}`); }
+    }
+    const bloqueConsent = bloqueRespuesta(resultadoConsent);
     const teamBlock = bloqueEquipo({ extra: cfg.extra || "", bienvenida: cfg.bienvenida || "" }, { primerTurno: !!est.primer_turno });
     const cat = await getCatalogoBlock();
     const nivel = avisoAsistente(prep.mensajes, !!est.primer_turno);
@@ -414,7 +427,7 @@ export function creaTurnoPg(d) {
       thinking: { type: "adaptive" },
       output_config: { effort: "low" },
       max_tokens: 2000,
-      system: [...systemBlocks(cat), { type: "text", text: bloqueAviso(nivel) }, ...(teamBlock ? [{ type: "text", text: teamBlock }] : [])],
+      system: [...systemBlocks(cat), { type: "text", text: bloqueAviso(nivel) }, ...(teamBlock ? [{ type: "text", text: teamBlock }] : []), ...(bloqueConsent ? [{ type: "text", text: bloqueConsent }] : [])],
       messages: mensajesModelo,
     });
 
@@ -452,6 +465,11 @@ export function creaTurnoPg(d) {
     }
     vistos.set(tel, prep.vistoHastaNuevo); topar(vistos, 5000);
 
+    // S12 — pregunta de seguimiento (Legal §4) o su repregunta única (Legal §2.5): mensaje PROPIO, después de la respuesta, nunca con traspaso ni cita.
+    const hayCita = !!apptMatch || !!(crmTags && crmTags.citas && crmTags.citas.length) || crmIlegibles > 0;
+    let preguntaEnviada = null;
+    if (!traspaso) { try { preguntaEnviada = await preguntaSeguimiento(ctx, { est, prep, nivel, reply, intent, hayCita, resultado: resultadoConsent }); } catch (e) { log(`pregunta de seguimiento: ${e && e.message}`); } }
+
     // Traspaso: lo que importa es que el bot se calle. La pausa va ANTES de cerrar; el aviso y la nota, después.
     let pausado = false;
     if (traspaso) {
@@ -464,7 +482,9 @@ export function creaTurnoPg(d) {
     // «Cambio de tema» sin que el modelo lo marque (no hay etiqueta para eso): el cliente vuelve tras más de 24 h de silencio, el mismo corte que el
     // aviso de asistente. Con material suficiente (≥4 mensajes sin resumir) la base pide resumen aunque no se haya llegado a N.
     const cambioTema = nivel === "completo" && !est.primer_turno;
-    const cierre = await cierra(ctx, { salida: [{ texto: reply }], intent, aviso, esperando: traspaso && pausado, cambioTema });
+    const salidaTurno = [{ texto: reply }];
+    if (preguntaEnviada) salidaTurno.push({ texto: preguntaEnviada.texto, ...(preguntaEnviada.wamid && /^[A-Za-z0-9._:=@+/-]{1,120}$/.test(preguntaEnviada.wamid) ? { wamid: preguntaEnviada.wamid } : {}) });
+    const cierre = await cierra(ctx, { salida: salidaTurno, intent, aviso, esperando: traspaso && pausado, cambioTema });
 
     // ── lo demás, después de cerrar: nada de esto retrasa ni bloquea el cierre ──
     if ((crmEfectivo === "on" && (apptMatch || crmIlegibles > 0)) || (crmEfectivo === "sombra" && crmIlegibles > 0 && !apptMatch) || (crmEfectivo !== "on" && apptMatch)) {
@@ -689,6 +709,82 @@ export function creaTurnoPg(d) {
     finally { recordatorioCorriendo = false; }
   }
 
+  // ═══ S12: PREGUNTA DE SEGUIMIENTO ═══
+  // Reservar (la base comprueba TODAS las condiciones de datos) → enviar → anclar el wamid. Si el envío falla, la base se queda en `preguntado` sin wamid:
+  // no se vuelve a preguntar (preguntar de menos es el fallo seguro). El texto es de Legal y es una constante de código.
+  async function preguntaSeguimiento(ctx, { est, prep, nivel, reply, intent, hayCita, resultado }) {
+    const repregunta = resultado === "repreguntar";
+    if (repregunta) {
+      if (hayCita || est.pausado) return null;
+    } else {
+      const d = decidePregunta({
+        habilitado: consentimientoOn, consent: est.consentimiento, esPrimerTurno: !!est.primer_turno, nivelAviso: nivel, textoCliente: ctx.texto, respuestaBot: reply,
+        intent, traspaso: false, hayCita, pausado: est.pausado, mensajesCliente: prep.mensajes.filter((m) => m.role === "user").length,
+      });
+      if (!d.pregunta) return null;
+    }
+    const idioma = idiomaPregunta(idiomaDe(est.historial));
+    const texto = (repregunta ? REPREGUNTA : PREGUNTA)[idioma];
+    const reserva = await pg.consentimientoPreguntar({ tel: ctx.tel, version: CONSENT_VERSION, idioma, texto, repregunta });
+    if (reserva.error) { log(`pregunta de seguimiento a …${String(ctx.tel).slice(-4)} no procede: ${reserva.error}`); return null; }
+    if (pausaPreguntaMs) await esperaMs(pausaPreguntaMs);
+    const token = autoriza.concede(ctx.tel, "turno");
+    let env;
+    try { env = await sendCliente(ctx.from, texto); } finally { autoriza.revoca(ctx.tel, token); }
+    if (!env || !env.ok) { log(`la pregunta de seguimiento a …${String(ctx.tel).slice(-4)} NO salió: queda reservada y no se vuelve a preguntar`); return null; }
+    const wamid = env.id || env.wamid || null;
+    if (wamid) {
+      try { const a = await pg.consentimientoEnviada({ tel: ctx.tel, wamid, repregunta }); if (a.error) log(`wamid de la pregunta no anclado: ${a.error}`); }
+      catch (e) { log(`wamid de la pregunta no anclado: ${e && e.message}`); }
+    } else log("la pregunta de seguimiento salió sin wamid: no se podrá casar la respuesta");
+    return { texto, wamid };
+  }
+
+  // ═══ S12: REENGANCHE A LAS 48 h Y A LOS 7 d (solo con consentimiento `si` vigente; máx. 2 por lead) ═══
+  // Orden por candidato: freno de testing (el envío de plantilla es el núcleo SIN freno) → estado (baja/pausa; da la autorización) → RESERVA en la base
+  // (que vuelve a comprobar todo: un STOP entre la lista y aquí gana) → plantilla en el idioma consentido → anotar. Un fallo tras reservar NO se reintenta
+  // (jamás dos envíos). Apagado por defecto: BOT_SEGUIMIENTO=postgres lo enciende. NO usa FOLLOWUP_TEMPLATE_NAME.
+  let seguimientoCorriendo = false;
+  const horaLocal = () => parseInt(new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", hour12: false }).format(new Date(ahora())), 10) % 24;
+  async function seguimientoTick() {
+    if (modoSeguimiento !== "postgres" || seguimientoCorriendo) return;
+    const h = horaLocal();
+    if (h < horaSeguimiento[0] || h >= horaSeguimiento[1]) return;          // no se escribe a un lead de madrugada
+    seguimientoCorriendo = true;
+    try {
+      const r = await pg.seguimientoCandidatos();
+      if (r.error) { log(`seguimiento: ${r.error}`); return; }
+      for (const c of r.candidatos || []) {
+        const tel = digitos(c.tel), plantilla = c.plantilla;
+        let token = null, reservado = false, anotado = false, enviado = null;
+        try {
+          if (!isAllowed(tel)) { log(`seguimiento a …${tel.slice(-4)} frenado por el modo testing`); continue; }
+          const est = await pg.estado({ tel });
+          if (est.error || est.baja || est.pausado) { log(`seguimiento a …${tel.slice(-4)} no sale (${est.error || (est.baja ? "baja" : "pausa")})`); continue; }
+          const rv = await pg.seguimientoReservar({ tel, plantilla });
+          if (rv.error) { log(`seguimiento a …${tel.slice(-4)} no procede: ${rv.error}`); continue; }
+          reservado = true;
+          const idioma = rv.idioma === "es" ? "es" : "en";
+          const nombre = nombrePila(rv.nombre || c.nombre, idioma);
+          token = autoriza.concede(tel, "turno");
+          const env = await sendClienteTemplate(tel, plantillasSeguimiento[plantilla], idioma, [nombre]);
+          enviado = !!(env && env.ok);
+          const wamid = enviado ? (env.wamid || env.id || `sin-id-${ahora()}`) : null;
+          await pg.seguimientoRegistrar({ tel, plantilla, wamid, resultado: enviado ? "enviado" : "fallo", texto: nombre });
+          anotado = true;
+          if (!enviado) await avisaDueno("seg:" + tel + plantilla, `⚠️ ${projectName}: no se pudo enviar el seguimiento (${plantilla}) a …${tel.slice(-4)}.`);
+        } catch (e) {
+          log(`seguimiento a …${tel.slice(-4)} falló: ${e && e.message}`);
+          if (reservado && !anotado) {
+            try { await pg.seguimientoRegistrar({ tel, plantilla, wamid: enviado ? `sin-id-${ahora()}` : null, resultado: enviado ? "enviado" : "fallo", texto: null }); }
+            catch (e2) { log(`seguimiento de …${tel.slice(-4)} sin anotar (queda reservado; no se reenvía): ${e2 && e2.message}`); }
+          }
+        } finally { autoriza.revoca(tel, token); }
+      }
+    } catch (e) { log(`seguimientoTick: ${e && e.message}`); }
+    finally { seguimientoCorriendo = false; }
+  }
+
   // ═══ ACCIONES HUMANAS DEL PANEL (vía el proxy) ═══
   // El bot SOLO envía a WhatsApp (tiene el token) tras comprobar la baja; NO escribe en la base como persona: pausar y registrar el envío
   // los hace lawang-bot-proxy por la ruta /humano de la edge (secreto y JWT de la persona que solo el proxy tiene; el bot no los ve).
@@ -732,5 +828,5 @@ export function creaTurnoPg(d) {
     }));
   }
 
-  return { webhook, recordatorioTick, rutasAdmin, atiende, turno, generaResumen, resumenStats, procesaEstados, mensajeDelDueno, _vistos: vistos };
+  return { webhook, recordatorioTick, seguimientoTick, rutasAdmin, atiende, turno, generaResumen, resumenStats, procesaEstados, mensajeDelDueno, _vistos: vistos };
 }

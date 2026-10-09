@@ -5,6 +5,7 @@ import http from "node:http";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { accionesConsentimiento } from "./fakes-consent.js";
 
 const RAIZ = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -33,10 +34,16 @@ export const ESQUEMA = {
     entrega_fallida: { claves: ["accion", "tel", "codigo", "detalle"], tel: true },
     escalar: { claves: ["accion", "tel", "nombre", "pregunta", "aviso_wamid"], tel: true },
     escalacion_tomar: { claves: ["accion", "wamid"], tel: false },
+    consentimiento_preguntar: { claves: ["accion", "tel", "version", "idioma", "texto", "repregunta"], tel: true },
+    consentimiento_enviada: { claves: ["accion", "tel", "wamid", "repregunta"], tel: true },
+    consentimiento_responder: { claves: ["accion", "tel", "wamid", "texto", "cita"], tel: true },
     lead_resumen: { claves: ["accion", "tel", "texto", "hasta_id"], tel: true },
   },
   recordatorio: {
     citas_recordar: { claves: ["accion"], tel: false },
+    seguimiento_candidatos: { claves: ["accion"], tel: false },
+    seguimiento_reservar: { claves: ["accion", "tel", "plantilla"], tel: true },
+    seguimiento_registrar: { claves: ["accion", "tel", "plantilla", "wamid", "resultado", "texto"], tel: true },
     cita_recordatorio_res: { claves: ["accion", "accion_id", "resultado"], tel: false },
   },
   // Ruta `importar` (S5/LAW-507, Redis→Postgres): la usa el importador, no el runtime de BOT_STORE=postgres. Se copia aquí solo para que
@@ -98,6 +105,8 @@ export async function creaEdgeFalsa({ secretos }) {
   const resumenes = [];
   const citas = { lista: [], resultados: [] };
   let idMsg = 0;
+  const S12 = accionesConsentimiento({ chats, chat: (t) => chat(t) });
+  const { estadoConsentimiento: _e, revocaPorBaja: _r, envejece: _v, cs: _c, ...S12acciones } = S12;
   const cfg = { extra: "", bienvenida: "", pausa_horas: 0, resumen_cada_n: 30, fallos_alarma: 3, version: 1, actualizado_en: null };
   const estado = { reprocesar: new Set(), tope: new Set(), resumirSiempre: false };
   const chat = (tel) => { if (!chats.has(tel)) chats.set(tel, { baja: false, bajaWamid: null, pausado: false, esperando: false, avisoNivel: 0, avisoTestingEn: null, msgs: [] }); return chats.get(tel); };
@@ -115,6 +124,7 @@ export async function creaEdgeFalsa({ secretos }) {
       }
       wamids.set(b.wamid, { tel: b.tel, vistoEn: Date.now(), procesado: false, reprocesos: 0 });
       c.esperando = true;
+      if (b.nombre_perfil) c.nombre = String(b.nombre_perfil).split(" ")[0];
       c.msgs.push({ id: ++idMsg, rol: "user", por: "cliente", texto: b.mensaje.texto || "", media: b.mensaje.media || null, ts: Date.now(), wamid: b.wamid });
       return { duplicado: false, procesado: false };
     },
@@ -126,6 +136,7 @@ export async function creaEdgeFalsa({ secretos }) {
       return {
         baja: c.baja, pausado: c.pausado, esperando: c.esperando, avisar_testing: avisar,
         primer_turno: !c.msgs.some((m) => m.rol === "assistant"), historial: hist(c), config: cfg,
+        consentimiento: S12.estadoConsentimiento(c),
       };
     },
     turno_cerrar(b) {
@@ -156,7 +167,7 @@ export async function creaEdgeFalsa({ secretos }) {
     baja(b) {
       const c = chat(b.tel);
       let r;
-      if (!c.baja) { c.baja = true; c.bajaWamid = b.wamid; c.pausado = true; r = "nueva"; }
+      if (!c.baja) { c.baja = true; c.bajaWamid = b.wamid; c.pausado = true; S12.revocaPorBaja(c); r = "nueva"; }
       else if (c.bajaWamid === b.wamid) r = "nueva";
       else r = "ya_dada";
       return { baja: r, pausado: true };
@@ -184,7 +195,8 @@ export async function creaEdgeFalsa({ secretos }) {
       return { ok: true };
     },
   };
-  const TEXTO = new Set(["entrega_fallida", "lead_resumen", "cita_recordatorio_res", "lead_upsert", "lead_nota", "lead_cita"]);
+  Object.assign(acciones, S12acciones);
+  const TEXTO = new Set(["entrega_fallida", "lead_resumen", "cita_recordatorio_res", "lead_upsert", "lead_nota", "lead_cita", "seguimiento_registrar"]);
   const RUTA = { estado: "estado", recordatorio: "recordatorio", humano: "humano", crm: "crm" };
 
   const srv = await escucha(async (req, res) => {
@@ -220,6 +232,7 @@ export async function creaEdgeFalsa({ secretos }) {
     de(accion) { return llamadas.filter((l) => l.accion === accion); },
     acciones() { return llamadas.map((l) => l.accion); },
     chat,
+    consent: S12,            // S12: .envejece(tel, ms), .cs(chat)
   };
 }
 
@@ -227,13 +240,17 @@ export async function creaEdgeFalsa({ secretos }) {
 export async function creaGraphFalso() {
   const enviados = [], lecturas = [];
   let n = 0;
-  const falla = { destinos: new Set() };
+  const falla = { destinos: new Set(), tras: new Map() };   // tras: destino → nº de envíos que SÍ salen antes de empezar a fallar (S12)
+  const salidos = new Map();
   const srv = await escucha(async (req, res) => {
     const crudo = await leeCuerpo(req);
     let b = {}; try { b = JSON.parse(crudo || "{}"); } catch { /* */ }
     res.setHeader("content-type", "application/json");
     if (b.status === "read") { lecturas.push(b); return res.end(JSON.stringify({ success: true })); }
     if (b.messaging_product === "whatsapp" && b.to) {
+      const yaSalidos = salidos.get(String(b.to)) || 0;
+      if (falla.tras.has(String(b.to)) && yaSalidos >= falla.tras.get(String(b.to))) { res.statusCode = 400; return res.end(JSON.stringify({ error: { message: "fallo inyectado", code: 100 } })); }
+      salidos.set(String(b.to), yaSalidos + 1);
       if (falla.destinos.has(String(b.to))) { res.statusCode = 400; return res.end(JSON.stringify({ error: { message: "fallo inyectado", code: 100 } })); }
       const e = { to: String(b.to), type: b.type, texto: b.text && b.text.body, plantilla: b.template && b.template.name, params: b.template && b.template.components, id: `wamid.OUT${++n}`, t: Date.now() };
       enviados.push(e);

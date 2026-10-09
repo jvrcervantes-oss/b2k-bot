@@ -26,6 +26,8 @@ const RUTA_DE = {
   mensaje_recibir: "estado", turno_estado: "estado", turno_cerrar: "estado", eco_operadora: "estado", pausar: "estado", baja: "estado",
   entrega_fallida: "estado", escalar: "estado", escalacion_tomar: "estado", lead_resumen: "estado",
   citas_recordar: "recordatorio", cita_recordatorio_res: "recordatorio",
+  consentimiento_preguntar: "estado", consentimiento_enviada: "estado", consentimiento_responder: "estado",     // S12
+  seguimiento_candidatos: "recordatorio", seguimiento_reservar: "recordatorio", seguimiento_registrar: "recordatorio",
 };
 // /humano NO está aquí a propósito: su secreto vive solo en la edge y en lawang-bot-proxy (que reenvía el JWT de la persona y registra pausas y envíos).
 // El bot no lo lee, no lo tiene en Railway y no puede llamar a esa ruta.
@@ -147,6 +149,16 @@ export function creaPg({
     // EXCEPCIÓN 2 (reloj de recordatorios).
     async citasRecordar() { return cuerpoDe(await llama("citas_recordar", {})); },
     async citaRecordatorioRes({ accionId, resultado }) { return cuerpoDe(await llama("cita_recordatorio_res", { accion_id: accionId, resultado })); },
+    // ── S12: consentimiento de seguimiento y reenganche. NINGUNA de estas llamadas envía un «estado»: lo decide la base. ──
+    async consentimientoPreguntar({ tel, version, idioma, texto, repregunta = false }) { return cuerpoDe(await llama("consentimiento_preguntar", { tel, version, idioma, texto, repregunta: repregunta === true })); },
+    async consentimientoEnviada({ tel, wamid, repregunta = false }) { return cuerpoDe(await llama("consentimiento_enviada", { tel, wamid, repregunta: repregunta === true })); },
+    async consentimientoResponder({ tel, wamid, texto, cita = null }) { return cuerpoDe(await llama("consentimiento_responder", { tel, wamid, texto, cita: cita || undefined })); },
+    // EXCEPCIÓN 3 (≤20): teléfonos de otros leads con un envío de reenganche debido.
+    async seguimientoCandidatos() { return cuerpoDe(await llama("seguimiento_candidatos", {})); },
+    async seguimientoReservar({ tel, plantilla }) { return cuerpoDe(await llama("seguimiento_reservar", { tel, plantilla })); },
+    async seguimientoRegistrar({ tel, plantilla, wamid = null, resultado, texto = null }) {
+      return cuerpoDe(await llama("seguimiento_registrar", { tel, plantilla, wamid: wamid || undefined, resultado, texto: texto || undefined }));
+    },
   };
   return api;
 }
