@@ -213,7 +213,7 @@ const FRASE_TRASPASO = "I'll pass you to a team member who can help you personal
 // ═══ FÁBRICA ═══════════════════════════════════════════════════════════════════════════════════
 export function creaTurnoPg(d) {
   const {
-    pg, autoriza, log = () => {}, ownerPhone = "", esOwner, isAllowed, testingMode = false, humanOnly = false,
+    pg, autoriza, avisoIA = false, aplicaAviso = (r) => r, log = () => {}, ownerPhone = "", esOwner, isAllowed, testingMode = false, humanOnly = false,
     firmaValida, waitMyTurn, palabrasBaja, acuse, claude, systemBlocks, paraModelo, cleanReply, extraeEtiquetas, citasIlegibles, pideTraspaso,
     botCrmMode = "off", crmEfectivo = "off", aplicaCrm, getCatalogoBlock, postCheckPrecios, sendBot, sendHumanized, sendOwner, sendCliente,
     sendClienteTemplate, notifyOwner, notifyOwnerTesting, markRead, transcribeAudio, avisoCitaSinRegistrar, notaDerechos, avisoDerechos,
@@ -393,6 +393,8 @@ export function creaTurnoPg(d) {
     const crmIlegibles = crmEfectivo !== "off" ? citasIlegibles(reply) : 0;
     reply = cleanReply(reply);
     if (traspaso && !reply.trim()) reply = FRASE_TRASPASO;
+    // Aviso de asistente (IA) de Legal: lo pone el SERVIDOR (mismo mecanismo que el modo redis, botcrm.aplicaAviso; batería S8). Solo el aviso completo; el corto lo guía el bloque.
+    if (avisoIA && nivel === "completo") reply = aplicaAviso(reply, { enviar: true, cliente: prep.mensajes.filter((m) => m.role === "user").slice(-3).map((m) => m.content) });
     try { postCheckPrecios(reply, cat, mensajesModelo, from); } catch (e) { log(`post-check falló: ${e && e.message}`); }
     const hayLinkFalso = /https?:\/\/(book|checkout|pay)\.stripe\.com\/\S*/i.test(reply);
     reply = reply.replace(/https?:\/\/(book|checkout|pay)\.stripe\.com\/\S*/gi, "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();

@@ -51,10 +51,10 @@ Solo en la rama `lawang` (`b2k` y `balibest` no lo tienen y siguen en Redis).
 |---|---|---|
 | `BOT_STORE` | `redis` (por defecto) · `postgres` | `redis`: el bot de siempre, sin cambios. `postgres`: el estado vive en Postgres de Lawang vía la edge `bot-api`; el módulo de Redis queda **bloqueado** (cualquier acceso lanza) y el webhook es el de `turno-pg.js`. Un valor desconocido cae a `redis` y lo grita en el log. |
 | `BOT_API_URL` | URL de la edge | La misma de catálogo/CRM. |
-| `BOT_API_SECRET_ESTADO` · `_RECORDATORIO` · `_HUMANO` | secretos | Un secreto por ruta de la edge (`/estado`, `/recordatorio`, `/humano`). Cada uno abre solo su ruta. |
+| `BOT_API_SECRET_ESTADO` · `_RECORDATORIO` | secretos | Un secreto por ruta de la edge (`/estado`, `/recordatorio`). Cada uno abre solo su ruta. **`BOT_API_SECRET_HUMANO` NO debe existir en Railway**: `/humano` la llama `lawang-bot-proxy` (interruptor `BOT_HUMANO_STORE=postgres` en la edge, a encender junto con `BOT_STORE=postgres`). |
 | `BOT_RECORDATORIO` | `off` (por defecto) · `postgres` | Recordatorio de cita 1 h antes desde Postgres (`/recordatorio`). Sin plantilla de Meta cableada: ventana cerrada = `sin_ventana` + aviso al dueño. |
-| `META_APP_SECRET` | obligatorio con `postgres` | Sin él **todo POST del webhook es 403** (el modo redis conserva su compatibilidad: sin la variable acepta todo). |
+| `META_APP_SECRET` | obligatorio con `postgres` | Sin él **el bot se niega a arrancar** (sale con código 1; el modo redis conserva su compatibilidad: sin la variable acepta todo). |
 | `BOT_TURNO_REINTENTOS_MS` · `BOT_CIERRE_REINTENTOS_MS` · `BOT_API_TIMEOUT_MS` | opcionales | Plazos de fiabilidad (por defecto `20000,90000` · `1000,3000,8000` · `10000`). |
 
-Con `postgres` el bot ya no tiene `/admin/api/leads`, `conv`, `config*`, `note`, `status`, media, newsletter… (responden 410). Siguen: `health`, `wa-status`, `templates`, `simulate`, y `pause` / `send` / `send-template`, que **exigen la cabecera `X-User-Jwt`** con la sesión de la persona (la reenvía el proxy; el usuario sale de ahí, nunca del cuerpo).
+Con `postgres` el bot ya no tiene `/admin/api/leads`, `conv`, `config*`, `note`, `status`, media, newsletter… (responden 410). Siguen: `health`, `wa-status`, `templates`, `simulate`, `send` / `send-template` (comprueban la baja, envían y devuelven `registrar{texto,wamid}`: el proxy lo anota por `/humano` con la persona del JWT) y `pause` (410: la pausa de una persona la escribe el proxy por `/humano`).
 Pruebas: `node --test test-store-bloqueo.js test-store-postgres.js test-turno-pg.js test-pg-estructura.js test-pg-e2e.js` (la última arranca el bot de verdad con una edge, un Meta y un Anthropic falsos: sin secretos ni red).

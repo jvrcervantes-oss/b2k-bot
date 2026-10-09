@@ -2371,7 +2371,7 @@ if (STORE_PG) {
     if (texto) await sendWhatsApp(OWNER_PHONE, texto);
   };
   turnoPg = turnoMod.creaTurnoPg({
-    pg: pgCli, autoriza: autorizaciones, log: logPg, projectName: PROJECT_NAME, ownerPhone: OWNER_PHONE || "",
+    pg: pgCli, autoriza: autorizaciones, avisoIA: PLAYBOOK.avisoIA === true, aplicaAviso, log: logPg, projectName: PROJECT_NAME, ownerPhone: OWNER_PHONE || "",
     esOwner: esOwnerExacto, isAllowed, testingMode: TESTING_MODE, humanOnly: HUMAN_ONLY_MODE,
     firmaValida: validSignatureEstricta, waitMyTurn, palabrasBaja: PALABRAS_BAJA, acuse: ACUSE_DERECHOS,
     claude: (params) => claudeMessage({ model: MODEL, ...params }),

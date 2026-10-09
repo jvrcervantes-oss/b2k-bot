@@ -4,6 +4,7 @@ import test from "node:test";
 import assert from "node:assert";
 import { creaEdgeFalsa, creaGraphFalso, creaAnthropicFalso, lanzaBot, payloadTexto, payloadMedia, payloadEco, payloadEstado, hasta, esperar, firma } from "./fakes-pg.js";
 
+import { AVISO_EN } from "./botcrm.js";
 const SEC = { estado: "sec-estado", recordatorio: "sec-recordatorio", humano: "sec-humano", crm: "sec-crm" };
 const OWNER = "6281100000000";
 let n = 0;
@@ -31,6 +32,7 @@ test("BOT_STORE=postgres: el camino normal de un mensaje de texto son 3 llamadas
   await hasta(() => E.edge.de("turno_cerrar").length === 1, "turno cerrado");
   assert.deepStrictEqual(E.edge.acciones(), ["mensaje_recibir", "turno_estado", "turno_cerrar"], "exactamente 3 llamadas, en este orden");
   assert.match(E.graph.a(T)[0].texto, /Thanks for your message/);
+  assert.ok(E.graph.a(T)[0].texto.startsWith(AVISO_EN), "el aviso exacto de Legal lo pone el servidor (botcrm.aplicaAviso), igual que en modo redis");
   assert.ok(!/\[INTENT/.test(E.graph.a(T)[0].texto), "las etiquetas internas no llegan al cliente");
   const cerrar = E.edge.de("turno_cerrar")[0].cuerpo;
   assert.strictEqual(cerrar.wamid, w);

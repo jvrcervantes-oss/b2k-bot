@@ -98,3 +98,10 @@ test("el handler de Redis es EXACTAMENTE el de S4b (2a008f2 = S4a 4b30403) más 
   }
   assert.strictEqual(cuerpoNuevo, cuerpoViejo);
 });
+
+test("el bot NO conoce el secreto de /humano ni llama a esa ruta (es del proxy; en Railway no debe existir)", () => {
+  for (const f of ["index.js", "turno-pg.js", "store/postgres.js"]) {
+    const src = fs.readFileSync(new URL("./" + f, import.meta.url), "utf8");
+    assert.ok(!/SECRET_HUMANO/.test(src), `${f} menciona BOT_API_SECRET_HUMANO`);
+  }
+});
