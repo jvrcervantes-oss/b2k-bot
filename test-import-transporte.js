@@ -146,3 +146,15 @@ test("lo que sale del transporte pasa el esquema cerrado de la edge (sin claves 
   mismas(g.config, K.cfg); g.log.forEach((e) => { mismas(e, ["ts_ms", "by", "prev", "next"]); mismas(e.prev, K.cfgLog); mismas(e.next, K.cfgLog); });
   assert.equal(g.config.pausa_horas, 12);
 });
+
+test("valores fuera de rango o no enteros se normalizan y el 400 deja su razón (solo palabra de la edge)", async () => {
+  const enviados = [];
+  const respuestas = [{ status: 400, headers: {}, data: { error: "mensajes" } }, { status: 200, headers: {}, data: { ok: false, error: "Raro 628111 texto" } }];
+  const t = creaTransporte({ url: "https://x/y", secreto: "s", http: { post: async (_u, b) => { enviados.push(b); return respuestas.shift() || { status: 200, headers: {}, data: { ok: true } }; } }, espera: async () => {} });
+  const chat = { creado_ms: 1790000000000.7, actualizado_ms: "1790000000001", ultimo_entrante_ms: null, pausa_hasta_ms: 1e16, baja_ms: null, aviso_nivel: 5, seguimientos: 2e6 };
+  await assert.rejects(t.chat({ tel: "1", chat, mensajes: [], escalaciones: [] }), /HTTP 400/);
+  await t.chat({ tel: "1", chat, mensajes: [], escalaciones: [] });
+  const c = enviados[0].chat;
+  assert.equal(c.creado_ms, 1790000000000); assert.equal(c.actualizado_ms, 1790000000001); assert.equal(c.pausa_hasta_ms, null); assert.equal(c.aviso_nivel, 2); assert.equal(c.seguimientos, 1000000);
+  assert.deepStrictEqual(t.razones, { "400:chat:mensajes": 1, "200:chat:?": 1 });
+});

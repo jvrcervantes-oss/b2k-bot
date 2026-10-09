@@ -2404,7 +2404,7 @@ app.post("/admin/api/redis-importar", async (req, res) => {
   if (!dry && !transporte) return res.status(409).json({ error: "falta BOT_API_URL o BOT_API_SECRET_IMPORTAR" });
   if (_importandoRedis) return res.status(409).json({ error: "importación en curso" });
   _importandoRedis = true;
-  try { res.json(await importarRedis(lector, transporte, { dryRun: dry })); }
+  try { const inf = await importarRedis(lector, transporte, { dryRun: dry }); if (transporte) inf.rechazos_edge = transporte.razones; res.json(inf); }
   catch (e) { console.error(`[${PROJECT_NAME}] redis-importar falló:`, e && e.message); res.status(500).json({ error: "importación falló" }); }
   finally { _importandoRedis = false; }
 });
