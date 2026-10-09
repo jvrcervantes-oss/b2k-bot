@@ -545,8 +545,8 @@ async function getFollowupCount(phone) {
   if (redisClient) { const v = await redisClient.get(`followup:${phone}`); return v ? parseInt(v) : 0; }
   return fallbackFollowup[phone] || 0;
 }
-async function setFollowupCount(phone, n) {
-  if (redisClient) await redisClient.setEx(`followup:${phone}`, 30 * 24 * 3600, String(n));
+async function setFollowupCount(phone, n, ttlSec = 30 * 24 * 3600) {
+  if (redisClient) await redisClient.setEx(`followup:${phone}`, ttlSec, String(n));
   else fallbackFollowup[phone] = n;
 }
 async function resetFollowup(phone) {
@@ -1339,7 +1339,8 @@ const followupRunner = createFollowupRunner({
   listLeads: () => listLeads(),
   isOwner: (p) => isOwner(p),
   getCount: (p) => getFollowupCount(p),
-  setCount: (p, n) => setFollowupCount(p, n),
+  setCount: (p, n, ttl) => setFollowupCount(p, n, ttl),
+  hashKey: process.env.ERP_SEGUIMIENTO_SECRET,
   send: (phone, tpl, lang, params, logId) => sendWhatsAppTemplate(phone, tpl, lang, params, logId),
   skipStatus: FOLLOWUP_SKIP_STATUS,
   skipIntent: FOLLOWUP_SKIP_INTENT,

@@ -1,6 +1,6 @@
 // Self-check del tick del seguimiento (seguimiento-tick.js) con dependencias de mentira. Ejecutar: node test-seguimiento-tick.js
 import assert from "node:assert";
-import { buildPlan, createFollowupRunner, FOLLOWUP_ERP_DAILY_CAP, FOLLOWUP_FAIL_REST_MS } from "./seguimiento-tick.js";
+import { buildPlan, createFollowupRunner, FOLLOWUP_ERP_DAILY_CAP, FOLLOWUP_FAIL_REST_MS, FOLLOWUP_ERP_COUNTER_TTL_S } from "./seguimiento-tick.js";
 
 const H = 3600 * 1000;
 const NOW = new Date("2026-10-10T12:00:00").getTime();
@@ -185,6 +185,52 @@ const text = (out) => out.lines.map((l) => l[1]).join("\n");
   const t2 = setup({ view: ON({ horas: 24 }), leads: [lead("1", 60)], counts: { 1: 1 } }); await t2.r.tick();
   assert.equal(t2.sends.length, 1, "al bajar a 24 h el mismo lead entra ya (peldaño 48 h)");
   ok("cambiar horas a mitad de vida desplaza el peldaño (comportamiento documentado)");
+}
+// ── Contador que CADUCA (Redis setEx): la escalera se cumple de verdad ────────────────────────────────
+// El getCount de los tests de arriba no caduca nunca; el real sí (30 días por defecto). Aquí un almacén con TTL y reloj propio.
+function simulate({ cfgOn, days, coldStartH = 24, resp = false }) {
+  let t = NOW; const store = new Map(); const sentAt = [];
+  const out = silent();
+  const lastInbound = NOW - coldStartH * H;
+  const r = createFollowupRunner({
+    project: "T", log: out, now: () => t,
+    isBotEnabled: async () => true, resolveView: async () => ({ mode: "on", reason: null, source: "erp", version: 1, cfg: cfgOn }),
+    env: {}, listLeads: async () => [{ phone: "1", name: "A", lastInboundAt: lastInbound, status: "quoted" }], isOwner: () => false,
+    getCount: async (p) => { const e = store.get(p); return e && e.exp > t ? e.n : 0; },
+    setCount: async (p, n, ttl = 30 * 24 * 3600) => { store.set(p, { n, exp: t + ttl * 1000 }); },
+    send: async () => { sentAt.push(t); return { ok: true }; },
+    skipStatus: new Set(), skipIntent: new Set(), dayCount: async () => 0, dayBump: async () => {},
+  });
+  return (async () => { for (let i = 0; i < days * 48; i++) { await r.tick(); t += 30 * 60000; } return sentAt.length; })();
+}
+{
+  const c48 = { horas: 48, max: 2, plantilla: "p", idioma: "en", vars: ["nombre"], version: 1 };
+  assert.equal(await simulate({ cfgOn: c48, days: 200 }), 2); // sin el arreglo: 2 por cada 30 días (≈ 12)
+  ok("ERP horas=48,max=2 durante 200 días con contador que caduca: EXACTAMENTE 2 mensajes");
+  const c720 = { horas: 720, max: 5, plantilla: "p", idioma: "en", vars: ["nombre"], version: 1 };
+  assert.equal(await simulate({ cfgOn: c720, days: 400 }), 5);
+  ok("ERP horas=720,max=5 durante 400 días: EXACTAMENTE 5 (el TTL de 30 días ya no lo rearma)");
+  assert.ok(FOLLOWUP_ERP_COUNTER_TTL_S >= 720 * 6 * 3600);
+  ok("el TTL del contador en modo ERP cubre la escalera máxima (720h*(5+1))");
+}
+{
+  // fuera_de_escalera: un lead frío desde hace meses con contador 0 NO entra al primer tick; uno dentro de la escalera sí
+  const old = setup({ view: ON({ horas: 48, max: 2 }), leads: [lead("1", 24 * 90), lead("2", 100)] });
+  await old.r.tick();
+  assert.deepEqual(old.sends.map((s) => s.phone), ["2"]); assert.ok(text(old.out).includes("fuera_de_escalera=1"));
+  const edge = setup({ view: ON({ horas: 48, max: 2 }), leads: [lead("1", 143.9), lead("2", 144)] });
+  await edge.r.tick(); assert.deepEqual(edge.sends.map((s) => s.phone), ["1"]);
+  ok("ERP: lead frío más allá de horas*(max+1) con contador 0 no entra (acota el primer tick); el borde es exacto");
+}
+{
+  // modo env: el corte NO se aplica (idéntico a antes)
+  const t = setup({ view: ENVV, env: { templateName: "x", lang: "es", schedule: "24,72" }, leads: [lead("1", 24 * 90)] });
+  await t.r.tick(); assert.equal(t.sends.length, 1); ok("modo env: sin corte de escalera (comportamiento de siempre)");
+}
+{
+  // el HMAC depende de la clave
+  const a = setup({ view: ON(), leads: [] }).r.hashId("62812"); 
+  assert.ok(/^c_[0-9a-f]{10}$/.test(a)); ok("hashId con forma c_<10 hex>");
 }
 // buildPlan puro
 {

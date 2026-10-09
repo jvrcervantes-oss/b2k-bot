@@ -23,6 +23,10 @@ import crypto from "crypto";
 
 export const FOLLOWUP_ERP_DAILY_CAP = 40;          // envíos de seguimiento por día y por bot en modo ERP (constante; no la toca el ERP)
 export const FOLLOWUP_FAIL_REST_MS = 6 * 3600 * 1000; // descanso de un lead tras un envío fallido (modo ERP)
+// TTL del contador followup:<tel> en modo ERP. El de siempre es 30 días, y con horas altas caduca ANTES de que el lead llegue al tope
+// (horas=720,max=5 → la escalera dura 180 días): el contador volvería a 0 y el bot repetiría la tanda para siempre. 190 días cubre el
+// máximo posible (HORAS_MAX*(MAX_MAX+1) = 4320 h = 180 días) con margen. El modo env conserva sus 30 días.
+export const FOLLOWUP_ERP_COUNTER_TTL_S = 190 * 24 * 3600;
 
 const RE_PLANTILLA = /^[a-z0-9_]+$/;
 const RE_IDIOMA = /^[a-z]{2,3}(_[A-Z]{2})?$/;
@@ -47,7 +51,7 @@ export function buildPlan(view, env) {
       return { off: true, reason: "config_invalida", source: view.source };
     }
     const schedule = Array.from({ length: c.max }, (_, i) => c.horas * (i + 1));
-    return { source: view.source, template: c.plantilla, lang: c.idioma, schedule, maxN: c.max, vars: c.vars, version: c.version };
+    return { source: view.source, template: c.plantilla, lang: c.idioma, schedule, maxN: c.max, vars: c.vars, version: c.version, horas: c.horas };
   }
   // mode 'env': exactamente lo que hacía index.js con FOLLOWUP_*
   if (!env.templateName) return { off: true, reason: "sin_plantilla_env", source: null, silent: true };
@@ -68,7 +72,8 @@ export function createFollowupRunner(d) {
   const failedAt = new Map();   // teléfono → ms del último fallo de envío (modo ERP)
   let running = false;
   let lastStateKey = "";
-  const hashId = (phone) => "c_" + crypto.createHash("sha256").update(`${d.project}:${String(phone)}`).digest("hex").slice(0, 10);
+  // HMAC con una clave del bot (d.hashKey = el secreto del ERP): un sha256 sin clave sobre teléfonos se revierte por fuerza bruta.
+  const hashId = (phone) => "c_" + crypto.createHmac("sha256", String(d.hashKey || d.project)).update(`${d.project}:${String(phone)}`).digest("hex").slice(0, 10);
 
   async function tick() {
     try {
@@ -117,6 +122,10 @@ export function createFollowupRunner(d) {
       if (!l.lastInboundAt) { skip("sin_inbound"); continue; }
       const coldH = (t - l.lastInboundAt) / 3600000;
       if (coldH < 24) { skip("ventana_abierta"); continue; }                    // ventana abierta → el bot ya responde solo
+      // Solo ERP: pasado el final de la escalera (horas*(max+1)) el lead ya no se toca. Cierra dos huecos: (1) un contador que se perdió
+      // (Redis vaciado, reinicio sin Redis) no rearma una tanda entera sobre un lead frío de meses; (2) acota el primer tick tras
+      // encender el ERP: los leads antiguos con contador 0 no entran, solo los que están DENTRO de la escalera.
+      if (erp && coldH >= schedule[schedule.length - 1] + plan.horas) { skip("fuera_de_escalera"); continue; }
       const sent = await d.getCount(l.phone);
       if (sent >= maxN) { skip("tope_intentos"); continue; }                    // tope de intentos alcanzado
       const dueH = schedule[sent] != null ? schedule[sent] : schedule[schedule.length - 1];
@@ -147,7 +156,7 @@ export function createFollowupRunner(d) {
         continue;
       }
       failedAt.delete(l.phone);
-      await d.setCount(l.phone, sent + 1);
+      await d.setCount(l.phone, sent + 1, FOLLOWUP_ERP_COUNTER_TTL_S);
       sentNow++;
       log.log(`[${d.project}] Follow-up ${sent + 1}/${maxN} enviado a ${id} (plantilla ${plan.template}, config v${plan.version}, frío ${coldH.toFixed(0)}h)`);
     }
