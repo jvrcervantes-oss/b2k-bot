@@ -1,7 +1,7 @@
 // S4b: las piezas puras y el guardián de turno-pg.js, con piezas falsas (sin red, sin proceso hijo).
 import test from "node:test";
 import assert from "node:assert";
-import { creaAutorizaciones, preparaHistorial, avisoAsistente, bloqueAviso, contenidoEntrante, promptResumen, limpiaResumen, filtraSensibles, TEXTO_RESUMEN_OMITIDO, textoRecordatorio, creaTurnoPg } from "./turno-pg.js";
+import { creaAutorizaciones, preparaHistorial, avisoAsistente, bloqueAviso, contenidoEntrante, promptResumen, limpiaResumen, filtraSensibles, TEXTO_RESUMEN_OMITIDO, textoRecordatorio, paramsRecordatorio, idiomaDe, creaTurnoPg } from "./turno-pg.js";
 
 const M = (role, content, ts, por = role === "user" ? "cliente" : "bot") => ({ role, content, ts, por });   // forma que ya sale de preparaHistorial
 const H = (rol, texto, ts, por = rol === "user" ? "cliente" : "bot", media = null) => ({ rol, texto, ts, por, media });
@@ -191,47 +191,103 @@ test("filtraSensibles: un resumen comercial normal NO salta (precios, fechas, ci
 });
 
 // ─── recordatorio ───
-test("textoRecordatorio: hora de Bali, bilingüe, sin datos del cliente", () => {
-  const t = textoRecordatorio({ tipo: "llamada", cuando_ts: "2026-10-14T02:30:00Z" });      // 10:30 en Bali (UTC+8)
-  assert.match(t, /call with our team is today at 10:30 Bali time/);
-  assert.match(t, /tu llamada con nuestro equipo es hoy a las 10:30/);
-  assert.match(textoRecordatorio({ tipo: "visita", cuando_ts: "2026-10-14T02:30:00Z" }), /visit/);
+test("textoRecordatorio: hora de Bali, un idioma, aviso de asistente (IA) y STOP, en/es/id", () => {
+  const c = { nombre: "Maria Lopez", tipo: "llamada", cuando_ts: "2026-10-14T02:30:00Z" };      // 10:30 en Bali (UTC+8)
+  const en = textoRecordatorio(c, "en");
+  assert.match(en, /^Hi Maria, this is Lawang's automated assistant \(AI\)\. A reminder that your call with our team is today at 10:30 \(Bali time\)/);
+  assert.match(en, /Reply STOP/);
+  assert.doesNotMatch(en, /tu llamada/);
+  assert.match(textoRecordatorio(c, "es"), /^Hola Maria, soy el asistente automático \(IA\) de Lawang\..*tu llamada con nuestro equipo es hoy a las 10:30 \(hora de Bali\)/);
+  assert.match(textoRecordatorio({ ...c, tipo: "visita" }, "id"), /^Halo Maria, saya asisten otomatis \(AI\) Lawang\..*kunjungan Anda.*pukul 10:30 \(waktu Bali\)/);
+  assert.match(textoRecordatorio({ ...c, tipo: "visita" }, "xx"), /your visit/);       // idioma desconocido → en
 });
 
-function turnoConFalsos({ citas, estado = { baja: false }, ahora = Date.parse("2026-10-14T01:30:00Z"), permitido = true, envia = async () => ({ ok: true, id: "wamid.X" }) } = {}) {
-  const enviados = [], resultados = [], avisos = [];
+test("paramsRecordatorio: [nombre, tipo, hora WITA] en el idioma; sin nombre, saltos o símbolos → fórmula neutra; nunca vacío", () => {
+  assert.deepStrictEqual(paramsRecordatorio({ nombre: "  Ana\nMaría ", tipo: "visita", cuando_ts: "2026-10-14T07:00:00Z" }, "es"), ["Ana", "visita", "15:00"]);
+  assert.deepStrictEqual(paramsRecordatorio({ nombre: "Budi", tipo: "llamada", cuando_ts: "2026-10-14T07:00:00Z" }, "id"), ["Budi", "panggilan", "15:00"]);
+  assert.strictEqual(paramsRecordatorio({ nombre: null, tipo: "llamada", cuando_ts: "2026-10-14T07:00:00Z" }, "en")[0], "there");
+  assert.strictEqual(paramsRecordatorio({ nombre: "😀 ###", tipo: "llamada", cuando_ts: "2026-10-14T07:00:00Z" }, "id")[0], "Bapak/Ibu");
+  assert.strictEqual(paramsRecordatorio({ nombre: "A".repeat(200), tipo: "llamada", cuando_ts: "2026-10-14T07:00:00Z" })[0].length, 30);
+});
+
+test("idiomaDe: por lo que escribió el lead; sin señal clara o sin historial → en", () => {
+  const u = (t) => ({ rol: "user", texto: t });
+  assert.strictEqual(idiomaDe([u("Hola, quiero información del terreno por favor")]), "es");
+  assert.strictEqual(idiomaDe([u("Halo, saya mau tahu harga tanah ya")]), "id");
+  assert.strictEqual(idiomaDe([u("Hello, I would like the price of the land")]), "en");
+  assert.strictEqual(idiomaDe([]), "en");
+  assert.strictEqual(idiomaDe(undefined), "en");
+  assert.strictEqual(idiomaDe([{ rol: "assistant", texto: "Hola, quiero información por favor para una villa" }]), "en");   // lo del bot no cuenta
+});
+
+function turnoConFalsos({ citas, estado = { baja: false }, ahora = Date.parse("2026-10-14T01:30:00Z"), permitido = true, envia = async () => ({ ok: true, id: "wamid.X" }), plantilla = "", indonesio = false, estadoFalla = null } = {}) {
+  const enviados = [], plantillas = [], resultados = [], avisos = [];
   const autoriza = creaAutorizaciones({ esOwner: () => false });
   const pg = {
     async citasRecordar() { return { citas }; },
-    async estado() { return estado; },
+    async estado() { if (estadoFalla) throw estadoFalla; return estado; },
     async citaRecordatorioRes(x) { resultados.push(x); return "ok"; },
   };
   const T = creaTurnoPg({
     pg, autoriza, log: () => {}, ownerPhone: "6281100000000", esOwner: (t) => t === "6281100000000", isAllowed: () => permitido, ahora: () => ahora,
     sendOwner: async (t) => { avisos.push(t); return { ok: true }; },
     sendCliente: async (to, texto) => { const m = autoriza.motivo(to, texto); if (m) return { ok: false, error: m }; enviados.push({ to, texto }); return envia(); },
-    modoRecordatorio: "postgres", minAvisoMs: 0,
+    sendClienteTemplate: async (to, nombre, lang, params) => { const m = autoriza.motivo(to, null); if (m) return { ok: false, error: m }; plantillas.push({ to, nombre, lang, params }); return envia(); },
+    modoRecordatorio: "postgres", minAvisoMs: 0, plantillaRecordatorio: plantilla, idiomaIndonesioAprobado: indonesio,
   });
-  return { T, enviados, resultados, avisos };
+  return { T, enviados, plantillas, resultados, avisos };
 }
-const cita = (extra = {}) => ({ accion_id: "11111111-1111-1111-1111-111111111111", tel: "62812345678", tipo: "llamada", cuando_ts: "2026-10-14T02:30:00Z", ultimo_entrante_en: "2026-10-14T00:30:00Z", ...extra });
+const cita = (extra = {}) => ({ accion_id: "11111111-1111-1111-1111-111111111111", tel: "62812345678", tipo: "llamada", nombre: "Maria", cuando_ts: "2026-10-14T02:30:00Z", ultimo_entrante_en: "2026-10-14T00:30:00Z", ...extra });
 
-test("recordatorio: ventana abierta → texto libre y resultado 'enviado' (el envío pasó por la autorización del estado)", async () => {
+test("recordatorio: ventana abierta → texto libre con aviso de asistente y resultado 'enviado' (el envío pasó por la autorización del estado)", async () => {
   const x = turnoConFalsos({ citas: [cita()] });
   await x.T.recordatorioTick();
   assert.strictEqual(x.enviados.length, 1);
+  assert.match(x.enviados[0].texto, /automated assistant \(AI\)/);
+  assert.strictEqual(x.plantillas.length, 0);
   assert.strictEqual(x.resultados[0].resultado, "enviado");
 });
 
-test("recordatorio: ventana cerrada → 'sin_ventana' y aviso al dueño (la plantilla no está cableada: faltan nombre e idioma en la edge)", async () => {
+test("recordatorio: ventana cerrada y SIN plantilla configurada → 'sin_ventana' y aviso al dueño", async () => {
   const x = turnoConFalsos({ citas: [cita({ ultimo_entrante_en: "2026-10-10T00:00:00Z" })] });
   await x.T.recordatorioTick();
   assert.strictEqual(x.enviados.length, 0);
+  assert.strictEqual(x.plantillas.length, 0);
   assert.strictEqual(x.resultados[0].resultado, "sin_ventana");
   assert.match(x.avisos[0], /NO enviado/);
   const y = turnoConFalsos({ citas: [cita({ ultimo_entrante_en: null })] });
   await y.T.recordatorioTick();
   assert.strictEqual(y.resultados[0].resultado, "sin_ventana");
+});
+
+test("recordatorio: ventana cerrada CON plantilla → plantilla en el idioma del lead con [nombre, tipo, hora WITA]; en por defecto; id solo si está aprobado", async () => {
+  const hist = (t) => ({ baja: false, historial: [{ rol: "user", texto: t }] });
+  const cerrada = { ultimo_entrante_en: "2026-10-10T00:00:00Z" };
+  const a = turnoConFalsos({ citas: [cita(cerrada)], plantilla: "lawang_cita_recordatorio" });
+  await a.T.recordatorioTick();
+  assert.deepStrictEqual(a.plantillas, [{ to: "62812345678", nombre: "lawang_cita_recordatorio", lang: "en", params: ["Maria", "call", "10:30"] }]);
+  assert.strictEqual(a.resultados[0].resultado, "enviado");
+  assert.strictEqual(a.avisos.length, 0);
+  const b = turnoConFalsos({ citas: [cita({ ...cerrada, tipo: "visita" })], plantilla: "lawang_cita_recordatorio", estado: hist("Hola, quiero información del terreno por favor") });
+  await b.T.recordatorioTick();
+  assert.deepStrictEqual(b.plantillas[0].params, ["Maria", "visita", "10:30"]);
+  assert.strictEqual(b.plantillas[0].lang, "es");
+  const c = turnoConFalsos({ citas: [cita(cerrada)], plantilla: "lawang_cita_recordatorio", estado: hist("Halo, saya mau tahu harga tanah ya") });
+  await c.T.recordatorioTick();
+  assert.strictEqual(c.plantillas[0].lang, "en");                       // el indonesio espera la lectura del hablante nativo
+  const d = turnoConFalsos({ citas: [cita(cerrada)], plantilla: "lawang_cita_recordatorio", estado: hist("Halo, saya mau tahu harga tanah ya"), indonesio: true });
+  await d.T.recordatorioTick();
+  assert.deepStrictEqual([d.plantillas[0].lang, d.plantillas[0].params[1]], ["id", "panggilan"]);
+  const e = turnoConFalsos({ citas: [cita(cerrada)], plantilla: "lawang_cita_recordatorio", estado: { error: "sin_chat" } });   // lead sin chat: ventana cerrada
+  await e.T.recordatorioTick();
+  assert.strictEqual(e.plantillas.length, 1);
+});
+
+test("recordatorio: la plantilla pasa por el MISMO freno de testing que el texto", async () => {
+  const x = turnoConFalsos({ citas: [cita({ ultimo_entrante_en: "2026-10-10T00:00:00Z" })], plantilla: "lawang_cita_recordatorio", permitido: false });
+  await x.T.recordatorioTick();
+  assert.strictEqual(x.plantillas.length, 0);
+  assert.strictEqual(x.resultados[0].resultado, "fallo");
 });
 
 test("recordatorio: frenado por el modo testing → 'fallo' y no se envía; baja → no se envía; envío fallido → 'fallo' + aviso", async () => {
@@ -246,6 +302,26 @@ test("recordatorio: frenado por el modo testing → 'fallo' y no se envía; baja
   await c.T.recordatorioTick();
   assert.strictEqual(c.resultados[0].resultado, "fallo");
   assert.ok(c.avisos.length >= 1);
+});
+
+test("recordatorio: si el estado no se puede leer NO se anota resultado (la base reclama a los 10 min) y no se envía nada", async () => {
+  const x = turnoConFalsos({ citas: [cita()], estadoFalla: new Error("edge caída") });
+  await x.T.recordatorioTick();
+  assert.strictEqual(x.enviados.length + x.plantillas.length, 0);
+  assert.strictEqual(x.resultados.length, 0);
+  const y = turnoConFalsos({ citas: [cita()], estado: { error: "telefono_invalido" } });
+  await y.T.recordatorioTick();
+  assert.strictEqual(y.resultados.length, 0);
+});
+
+test("recordatorio: un segundo tick mientras corre el primero no hace nada (un solo reloj por proceso)", async () => {
+  let n = 0, suelta;
+  const puerta = new Promise((r) => { suelta = r; });
+  const T = creaTurnoPg({ pg: { async citasRecordar() { n++; await puerta; return { citas: [] }; } }, autoriza: creaAutorizaciones({ esOwner: () => false }), modoRecordatorio: "postgres", log: () => {} });
+  const p1 = T.recordatorioTick();
+  await T.recordatorioTick();
+  suelta(); await p1;
+  assert.strictEqual(n, 1);
 });
 
 test("recordatorio: con el interruptor apagado no hace NADA (ni siquiera llama a la edge)", async () => {

@@ -199,14 +199,51 @@ export function limpiaResumen(texto) {
 }
 
 // ─── RECORDATORIO DE CITA ──────────────────────────────────────────────────────────────────────
-/** Texto libre (solo dentro de la ventana de 24 h). Sin idioma por lead todavía: va en inglés y español, la hora es de Bali. */
-export function textoRecordatorio({ tipo, cuando_ts }, tz = "Asia/Makassar") {
-  const d = new Date(cuando_ts);
-  const hora = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
-  const fecha = new Intl.DateTimeFormat("en-GB", { timeZone: tz, day: "numeric", month: "short" }).format(d);
-  const en = tipo === "visita" ? "visit" : "call";
-  const es = tipo === "visita" ? "visita" : "llamada";
-  return `Reminder from Lawang: your ${en} with our team is today at ${hora} Bali time (${fecha}). / Recordatorio de Lawang: tu ${es} con nuestro equipo es hoy a las ${hora}, hora de Bali (${fecha}).`;
+const TIPO_CITA = { en: { llamada: "call", visita: "visit" }, es: { llamada: "llamada", visita: "visita" }, id: { llamada: "panggilan", visita: "kunjungan" } };
+const SIN_NOMBRE = { en: "there", es: "cliente", id: "Bapak/Ibu" };
+// Mismas palabras que las plantillas de Meta (encargos/20261009_lawang_plantillas_meta.md §2): el texto libre lleva el aviso de asistente (IA) y STOP.
+const TEXTO_RECORDATORIO = {
+  en: (n, t, h) => `Hi ${n}, this is Lawang's automated assistant (AI). A reminder that your ${t} with our team is today at ${h} (Bali time). If you need to change it, just reply here and a team member will help. Reply STOP to stop these messages.`,
+  es: (n, t, h) => `Hola ${n}, soy el asistente automático (IA) de Lawang. Te recordamos que tu ${t} con nuestro equipo es hoy a las ${h} (hora de Bali). Si necesitas cambiarla, responde aquí y una persona del equipo te ayudará. Responde STOP para dejar de recibir estos mensajes.`,
+  id: (n, t, h) => `Halo ${n}, saya asisten otomatis (AI) Lawang. Pengingat bahwa ${t} Anda dengan tim kami hari ini pukul ${h} (waktu Bali). Jika perlu mengubahnya, balas pesan ini dan anggota tim akan membantu. Balas STOP untuk berhenti menerima pesan ini.`,
+};
+const PALABRAS_EN = new Set(["hello", "hi", "thanks", "thank", "you", "want", "would", "like", "the", "and", "price", "how", "much", "when", "can", "please", "land", "visit", "call", "info", "interested", "what", "where", "is", "are"]);
+const PALABRAS_ES = new Set(["hola", "gracias", "quiero", "quisiera", "para", "una", "por", "favor", "cuando", "puedo", "tengo", "buenas", "buenos", "dias", "días", "tardes", "informacion", "información", "precio", "cuanto", "cuánto", "terreno", "villa", "llamada", "visita", "si", "sí", "estoy", "como", "cómo", "que", "qué", "donde", "dónde", "mañana"]);
+const PALABRAS_ID = new Set(["halo", "terima", "kasih", "saya", "mau", "ingin", "untuk", "bisa", "berapa", "harga", "tanah", "vila", "apakah", "tolong", "selamat", "pagi", "siang", "sore", "malam", "dan", "yang", "dengan", "ada", "besok", "boleh", "informasi", "kapan", "dimana", "tidak", "iya", "ya"]);
+/** Idioma del lead (en/es/id; en por defecto) a partir de lo que ESCRIBIÓ él en el historial. Sin mensajes o sin señal clara → en. */
+export function idiomaDe(historial) {
+  const textos = (Array.isArray(historial) ? historial : []).filter((h) => h && h.rol === "user" && h.texto).slice(-6).map((h) => String(h.texto));
+  let es = 0, id = 0, en = 0;
+  for (const t of textos) for (const w of t.toLowerCase().split(/[^\p{L}]+/u)) {
+    if (!w) continue;
+    if (PALABRAS_ES.has(w)) es++;
+    if (PALABRAS_ID.has(w)) id++;
+    if (PALABRAS_EN.has(w)) en++;
+  }
+  if (es >= 2 && es > id && es > en) return "es";
+  if (id >= 2 && id > es && id > en) return "id";
+  return "en";
+}
+/** Hora de Bali (WITA) de la cita: "15:00". */
+export function horaBali(cuando_ts, tz = "Asia/Makassar") {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(cuando_ts));
+}
+/** Primer nombre limpio para {{1}} (Meta rechaza vacíos, saltos y tabuladores). Sin nombre usable → fórmula neutra del idioma. */
+export function nombrePila(nombre, idioma = "en") {
+  const t = String(nombre || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim().split(/\s+/)[0] || "";
+  const limpio = t.replace(/[^\p{L}\p{M}'’.-]/gu, "").slice(0, 30);
+  return limpio.length >= 1 ? limpio : (SIN_NOMBRE[idioma] || SIN_NOMBRE.en);
+}
+/** Variables de la plantilla en el orden {{1}} nombre · {{2}} tipo (idioma de la plantilla) · {{3}} hora de Bali. */
+export function paramsRecordatorio({ nombre, tipo, cuando_ts }, idioma = "en", tz = "Asia/Makassar") {
+  const l = TIPO_CITA[idioma] ? idioma : "en";
+  return [nombrePila(nombre, l), TIPO_CITA[l][tipo === "visita" ? "visita" : "llamada"], horaBali(cuando_ts, tz)];
+}
+/** Texto libre (solo dentro de la ventana de 24 h), con el aviso de asistente (IA) de Legal. */
+export function textoRecordatorio(cita, idioma = "en", tz = "Asia/Makassar") {
+  const l = TEXTO_RECORDATORIO[idioma] ? idioma : "en";
+  const [n, t, h] = paramsRecordatorio(cita, l, tz);
+  return TEXTO_RECORDATORIO[l](n, t, h);
 }
 
 const NIVEL_AVISO = { interested: 1, booking: 2 };
@@ -221,7 +258,7 @@ export function creaTurnoPg(d) {
     sendClienteTemplate, notifyOwner, notifyOwnerTesting, markRead, transcribeAudio, avisoCitaSinRegistrar, notaDerechos, avisoDerechos,
     clasificaEntrega, setWaBlocked, clearWaBlocked, resume, projectName = "Bot", ahora = Date.now,
     reintentosEstadoMs = [20_000, 90_000], reintentosCierreMs = [1_000, 3_000, 8_000], minAvisoMs = 10 * 60_000, tz = "Asia/Makassar",
-    modoRecordatorio = "off",
+    modoRecordatorio = "off", plantillaRecordatorio = "", idiomaIndonesioAprobado = false,
   } = d;
   const esperaMs = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -601,33 +638,55 @@ export function creaTurnoPg(d) {
   }
 
   // ═══ RECORDATORIO DE CITA (S6a) ═══
+  // Orden por cita: baja → freno de testing → ventana abierta (texto libre con aviso de asistente) | cerrada (plantilla en el idioma del lead,
+  // solo si hay plantilla aprobada y configurada) | sin_ventana + aviso al dueño. La plantilla va por el envío «humano» (sin freno propio), así
+  // que el freno de testing se aplica AQUÍ, antes de elegir camino. Un fallo ANTES de enviar no anota resultado: la base reclama otra vez a los 10 min (una vez).
+  let recordatorioCorriendo = false;
   async function recordatorioTick() {
-    if (modoRecordatorio !== "postgres") return;
+    if (modoRecordatorio !== "postgres" || recordatorioCorriendo) return;
+    recordatorioCorriendo = true;
     try {
       const r = await pg.citasRecordar();
       if (r.error) { log(`recordatorios: ${r.error}`); return; }
       for (const cita of r.citas || []) {
         const tel = digitos(cita.tel);
-        let res = "fallo", token = null;
+        let res = null, token = null, intentoDeEnvio = false;
         try {
           const est = await pg.estado({ tel });
-          const abierta = !est.error && !est.baja && cita.ultimo_entrante_en && ahora() - Date.parse(cita.ultimo_entrante_en) < VENTANA_MS;
+          const sinChat = est.error === "sin_chat";
+          if (est.error && !sinChat) { log(`recordatorio de …${tel.slice(-4)}: estado no disponible (${est.error}); se reintenta`); continue; }
           if (est.baja) res = "fallo";
-          else if (!abierta) {
-            res = "sin_ventana";
-            await avisaDueno("rec:" + cita.accion_id, `⏰ ${projectName}: recordatorio de ${cita.tipo === "visita" ? "visita" : "llamada"} NO enviado a …${tel.slice(-4)} (su ventana de 24 h está cerrada y aún no hay plantilla aprobada). Avísale tú.`);
-          } else if (!isAllowed(tel)) { res = "fallo"; log(`recordatorio a …${tel.slice(-4)} frenado por el modo testing`); }
+          else if (!isAllowed(tel)) { res = "fallo"; log(`recordatorio a …${tel.slice(-4)} frenado por el modo testing`); }
           else {
-            token = autoriza.concede(tel, "turno");
-            const env = await sendCliente(tel, textoRecordatorio(cita, tz));
-            res = env && env.ok ? "enviado" : "fallo";
+            const abierta = !sinChat && cita.ultimo_entrante_en && ahora() - Date.parse(cita.ultimo_entrante_en) < VENTANA_MS;
+            const detectado = idiomaDe(est.historial);
+            const idioma = detectado === "id" && !idiomaIndonesioAprobado ? "en" : detectado;
+            if (abierta) {
+              token = autoriza.concede(tel, "turno");
+              intentoDeEnvio = true;
+              const env = await sendCliente(tel, textoRecordatorio(cita, idioma, tz));
+              res = env && env.ok ? "enviado" : "fallo";
+            } else if (plantillaRecordatorio) {
+              token = autoriza.concede(tel, "turno");
+              intentoDeEnvio = true;
+              const env = await sendClienteTemplate(tel, plantillaRecordatorio, idioma, paramsRecordatorio(cita, idioma, tz));
+              res = env && env.ok ? "enviado" : "fallo";
+            } else {
+              res = "sin_ventana";
+              await avisaDueno("rec:" + cita.accion_id, `⏰ ${projectName}: recordatorio de ${cita.tipo === "visita" ? "visita" : "llamada"} NO enviado a …${tel.slice(-4)} (su ventana de 24 h está cerrada y aún no hay plantilla aprobada). Avísale tú.`);
+            }
             if (res === "fallo") await avisaDueno("rec:" + cita.accion_id, `⏰ ${projectName}: no se pudo enviar el recordatorio a …${tel.slice(-4)}.`);
           }
-        } catch (e) { log(`recordatorio de …${tel.slice(-4)} falló: ${e && e.message}`); }
+        } catch (e) {
+          log(`recordatorio de …${tel.slice(-4)} falló: ${e && e.message}`);
+          if (intentoDeEnvio) res = "fallo";   // pudo salir algo: no se reenvía
+        }
         finally { autoriza.revoca(tel, token); }
+        if (res === null) continue;           // nada se envió: sin resultado → reclamo con reintento
         try { await pg.citaRecordatorioRes({ accionId: cita.accion_id, resultado: res }); } catch (e) { log(`resultado del recordatorio no anotado: ${e && e.message}`); }
       }
     } catch (e) { log(`recordatorioTick: ${e && e.message}`); }
+    finally { recordatorioCorriendo = false; }
   }
 
   // ═══ ACCIONES HUMANAS DEL PANEL (vía el proxy) ═══

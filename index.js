@@ -2390,6 +2390,10 @@ if (STORE_PG) {
     reintentosEstadoMs: listaMs(process.env.BOT_TURNO_REINTENTOS_MS, [20000, 90000]), reintentosCierreMs: listaMs(process.env.BOT_CIERRE_REINTENTOS_MS, [1000, 3000, 8000]),
     modoRecordatorio: String(process.env.BOT_RECORDATORIO || "off").trim().toLowerCase() === "postgres" ? "postgres" : "off",
     tz: CALENDAR_TZ || "Asia/Makassar",
+    // Plantilla de utilidad para la cita con la ventana cerrada (S6b la activa: REMINDER_TEMPLATE_NAME=lawang_cita_recordatorio). El idioma lo elige el código.
+    // El indonesio no se usa hasta la lectura de un hablante nativo (LAW-507): BOT_RECORDATORIO_ID=on lo habilita.
+    plantillaRecordatorio: String(REMINDER_TEMPLATE_NAME || "").trim(),
+    idiomaIndonesioAprobado: String(process.env.BOT_RECORDATORIO_ID || "").trim().toLowerCase() === "on",
   });
   webhookPg = turnoPg.webhook;
   // Lo que el bot ya no tiene (lo vacío o sin configurar en Lawang, decisión 7 del owner) responde 410 en vez de tocar un almacén que no existe.
