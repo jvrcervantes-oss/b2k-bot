@@ -11,7 +11,8 @@ import crypto from "crypto";
 import { createSeguimientoConfig } from "./seguimiento-config.js";
 import { createFollowupRunner } from "./seguimiento-tick.js";
 import { createRsvForwarder, createXenditGate } from "./xendit-rsv.js";
-import { createBackendSwitch } from "./bbmerp.js";
+import { createBackendSwitch, createBbmErp, createPendingRsv } from "./bbmerp.js";
+import { createQuoteStore, createReservaIndex, createErpTools, createCierreErp, createAvisoPago, createSombra, ERP_QUOTE_TOOL, ERP_PROMPT_BLOCK, COTIZACION_TTL_S } from "./bbmflow.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -231,18 +232,26 @@ async function runGetQuote({ bike_model, from, to, delivery_address, self_return
 // sola llamada = comportamiento idéntico al anterior. Con tools, itera hasta end_turn (tope de
 // seguridad) ejecutando get_quote. NO persiste los turnos intermedios: opera sobre una copia local
 // de messages; el server sigue guardando solo el texto final en el historial de Redis.
-async function claudeConverse(params) {
-  if (!quoteToolEnabled()) return claudeMessage(params);
+async function claudeConverse(params, ctx = {}) {
+  // ctx.backend lo fija el turno UNA vez (bbmBackendTurno en el handler): "erp" usa la herramienta del ERP (bbmflow.js), cualquier otra cosa es el camino de siempre.
+  const erpMode = ctx.backend === "erp";
+  if (!erpMode && !quoteToolEnabled()) return claudeMessage(params);
   const messages = [...params.messages];
   let msg;
   for (let iter = 0; iter < 4; iter++) {
-    msg = await claudeMessage({ ...params, tools: [GET_QUOTE_TOOL], messages });
+    msg = await claudeMessage({ ...params, tools: [erpMode ? ERP_QUOTE_TOOL : GET_QUOTE_TOOL], messages });
     if (msg.stop_reason !== "tool_use") return msg;
     const toolUses = msg.content.filter((b) => b.type === "tool_use");
     messages.push({ role: "assistant", content: msg.content }); // incluye thinking + tool_use (obligatorio replicarlo)
     const results = [];
     for (const tu of toolUses) {
-      const out = tu.name === "get_quote" ? await runGetQuote(tu.input || {}) : { ok: false, error: "Unknown tool." };
+      let out;
+      if (tu.name !== "get_quote") out = { ok: false, error: "Unknown tool." };
+      else if (erpMode) out = await runGetQuoteErpTurno(ctx.tel, tu.input || {});
+      else {
+        out = await runGetQuote(tu.input || {});
+        bbmDionCotizo(ctx.tel, out); // 7a/7c: fija la conversación a dion y, si hay sombra, compara con el ERP sin esperar
+      }
       results.push({ type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(out) });
     }
     messages.push({ role: "user", content: results });
@@ -1739,8 +1748,10 @@ async function buildOfferHint() {
 // y se había quedado solo con mediaHint (sin stock, precios, delivery ni ofertas), así que toda la
 // QA hecha ahí daba falsos negativos — el bot llegaba a responder "I need the LIVE PRICING block
 // to confirm the weekly rate" porque, en el simulador, era verdad que no lo tenía.
-async function buildSystemBlocks(mediaLib, phone) {
+async function buildSystemBlocks(mediaLib, phone, backend = "dion") {
   const mediaHint = buildMediaHint(mediaLib);
+  // Modo erp: el inventario, las tarifas, las ofertas y la comisión de pasarela son de Dion y NO existen en el ERP; el modelo solo ve el bloque del ERP.
+  if (backend === "erp") return [{ type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } }, { type: "text", text: dateHint() }, ...[mediaHint, ERP_PROMPT_BLOCK].filter(Boolean).map((text) => ({ type: "text", text }))];
   // % de pasarela real para ESTE teléfono — ver activeGatewayFor arriba. Solo rental (tour usa
   // otro flujo de pago) y solo si se conoce el teléfono (el simulador del panel puede no pasarlo).
   const gatewayHint = BOT_VERTICAL === "rental" && phone
@@ -2664,12 +2675,80 @@ async function markLeadPaid(phone, provider, amountIDR, receiptUrl) {
 
 // Interruptor de backend de BBM (F8-7c, parte segura): `dion` (hoy) o `erp`. Por defecto Redis `bbm:backend` (editable SIN redeploy) > BBM_BACKEND > dion.
 // Todavía NO lo lee ninguna rama de la conversación: solo está cableado y visible en /admin/api/health. Con `dion` (o sin variables) nada cambia.
-const bbmBackendSw = createBackendSwitch({ redis: () => redisClient, envValue: process.env.BBM_BACKEND, project: PROJECT_NAME });
+const bbmBackendSw = createBackendSwitch({ redis: () => redisClient, envValue: process.env.BBM_BACKEND, project: PROJECT_NAME, enlaceVivo: async (tel) => !!(await bbmPendingRsv.lee(tel)) }); // un enlace rsv: vivo ata la conversación a erp aunque caduque el pin
+// ── F8-7 (7a sombra + 7c modo erp): cliente de reservas-bot y piezas de bbmflow.js ──────────────────────────────────────────────────
+// Sin BBM_ERP_URL + BBM_RESERVAS_SECRET `bbmErp.enabled` es false y NADA de esto se ejecuta. `clave` de idempotencia solo con BBM_ERP_CLAVE=1 (cuando la edge
+// con `clave` esté desplegada; con la edge vieja la rechazaría con campo_no_admitido y rompería todas las reservas).
+const bbmErp = createBbmErp({ url: process.env.BBM_ERP_URL, secret: process.env.BBM_RESERVAS_SECRET, enviaClave: process.env.BBM_ERP_CLAVE === "1", project: PROJECT_NAME });
+const bbmPendingRsv = createPendingRsv({ redis: () => redisClient });
+const bbmQuotes = createQuoteStore({ redis: () => redisClient });
+const bbmIndiceRsv = createReservaIndex({ redis: () => redisClient });
+const bbmErpTools = createErpTools({ erp: bbmErp, quotes: bbmQuotes, project: PROJECT_NAME });
+const bbmSombraN = Math.max(1, parseInt(process.env.BBM_SOMBRA_N || "30", 10) || 30);
+const bbmSombra = process.env.BBM_SOMBRA === "1" && bbmErp.enabled ? createSombra({ erp: bbmErp, redis: () => redisClient, n: bbmSombraN, project: PROJECT_NAME }) : null;
+async function avisaEquipoBbm(texto) {
+  await notifyTelegram(texto);
+  if (OWNER_PHONE) await sendWhatsApp(OWNER_PHONE, texto);
+}
+// El enlace de pago del modo erp: importe y external_id los pone la base (cobro de la reserva), NO pasa por createRentalPayLink (sin comisión del 3 %, sin Stripe).
+async function crearFacturaRsv({ external_id, importe, moneda, descripcion, duracionS }) {
+  if (!XENDIT_SECRET_KEY) return null;
+  try {
+    const res = await axios.post("https://api.xendit.co/v2/invoices", {
+      external_id, amount: importe, currency: moneda, description: String(descripcion).slice(0, 250), invoice_duration: duracionS,
+      success_redirect_url: STRIPE_SUCCESS_URL || "https://balibestmotorcycle.com/?booking=confirmed",
+      failure_redirect_url: STRIPE_CANCEL_URL || "https://balibestmotorcycle.com/",
+    }, { auth: { username: XENDIT_SECRET_KEY, password: "" }, timeout: 15000 });
+    console.log(`[${PROJECT_NAME}] Xendit invoice rsv: ${importe} ${moneda}`);
+    return res.data && res.data.invoice_url ? { url: res.data.invoice_url, id: res.data.id } : null;
+  } catch (e) {
+    console.error(`[${PROJECT_NAME}] Xendit invoice rsv error:`, e.response ? JSON.stringify(e.response.data) : e.message);
+    return null;
+  }
+}
+const cierreErp = createCierreErp({
+  erp: bbmErp, quotes: bbmQuotes, pendingRsv: bbmPendingRsv, indice: bbmIndiceRsv, backend: bbmBackendSw,
+  crearFactura: crearFacturaRsv, avisaEquipo: avisaEquipoBbm, project: PROJECT_NAME,
+});
+// Backend de ESTE turno. Sin ERP configurado: dion, sin leer nada. Una sola vez por mensaje (ver el handler).
+async function bbmBackendTurno(tel) {
+  if (BOT_VERTICAL !== "rental" || !bbmErp.enabled) return "dion";
+  try { return await bbmBackendSw.bbmBackend(tel); } catch { return "dion"; }
+}
+// Herramienta get_quote del modo erp: tras una cotización buena la conversación queda fijada a erp (el interruptor no puede moverla entre cotizar y pagar).
+async function runGetQuoteErpTurno(tel, input) {
+  const out = await bbmErpTools.runGetQuote(tel, input);
+  if (out && out.ok && out.available) { try { await bbmBackendSw.fija(tel, COTIZACION_TTL_S, "erp"); } catch { /* el enlace pendiente también ata */ } }
+  return out;
+}
+// Camino de Dion con ERP configurado: fija la conversación a dion al cotizar (si no, un cambio del interruptor la movería a erp con una cotización de Dion en vuelo)
+// y lanza la sombra SIN esperarla. Sin ERP configurado: no hace nada.
+function bbmDionCotizo(tel, out) {
+  if (!bbmErp.enabled || !out || out.ok !== true) return;
+  bbmBackendSw.fija(tel, COTIZACION_TTL_S, "dion").catch(() => {});
+  if (bbmSombra) bbmSombra.observa(out).catch(() => {});
+}
+// Cobro de una reserva del ERP: el lead pasa a ganado (sin los avisos del flujo viejo, que dicen «falta crear la reserva en el ERP»).
+async function marcaLeadPagadoErp(phone, importe, moneda) {
+  const prev = await getStatus(phone);
+  if (prev !== "won") await setStatus(phone, "won");
+  await logEvent(phone, "payment", { provider: "xendit-erp", amount: Math.round(importe || 0), from: prev || "", to: "won" });
+}
+const avisoPagoRsv = createAvisoPago({
+  indice: bbmIndiceRsv, pendingRsv: bbmPendingRsv, backend: bbmBackendSw,
+  dedupe: async (invoiceId) => !(await alreadyProcessedPayment(`xendit-rsv:${invoiceId}`)),
+  enviaCliente: async (tel, texto) => {
+    const r = await sendWhatsAppResult(tel, texto);
+    if (r.ok) { const h = await getConversation(tel); h.push({ role: "assistant", content: texto, ts: Date.now(), by: "bot" }); await saveConversation(tel, h); }
+    return r;
+  },
+  marcaPagado: marcaLeadPagadoErp, avisaEquipo: avisaEquipoBbm, project: PROJECT_NAME,
+});
 // Puerta del webhook (xendit-rsv.js): valida el token (503 si falta, 403 si no coincide, tiempo constante) y, si el aviso es de una reserva del ERP
 // (`rsv:`), lo reenvía a la edge reservas-pago y ACABA ahí (F8-7b, independiente de BBM_BACKEND); el resto sigue a la rama `paylink_` de siempre.
 // Solo necesita BBM_ERP_URL: el token que reenvía es el del propio aviso de Xendit. Sin esa URL un `rsv:` recibe 503 (Xendit reintenta, no se pierde).
 const xenditGate = createXenditGate({
-  token: XENDIT_CALLBACK_TOKEN, forwarder: createRsvForwarder({ erpUrl: process.env.BBM_ERP_URL, project: PROJECT_NAME }), project: PROJECT_NAME,
+  token: XENDIT_CALLBACK_TOKEN, forwarder: createRsvForwarder({ erpUrl: process.env.BBM_ERP_URL, project: PROJECT_NAME }), onResultado: avisoPagoRsv, project: PROJECT_NAME,
 });
 app.post("/webhook/xendit", xenditGate, async (req, res) => {
   try {
@@ -2997,6 +3076,8 @@ app.post("/webhook", async (req, res) => {
 
     // Media disponible (gestionada desde el panel): se inyecta para que el bot solo ofrezca lo que existe.
     const mediaLib = await getMediaLib();
+    // Un solo valor de backend por turno (F8-7c): se lee UNA vez y lo usan la herramienta, el prompt y [PAY]. Sin ERP configurado ni se consulta: camino de Dion intacto.
+    const backendTurno = await bbmBackendTurno(from);
     // Streaming (no create): evita el "Premature close" en respuestas no-stream y mantiene viva la conexión.
     // claudeConverse = claudeMessage + bucle de tool-use (get_quote) cuando es rental+ERP; si no, 1 llamada igual.
     const response = await claudeConverse({
@@ -3009,9 +3090,9 @@ app.post("/webhook", async (req, res) => {
       thinking: { type: "adaptive" },
       output_config: { effort: "low" },
       max_tokens: 2000,
-      system: await buildSystemBlocks(mediaLib, from), // mismos bloques que el simulador del panel — ver buildSystemBlocks
+      system: await buildSystemBlocks(mediaLib, from, backendTurno), // mismos bloques que el simulador del panel — ver buildSystemBlocks
       messages: history.slice(-20).map((m) => ({ role: m.role, content: m.content })), // prompt = últimos 20; el resto es historial del panel
-    });
+    }, { backend: backendTurno, tel: from });
 
     const _textBlock = response.content.find((b) => b.type === "text");
     let reply = (_textBlock && _textBlock.text) || "";
@@ -3053,6 +3134,12 @@ app.post("/webhook", async (req, res) => {
       else console.error(`[${PROJECT_NAME}] booking detectado pero no se pudo crear la sesión Stripe`);
     } else if (numRiders && intent === "booking" && !stripeClient) {
       console.error(`[${PROJECT_NAME}] booking detectado pero stripeClient es null — falta STRIPE_SECRET_KEY en el entorno`);
+    } else if (payMatch && BOT_VERTICAL === "rental" && backendTurno === "erp") {
+      // Modo erp (bbmflow.js): [PAY] solo dispara. La reserva sale de la cotización GUARDADA; el importe del modelo se compara, nunca se usa.
+      const lf = leadFields || {}, leadActual = await getLead(from);
+      const cierre = await cierreErp.cierra({ tel: from, mensajeId: message.id, payAmount, nombre: lf.name || (leadActual && leadActual.name), pais: lf.country || (leadActual && leadActual.country) });
+      if (cierre.ok) { reply = reply + "\n\n" + cierre.url; await setLastLink(from, cierre.url); }
+      else reply = reply + "\n\n" + cierre.texto;
     } else if (payMatch && BOT_VERTICAL === "rental") {
       // Alquiler: el bot cierra en el chat mandando el link de pago por el total cotizado.
       // ponytail: valida el importe en rango sano (10k–100M IDR) para que una cifra alucinada
@@ -3642,6 +3729,7 @@ app.get("/admin/api/health", async (req, res) => {
   let bbmBackend = "dion";
   try { bbmBackend = await bbmBackendSw.porDefecto(); } catch (e) { /* best-effort */ }
   const bbm = { backend: bbmBackend, erp_configurado: !!(process.env.BBM_ERP_URL && process.env.BBM_RESERVAS_SECRET), webhook_rsv: !!process.env.BBM_ERP_URL };
+  if (bbmSombra) { try { bbm.sombra = await bbmSombra.estado(); } catch (e) { /* best-effort */ } }
   res.json({ storage: redisClient ? "redis" : "ram", leads: count, bbm, seguimiento: seguimientoCfg.enabled ? seguimientoCfg.status() : { enabled: false, source: "env (FOLLOWUP_*)" } });
 });
 

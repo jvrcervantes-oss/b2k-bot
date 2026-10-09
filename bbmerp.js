@@ -386,12 +386,12 @@ export function createPendingRsv(o = {}) {
   const mem = new Map();
   const key = (tel) => `pendingrsv:${String(tel).replace(/\D/g, "")}`;
 
-  async function guarda(tel, { external_id, importe, moneda, reserva_id, caduca_en_ms }) {
+  async function guarda(tel, { external_id, importe, moneda, reserva_id, caduca_en_ms, url }) {
     if (!telefonoVerificado(tel)) throw new Error("pendingRsv: teléfono inválido");
     if (!str(external_id) || !external_id.startsWith("rsv:")) throw new Error("pendingRsv: external_id debe empezar por rsv:");
     if (!entero(importe) || importe <= 0) throw new Error("pendingRsv: importe entero positivo");
     if (!Number.isFinite(caduca_en_ms) || caduca_en_ms <= now()) throw new Error("pendingRsv: caducidad en el futuro");
-    const reg = { external_id, importe, moneda: str(moneda) ? moneda : null, reserva_id: str(reserva_id) ? reserva_id : null, creado_en: now(), caduca_en: caduca_en_ms };
+    const reg = { external_id, importe, moneda: str(moneda) ? moneda : null, reserva_id: str(reserva_id) ? reserva_id : null, url: str(url) && /^https:\/\//.test(url) && url.length <= 500 ? url : null, creado_en: now(), caduca_en: caduca_en_ms };
     const ttl = Math.max(1, Math.ceil((caduca_en_ms - now()) / 1000));
     const r = redis();
     if (r) await r.setEx(key(tel), ttl, JSON.stringify(reg));

@@ -53,7 +53,13 @@ export function createRsvForwarder(o = {}) {
       return { status: 502 };
     }
     const st = r.status;
-    if (st === 200) { log.log(p(`reenviado ok (factura ${id})`)); return { status: 200 }; }
+    if (st === 200) {
+      // El cuerpo de la edge dice qué pasó con el pago ({ok,factura|factura_espera} o {revisar}); solo se pasa tal cual a quien avisa al cliente.
+      let cuerpo = null;
+      try { cuerpo = await r.json(); } catch { /* sin cuerpo legible: el aviso al cliente será el genérico */ }
+      log.log(p(`reenviado ok (factura ${id})`));
+      return { status: 200, cuerpo };
+    }
     if (st === 400 || st === 413) { log.error(p(`reservas-pago rechaza el cuerpo (${st}): se devuelve ${st} (factura ${id})`)); return { status: st }; }
     log.error(p(`reservas-pago devolvió ${st}: 502, Xendit reintenta (factura ${id})`));
     return { status: 502 };
@@ -66,7 +72,9 @@ export function createRsvForwarder(o = {}) {
 // El token se valida ANTES de mirar el cuerpo (un aviso sin token válido no llega a nada, ni siquiera al reenvío). Misma semántica que tenía
 // el handler: sin token configurado 503; token distinto 403, comparado en tiempo constante.
 export function createXenditGate(o = {}) {
-  const { token: esperado, forwarder, log = console, project = "bot" } = o;
+  // onResultado({ externalId, invoiceId, cuerpo }) — opcional, mejor esfuerzo, DESPUÉS de responder 200: avisar al cliente de que pagó. Un fallo ahí
+  // jamás cambia lo que se contesta a Xendit (el pago ya está en la base; reintentar solo duplicaría el aviso, que además se deduplica aguas abajo).
+  const { token: esperado, forwarder, onResultado, log = console, project = "bot" } = o;
   return async function xenditGate(req, res, next) {
     if (!esperado) { log.warn(`[${project}] /webhook/xendit recibido pero falta XENDIT_CALLBACK_TOKEN — ignorado`); return res.sendStatus(503); }
     const token = req.get("x-callback-token") || "";
@@ -75,7 +83,12 @@ export function createXenditGate(o = {}) {
     if (esAvisoRsv(req.body)) {
       try {
         const r = await forwarder.reenvia({ rawBody: req.rawBody, token, invoiceId: req.body.id });
-        return res.sendStatus(r.status);
+        res.sendStatus(r.status);
+        if (r.status === 200 && typeof onResultado === "function") {
+          try { await onResultado({ externalId: req.body.external_id, invoiceId: req.body.id, cuerpo: r.cuerpo ?? null }); }
+          catch { log.error(`[${project}] [xendit-rsv] el aviso al cliente falló (el pago ya está en la base)`); }
+        }
+        return;
       } catch (e) {
         log.error(`[${project}] [xendit-rsv] fallo inesperado al reenviar: 502, Xendit reintenta`);   // sin e.message: podría arrastrar datos del cuerpo
         return res.sendStatus(502);

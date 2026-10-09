@@ -188,4 +188,30 @@ ok("edge 200→200 · 400/413→mismo 4xx · 401/403/404/429/5xx→502");
   ok("index.js: una sola ruta /webhook/xendit con la puerta delante; el handler no usa variables huérfanas");
 }
 
+// F8-7: el cuerpo de la edge llega a onResultado DESPUÉS de contestar 200; un fallo del aviso no cambia la respuesta a Xendit
+{
+  const avisos = [];
+  const forwarder = createRsvForwarder({ erpUrl: "https://erp.test", fetchImpl: async () => ({ status: 200, json: async () => ({ ok: true, factura: { numero: "INV-1" } }) }), log: silent, project: "T" });
+  const orden = [];
+  const gate = createXenditGate({ token: TOKEN, forwarder, log: silent, project: "T", onResultado: async (x) => { orden.push("aviso"); avisos.push(x); } });
+  const res = { code: null, sendStatus(c) { orden.push("respuesta"); res.code = c; return res; } };
+  await gate(mkReq({ body }), res, () => {});
+  assert.equal(res.code, 200); assert.deepEqual(orden, ["respuesta", "aviso"], "primero se contesta a Xendit, luego se avisa al cliente");
+  assert.equal(avisos[0].externalId, RSV); assert.equal(avisos[0].invoiceId, "inv_abc123"); assert.deepEqual(avisos[0].cuerpo, { ok: true, factura: { numero: "INV-1" } });
+  const gate2 = createXenditGate({ token: TOKEN, forwarder, log: silent, project: "T", onResultado: async () => { throw new Error("boom"); } });
+  const res2 = mkRes();
+  await gate2(mkReq({ body }), res2, () => {});
+  assert.equal(res2.code, 200, "si el aviso al cliente revienta, Xendit sigue recibiendo 200 (el pago ya está en la base)");
+  const fwd502 = createRsvForwarder({ erpUrl: "https://erp.test", fetchImpl: async () => ({ status: 500 }), log: silent, project: "T" });
+  let llamado = 0;
+  const gate3 = createXenditGate({ token: TOKEN, forwarder: fwd502, log: silent, project: "T", onResultado: async () => { llamado++; } });
+  const res3 = mkRes();
+  await gate3(mkReq({ body }), res3, () => {});
+  assert.equal(res3.code, 502); assert.equal(llamado, 0, "sin 200 de la edge no se avisa al cliente de nada");
+  const fwdSinCuerpo = createRsvForwarder({ erpUrl: "https://erp.test", fetchImpl: async () => ({ status: 200 }), log: silent, project: "T" });
+  const r = await fwdSinCuerpo.reenvia({ rawBody: Buffer.from("{}"), token: TOKEN, invoiceId: "x" });
+  assert.equal(r.status, 200); assert.equal(r.cuerpo, null);
+  ok("onResultado: después del 200, con el cuerpo de la edge; no cambia la respuesta si falla; nada si la edge no dio 200");
+}
+
 console.log(`\n${n} comprobaciones OK`);
