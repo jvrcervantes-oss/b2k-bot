@@ -127,3 +127,8 @@ test("context-lawang.md: Palm Field W5 y Bonian Village, frase de cierre y etiqu
   assert.match(CTX, /NEVER promise or estimate profitability/);
   assert.match(CTX, /That block is the only source of prices and availability/);
 });
+
+test("context-lawang.md: sin bloque CATALOG (catalogo off o no disponible) el caso (b) no traspasa", () => {
+  assert.match(CTX, /if there is no CATALOG block or it says it is unavailable, never hand over for this reason/);
+  assert.match(CTX, /there IS a CATALOG block with figures/);
+});
