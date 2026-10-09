@@ -1,6 +1,6 @@
 // S13 (LAW-507): el bot de punta a punta. Arranca `node index.js` DE VERDAD con el API de Meta falso (nada sale a Meta) y comprueba lo que llega al cliente
 // y al equipo: ventana cerrada → plantilla con sus variables; ventana abierta → texto libre; freno de testing; interruptor apagado; alerta al equipo
-// sin saltos de línea. Se repite con BOT_STORE=postgres (edge falsa) y con BOT_STORE=redis (memoria).
+// sin saltos de línea. Se repite con BOT_STORE=supabase (edge falsa) y con BOT_STORE=redis (memoria).
 import test from "node:test";
 import assert from "node:assert";
 import { creaEdgeFalsa, creaGraphFalso, creaAnthropicFalso, lanzaBot, payloadTexto, hasta, esperar } from "./fakes-pg.js";
@@ -23,7 +23,7 @@ async function entorno(modo, env = {}) {
 }
 const params = (e) => (e.params && e.params[0] ? e.params[0].parameters.map((p) => p.text) : []);
 
-for (const modo of ["postgres", "redis"]) {
+for (const modo of ["supabase", "redis"]) {
   test(`[${modo}] sin BOT_AVISOS_CLIENTE=on el endpoint está cerrado (404) y no sale nada`, async (t) => {
     const E = await entorno(modo, PLANTILLAS);
     t.after(() => E.cierra());
@@ -75,7 +75,7 @@ for (const modo of ["postgres", "redis"]) {
 }
 
 test("[postgres] ventana ABIERTA (el lead acaba de escribir) → texto libre con aviso de asistente, no plantilla", async (t) => {
-  const E = await entorno("postgres", { ...PLANTILLAS, BOT_AVISOS_CLIENTE: "on" });
+  const E = await entorno("supabase", { ...PLANTILLAS, BOT_AVISOS_CLIENTE: "on" });
   t.after(() => E.cierra());
   const T = tel(6);
   assert.strictEqual(await E.bot.post(payloadTexto(T, "Hola, quiero una visita por favor, información del terreno", wamid())), 200);
@@ -91,7 +91,7 @@ test("[postgres] ventana ABIERTA (el lead acaba de escribir) → texto libre con
 });
 
 test("[postgres] un lead que pidió la baja (STOP) no recibe ningún aviso", async (t) => {
-  const E = await entorno("postgres", { ...PLANTILLAS, BOT_AVISOS_CLIENTE: "on" });
+  const E = await entorno("supabase", { ...PLANTILLAS, BOT_AVISOS_CLIENTE: "on" });
   t.after(() => E.cierra());
   const T = tel(7);
   assert.strictEqual(await E.bot.post(payloadTexto(T, "STOP", wamid())), 200);
