@@ -2,8 +2,8 @@
 // con dependencias de mentira (index.js arranca Express + Redis al importarse y no se puede cargar en un test).
 //
 // DOS orígenes de configuración:
-//   · source 'env'  — sin ERP_SEGUIMIENTO_URL/SECRET: variables FOLLOWUP_*, comportamiento IDÉNTICO al que había en index.js
-//                     (incluido que un envío fallido incrementa el contador; ver más abajo por qué no se ha tocado).
+//   · source 'env'  — sin ERP_SEGUIMIENTO_URL/SECRET: variables FOLLOWUP_*, igual que en index.js salvo dos arreglos (9-oct-2026):
+//                     un envío fallido NO sube el contador (descansa 6 h) y el contador tiene TTL largo con corte fuera_de_escalera.
 //   · source 'erp'/'cache' — el ERP manda (seguimiento-config.js). Aquí hay endurecimientos propios:
 //        - un envío FALLIDO no incrementa el contador `followup:<tel>` (si no, un fallo dejaba al lead «contactado» sin haberlo sido);
 //          en su lugar el lead descansa 6 h en memoria para no reintentar cada 30 min;
@@ -27,6 +27,10 @@ export const FOLLOWUP_FAIL_REST_MS = 6 * 3600 * 1000; // descanso de un lead tra
 // (horas=720,max=5 → la escalera dura 180 días): el contador volvería a 0 y el bot repetiría la tanda para siempre. 190 días cubre el
 // máximo posible (HORAS_MAX*(MAX_MAX+1) = 4320 h = 180 días) con margen. El modo env conserva sus 30 días.
 export const FOLLOWUP_ERP_COUNTER_TTL_S = 190 * 24 * 3600;
+
+// Modo variables: TTL = última hora de la escalera + 30 días de margen, con tope de 400 días.
+export const ENV_COUNTER_TTL_MARGIN_S = 30 * 24 * 3600;
+export const ENV_COUNTER_TTL_MAX_S = 400 * 24 * 3600;
 
 const H_MS = 3600 * 1000;
 const RE_PLANTILLA = /^[a-z0-9_]+$/;
@@ -60,7 +64,11 @@ export function buildPlan(view, env) {
   if (!schedule.length) return { off: true, reason: "sin_cadencia_env", source: null, silent: true };
   const maxN = parseInt(env.max) || schedule.length;
   const nVars = env.vars != null ? parseInt(env.vars) : 1;
-  return { source: "env", template: env.templateName, lang: env.lang, schedule, maxN, nVars, version: null };
+  // TTL del contador y corte de escalera propios del modo variables (antes: 30 días fijos, y al caducar se rearmaba la tanda para siempre).
+  const last = schedule[schedule.length - 1];
+  const step = schedule.length > 1 ? last - schedule[schedule.length - 2] : last;
+  const ttlS = Math.min(Math.ceil(last * 3600) + ENV_COUNTER_TTL_MARGIN_S, ENV_COUNTER_TTL_MAX_S);
+  return { source: "env", template: env.templateName, lang: env.lang, schedule, maxN, nVars, version: null, ttlS, cutoffH: last + step };
 }
 
 // d: { project, isBotEnabled, resolveView, env, listLeads, isOwner, getCount, setCount, send, skipStatus, skipIntent,
@@ -129,16 +137,28 @@ export function createFollowupRunner(d) {
       // antiguos con contador 0 no entran, solo los que están DENTRO de la escalera.
       if (erp && coldH >= schedule[schedule.length - 1] + plan.horas) { skip("fuera_de_escalera"); continue; }
       const sent = await d.getCount(l.phone);
+      // Modo variables: un lead frío más allá del último peldaño (+ un paso) sin contador NO recibe un primer mensaje (el contador
+      // caducado o perdido no rearma la tanda). Solo con contador 0: a mitad de escalera no se corta.
+      if (!erp && sent === 0 && coldH >= plan.cutoffH) { skip("fuera_de_escalera"); continue; }
       if (sent >= maxN) { skip("tope_intentos"); continue; }                    // tope de intentos alcanzado
       const dueH = schedule[sent] != null ? schedule[sent] : schedule[schedule.length - 1];
       if (coldH < dueH) { skip("no_toca"); continue; }                          // aún no toca el siguiente intento
 
       if (!erp) {
-        // Origen variables: idéntico al index.js anterior. Un envío fallido SÍ cuenta aquí (comportamiento histórico, no se toca).
+        // Origen variables: misma plantilla, params, cadencia, filtros y línea de log de siempre. Un envío fallido ya NO cuenta (como en ERP):
+        // el lead descansa 6 h en memoria para no reintentar cada tick.
+        const rest = failedAt.get(l.phone);
+        if (rest && t - rest < FOLLOWUP_FAIL_REST_MS) { skip("descanso_tras_fallo"); continue; }
         const firstName = VAR_RESOLVERS.nombre(l);
         const params = plan.nVars >= 1 ? [firstName] : [];
-        await d.send(l.phone, plan.template, plan.lang, params);
-        await d.setCount(l.phone, sent + 1);
+        const r = await d.send(l.phone, plan.template, plan.lang, params);
+        if (!r || r.ok !== true) {
+          failedAt.set(l.phone, t);
+          log.error(`[${d.project}] Follow-up ${sent + 1}/${maxN} NO enviado a ${l.phone}: el contador NO sube`);
+          continue;
+        }
+        failedAt.delete(l.phone);
+        await d.setCount(l.phone, sent + 1, plan.ttlS);
         log.log(`[${d.project}] Follow-up ${sent + 1}/${maxN} enviado a ${l.phone} (frío ${coldH.toFixed(0)}h)`);
         continue;
       }

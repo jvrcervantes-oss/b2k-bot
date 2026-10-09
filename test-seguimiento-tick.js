@@ -69,10 +69,12 @@ const text = (out) => out.lines.map((l) => l[1]).join("\n");
   ok("modo env: FOLLOWUP_TEMPLATE_VARS=0 → sin variables");
 }
 {
-  // en modo env un envío fallido SÍ cuenta (comportamiento histórico documentado, no se toca)
-  const t = setup({ view: ENVV, env: { templateName: "x", lang: "es" }, leads: [lead("1", 30)], sendImpl: () => ({ ok: false }) });
-  await t.r.tick(); assert.equal(t.cnt[1], 1);
-  ok("modo env: comportamiento histórico (fallo cuenta) intacto");
+  // CAMBIADO 9-oct: antes fijaba que en modo env un fallo SÍ contaba (defecto). Ahora no sube el contador y el lead descansa.
+  const t = setup({ view: ENVV, env: { templateName: "x", lang: "es" }, leads: [lead("1", 30), lead("2", 30)], sendImpl: (p) => (p === "1" ? { ok: false } : { ok: true }) });
+  await t.r.tick(); assert.equal(t.cnt[1], undefined); assert.equal(t.cnt[2], 1);
+  await t.r.tick(); assert.equal(t.sends.filter((s) => s.phone === "1").length, 1);
+  assert.ok(text(t.out).includes("NO enviado a 1"));
+  ok("modo env: un envío fallido NO sube el contador y el lead descansa 6 h");
 }
 {
   const t = setup({ view: ENVV, env: { templateName: "x" }, leads: [lead("1", 30)], botEnabled: false });
@@ -227,9 +229,10 @@ function simulate({ cfgOn, days, coldStartH = 24, resp = false }) {
   ok("ERP: lead frío más allá de horas*(max+1) con contador 0 no entra (acota el primer tick); el borde es exacto");
 }
 {
-  // modo env: el corte NO se aplica (idéntico a antes)
-  const t = setup({ view: ENVV, env: { templateName: "x", lang: "es", schedule: "24,72" }, leads: [lead("1", 24 * 90)] });
-  await t.r.tick(); assert.equal(t.sends.length, 1); ok("modo env: sin corte de escalera (comportamiento de siempre)");
+  // CAMBIADO 9-oct: antes fijaba que el modo env no tenía corte. Ahora un frío de 90 días con contador 0 no entra; uno dentro (24,72 → corte 120 h) sí.
+  const t = setup({ view: ENVV, env: { templateName: "x", lang: "es", schedule: "24,72" }, leads: [lead("1", 24 * 90), lead("2", 119), lead("3", 120), lead("4", 24 * 90)], counts: { 4: 1 } });
+  await t.r.tick(); assert.deepEqual(t.sends.map((s) => s.phone), ["2", "4"]); assert.ok(text(t.out).length >= 0);
+  ok("modo env: corte fuera_de_escalera solo con contador 0 (borde exacto 120 h); con contador >0 no se corta");
 }
 {
   // el HMAC depende de la clave
@@ -259,6 +262,30 @@ function simulate({ cfgOn, days, coldStartH = 24, resp = false }) {
   t.lastAt["1"] = NOW - 1000;
   await t.r.tick(); assert.equal(t.sends.length, 1); assert.equal(t.lastAt["1"], NOW - 1000);
   ok("modo env: sin separación mínima ni escritura de la hora (idéntico)");
+}
+// Modo variables con almacén que CADUCA y reloj simulado
+function simulateEnv({ days, schedule = "24,72", max, failFirst = 0 }) {
+  let t = NOW; const store = new Map(); const sentAt = []; let calls = 0;
+  const r = createFollowupRunner({
+    project: "T", log: silent(), now: () => t,
+    isBotEnabled: async () => true, resolveView: async () => ENVV,
+    env: { templateName: "x", lang: "es", schedule, max }, listLeads: async () => [{ phone: "1", name: "A", lastInboundAt: NOW - 24 * H, status: "quoted" }], isOwner: () => false,
+    getCount: async (p) => { const e = store.get(p); return e && e.exp > t ? e.n : 0; },
+    setCount: async (p, n, ttl = 30 * 24 * 3600) => { store.set(p, { n, exp: t + ttl * 1000 }); },
+    send: async () => { calls++; if (calls <= failFirst) return { ok: false }; sentAt.push(t); return { ok: true }; },
+    skipStatus: new Set(), skipIntent: new Set(), dayCount: async () => 0, dayBump: async () => {},
+  });
+  return (async () => { for (let i = 0; i < days * 48; i++) { await r.tick(); t += 30 * 60000; } return { sent: sentAt.length, calls }; })();
+}
+{
+  assert.equal((await simulateEnv({ days: 200 })).sent, 2);   // con TTL de 30 días eran ~2 por cada 30 días
+  ok("modo env por defecto (24,72, 2 mensajes): lead frío 200 días con contador que caduca = EXACTAMENTE 2 mensajes");
+  const f = await simulateEnv({ days: 5, failFirst: 1 });
+  assert.equal(f.calls, 3); assert.equal(f.sent, 2); // 1 fallo (descansa 6 h, luego reintenta) + 2 envíos; el fallo no cuenta
+  ok("modo env: un fallo no sube el contador (siguen siendo 2 mensajes OK tras 1 fallo) y reintenta pasadas 6 h");
+  assert.equal(buildPlan(ENVV, { templateName: "x" }).ttlS, (72 * 3600) + 30 * 24 * 3600);
+  assert.equal(buildPlan(ENVV, { templateName: "x", schedule: "24,100000" }).ttlS, 400 * 24 * 3600);
+  ok("modo env: TTL = última hora de la escalera + 30 días, con tope de 400");
 }
 // buildPlan puro
 {
