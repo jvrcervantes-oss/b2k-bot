@@ -466,3 +466,25 @@ export async function getScheduled() {
 export async function setScheduled(list) {
   if (redisClient) await redisClient.set("nl_scheduled", JSON.stringify(list)); else fallbackScheduled = list;
 }
+
+// ─── LECTOR PARA EL IMPORTADOR (S5, TEMPORAL: se borra en S9 junto con Redis) ──────────────────────
+// SOLO LECTURA. import_redis.js no puede nombrar el cliente (test-store-aislado.js), así que recibe esto.
+// null si no hay Redis conectado. Nada de aquí escribe ni borra una clave.
+export function lectorImportacion() {
+  if (!redisClient) return null;
+  const c = redisClient;
+  const aplana = (k) => (Array.isArray(k) ? k : [k]);
+  return {
+    async *escanear() { for await (const k of c.scanIterator({ MATCH: "*", COUNT: 500 })) for (const x of aplana(k)) yield String(x); },
+    tipo: (k) => c.type(k),
+    pttl: (k) => c.pTTL(k),
+    get: (k) => c.get(k),
+    lista: (k) => c.lRange(k, 0, -1),
+    dbsize: () => c.dbSize(),
+    async keyspace() {                       // solo números: «db0:keys=12,expires=3,...» → [{db, keys}]
+      const txt = String(await c.info("keyspace"));
+      const dbs = [...txt.matchAll(/^db(\d+):keys=(\d+)/gm)].map((m) => ({ db: Number(m[1]), keys: Number(m[2]) }));
+      return { dbs };
+    },
+  };
+}

@@ -6,9 +6,10 @@ import fs from "fs";
 import https from "https";
 import Stripe from "stripe";
 import crypto from "crypto";
+import { inventario as inventarioRedis } from "./import_redis.js"; // TEMPORAL (S5/LAW-507): se retira en S9
 import { VACIA as CFG_VACIA, validaConfig, bloqueEquipo, ttlPausaHumana } from "./botcfg.js";
 import {
-  initRedis, redisActivo, almacenNombre,
+  initRedis, redisActivo, almacenNombre, lectorImportacion,
   getConversation, saveConversation, escPush, escPop, escMapGuardar, escRutaPorCita,
   getLead, leadGuardar, leadsListar, leadsContar, leadBorrar, getNotifiedLevel, setNotifiedLevel,
   setPaused, isPaused, setPausedHumano as setPausedHumanoStore, cfgRawLeer, cfgLogRaw, cfgGuardarConLog, incrTope,
@@ -2374,6 +2375,18 @@ app.get("/admin/api/health", async (req, res) => {
     })(),
     crm: { modo: BOT_CRM_MODE, efectivo: CRM_EFECTIVO },
   });
+});
+
+// TEMPORAL (S5 / LAW-507, A.1) — SE RETIRA EN S9 junto con Redis. Inventario de TODAS las claves de Redis: SOLO conteos por grupo
+// y TTL (nunca valores, nunca un teléfono; las claves desconocidas salen con su forma enmascarada). Solo lectura. Va solo por la
+// cabecera x-admin-key (NO acepta ?key=, que acabaría en los logs HTTP).
+app.get("/admin/api/redis-inventario", async (req, res) => {
+  if (!ADMIN_PASSWORD) return res.status(503).json({ error: "panel no configurado" });
+  if (req.get("x-admin-key") !== ADMIN_PASSWORD) return res.status(403).json({ error: "forbidden" });
+  const lector = lectorImportacion();
+  if (!lector) return res.status(409).json({ error: "sin Redis conectado" });
+  try { res.json(await inventarioRedis(lector)); }
+  catch (e) { console.error(`[${PROJECT_NAME}] redis-inventario falló:`, e.message); res.status(500).json({ error: "inventario falló" }); }
 });
 
 app.get("/admin/api/conv/:phone", async (req, res) => {
