@@ -240,6 +240,30 @@ const COT = { producto_id: PID, nombre: "Honda Scoopy", desde: FUT, hasta: FUT2,
   ok("el teléfono de la reserva es el del webhook normalizado");
 }
 
+{
+  // dos [PAY] simultáneos: una sola reserva
+  const m = montaCierre();
+  await m.quotes.guarda(TEL, COT);
+  const [a, b] = await Promise.all([1, 2].map((i) => m.cierre.cierra({ tel: TEL, mensajeId: "m" + i, payAmount: 330000, nombre: "Ana", pais: "Spain" })));
+  assert.equal(m.calls.filter((c) => c.accion === "reserva").length, 1, "una sola reserva");
+  assert.equal(m.facturas.length, 1);
+  assert.deepEqual([a.ok, b.ok].sort(), [false, true]); assert.ok([a, b].some((x) => x.motivo === "en_curso"));
+  ok("dos [PAY] a la vez del mismo chat: una reserva, un enlace");
+  // tras un fallo posterior a la reserva, la cotización se borra (no se reserva otra unidad con el mismo [PAY])
+  for (const over of [{ cliente: () => [409, { error: "no_aplica" }] }]) {
+    const x = montaCierre(over);
+    await x.quotes.guarda(TEL, COT);
+    await x.cierre.cierra({ tel: TEL, mensajeId: "a", payAmount: 330000, nombre: "Ana", pais: "Spain" });
+    const r2 = await x.cierre.cierra({ tel: TEL, mensajeId: "b", payAmount: 330000, nombre: "Ana", pais: "Spain" });
+    assert.equal(r2.motivo, "sin_cotizacion"); assert.equal(x.calls.filter((c) => c.accion === "reserva").length, 1);
+  }
+  const y = montaCierre({}, { crearFactura: async () => null });
+  await y.quotes.guarda(TEL, COT);
+  await y.cierre.cierra({ tel: TEL, mensajeId: "a", payAmount: 330000, nombre: "Ana", pais: "Spain" });
+  assert.equal(await y.quotes.lee(TEL), null);
+  ok("fallo de cliente/Xendit tras reservar: la cotización se borra, el siguiente [PAY] no reserva otra unidad");
+}
+
 // ── 3) aviso al cliente cuando paga ───────────────────────────────────────────────────────────────────────────────────────────────────
 {
   assert.match(textoPagoRecibido({ ok: true, factura: { numero: "INV-2026-0042", total: 330000, moneda: "IDR" } }, { importe: 330000, moneda: "IDR" }), /confirmed\. Your invoice number is INV-2026-0042/);

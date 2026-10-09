@@ -207,6 +207,7 @@ const TEXTO_FALLO = {
   precio_cambio: "The price has just been updated, so I'm confirming the final total with the team before sending you the link.",
   tope: "We're getting a lot of bookings right now. The team will send you the payment link personally in a few minutes.",
   sin_tiempo: "Your hold is about to run out. I'm asking the team to refresh it — they'll message you shortly.",
+  en_curso: "I'm already preparing your payment link — it will arrive in a moment.",
   generico: "I couldn't generate your payment link just now. I've flagged it to the team and they'll send it to you shortly.",
 };
 const MOTIVO_A_TEXTO = {
@@ -224,9 +225,18 @@ export function createCierreErp({ erp, quotes, pendingRsv, indice, backend, crea
     return { ok: false, motivo, texto: TEXTO_FALLO[clave] };
   };
 
-  async function cierra({ tel, mensajeId, payAmount, nombre, pais }) {
-    const t = telefonoVerificado(tel);
+  // Un solo cierre a la vez por teléfono: dos [PAY] casi simultáneos (el handler no serializa por chat) reservarían dos veces. Un solo proceso: basta memoria.
+  const enCurso = new Set();
+  async function cierra(args) {
+    const t = telefonoVerificado(args.tel);
     if (!t) return fallo("generico", "telefono");
+    if (enCurso.has(t)) return { ok: false, motivo: "en_curso", texto: TEXTO_FALLO.en_curso };
+    enCurso.add(t);
+    try { return await cierraUno({ ...args, tel: t }); } finally { enCurso.delete(t); }
+  }
+
+  async function cierraUno({ tel, mensajeId, payAmount, nombre, pais }) {
+    const t = tel;
 
     // 1) Un enlace vivo se reenvía; no se crea otra reserva
     const pend = await pendingRsv.lee(t);
@@ -259,14 +269,14 @@ export function createCierreErp({ erp, quotes, pendingRsv, indice, backend, crea
 
     // 5) Cliente (nombre y país) ANTES del enlace
     const c = await erp.cliente({ reserva_id: rs.reserva_id, nombre, pais });
-    if (!c.ok) return fallo("generico", `cliente:${c.motivo}`);
+    if (!c.ok) { await quotes.borra(t); return fallo("generico", `cliente:${c.motivo}`); }   // la cotización se gasta: el siguiente intento recotiza y la base devuelve la MISMA reserva viva (teléfono+moto+fechas)
     if (!c.cliente_identificado) log.warn(p(`cliente no identificado (${c.motivo || "?"}): lo decide una persona; el cobro sigue`));
 
     // 6) Enlace de pago con EL cobro de la base
     const duracionS = rs.cobro.segundos_hasta_caducar - MARGEN_CADUCIDAD_S;
-    if (duracionS < MIN_ENLACE_S) return fallo("sin_tiempo", `quedan=${rs.cobro.segundos_hasta_caducar}s`);
+    if (duracionS < MIN_ENLACE_S) { await quotes.borra(t); return fallo("sin_tiempo", `quedan=${rs.cobro.segundos_hasta_caducar}s`); }
     const inv = await crearFactura({ external_id: rs.cobro.external_id, importe: rs.cobro.importe, moneda: rs.cobro.moneda, descripcion: `${project} — ${q.nombre} ${q.desde}→${q.hasta}`, duracionS });
-    if (!inv || !str(inv.url)) return fallo("generico", "xendit"); // la reserva caduca sola (no hay acción `libera`)
+    if (!inv || !str(inv.url)) { await quotes.borra(t); return fallo("generico", "xendit"); } // la reserva caduca sola (no hay acción `libera`)
 
     // 7) Registro: enlace pendiente + índice para avisar del pago. Si falla, el enlace sigue siendo válido: se manda igual.
     try { await pendingRsv.guarda(t, { external_id: rs.cobro.external_id, importe: rs.cobro.importe, moneda: rs.cobro.moneda, reserva_id: rs.reserva_id, caduca_en_ms: now() + duracionS * 1000, url: inv.url }); }
