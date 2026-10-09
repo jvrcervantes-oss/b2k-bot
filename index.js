@@ -2530,6 +2530,7 @@ app.get("/admin/api/health", async (req, res) => {
 app.get("/admin/api/redis-inventario", async (req, res) => {
   if (!ADMIN_PASSWORD) return res.status(503).json({ error: "panel no configurado" });
   if (req.get("x-admin-key") !== ADMIN_PASSWORD) return res.status(403).json({ error: "forbidden" });
+  if (STORE_PG) return res.status(409).json({ error: "BOT_STORE=postgres: Redis bloqueado" }); // S4b: el store lanza si se le pide el lector
   const lector = lectorImportacion();
   if (!lector) return res.status(409).json({ error: "sin Redis conectado" });
   try { res.json(await inventarioRedis(lector)); }

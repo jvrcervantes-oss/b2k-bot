@@ -39,6 +39,13 @@ export const ESQUEMA = {
     citas_recordar: { claves: ["accion"], tel: false },
     cita_recordatorio_res: { claves: ["accion", "accion_id", "resultado"], tel: false },
   },
+  // Ruta `importar` (S5/LAW-507, Redis→Postgres): la usa el importador, no el runtime de BOT_STORE=postgres. Se copia aquí solo para que
+  // la comparación con LISTA_CERRADA de la edge real siga siendo exacta tras integrar S5 (rebase S4b, 9-oct-2026).
+  importar: {
+    chat: { claves: ["accion", "tel", "chat", "mensajes", "escalaciones"], tel: true },
+    config: { claves: ["accion", "config", "log"], tel: false },
+    cuadre: { claves: ["accion", "tel"], tel: true },
+  },
   humano: {
     pausar: { claves: ["accion", "tel", "modo"], tel: true },
     enviar: { claves: ["accion", "tel", "texto", "wamid", "media"], tel: true },

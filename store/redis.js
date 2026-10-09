@@ -478,7 +478,7 @@ export async function setScheduled(list) { guardia("setScheduled");
 // ─── LECTOR PARA EL IMPORTADOR (S5, TEMPORAL: se borra en S9 junto con Redis) ──────────────────────
 // SOLO LECTURA. import_redis.js no puede nombrar el cliente (test-store-aislado.js), así que recibe esto.
 // null si no hay Redis conectado. Nada de aquí escribe ni borra una clave.
-export function lectorImportacion() {
+export function lectorImportacion() { guardia("lectorImportacion");
   if (!redisClient) return null;
   const c = redisClient;
   const aplana = (k) => (Array.isArray(k) ? k : [k]);
