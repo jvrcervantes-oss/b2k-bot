@@ -12,6 +12,7 @@
 //   · Respuesta a Xendit (Xendit reintenta todo lo que no sea 2xx):
 //        edge 200                      → 200 (incluso si la edge dice «pago a revisar»: ya lo tiene la base y avisa al equipo)
 //        edge 400 / 413 (cuerpo malo)  → ese mismo 4xx (reintentar no lo arregla: nada de tormenta de reintentos)
+//        sin cuerpo original (rawBody)  → 502 (es un fallo NUESTRO de parser/config: un 400 haría que Xendit dejara de reintentar y se perdería el pago)
 //        cualquier otra cosa           → 502 (red, tiempo agotado, 5xx, y también 401/403/404/429: secreto o URL rotos, que NO son culpa
 //                                         del cuerpo; Xendit seguirá reintentando mientras alguien lo arregla, y el pago no se pierde)
 //        sin BBM_ERP_URL               → 503 (reintento; jamás perderlo en silencio)
@@ -38,7 +39,7 @@ export function createRsvForwarder(o = {}) {
   async function reenvia({ rawBody, token, invoiceId }) {
     const id = typeof invoiceId === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(invoiceId) ? invoiceId : "?";
     if (!enabled) { log.warn(p(`aviso rsv sin BBM_ERP_URL: 503 para que Xendit reintente (factura ${id})`)); return { status: 503 }; }
-    if (!Buffer.isBuffer(rawBody) && typeof rawBody !== "string") { log.error(p(`aviso rsv sin cuerpo original: 400 (factura ${id})`)); return { status: 400 }; }
+    if (!Buffer.isBuffer(rawBody) && typeof rawBody !== "string") { log.error(p(`aviso rsv SIN cuerpo original (fallo del parser del bot, no del aviso): 502 para que Xendit reintente (factura ${id})`)); return { status: 502 }; }
     let r;
     try {
       r = await fetchImpl(`${base}/functions/v1/reservas-pago`, {

@@ -483,6 +483,24 @@ function fakeRedis(reloj) {
   redis.caer(false);
   ok("backend fijado por conversación: no cambia con cotización viva, sí en conversaciones nuevas o al caducar");
 
+  // un enlace de pago rsv: vivo ata la conversación a erp aunque el pin haya caducado y el interruptor diga dion
+  {
+    const reg = createPendingRsv({ redis: () => redis, now });
+    const sw2 = createBackendSwitch({ redis: () => redis, envValue: "dion", enlaceVivo: (tel) => reg.lee(tel).then(Boolean), now, log: silent });
+    await redis.set("bbm:backend", "dion");
+    await sw2.fija("777", 600, "erp");
+    await reg.guarda("777000", { external_id: `rsv:${RESERVA.id}`, importe: 330000, caduca_en_ms: t + 3000 * 1000 });
+    t += 601 * 1000;                                                   // el pin caducó; el enlace sigue pagable
+    assert.equal(await sw2.bbmBackend("777000"), "erp", "pin caducado + enlace vivo ⇒ erp");
+    assert.equal(await sw2.bbmBackend("888000"), "dion", "otra conversación ⇒ dion");
+    t += 3000 * 1000;                                                  // el enlace caducó
+    assert.equal(await sw2.bbmBackend("777000"), "dion");
+    const roto = createBackendSwitch({ redis: () => redis, envValue: "dion", enlaceVivo: async () => { throw new Error("x"); }, now, log: silent });
+    assert.equal(await roto.bbmBackend("777000"), "dion");
+    await redis.del("bbm:backend");
+    ok("backend: un enlace rsv: pagable ata la conversación a erp aunque el pin haya caducado");
+  }
+
   // modo RAM (sin Redis): mismas reglas
   const ram = createBackendSwitch({ redis: () => null, envValue: "erp", now, log: silent });
   assert.equal(await ram.bbmBackend("9"), "erp");

@@ -11,7 +11,7 @@
       "reserva": ["accion", "producto_id", "desde", "hasta", "contacto_telefono", "contacto_nombre", "entrega_direccion", "recogida_direccion", "conversacion_ref", "notas"],
       "cliente": ["accion", "reserva_id", "nombre", "pais"]
     },
-    "pendiente_en_la_edge": "El campo `clave` (idempotencia por id de mensaje) lo acepta la funcion SQL reserva_producto_bot_crea pero NO esta en la lista TEXTOS de la edge: hoy la edge lo rechazaria con 400 campo_no_admitido. bbmerp.js lo manda solo con enviaClave=true (BBM_ERP_ENVIA_CLAVE=1)."
+    "pendiente_en_la_edge": "El campo `clave` (idempotencia por id de mensaje) lo acepta la funcion SQL reserva_producto_bot_crea pero NO esta en la lista TEXTOS de la edge: hoy la edge lo rechazaria con 400 campo_no_admitido. bbmerp.js lo manda solo con la opcion enviaClave=true del constructor (ninguna variable la lee aun)."
   },
   "errores": {
     "400": {"error": "json|accion|producto_id|fechas|campo_no_admitido|reserva_id|nombre|pais|direccion|contacto_telefono|..."},

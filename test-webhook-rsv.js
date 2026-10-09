@@ -102,9 +102,9 @@ ok("edge 200→200 · 400/413→mismo 4xx · 401/403/404/429/5xx→502");
 {
   const h = harness();
   const req = mkReq({ body }); req.rawBody = undefined;
-  assert.equal((await h.run(req)).code, 400);
+  assert.equal((await h.run(req)).code, 502, "un fallo nuestro no puede ser un 4xx: Xendit dejaría de reintentar");
   assert.equal(h.calls.length, 0);
-  ok("sin rawBody no se reenvía JSON re-serializado: 400");
+  ok("sin rawBody no se reenvía JSON re-serializado: 502 (Xendit reintenta)");
 }
 
 {
@@ -166,6 +166,26 @@ ok("edge 200→200 · 400/413→mismo 4xx · 401/403/404/429/5xx→502");
   assert.ok(!/1500000|a@b\.com|6281234567890|PAID/.test(todo), "sin importes, correos ni teléfonos");
   assert.ok(!todo.includes(TOKEN));
   ok("logs sin cuerpo, importe, correo, teléfono ni token");
+}
+
+// index.js usa de verdad esta puerta (no se puede importar: se comprueba el texto)
+{
+  const fs = await import("node:fs");
+  const src = fs.readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  const rutas = src.match(/app\.post\(\s*["']\/webhook\/xendit["'][^\n]*/g) || [];
+  assert.equal(rutas.length, 1, "una sola ruta /webhook/xendit");
+  assert.ok(/app\.post\("\/webhook\/xendit", xenditGate, async \(req, res\) => \{/.test(rutas[0]), "la ruta lleva la puerta antes del handler");
+  assert.ok(/import \{ createRsvForwarder, createXenditGate \} from "\.\/xendit-rsv\.js";/.test(src));
+  assert.ok(/createXenditGate\(\{\s*token: XENDIT_CALLBACK_TOKEN, forwarder: createRsvForwarder\(\{ erpUrl: process\.env\.BBM_ERP_URL/.test(src), "la puerta se construye con el token y BBM_ERP_URL");
+  // el handler que queda no usa lo que se movió a la puerta (token, a, b): un ReferenceError no lo detecta node --check
+  const i = src.indexOf('app.post("/webhook/xendit", xenditGate');
+  const j = src.indexOf("\n});\n", i);
+  const cuerpo = src.slice(i, j);
+  assert.ok(j > i && cuerpo.length > 200);
+  assert.ok(!/\btoken\b|\ba\.length|\bb\)/.test(cuerpo.replace(/\/\/.*$/gm, "")), "el handler no referencia las variables que ahora viven en la puerta");
+  // la rama paylink_ sigue ahí y el catch genérico devuelve 500 (como hoy)
+  assert.ok(cuerpo.includes("paylink_") && cuerpo.includes("res.sendStatus(500)"));
+  ok("index.js: una sola ruta /webhook/xendit con la puerta delante; el handler no usa variables huérfanas");
 }
 
 console.log(`\n${n} comprobaciones OK`);

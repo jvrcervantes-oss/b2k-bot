@@ -18,8 +18,8 @@
 //     entrega; el bot lo mostrará aparte). Si no es un entero positivo igual a `precio_total`, la reserva se trata como respuesta inválida.
 //   · Idempotencia de `reserva`: los webhooks de Meta se reentregan. La clave sale del id del mensaje de WhatsApp (hash corto, porque el
 //     wamid lleva `=` y `/` y la base solo admite [A-Za-z0-9@:._+-]). Si la respuesta se pierde se reintenta UNA vez con la misma clave.
-//     ⚠ La edge reservas-bot de hoy NO admite el campo `clave` (lo rechazaría con campo_no_admitido): se manda solo con enviaClave=true
-//     (BBM_ERP_ENVIA_CLAVE=1), cuando la edge lo acepte. Mientras tanto la base deduplica por teléfono + moto + fechas (md5) mientras la reserva siga en bloqueo.
+//     ⚠ La edge reservas-bot de hoy NO admite el campo `clave` (lo rechazaría con campo_no_admitido): se manda solo con enviaClave=true (opción del constructor; ninguna variable la lee aún: createBbmErp no se instancia en index.js hasta la pieza del flujo),
+//     cuando la edge lo acepte. Mientras tanto la base deduplica por teléfono + moto + fechas (md5) mientras la reserva siga en bloqueo.
 //   · Logs sin PII: acción, resultado, ids, importes. Nunca teléfonos, nombres, direcciones, mensajes de la base ni el secreto.
 
 import crypto from "crypto";
@@ -299,7 +299,9 @@ export const normalizaBackend = (v) => {
 };
 
 export function createBackendSwitch(o = {}) {
-  const { redis = () => null, envValue, now = () => Date.now(), log = console, project = "bot" } = o;
+  // enlaceVivo(tel) → true si esa conversación tiene un enlace de pago `rsv:` aún pagable (createPendingRsv.lee). Ese enlace ATA la conversación
+  // a erp aunque el pin haya caducado: si no, el interruptor la pasaría a dion con un pago en vuelo.
+  const { redis = () => null, envValue, enlaceVivo = async () => false, now = () => Date.now(), log = console, project = "bot" } = o;
   const p = (m) => `[${project}] [bbm-backend] ${m}`;
   const mem = new Map();   // sin Redis (modo RAM): mismas reglas en memoria
   const memConf = { valor: undefined };
@@ -343,6 +345,9 @@ export function createBackendSwitch(o = {}) {
       const pin = await leePin(String(tel));
       if (pin && pin.error) return "dion";           // no se sabe si había una cotización viva en erp: lo seguro es no tocar nada
       if (pin) return pin.backend;
+      let vivo = false;
+      try { vivo = await enlaceVivo(String(tel)); } catch { /* sin poder saberlo, manda el valor por defecto */ }
+      if (vivo) return "erp";
     }
     return porDefecto();
   }
