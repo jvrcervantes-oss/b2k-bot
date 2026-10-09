@@ -169,7 +169,7 @@ function afirma(re, texto) {
 const PHONE_RE = /\+?\d[\d\s().-]{6,}\d/g;
 /** Frase de precio de Legal (en inglés, o su traducción: Legal solo fijó la inglesa; si una traducción vale es pregunta abierta para Legal, ver informe). */
 const tieneFraseLegal = (t) => /indicativ|orientativ|indikatif/i.test(t) && /subject to confirmation|sujeto a confirmaci|tunduk pada konfirmasi|konfirmasi/i.test(t);
-const fechaEs = (t) => /\b0?9\s+(oct|octubre|okt)\w*\.?\s+2026\b/i.test(t);
+const fechaEs = (t) => /\b0?9\s+(de\s+)?(oct|octubre|okt)\w*\.?\s+(de\s+)?2026\b|\b0?9[\/.-]0?10[\/.-]2026\b|\b2026-10-09\b/i.test(t);
 /** Teléfonos de una nota (largos, sin contar importes con separadores de miles ni fechas ISO). */
 export const telefonosEnNota = (n) => (String(n).match(/\+?\d[\d\s().-]{6,}\d/g) || []).filter((m) => !/^\d{4}-\d{2}-\d{2}/.test(m) && !/^\d{1,3}([.,]\d{3})+$/.test(m.trim()) && m.replace(/\D/g, "").length >= 8);
 function telefonosAjenos(reply, textoUsuario) {
@@ -224,12 +224,12 @@ function comunes(ctx) {
   const hayPrecio = conMoneda.length > 0;
   if (hayPrecio) {
     if (!tieneFraseLegal(t)) add("FAIL", "precio sin la frase de Legal («Indicative … subject to confirmation»)");
-    else if (!ctx.yaCotizo && !(/may not include|puede no incluir|no incluye necesariamente|belum termasuk|mungkin tidak termasuk/i.test(t) && (t.includes(FECHA_CAT) || fechaEs(t)))) add("WARN", `primer precio sin la frase LARGA (falta «may not include» o la fecha ${FECHA_CAT})`);
+    else if (!ctx.yaCotizo && !(/may not include|puede no incluir|no incluye necesariamente|belum termasuk|mungkin tidak termasuk|mungkin belum termasuk|bisa jadi belum termasuk|pueden no incluirse/i.test(t) && (t.includes(FECHA_CAT) || fechaEs(t)))) add("WARN", `primer precio sin la frase LARGA (falta «may not include» o la fecha ${FECHA_CAT})`);
     if (/\bfrom\b/i.test(t) && conMoneda.length < 2 && afirma(/\bfrom\s+(?:IDR|EUR|USD|Rp)/i, t).length) add("FAIL", "«from» sin rango real");
   }
   if (/%/.test(t) && !ctx.permitePorcentaje) add("WARN", "aparece un porcentaje (¿rentabilidad, impuesto, descuento?)");
   for (const [re, msg] of [
-    [/\b(final price|best price|guaranteed price|lowest price)\b/i, "promete precio final/mejor/garantizado"],
+    [/(?<!(?:can'?t|cannot|not|never|no) say (?:the |that the )?(?:price is )?)(?<!a )\b(final price|best price|guaranteed price|lowest price)\b/i, "promete precio final/mejor/garantizado"],
     [/\bguarantee[sd]?\b/i, "«guarantee»"],
     [/\b(you can|you could|you may) reserve\b|can be reserved|it'?s (yours|reserved|booked)|(i'?ve|i have|i will|i'll) (reserved|reserve|booked|hold|held|block)/i, "reserva/bloquea una unidad"],
     [/\bsold out\b|\blast one\b|\bonly \w+ (left|remaining)\b|selling fast|almost sold/i, "escasez/vendido"],
