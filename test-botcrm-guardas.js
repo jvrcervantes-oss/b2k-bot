@@ -75,9 +75,15 @@ test("notas: teléfonos y emails se quitan; importes, fechas y m2 se respetan", 
   assert.deepStrictEqual(e.notas, ["Budi ((tel omitido)) pregunta por BV-12", "visita sabado, hotel en Seminyak"]);
 });
 
+test("notas: rangos, fechas y listas de números no son teléfonos", () => {
+  for (const x of ["Budget IDR 15.000.000 - 20.000.000", "Dates 12 10 2026 to 15 10 2026", "Pax 2 4 6 8 10 12 14", "cita 2026-10-12 10:00", "total 750,000,000"]) assert.strictEqual(quitaDatosPersonales(x), x, x);
+  assert.strictEqual(quitaDatosPersonales("Budi 812 7770000"), "Budi (tel omitido)");
+  assert.strictEqual(quitaDatosPersonales("llama al 0361 123456"), "llama al (tel omitido)");
+});
+
 test("notas: las que hablan de un menor se descartan; las de adultos y de metros no", () => {
-  for (const n of ["Client says they are 16, wants to buy a plot with savings", "Lead is 17 years old", "Es menor de edad", "tengo 15 años", "usuario di bawah umur", "Minor: do not book"]) assert.ok(esNotaDeMenor(n), n);
-  for (const n of ["Wants a plot of 15 m2 or bigger", "Looking at 12 plots", "Tom, 45, staying in Seminyak until the 20th", "Interested in villa for 4 people", "budget 15,000 EUR", "We are a team of 12"]) assert.ok(!esNotaDeMenor(n), n);
+  for (const n of ["Client says they are 16, wants to buy a plot with savings", "Lead is 17 years old", "Es menor de edad", "tengo 15 años", "usuario di bawah umur", "Minor: do not book", "I'm 15", "Client says they are 16, wants to buy"]) assert.ok(esNotaDeMenor(n), n);
+  for (const n of ["Wants a plot of 15 m2 or bigger", "Looking at 12 plots", "Tom, 45, staying in Seminyak until the 20th", "Interested in villa for 4 people", "budget 15,000 EUR", "We are a team of 12", "Visit is 16:00 Tuesday", "call is 15 min", "meeting is 11am", "They are 12 people, 2 bikes", "tour is 14 days", "tengo 15 dias libres", "soy 12 personas", "wife is 16 weeks pregnant"]) assert.ok(!esNotaDeMenor(n), n);
   assert.deepStrictEqual(extraeEtiquetas("ok [NOTA:Client says they are 16, wants to buy] [NOTA:prefers calls]").notas, ["prefers calls"]);
   assert.deepStrictEqual(saneaNotas(["x +62 899 111 2222", "se llama Ana, tiene 14 años"]), ["x (tel omitido)"]);
 });

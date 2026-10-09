@@ -51,15 +51,17 @@ const limpiaNota = (s) => String(s || "").replace(/[\u0000-\u001f\u007f]+/g, " "
 // las notas que hablan de un menor (Legal: «nada de un menor»; el contexto manda al equipo, no a la ficha).
 const TEL_EN_TEXTO = /\+?\d[\d\s().-]{6,}\d/g;
 const EMAIL_EN_TEXTO = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
-/** Números largos que NO son un teléfono: fechas ISO e importes con separadores de miles. */
-const noEsTelefono = (m) => /^\d{4}-\d{2}-\d{2}/.test(m) || /^\d{1,3}(?:[.,]\d{3})+$/.test(m.trim()) || m.replace(/\D/g, "").length < 8;
+/** ¿Es un teléfono? Empieza por + / 0 / ( o son grupos de dígitos (3-4 + 3-8); no cuentan fechas ISO, importes con miles, rangos («15.000.000 - 20.000.000») ni listas de números sueltos. */
+const esTelefono = (m) => m.replace(/\D/g, "").length >= 8 && !/^\d{4}-\d{2}-\d{2}/.test(m) && !/^\d{1,3}(?:[.,]\d{3})+$/.test(m.trim())
+  && (/^[+0(]/.test(m) || /^\d{3,4}(?:[\s.-]\d{3,8}){1,3}$/.test(m.trim()));
 export function quitaDatosPersonales(s) {
   return String(s || "")
     .replace(EMAIL_EN_TEXTO, "(email omitido)")
-    .replace(TEL_EN_TEXTO, (m) => (noEsTelefono(m) ? m : "(tel omitido)"));
+    .replace(TEL_EN_TEXTO, (m) => (esTelefono(m) ? "(tel omitido)" : m));
 }
-const EDAD_MENOR = "1[0-7](?!\\s*(?:m2|m²|sqm|%|plots?|parcelas?|villas?|,\\d|\\.\\d|\\d))";
-const MENOR_RE = new RegExp("\\b(?:minors?|under[- ]?age|under\\s*18|menor(?:es)?\\s+de\\s+edad|di\\s+bawah\\s+umur)\\b|\\b" + EDAD_MENOR + "\\s*[- ]?(?:years?[- ]old|yo|y/o|a[ñn]os|tahun)|\\b(?:is|am|are|i'm|im|aged?|tiene|tengo|soy|usia)\\s+" + EDAD_MENOR, "i");
+const EDAD_MENOR = /1[0-7](?![:.,]?\d)(?!\s*(?:m2|m²|sqm|%|plots?|parcelas?|villas?|people|pax|persons?|personas?|bikes?|days?|d[ií]as|weeks?|semanas?|min\w*|hours?|horas?|am|pm|h\b))/.source;
+const SUJETO_EDAD = /(?:i'm|im|i am|am|aged?|tiene|tengo|soy|usia|(?:they|he|she|lead|client|customer|user|el|ella)\s+(?:is|are|es|son))/.source;
+const MENOR_RE = new RegExp(/\b(?:minors?|under[- ]?age|under\s*18|menor(?:es)?\s+de\s+edad|di\s+bawah\s+umur)\b/.source + "|" + /\b/.source + EDAD_MENOR + /\s*[- ]?(?:years?[- ]old|yo|y\/o|a[ñn]os|tahun)/.source + "|" + /\b/.source + SUJETO_EDAD + /\s+/.source + EDAD_MENOR, "i");
 /** ¿La nota habla de una persona menor de 18? */
 export const esNotaDeMenor = (n) => MENOR_RE.test(String(n || ""));
 const limpiaNotaCrm = (s) => limpiaNota(quitaDatosPersonales(s));
