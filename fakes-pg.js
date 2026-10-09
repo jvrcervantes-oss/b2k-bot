@@ -46,7 +46,7 @@ export const ESQUEMA = {
     seguimiento_registrar: { claves: ["accion", "tel", "plantilla", "wamid", "resultado", "texto"], tel: true },
     cita_recordatorio_res: { claves: ["accion", "accion_id", "resultado"], tel: false },
   },
-  // Ruta `importar` (S5/LAW-507, Redis→Postgres): la usa el importador, no el runtime de BOT_STORE=postgres. Se copia aquí solo para que
+  // Ruta `importar` (S5/LAW-507, Redis→Postgres): la usa el importador, no el runtime de BOT_STORE=supabase. Se copia aquí solo para que
   // la comparación con LISTA_CERRADA de la edge real siga siendo exacta tras integrar S5 (rebase S4b, 9-oct-2026).
   importar: {
     chat: { claves: ["accion", "tel", "chat", "mensajes", "escalaciones"], tel: true },
@@ -306,7 +306,7 @@ export const payloadEstado = (recipient, status, id, errores) => ({
 });
 
 // ═══ el bot de verdad, como proceso hijo ═══
-export async function lanzaBot({ env = {}, graph, anthropic, edge, secretos, appSecret = "app-secret-de-prueba", modo = "postgres" }) {
+export async function lanzaBot({ env = {}, graph, anthropic, edge, secretos, appSecret = "app-secret-de-prueba", modo = "supabase" }) {
   const puerto = await new Promise((ok) => { const s = http.createServer(); s.listen(0, "127.0.0.1", () => { const p = s.address().port; s.close(() => ok(p)); }); });
   const e = {
     PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: process.env.TEMP, TMP: process.env.TMP,
@@ -314,7 +314,7 @@ export async function lanzaBot({ env = {}, graph, anthropic, edge, secretos, app
     WHATSAPP_API_BASE: graph.base, ANTHROPIC_API_KEY: "sk-test", ANTHROPIC_BASE_URL: anthropic.base,
     OWNER_PHONE: "6281100000000", CONTEXT_FILE: "context-lawang.md", PLAYBOOK_FILE: "playbook-lawang.json",
     HUMANIZE_CHUNKS: "off", ADMIN_PASSWORD: "admin-test", BOT_MODEL: "claude-test",
-    BOT_STORE: modo, ...(modo === "postgres" ? {
+    BOT_STORE: modo, ...(modo === "supabase" || modo === "postgres" ? {
       BOT_API_URL: edge.url, BOT_API_SECRET_ESTADO: secretos.estado, BOT_API_SECRET_RECORDATORIO: secretos.recordatorio,
       BOT_TURNO_REINTENTOS_MS: "30,30", BOT_CIERRE_REINTENTOS_MS: "30,30,30", BOT_API_PAUSA_REINTENTO_MS: "20",
     } : {}),

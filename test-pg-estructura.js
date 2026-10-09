@@ -30,7 +30,7 @@ test("todo POST a /messages de Meta vive en una función que exige autorización
     const ini = lineas.findIndex((l) => l.startsWith(`async function ${f}(`));
     let fin = ini; while (!/^}/.test(lineas[fin])) fin++;
     const cuerpo = lineas.slice(ini, fin + 1).join("\n");
-    assert.match(cuerpo, /if \(STORE_PG\)/, `${f}: sin el guardián de BOT_STORE=postgres`);
+    assert.match(cuerpo, /if \(STORE_PG\)/, `${f}: sin el guardián de BOT_STORE=supabase`);
     assert.match(cuerpo, /autorizaciones\.motivo\(/, `${f}: no consulta la autorización`);
     assert.ok(cuerpo.indexOf("autorizaciones.motivo(") < cuerpo.indexOf("axios.post("), `${f}: la autorización debe comprobarse ANTES del envío`);
   }
@@ -59,7 +59,7 @@ test("turno-pg.js y store/postgres.js no tocan Redis ni importan el motor", () =
   }
 });
 
-test("con BOT_STORE=postgres no corre ningún reloj de Redis: cada setInterval/enrichSweep va condicionado a STORE_PG", () => {
+test("con BOT_STORE=supabase no corre ningún reloj de Redis: cada setInterval/enrichSweep va condicionado a STORE_PG", () => {
   const relojes = lineas.filter((l) => /setInterval\(|setTimeout\(\(\) => enrichSweep/.test(l) && !/^\s*\/\//.test(l));
   assert.ok(relojes.length >= 6);
   for (const l of relojes) assert.match(l, /STORE_PG/, "reloj sin condicionar: " + l.trim());
@@ -77,7 +77,8 @@ test("el handler de Redis es EXACTAMENTE el de S4b (2a008f2 = S4a 4b30403) más 
   catch { return; }          // sin el historial (copia suelta del repo) no se puede comparar: las pruebas e2e en modo redis siguen cubriendo
   const cuerpoViejo = antes.slice(antes.indexOf('app.post("/webhook", async (req, res) => {') + 'app.post("/webhook", async (req, res) => {'.length, antes.indexOf("\n});\n\n// ─── PANEL WEB"));
   const ini = IDX.indexOf("const webhookRedis = async (req, res) => {") + "const webhookRedis = async (req, res) => {".length;
-  const FIN = "\n};\n// ─── BOT_STORE=postgres";
+  const FIN = "\n};\n// ─── BOT_STORE=supabase";
+  const FIN_VIEJO = "\n};\n// ─── BOT_STORE=postgres"; // 2a008f2 y anteriores llevan el nombre antiguo del interruptor
   let cuerpoNuevo = IDX.slice(ini, IDX.indexOf(FIN));
   assert.ok(cuerpoViejo.length > 10000, "no se extrajo el handler antiguo");
   // Referencia vigente: 2a008f2 (origin/lawang, handler de redis ya con S4b). Debe seguir siendo idéntico al de S4a.
@@ -85,7 +86,7 @@ test("el handler de Redis es EXACTAMENTE el de S4b (2a008f2 = S4a 4b30403) más 
   try { s4b = quitaCR(execFileSync("git", ["show", "2a008f2:index.js"], { cwd: new URL(".", import.meta.url), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 20_000_000 })); }
   catch { return; }
   const iniB = s4b.indexOf("const webhookRedis = async (req, res) => {") + "const webhookRedis = async (req, res) => {".length;
-  const cuerpoS4b = s4b.slice(iniB, s4b.indexOf(FIN));
+  const cuerpoS4b = s4b.slice(iniB, s4b.indexOf(FIN_VIEJO));
   assert.strictEqual(cuerpoS4b, cuerpoViejo, "2a008f2 ya no coincide con el handler de S4a");
   // DIFERENCIAS DECLARADAS respecto a 2a008f2 (batería S8, 9-oct-2026). Cualquier otra línea tocada o movida rompe este test.
   //  1) aviso de asistente (IA) de Legal: lo pone el SERVIDOR (aplicaAviso) justo tras generar la respuesta; solo actúa con PLAYBOOK.avisoIA (Lawang).

@@ -178,16 +178,17 @@ const CONTEXT = fs.existsSync(contextFileName)
   ? fs.readFileSync(contextFileName, "utf8")
   : BOT_CONTEXT;
 
-// ─── ALMACÉN: BOT_STORE=redis (por defecto) | postgres (S4b del encargo 20261009_lawang_bot_sin_redis) ──────────
-// redis: el bot de siempre, sin ningún cambio de comportamiento. postgres: el estado vive en Postgres de Lawang a través de la edge `bot-api`;
+// ─── ALMACÉN: BOT_STORE=redis (por defecto) | supabase (alias documentado: postgres) (S4b del encargo 20261009_lawang_bot_sin_redis) ──────────
+// redis: el bot de siempre, sin ningún cambio de comportamiento. supabase (antes `postgres`, que sigue valiendo como alias): el estado vive en Postgres de Lawang a través de la edge `bot-api`;
 // el módulo de Redis queda BLOQUEADO (cualquier acceso lanza) y el webhook es el de turno-pg.js. Un valor desconocido NO abre nada nuevo: cae a redis, gritando.
 const BOT_STORE_RAW = String(process.env.BOT_STORE || "redis").trim().toLowerCase();
-if (!["redis", "postgres"].includes(BOT_STORE_RAW)) console.error(`[${PROJECT_NAME}] BOT_STORE="${BOT_STORE_RAW}" no es válido (redis | postgres): se usa redis`);
-const STORE_PG = BOT_STORE_RAW === "postgres";
+if (!["redis", "supabase", "postgres"].includes(BOT_STORE_RAW)) console.error(`[${PROJECT_NAME}] BOT_STORE="${BOT_STORE_RAW}" no es válido (redis | supabase; postgres es alias de supabase): se usa redis`);
+if (BOT_STORE_RAW === "postgres") console.warn(`[${PROJECT_NAME}] BOT_STORE=postgres es el nombre antiguo: vale como alias de supabase, pero el nombre correcto es BOT_STORE=supabase`);
+const STORE_PG = BOT_STORE_RAW === "supabase" || BOT_STORE_RAW === "postgres";
 // Sin META_APP_SECRET la firma X-Hub-Signature-256 no se puede comprobar (en modo redis es fail-open por compatibilidad). Con Postgres el bot se NIEGA A ARRANCAR:
 // un webhook sin firma deja a cualquiera escribir mensajes «de clientes» en la base y disparar respuestas de pago.
 if (STORE_PG && !String(process.env.META_APP_SECRET || "").trim()) {
-  console.error("FATAL: BOT_STORE=postgres exige META_APP_SECRET (firma del webhook). Arranque denegado.");
+  console.error("FATAL: BOT_STORE=supabase exige META_APP_SECRET (firma del webhook). Arranque denegado.");
   process.exit(1);
 }
 const turnoMod = STORE_PG ? await import("./turno-pg.js") : null;     // en modo redis estos módulos ni se cargan
@@ -984,7 +985,7 @@ async function reminderTick() {
     console.error(`[${PROJECT_NAME}] reminderTick error: ${e.message}`);
   }
 }
-if (!STORE_PG) setInterval(reminderTick, 5 * 60000); // revisar cada 5 minutos (BOT_STORE=postgres: su reloj es turno-pg.js → recordatorioTick)
+if (!STORE_PG) setInterval(reminderTick, 5 * 60000); // revisar cada 5 minutos (BOT_STORE=supabase: su reloj es turno-pg.js → recordatorioTick)
 
 // ─── RE-ENGANCHE DE VENTAS TRAS LA VENTANA DE 24h ──────────────────
 // Pasadas las 24h, WhatsApp solo permite PLANTILLAS aprobadas (no texto libre).
@@ -1030,7 +1031,7 @@ async function followupTick() {
     console.error(`[${PROJECT_NAME}] followupTick error: ${e.message}`);
   }
 }
-if (!STORE_PG) setInterval(followupTick, 30 * 60000); // revisar cada 30 minutos (BOT_STORE=postgres: su reenganche es turno-pg.js → seguimientoTick, con consentimiento)
+if (!STORE_PG) setInterval(followupTick, 30 * 60000); // revisar cada 30 minutos (BOT_STORE=supabase: su reenganche es turno-pg.js → seguimientoTick, con consentimiento)
 
 // ─── RECORDATORIOS DE SEGUIMIENTO MANUAL ───────────────────────────
 // Cuando un lead llega a su fecha "Próximo seguimiento" (nextFollowUp), avisa al OWNER
@@ -1059,7 +1060,7 @@ async function followUpReminderTick() {
     console.error(`[${PROJECT_NAME}] followUpReminderTick error: ${e.message}`);
   }
 }
-if (!STORE_PG) setInterval(followUpReminderTick, 30 * 60000); // revisar cada 30 minutos (BOT_STORE=postgres: apagado)
+if (!STORE_PG) setInterval(followUpReminderTick, 30 * 60000); // revisar cada 30 minutos (BOT_STORE=supabase: apagado)
 
 // ─── INSTRUCCIONES BASE ───────────────────────────────────────────
 const BASE_INSTRUCTIONS_HEAD = `
@@ -1389,7 +1390,7 @@ async function createStripeSession(numUnits) {
 }
 
 // ─── WHATSAPP ─────────────────────────────────────────────────────
-// Solo BOT_STORE=postgres: un envío sin autorización de turno se RECHAZA y se grita (es un fallo de programación, no del cliente).
+// Solo BOT_STORE=supabase: un envío sin autorización de turno se RECHAZA y se grita (es un fallo de programación, no del cliente).
 function rechazoDeEnvio(toClean, motivo) {
   const n = autorizaciones.cuentaRechazo();
   console.error(`[${PROJECT_NAME}] 🚫 ENVÍO RECHAZADO a …${String(toClean).slice(-4)}: ${motivo} (rechazos desde el arranque: ${n})`);
@@ -1401,7 +1402,7 @@ async function sendWhatsAppResult(to, message) {
      ticks, panel y comercial. Ponerla en los endpoints dejaria fuera a followupTick y
      reminderTick, que es justo quien mas insiste. */
   if (STORE_PG) {
-    // BOT_STORE=postgres: no se envía a un cliente sin haber consultado ANTES su estado (baja incluida). Ver turno-pg.js → creaAutorizaciones.
+    // BOT_STORE=supabase: no se envía a un cliente sin haber consultado ANTES su estado (baja incluida). Ver turno-pg.js → creaAutorizaciones.
     const motivo = autorizaciones.motivo(toClean, message);
     if (motivo) return rechazoDeEnvio(toClean, motivo);
   } else if (await getOptOut(toClean)) {
@@ -1451,7 +1452,7 @@ async function sendWhatsApp(to, message) {
   }
   const r = await sendWhatsAppResult(to, message);
   if (!r.ok) console.error(`[${PROJECT_NAME}] Error enviando WhatsApp a ${normalizePhone(to)}:`, r.error);
-  return !!r.ok;   // el valor solo lo lee BOT_STORE=postgres (¿salió algo?); el modo redis lo ignora, como siempre
+  return !!r.ok;   // el valor solo lo lee BOT_STORE=supabase (¿salió algo?); el modo redis lo ignora, como siempre
 }
 
 // ─── ENVÍO HUMANIZADO: 1-3 burbujas con pausa de tecleo, no un párrafo de golpe ─────
@@ -1804,7 +1805,7 @@ function isOwner(from) {
   return ownerClean.slice(-9) === fromClean.slice(-9);
 }
 
-// Comparación EXACTA de dígitos (BOT_STORE=postgres): lo que decide quién puede tomar una escalación y reenviar su respuesta a un cliente no puede
+// Comparación EXACTA de dígitos (BOT_STORE=supabase): lo que decide quién puede tomar una escalación y reenviar su respuesta a un cliente no puede
 // ser «los últimos 9 dígitos» (dos móviles de países distintos los comparten y el fallo sería fail-open). OWNER_PHONE debe llevar prefijo de país.
 function esOwnerExacto(from) {
   const o = normalizePhone(OWNER_PHONE);
@@ -1858,7 +1859,7 @@ function validSignature(req) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-// BOT_STORE=postgres: sin META_APP_SECRET no se acepta NADA (el modo redis conserva su compatibilidad de siempre). Se comprueba ANTES de cualquier llamada a la base.
+// BOT_STORE=supabase: sin META_APP_SECRET no se acepta NADA (el modo redis conserva su compatibilidad de siempre). Se comprueba ANTES de cualquier llamada a la base.
 function validSignatureEstricta(req) {
   if (!META_APP_SECRET) return false;
   return validSignature(req);
@@ -2341,7 +2342,7 @@ const webhookRedis = async (req, res) => {
     if (releaseTurn) releaseTurn();   // sin esto, un fallo deja al lead sin poder volver a escribir
   }
 };
-// ─── BOT_STORE=postgres: webhook, rutas del panel y recordatorio de turno-pg.js ─────────────────────────────
+// ─── BOT_STORE=supabase: webhook, rutas del panel y recordatorio de turno-pg.js ─────────────────────────────
 // El handler de arriba (webhookRedis) no se ha tocado: con BOT_STORE=redis el comportamiento es el de siempre. S9 lo borra.
 let webhookPg = null, turnoPg = null, estadoLeadPg = null;
 if (STORE_PG) {
@@ -2553,7 +2554,7 @@ app.get("/admin/api/health", async (req, res) => {
 app.get("/admin/api/redis-inventario", async (req, res) => {
   if (!ADMIN_PASSWORD) return res.status(503).json({ error: "panel no configurado" });
   if (req.get("x-admin-key") !== ADMIN_PASSWORD) return res.status(403).json({ error: "forbidden" });
-  if (STORE_PG) return res.status(409).json({ error: "BOT_STORE=postgres: Redis bloqueado" }); // S4b: el store lanza si se le pide el lector
+  if (STORE_PG) return res.status(409).json({ error: "BOT_STORE=supabase: Redis bloqueado" }); // S4b: el store lanza si se le pide el lector
   const lector = lectorImportacion();
   if (!lector) return res.status(409).json({ error: "sin Redis conectado" });
   try { res.json(await inventarioRedis(lector)); }
@@ -3304,7 +3305,7 @@ async function newsletterTick() {
     nlSending = false;
   }
 }
-if (!STORE_PG) setInterval(newsletterTick, 60000); // revisar cada minuto (BOT_STORE=postgres: sin newsletter)
+if (!STORE_PG) setInterval(newsletterTick, 60000); // revisar cada minuto (BOT_STORE=supabase: sin newsletter)
 
 // ── Citas / calendario ──
 app.get("/admin/api/appts", async (req, res) => {
@@ -3352,12 +3353,12 @@ app.listen(PORT, async () => {
   } else {
     console.log(`[${PROJECT_NAME}] 🌐 Modo abierto — el bot responde a cualquier número (BOT_ALLOWLIST y BOT_MODE sin definir).`);
   }
-  console.log(`[${PROJECT_NAME}] CRM (BD): ${STORE_PG ? "Postgres de Lawang vía la edge bot-api (BOT_STORE=postgres; Redis BLOQUEADO)" : redisActivo() ? "Redis (persistente)" : "RAM (volátil — configura REDIS_URL)"}`);
+  console.log(`[${PROJECT_NAME}] CRM (BD): ${STORE_PG ? "Postgres de Lawang vía la edge bot-api (BOT_STORE=supabase; Redis BLOQUEADO)" : redisActivo() ? "Redis (persistente)" : "RAM (volátil — configura REDIS_URL)"}`);
   if (STORE_PG) {
     const faltan = [["BOT_API_URL", BOT_API_URL], ["BOT_API_SECRET_ESTADO", process.env.BOT_API_SECRET_ESTADO], ["META_APP_SECRET", META_APP_SECRET], ["OWNER_PHONE", OWNER_PHONE]].filter(([, v]) => !String(v || "").trim()).map(([k]) => k);
-    if (faltan.length) console.error(`[${PROJECT_NAME}] 🚨 BOT_STORE=postgres con variables VACÍAS: ${faltan.join(", ")}. ${faltan.includes("META_APP_SECRET") ? "SIN META_APP_SECRET todo POST del webhook se rechaza con 403. " : ""}El bot no podrá contestar hasta ponerlas.`);
+    if (faltan.length) console.error(`[${PROJECT_NAME}] 🚨 BOT_STORE=supabase con variables VACÍAS: ${faltan.join(", ")}. ${faltan.includes("META_APP_SECRET") ? "SIN META_APP_SECRET todo POST del webhook se rechaza con 403. " : ""}El bot no podrá contestar hasta ponerlas.`);
     if (String(process.env.BOT_RECORDATORIO || "").trim().toLowerCase() === "postgres" && !String(process.env.BOT_API_SECRET_RECORDATORIO || "").trim()) console.error(`[${PROJECT_NAME}] 🚨 BOT_RECORDATORIO=postgres pero falta BOT_API_SECRET_RECORDATORIO`);
-    if (OWNER_PHONE && normalizePhone(OWNER_PHONE).length < 10) console.error(`[${PROJECT_NAME}] ⚠️ OWNER_PHONE parece sin prefijo de país: con BOT_STORE=postgres el dueño se reconoce por dígitos EXACTOS`);
+    if (OWNER_PHONE && normalizePhone(OWNER_PHONE).length < 10) console.error(`[${PROJECT_NAME}] ⚠️ OWNER_PHONE parece sin prefijo de país: con BOT_STORE=supabase el dueño se reconoce por dígitos EXACTOS`);
   }
   if (process.env.ALERT_TEMPLATE_NAME) console.error(`[${PROJECT_NAME}] ⚠️ ALERT_TEMPLATE_NAME está puesta y este motor YA NO la lee (S13): la alerta al equipo usa ${ENV_PLANTILLA.alerta}=lawang_alerta_equipo. ${ALERTA_EQUIPO_TEMPLATE_NAME ? "Borra la vieja." : "SIN ella el aviso al equipo sale como texto libre (solo llega con su ventana de 24 h abierta): configúrala y borra la vieja."}`);
   console.log(`[${PROJECT_NAME}] Avisos de cita/traspaso al cliente (BOT_AVISOS_CLIENTE): ${AVISOS_CLIENTE_ON ? "ON" : "off"} · alerta al equipo: ${ALERTA_EQUIPO_TEMPLATE_NAME ? "plantilla " + ALERTA_EQUIPO_TEMPLATE_NAME : "texto libre"}`);

@@ -20,13 +20,13 @@ const fallbackMemory = {};
 const fallbackEscQueue = [];
 let redisClient = null;
 
-// BOT_STORE=postgres (S4b): tras llamar a bloqueaRedis() cualquier función de este módulo que toque Redis o la memoria de
+// BOT_STORE=supabase (S4b): tras llamar a bloqueaRedis() cualquier función de este módulo que toque Redis o la memoria de
 // respaldo LANZA. Es lo que garantiza que, con Postgres como almacén, un STOP o una pausa no acaben guardados aquí por un sitio
 // olvidado. Quedan fuera del bloqueo solo lo que no puede tocar Redis (apptTs, redisActivo, almacenNombre) y lo que en ese modo
 // es memoria del proceso por diseño (cuenta de WhatsApp bloqueada y topes del CRM: el cliente de Redis nunca se crea).
 let bloqueado = false;
 export function bloqueaRedis() { bloqueado = true; }
-function guardia(nombre) { if (bloqueado) throw new Error("Redis bloqueado (BOT_STORE=postgres): " + nombre); }
+function guardia(nombre) { if (bloqueado) throw new Error("Redis bloqueado (BOT_STORE=supabase): " + nombre); }
 
 // Conexión: se llama UNA vez desde el arranque de index.js, en el mismo punto donde antes vivía este bloque.
 export async function initRedis({ url, projectName, crear = createClient }) { guardia("initRedis");  // `crear`: solo lo cambian los tests (cliente falso)

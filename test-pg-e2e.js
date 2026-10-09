@@ -1,4 +1,4 @@
-// S4b: el bot de punta a punta con BOT_STORE=postgres. Arranca `node index.js` DE VERDAD con una edge falsa (base en memoria), el API de
+// S4b: el bot de punta a punta con BOT_STORE=supabase. Arranca `node index.js` DE VERDAD con una edge falsa (base en memoria), el API de
 // Meta falso y el de Anthropic falso (SSE). Sin secretos reales ni red. Cada bloque levanta su propio bot y lo detiene por el PID que lanzó.
 import test from "node:test";
 import assert from "node:assert";
@@ -23,7 +23,7 @@ async function entorno(opts = {}) {
 }
 
 // ═════════ BLOQUE 1: Postgres, bot abierto ═════════
-test("BOT_STORE=postgres: el camino normal de un mensaje de texto son 3 llamadas a la edge y UNA respuesta", async (t) => {
+test("BOT_STORE=supabase: el camino normal de un mensaje de texto son 3 llamadas a la edge y UNA respuesta", async (t) => {
   const E = await entorno();
   t.after(() => E.cierra());
   const T = tel(1), w = wamid();
@@ -425,7 +425,7 @@ test("BOT_STORE=redis (por defecto): el bot de siempre — responde, y la edge N
 test("BOT_STORE desconocido cae a redis y lo grita", async (t) => {
   const E = await entorno({ modo: "postgre" });
   t.after(() => E.cierra());
-  assert.match(E.bot.texto(), /BOT_STORE="postgre" no es válido/);
+  assert.match(E.bot.texto(), /BOT_STORE="postgre" no es válido \(redis \| supabase/);
   const T = tel(51);
   await E.bot.post(payloadTexto(T, "Hello there", wamid()));
   await hasta(() => E.graph.a(T).length === 1, "respuesta en modo redis");
@@ -558,4 +558,12 @@ test("el envío del panel y el turno del bot sobre el MISMO teléfono no se canc
   assert.match(texto, /Third paragraph/);
   assert.match(texto, /A person here/);
   assert.strictEqual(E.edge.de("turno_cerrar")[0].cuerpo.salida.length, 1, "la respuesta se guarda entera una vez");
+});
+
+test("BOT_STORE=postgres sigue valiendo como alias de supabase, avisando del nombre antiguo", async (t) => {
+  const E = await entorno({ modo: "postgres" });
+  t.after(() => E.cierra());
+  assert.match(E.bot.texto(), /BOT_STORE=postgres es el nombre antiguo/);
+  const h = await E.bot.get("/admin/api/health", { "x-admin-key": "admin-test" });
+  assert.strictEqual(h.json.storage, "postgres");
 });

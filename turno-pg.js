@@ -1,5 +1,5 @@
 // ─── TURNO DEL BOT CON POSTGRES (S4b del encargo 20261009_lawang_bot_sin_redis) ───────────────────
-// Todo lo que el bot hace en BOT_STORE=postgres vive aquí: el webhook en TRES PASOS, el guardián de envíos, el aviso de asistente, el
+// Todo lo que el bot hace en BOT_STORE=supabase vive aquí: el webhook en TRES PASOS, el guardián de envíos, el aviso de asistente, el
 // resumen de la conversación, el recordatorio de cita y las acciones humanas del panel. Con BOT_STORE=redis (por defecto) NADA de este
 // fichero se carga ni se ejecuta: el handler de siempre sigue siendo el de index.js, sin tocar. S9 borrará aquel handler.
 //
@@ -23,7 +23,7 @@ const VENTANA_MS = 24 * 3600 * 1000;
 export const digitos = (p) => String(p || "").replace(/\D/g, "");
 
 // ─── GUARDIÁN DE ENVÍOS ───────────────────────────────────────────────────────────────────────
-// En BOT_STORE=postgres un envío a un cliente solo sale si ANTES se consultó el estado de ESE teléfono (y no tenía baja). La autorización
+// En BOT_STORE=supabase un envío a un cliente solo sale si ANTES se consultó el estado de ESE teléfono (y no tenía baja). La autorización
 // se concede al leer el estado, se gasta con el turno y caduca sola. El dueño (comparación EXACTA de dígitos) queda fuera: no tiene baja.
 // Excepción única: el acuse de un STOP nuevo, que solo autoriza el texto exacto del acuse.
 export function creaAutorizaciones({ esOwner, ttlMs = 30 * 60_000, ahora = Date.now }) {
@@ -141,7 +141,7 @@ export function preparaHistorial(historial, textoGuardado, { vistoHasta = 0 } = 
 }
 
 // UNIFICACION CON origin/lawang (rebase S4b, 9-oct-2026): en BOT_STORE=redis el aviso NO lo decide el servidor: la frase vive en
-// context-lawang.md (DISCLOSURE) y la aplica el modelo; ese comportamiento queda intacto. En BOT_STORE=postgres el servidor decide
+// context-lawang.md (DISCLOSURE) y la aplica el modelo; ese comportamiento queda intacto. En BOT_STORE=supabase el servidor decide
 // CUANDO (completo/corto/ninguno) y la frase es la MISMA del contexto de Legal (bloqueAviso solo remite a ella). No hay un segundo
 // mecanismo de aviso en botcrm.js: lo de alli (avisoCita/avisoDerechos) son avisos al OWNER, no la divulgacion de IA.
 /**

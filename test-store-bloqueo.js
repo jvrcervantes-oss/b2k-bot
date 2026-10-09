@@ -1,4 +1,4 @@
-// S4b (encargo 20261009_lawang_bot_sin_redis): con BOT_STORE=postgres el módulo de Redis queda BLOQUEADO — cualquier función que
+// S4b (encargo 20261009_lawang_bot_sin_redis): con BOT_STORE=supabase el módulo de Redis queda BLOQUEADO — cualquier función que
 // toque Redis o la memoria de respaldo lanza. El test recorre TODAS las exportaciones del módulo, así que una función nueva que
 // alguien añada mañana sin su guardia lo hace fallar (no hay lista a mano que se quede corta).
 import test from "node:test";
