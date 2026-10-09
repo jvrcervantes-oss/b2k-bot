@@ -19,7 +19,7 @@ function setup({ view, leads = [], counts = {}, env = {}, sendImpl, botEnabled =
   const out = silent();
   const sends = [];
   const cnt = { ...counts };
-  let day = dayStart, listCalls = 0;
+  let day = dayStart, listCalls = 0; const lastAt = {};
   const r = createFollowupRunner({
     project: "T", log: out, now: () => NOW,
     isBotEnabled: async () => botEnabled,
@@ -35,8 +35,9 @@ function setup({ view, leads = [], counts = {}, env = {}, sendImpl, botEnabled =
     },
     skipStatus: new Set(["won", "lost", "noshow"]), skipIntent: new Set(["escalate", "urgent_service"]),
     dayCount: async () => day, dayBump: async () => { day++; },
+    getLastSent: async (p) => lastAt[p] || 0, setLastSent: async (p, ms) => { lastAt[p] = ms; },
   });
-  return { r, out, sends, cnt, listCalls: () => listCalls, day: () => day };
+  return { r, out, sends, cnt, lastAt, listCalls: () => listCalls, day: () => day };
 }
 const text = (out) => out.lines.map((l) => l[1]).join("\n");
 
@@ -200,6 +201,8 @@ function simulate({ cfgOn, days, coldStartH = 24, resp = false }) {
     setCount: async (p, n, ttl = 30 * 24 * 3600) => { store.set(p, { n, exp: t + ttl * 1000 }); },
     send: async () => { sentAt.push(t); return { ok: true }; },
     skipStatus: new Set(), skipIntent: new Set(), dayCount: async () => 0, dayBump: async () => {},
+    getLastSent: async (p) => { const e = store.get('at:' + p); return e && e.exp > t ? e.n : 0; },
+    setLastSent: async (p, ms, ttl) => { store.set('at:' + p, { n: ms, exp: t + ttl * 1000 }); },
   });
   return (async () => { for (let i = 0; i < days * 48; i++) { await r.tick(); t += 30 * 60000; } return sentAt.length; })();
 }
@@ -210,6 +213,7 @@ function simulate({ cfgOn, days, coldStartH = 24, resp = false }) {
   const c720 = { horas: 720, max: 5, plantilla: "p", idioma: "en", vars: ["nombre"], version: 1 };
   assert.equal(await simulate({ cfgOn: c720, days: 400 }), 5);
   ok("ERP horas=720,max=5 durante 400 días: EXACTAMENTE 5 (el TTL de 30 días ya no lo rearma)");
+  { const c = { horas: 48, max: 3, plantilla: 'p', idioma: 'en', vars: ['nombre'], version: 1 }; assert.equal(await simulate({ cfgOn: c, days: 30, coldStartH: 100 }), 2); ok('ERP horas=48,max=3, lead frío 100 h: 2 envíos (a 100 h y 148 h; el 3º cae a 196 h, fuera de la escalera de 192 h), espaciados 48 h'); }
   assert.ok(FOLLOWUP_ERP_COUNTER_TTL_S >= 720 * 6 * 3600);
   ok("el TTL del contador en modo ERP cubre la escalera máxima (720h*(5+1))");
 }
@@ -231,6 +235,30 @@ function simulate({ cfgOn, days, coldStartH = 24, resp = false }) {
   // el HMAC depende de la clave
   const a = setup({ view: ON(), leads: [] }).r.hashId("62812"); 
   assert.ok(/^c_[0-9a-f]{10}$/.test(a)); ok("hashId con forma c_<10 hex>");
+}
+{
+  // ráfaga: lead frío 100 h con horas=48,max=3 → un solo envío por pasada y ninguno al tick siguiente
+  const t = setup({ view: ON({ horas: 48, max: 3 }), leads: [lead("1", 100)] });
+  await t.r.tick();
+  assert.equal(t.sends.length, 1); assert.equal(t.cnt[1], 1);
+  await t.r.tick(); await t.r.tick();
+  assert.equal(t.sends.length, 1); assert.ok(text(t.out).includes("separacion_minima=1"));
+  ok("ERP: lead frío 100 h con horas=48: un solo envío por pasada y ninguno al tick siguiente");
+}
+{
+  // el fallo de envío no guarda la hora
+  const t = setup({ view: ON(), leads: [lead("1", 50)], sendImpl: () => ({ ok: false }) });
+  await t.r.tick(); assert.equal(t.lastAt[1], undefined);
+  const g = setup({ view: ON(), leads: [lead("1", 50)] });
+  await g.r.tick(); assert.equal(g.lastAt[1], NOW);
+  ok("ERP: el fallo de envío no guarda la hora del último envío; el éxito sí");
+}
+{
+  // modo env: sin separación mínima (idéntico): con lastAt puesto igualmente envía
+  const t = setup({ view: ENVV, env: { templateName: "x", lang: "es", schedule: "24,48", max: "3" }, leads: [lead("1", 100)], counts: { 1: 1 } });
+  t.lastAt["1"] = NOW - 1000;
+  await t.r.tick(); assert.equal(t.sends.length, 1); assert.equal(t.lastAt["1"], NOW - 1000);
+  ok("modo env: sin separación mínima ni escritura de la hora (idéntico)");
 }
 // buildPlan puro
 {

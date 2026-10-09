@@ -541,6 +541,7 @@ async function getInbound(phone) {
 // Cuenta cuántas plantillas de follow-up se han mandado en la racha "fría" actual.
 // Se reinicia en cuanto el cliente responde (vuelve a abrir la ventana de 24h).
 const fallbackFollowup = {};
+const fallbackFollowupAt = {}; // hora del último envío de seguimiento por lead (modo ERP)
 async function getFollowupCount(phone) {
   if (redisClient) { const v = await redisClient.get(`followup:${phone}`); return v ? parseInt(v) : 0; }
   return fallbackFollowup[phone] || 0;
@@ -550,8 +551,8 @@ async function setFollowupCount(phone, n, ttlSec = 30 * 24 * 3600) {
   else fallbackFollowup[phone] = n;
 }
 async function resetFollowup(phone) {
-  if (redisClient) await redisClient.del(`followup:${phone}`);
-  else delete fallbackFollowup[phone];
+  if (redisClient) await redisClient.del(`followup:${phone}`, `followupat:${phone}`);
+  else { delete fallbackFollowup[phone]; delete fallbackFollowupAt[phone]; }
 }
 
 async function getLead(phone) {
@@ -1341,6 +1342,15 @@ const followupRunner = createFollowupRunner({
   getCount: (p) => getFollowupCount(p),
   setCount: (p, n, ttl) => setFollowupCount(p, n, ttl),
   hashKey: process.env.ERP_SEGUIMIENTO_SECRET,
+  // Hora del último envío de seguimiento por lead (solo modo ERP): separación mínima entre dos mensajes.
+  getLastSent: async (p) => {
+    if (redisClient) { const v = await redisClient.get(`followupat:${p}`); return v ? parseInt(v) : 0; }
+    return fallbackFollowupAt[p] || 0;
+  },
+  setLastSent: async (p, ms, ttl) => {
+    if (redisClient) await redisClient.setEx(`followupat:${p}`, ttl, String(ms));
+    else fallbackFollowupAt[p] = ms;
+  },
   send: (phone, tpl, lang, params, logId) => sendWhatsAppTemplate(phone, tpl, lang, params, logId),
   skipStatus: FOLLOWUP_SKIP_STATUS,
   skipIntent: FOLLOWUP_SKIP_INTENT,
@@ -3998,7 +4008,7 @@ app.post("/admin/api/archive", async (req, res) => {
 // ── CRM: borrar definitivamente un lead (irreversible) ──
 async function deleteLead(phone) {
   if (redisClient) {
-    await redisClient.del(`lead:${phone}`, `notes:${phone}`, `status:${phone}`, `conv:${phone}`, `paused:${phone}`, `waiting:${phone}`, `inbound:${phone}`, `followup:${phone}`, `notified:${phone}`, `lastlink:${phone}`, `pendingpay:${phone}`, `urgentalert:${phone}`);
+    await redisClient.del(`lead:${phone}`, `notes:${phone}`, `status:${phone}`, `conv:${phone}`, `paused:${phone}`, `waiting:${phone}`, `inbound:${phone}`, `followup:${phone}`, `followupat:${phone}`, `notified:${phone}`, `lastlink:${phone}`, `pendingpay:${phone}`, `urgentalert:${phone}`);
     await redisClient.zRem("leads_index", phone);
   } else {
     delete fallbackLeads[phone]; delete fallbackNotes[phone]; delete fallbackStatus[phone];

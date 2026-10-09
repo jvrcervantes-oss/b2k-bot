@@ -28,6 +28,7 @@ export const FOLLOWUP_FAIL_REST_MS = 6 * 3600 * 1000; // descanso de un lead tra
 // máximo posible (HORAS_MAX*(MAX_MAX+1) = 4320 h = 180 días) con margen. El modo env conserva sus 30 días.
 export const FOLLOWUP_ERP_COUNTER_TTL_S = 190 * 24 * 3600;
 
+const H_MS = 3600 * 1000;
 const RE_PLANTILLA = /^[a-z0-9_]+$/;
 const RE_IDIOMA = /^[a-z]{2,3}(_[A-Z]{2})?$/;
 
@@ -122,9 +123,10 @@ export function createFollowupRunner(d) {
       if (!l.lastInboundAt) { skip("sin_inbound"); continue; }
       const coldH = (t - l.lastInboundAt) / 3600000;
       if (coldH < 24) { skip("ventana_abierta"); continue; }                    // ventana abierta → el bot ya responde solo
-      // Solo ERP: pasado el final de la escalera (horas*(max+1)) el lead ya no se toca. Cierra dos huecos: (1) un contador que se perdió
-      // (Redis vaciado, reinicio sin Redis) no rearma una tanda entera sobre un lead frío de meses; (2) acota el primer tick tras
-      // encender el ERP: los leads antiguos con contador 0 no entran, solo los que están DENTRO de la escalera.
+      // Solo ERP: pasado el final de la escalera (horas*(max+1)) el lead ya no se toca. Esto ACOTA qué leads entran; NO evita la ráfaga
+      // (eso lo hace la separación mínima de más abajo). Cierra dos huecos: (1) un contador que se perdió (Redis vaciado, reinicio sin
+      // Redis) no rearma una tanda entera sobre un lead frío de meses; (2) acota el primer tick tras encender el ERP: los leads
+      // antiguos con contador 0 no entran, solo los que están DENTRO de la escalera.
       if (erp && coldH >= schedule[schedule.length - 1] + plan.horas) { skip("fuera_de_escalera"); continue; }
       const sent = await d.getCount(l.phone);
       if (sent >= maxN) { skip("tope_intentos"); continue; }                    // tope de intentos alcanzado
@@ -142,6 +144,10 @@ export function createFollowupRunner(d) {
       }
 
       // Origen ERP
+      // Separación mínima: un lead frío 100 h con horas=48 ya supera los peldaños 1 y 2; sin esto recibiría el 1º y, 30 min después, el 2º.
+      // Entre dos envíos al mismo lead pasan al menos `horas` horas (hora del último envío guardada aparte del contador).
+      const lastAt = d.getLastSent ? await d.getLastSent(l.phone) : 0;
+      if (lastAt && t - lastAt < plan.horas * H_MS) { skip("separacion_minima"); continue; }
       const rest = failedAt.get(l.phone);
       if (rest && t - rest < FOLLOWUP_FAIL_REST_MS) { skip("descanso_tras_fallo"); continue; }
       if ((await d.dayCount()) >= FOLLOWUP_ERP_DAILY_CAP) { skip("tope_diario"); capHit = true; break; }
@@ -157,6 +163,7 @@ export function createFollowupRunner(d) {
       }
       failedAt.delete(l.phone);
       await d.setCount(l.phone, sent + 1, FOLLOWUP_ERP_COUNTER_TTL_S);
+      if (d.setLastSent) await d.setLastSent(l.phone, t, FOLLOWUP_ERP_COUNTER_TTL_S); // solo tras un envío OK: un fallo no guarda la hora
       sentNow++;
       log.log(`[${d.project}] Follow-up ${sent + 1}/${maxN} enviado a ${id} (plantilla ${plan.template}, config v${plan.version}, frío ${coldH.toFixed(0)}h)`);
     }
