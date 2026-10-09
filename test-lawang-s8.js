@@ -57,7 +57,8 @@ test("STOP: frases claras de baja y borrado cortan; las normales y las preferenc
   const corta = ["STOP", "stop", "Stop please", "please stop", "Please stop.", "please stop messaging me", "stop texting me", "stop contacting me please", "no me escribas más",
     "no me escribas mas", "no me contactes", "deja de escribirme", "dejad de escribirme por favor", "no quiero más mensajes", "delete my data", "Please delete my personal data",
     "erase my information", "remove my number", "borra mis datos", "borrad mis datos por favor", "elimina mis datos", "Don't contact me again", "do not message me anymore",
-    "hentikan", "tolong hentikan pesan ini", "jangan hubungi saya lagi", "hapus data saya", "I want to unsubscribe", "opt out", "berhenti", "darme de baja"];
+    "hentikan", "tolong hentikan pesan ini", "jangan hubungi saya lagi", "hapus data saya", "I want to unsubscribe", "opt out", "berhenti", "darme de baja",
+    "Please don't contact me anymore, thanks", "no me escribas más, gracias", "delete my data, thank you", "STOP thanks"];   // cortesía final (batería S8, D02)
   for (const s of corta) assert.ok(PALABRAS_BAJA.test(s), `«${s}» debe cortar`);
   const no = ["can we stop by the villa tomorrow?", "Please stop by at 3pm", "don't call me before 10, write me here", "do not contact me before Monday", "no me llames, escríbeme por aquí",
     "no me escribas hasta el lunes", "what happens to my data?", "how do you handle my data", "is there a bus stop near the plot", "I can't delete my old chat, can you send the price again?",

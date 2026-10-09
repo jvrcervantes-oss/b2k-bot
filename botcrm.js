@@ -46,6 +46,26 @@ export function isoConZona(cuando, zona) {
 
 const limpiaNota = (s) => String(s || "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/[\[\]]/g, "").replace(/\s+/g, " ").trim().slice(0, MAX_NOTA_CHARS);
 
+// ─── HIGIENE DE NOTAS (batería S8, 9-oct-2026: P06 y T09 guardaban en la nota el teléfono de un tercero y la edad de un menor) ───
+// Lo que el modelo escribe en una [NOTA] no es de fiar: el servidor quita teléfonos y emails (el teléfono del lead ya va por el webhook) y descarta del todo
+// las notas que hablan de un menor (Legal: «nada de un menor»; el contexto manda al equipo, no a la ficha).
+const TEL_EN_TEXTO = /\+?\d[\d\s().-]{6,}\d/g;
+const EMAIL_EN_TEXTO = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
+/** Números largos que NO son un teléfono: fechas ISO e importes con separadores de miles. */
+const noEsTelefono = (m) => /^\d{4}-\d{2}-\d{2}/.test(m) || /^\d{1,3}(?:[.,]\d{3})+$/.test(m.trim()) || m.replace(/\D/g, "").length < 8;
+export function quitaDatosPersonales(s) {
+  return String(s || "")
+    .replace(EMAIL_EN_TEXTO, "(email omitido)")
+    .replace(TEL_EN_TEXTO, (m) => (noEsTelefono(m) ? m : "(tel omitido)"));
+}
+const EDAD_MENOR = "1[0-7](?!\\s*(?:m2|m²|sqm|%|plots?|parcelas?|villas?|,\\d|\\.\\d|\\d))";
+const MENOR_RE = new RegExp("\\b(?:minors?|under[- ]?age|under\\s*18|menor(?:es)?\\s+de\\s+edad|di\\s+bawah\\s+umur)\\b|\\b" + EDAD_MENOR + "\\s*[- ]?(?:years?[- ]old|yo|y/o|a[ñn]os|tahun)|\\b(?:is|am|are|i'm|im|aged?|tiene|tengo|soy|usia)\\s+" + EDAD_MENOR, "i");
+/** ¿La nota habla de una persona menor de 18? */
+export const esNotaDeMenor = (n) => MENOR_RE.test(String(n || ""));
+const limpiaNotaCrm = (s) => limpiaNota(quitaDatosPersonales(s));
+/** Notas ya listas para guardar: sin teléfonos ni emails y sin las que hablan de un menor. */
+export const saneaNotas = (notas) => (notas || []).map(limpiaNotaCrm).filter((n) => n && !esNotaDeMenor(n));
+
 /**
  * Etiquetas que el modelo escribió en SU respuesta: [NOTA:texto] y [CITA:llamada|2026-10-12T10:00|AEST].
  * No hay campo de teléfono: no existe forma de apuntar a otro lead. Devuelve los datos, con topes por respuesta.
@@ -54,8 +74,8 @@ export function extraeEtiquetas(respuesta) {
   const r = String(respuesta || "");
   const notas = [];
   for (const m of r.matchAll(/\[NOTA:([^\]]*)\]/gi)) {
-    const t = limpiaNota(m[1]);
-    if (t) notas.push(t);
+    const t = limpiaNotaCrm(m[1]);
+    if (t && !esNotaDeMenor(t)) notas.push(t);
   }
   const citas = [];
   for (const m of r.matchAll(/\[CITA:\s*(llamada|visita|call|visit)\s*\|\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(?:\s*\|\s*([^\]|]{1,12}))?\s*\]/gi)) {
@@ -105,6 +125,7 @@ const enmascara = (tel) => "…" + String(tel).slice(-4);
  */
 export async function ejecutaCrm({ modo, tel, msgId, nombre = "", notas = [], citas = [], llama, topes, log = () => {} }) {
   const hechos = [];
+  notas = saneaNotas(notas); // también las que arma el servidor (la del traspaso copia el último mensaje del cliente)
   try {
     if (!notas.length && !citas.length) return hechos;
     const me = enmascara(tel);
@@ -246,7 +267,13 @@ export function saneaHumano(texto) {
 }
 
 /** ¿Ha escrito el modelo la etiqueta de traspaso en SU respuesta? */
-export const pideTraspaso = (respuesta) => /\[\s*HUMANO\s*\]/i.test(String(respuesta || ""));
+export const pideTraspaso = (respuesta) => {
+  const r = String(respuesta || "");
+  return /\[\s*HUMANO\s*\]/i.test(r) || FRASES_TRASPASO.some((re) => re.test(r));
+};
+// Batería S8, H01: el modelo escribió «I'll pass you to a team member…» y se olvidó de la etiqueta: el cliente cree que viene una persona y el bot seguía hablando.
+// La frase exacta ES la promesa de traspaso, así que el servidor la trata como la etiqueta (idempotente: ejecutaTraspaso no repite si el chat ya está en pausa).
+export const FRASES_TRASPASO = [/I['’]ll pass you to a team member who can help you personally\./i, /Te paso con una persona del equipo que podrá ayudarte personalmente\./i];
 
 /**
  * Ejecuta el traspaso SOBRE `tel` (el del webhook). Idempotente: si el chat ya estaba en pausa (otro traspaso, la operadora, el panel,
@@ -279,3 +306,48 @@ export const notaDerechos = (textoCliente) =>
 /** Aviso al owner (el CRM puede estar en sombra o caido: la solicitud tiene plazo legal y no puede depender de que la nota se guarde). */
 export const avisoDerechos = ({ proyecto = "Bot", nombre = "", tel = "", texto = "" }) =>
   `🔒 ${proyecto} — SOLICITUD DE DERECHOS (STOP / borrado)\n\n*${limpiaNota(nombre).slice(0, 80).replace(/\*/g, "") || tel}*\nTel: ${tel}\nEscribió: "${limpiaNota(texto).slice(0, 160)}"\n\nPlazo: confirmarle en un máximo de 30 días. El bot ya no le escribe y NO le ha dicho que esté borrado.`;
+
+// ─── AVISO DE ASISTENTE (IA): lo decide el SERVIDOR, no el modelo ────────────────────────────────────────────────────────────
+// Batería S8: con Haiku 5.5 el aviso exacto de Legal salía solo en 77 de 124 primeros mensajes (13 traducidos a medias, 34 ausentes) y una vez
+// el modelo filtró su razonamiento al cliente repitiendo el aviso. Legal (contexto/legal/bot_lawang_aviso_retencion_precio.md §a): primer mensaje del bot
+// y de nuevo tras más de 24 h sin mensajes; inglés para todo idioma salvo el español (el indonesio espera la lectura de un nativo).
+export const AVISO_EN = "Hi, this is Lawang's automated assistant (AI). I can share indicative prices and availability, and arrange a call or a visit with our team. A team member can take over at any time, just ask. How we handle your data: lawangproperties.com/legal#privacy";
+export const AVISO_ES = "Hola, soy el asistente automático (IA) de Lawang. Puedo darte precios orientativos y disponibilidad, y gestionar una llamada o una visita con nuestro equipo. Una persona del equipo puede continuar cuando quieras, solo pídelo. Cómo tratamos tus datos: lawangproperties.com/legal#privacy";
+export const SILENCIO_AVISO_MS = 24 * 3600 * 1000;
+
+/** ¿Toca el aviso? `history` ya trae al final el mensaje actual del cliente. Toca si el bot no ha hablado nunca o su último mensaje es de hace más de 24 h. */
+export function debeAvisar(history, ahora = Date.now()) {
+  const h = Array.isArray(history) ? history : [];
+  for (let i = h.length - 1; i >= 0; i--) {
+    if (h[i] && h[i].role === "assistant") {
+      const ts = Number(h[i].ts);
+      return Number.isFinite(ts) && ts > 0 ? ahora - ts > SILENCIO_AVISO_MS : false; // sin hora conocida: no se repite por error
+    }
+  }
+  return true;
+}
+
+const PALABRAS_ES = /[¿¡ñ]|\b(hola|buenas|buenos|quiero|quisiera|busco|tengo|gracias|cu[aá]nto|parcela|puedo|eres|estoy|soy|persona|equipo|necesito|d[oó]nde|cu[aá]ndo|tambi[eé]n|garantizas|reservar|ahora|ma[nñ]ana|llamada|hablar|puede|tiene|precio|por favor)\b/i;
+/** ¿Alguno de los textos del cliente está en español? (se miran varios: un «ok» suelto no cambia el idioma de la conversación) */
+export const escribeEnEspanol = (textos) => (Array.isArray(textos) ? textos : [textos]).some((t) => PALABRAS_ES.test(String(t || "")));
+
+const reAviso = (a) => new RegExp(a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"), "gi");
+/**
+ * Pone el aviso exacto de Legal al principio de la respuesta y quita cualquier aviso propio del modelo (copia exacta, traducida, o «Automated assistant (AI) here.»).
+ * Si el aviso exacto sale dos veces, lo que hay entre medias es razonamiento filtrado: se queda solo lo que sigue a la última copia.
+ */
+export function aplicaAviso(reply, { enviar = false, cliente = [] } = {}) {
+  if (!enviar) return reply;
+  let r = String(reply || "");
+  const aviso = escribeEnEspanol(cliente) ? AVISO_ES : AVISO_EN;
+  const hits = [...r.matchAll(reAviso(AVISO_EN)), ...r.matchAll(reAviso(AVISO_ES))].sort((a, b) => a.index - b.index);
+  if (hits.length >= 2) { const u = hits[hits.length - 1]; r = r.slice(u.index + u[0].length); }
+  else if (hits.length === 1) r = r.slice(0, hits[0].index) + r.slice(hits[0].index + hits[0][0].length);
+  r = r.split(/\n\s*\n/).filter((p) => !/legal#privacy/i.test(p)).join("\n\n");   // un aviso traducido por el modelo siempre lleva el enlace
+  r = r.replace(/^\s*(?:automated assistant|asistente autom\w+|asisten otomatis)[^.\n]*\((?:AI|IA)\)[^.\n]*[.!]\s*/i, "");
+  r = r.trim();
+  return r ? `${aviso}\n\n${r}` : aviso;
+}
+
+/** Razonamiento del modelo que se coló en el texto visible (batería S8, AV04). Solo para medir; no corrige. */
+export const RAZONAMIENTO_FILTRADO = /\b(the rule says|per the rule|let me (?:correct|check|think|re-?read)|customer writes in|the customer (?:writes|says|asks|is writing)|so the disclosure|I should (?:say|give|answer|reply|use))\b/i;
