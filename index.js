@@ -7,6 +7,8 @@ import https from "https";
 import { createClient } from "redis";
 import Stripe from "stripe";
 import crypto from "crypto";
+import { createSeguimientoConfig } from "./seguimiento-config.js";
+import { createFollowupRunner } from "./seguimiento-tick.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -1319,44 +1321,41 @@ setInterval(reminderTick, 5 * 60000); // revisar cada 5 minutos
 // Cuando el cliente responde, resetFollowup() reinicia la cadencia y el bot retoma la venta.
 const FOLLOWUP_SKIP_INTENT = new Set(["escalate", "urgent_service"]); // pregunta o avería pendiente del owner/equipo
 const FOLLOWUP_SKIP_STATUS = new Set(["won", "lost", "noshow"]); // ya cerrado
-async function followupTick() {
-  try {
-    if (!(await isBotEnabled())) return; // bot apagado (interruptor global) → tampoco hace seguimiento
-    if (!FOLLOWUP_TEMPLATE_NAME) return; // sin plantilla aprobada no se puede contactar fuera de 24h
-    const schedule = (FOLLOWUP_SCHEDULE || "24,72").split(",").map((s) => parseFloat(s)).filter((n) => !isNaN(n) && n >= 24);
-    if (!schedule.length) return;
-    const maxN = parseInt(FOLLOWUP_MAX) || schedule.length;
-    const nVars = FOLLOWUP_TEMPLATE_VARS != null ? parseInt(FOLLOWUP_TEMPLATE_VARS) : 1;
-    const now = Date.now();
-    const _d = new Date();
-    const todayStr = _d.getFullYear() + "-" + ("0" + (_d.getMonth() + 1)).slice(-2) + "-" + ("0" + _d.getDate()).slice(-2);
-    const leads = await listLeads();
-    for (const l of leads) {
-      if (isOwner(l.phone)) continue;
-      if (l.paused) continue;                              // humano al mando
-      if (FOLLOWUP_SKIP_STATUS.has(l.status)) continue;    // cerrado (ganado/perdido/no-show)
-      if (FOLLOWUP_SKIP_INTENT.has(l.intent)) continue;    // hay una duda escalada al owner
-      // Seguimiento AGENDADO a futuro (p.ej. waitlist "avísame cuando abráis 2027"):
-      // no auto-nudge; ya lo cubre followUpReminderTick avisando al owner en esa fecha.
-      if (l.nextFollowUp && String(l.nextFollowUp).slice(0, 10) > todayStr) continue;
-      if (Array.isArray(l.tags) && l.tags.some((t) => /waitlist/i.test(t))) continue; // en lista de espera
-      if (!l.lastInboundAt) continue;
-      const coldH = (now - l.lastInboundAt) / 3600000;
-      if (coldH < 24) continue;                            // ventana abierta → el bot ya responde solo
-      const sent = await getFollowupCount(l.phone);
-      if (sent >= maxN) continue;                          // tope de intentos alcanzado
-      const dueH = schedule[sent] != null ? schedule[sent] : schedule[schedule.length - 1];
-      if (coldH < dueH) continue;                          // aún no toca el siguiente intento
-      const firstName = (l.name || "").trim().split(/\s+/)[0] || "there";
-      const params = nVars >= 1 ? [firstName] : [];
-      await sendWhatsAppTemplate(l.phone, FOLLOWUP_TEMPLATE_NAME, FOLLOWUP_TEMPLATE_LANG, params);
-      await setFollowupCount(l.phone, sent + 1);
-      console.log(`[${PROJECT_NAME}] Follow-up ${sent + 1}/${maxN} enviado a ${l.phone} (frío ${coldH.toFixed(0)}h)`);
-    }
-  } catch (e) {
-    console.error(`[${PROJECT_NAME}] followupTick error: ${e.message}`);
-  }
-}
+// La lógica del tick vive en seguimiento-tick.js (probable sin arrancar Express/Redis). Origen de la configuración:
+//   · sin ERP_SEGUIMIENTO_URL/ERP_SEGUIMIENTO_SECRET → variables FOLLOWUP_* (comportamiento de siempre);
+//   · con ellas → manda el ERP (seguimiento-config.js), fail-closed: ERP caído → caché ≤24 h → APAGADO, nunca FOLLOWUP_*.
+// Los valores se resuelven DENTRO de cada tick (cada 30 min), no al arrancar.
+// ⚠ Cambiar horas/max a mitad de vida desplaza el peldaño schedule[sent] de los leads en curso (detalle en seguimiento-tick.js).
+const seguimientoCfg = createSeguimientoConfig({
+  url: process.env.ERP_SEGUIMIENTO_URL, secret: process.env.ERP_SEGUIMIENTO_SECRET, project: PROJECT_NAME,
+});
+const fallbackFollowupDay = {};
+const followupDayKey = () => new Date().toISOString().slice(0, 10);
+const followupRunner = createFollowupRunner({
+  project: PROJECT_NAME,
+  isBotEnabled: () => isBotEnabled(),
+  resolveView: () => seguimientoCfg.resolve(),
+  env: { templateName: FOLLOWUP_TEMPLATE_NAME, lang: FOLLOWUP_TEMPLATE_LANG, schedule: FOLLOWUP_SCHEDULE, max: FOLLOWUP_MAX, vars: FOLLOWUP_TEMPLATE_VARS },
+  listLeads: () => listLeads(),
+  isOwner: (p) => isOwner(p),
+  getCount: (p) => getFollowupCount(p),
+  setCount: (p, n) => setFollowupCount(p, n),
+  send: (phone, tpl, lang, params, logId) => sendWhatsAppTemplate(phone, tpl, lang, params, logId),
+  skipStatus: FOLLOWUP_SKIP_STATUS,
+  skipIntent: FOLLOWUP_SKIP_INTENT,
+  // Tope global por día (modo ERP). Redis si hay (sobrevive a un reinicio); si no, memoria.
+  dayCount: async () => {
+    const k = followupDayKey();
+    if (redisClient) { const v = await redisClient.get(`followupday:${k}`); return v ? parseInt(v) : 0; }
+    return fallbackFollowupDay[k] || 0;
+  },
+  dayBump: async () => {
+    const k = followupDayKey();
+    if (redisClient) { await redisClient.incr(`followupday:${k}`); await redisClient.expire(`followupday:${k}`, 2 * 24 * 3600); }
+    else fallbackFollowupDay[k] = (fallbackFollowupDay[k] || 0) + 1;
+  },
+});
+async function followupTick() { return followupRunner.tick(); }
 setInterval(followupTick, 30 * 60000); // revisar cada 30 minutos
 
 // ─── RECORDATORIOS DE SEGUIMIENTO MANUAL ───────────────────────────
@@ -2374,14 +2373,15 @@ async function clearWaBlocked() {
 }
 
 // Mensaje de PLANTILLA (única forma de escribir al owner fuera de su ventana de 24h)
-async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams = []) {
+async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams = [], logId = null) {
   const toClean = normalizePhone(to);
+  const who = logId || toClean; // logId (opcional): el seguimiento del ERP loguea un id hasheado, no el teléfono en claro
   // Cuenta bloqueada → no gastar el intento: rebotaría igual y el lead quedaría marcado
   // como contactado sin haberlo sido. El texto libre SÍ se intenta (ver comentario arriba):
   // más vale fallar contestando a un cliente que callarse.
   const blocked = await getWaBlocked();
   if (blocked) {
-    console.error(`[${PROJECT_NAME}] Plantilla "${templateName}" NO enviada a ${toClean} — cuenta bloqueada (code ${blocked.code})`);
+    console.error(`[${PROJECT_NAME}] Plantilla "${templateName}" NO enviada a ${who} — cuenta bloqueada (code ${blocked.code})`);
     return { ok: false, error: `Cuenta de WhatsApp bloqueada (code ${blocked.code}): ${blocked.detail}` };
   }
   const clean = (s) => String(s).replace(/[\r\n\t]+/g, " ").replace(/ {4,}/g, "   ").trim();
@@ -2399,11 +2399,11 @@ async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams = [])
       },
       { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" } }
     );
-    console.log(`[${PROJECT_NAME}] Plantilla "${templateName}" enviada a ${toClean}`);
+    console.log(`[${PROJECT_NAME}] Plantilla "${templateName}" enviada a ${who}`);
     return { ok: true };
   } catch (e) {
     const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
-    console.error(`[${PROJECT_NAME}] Error enviando plantilla "${templateName}" a ${toClean}:`, detail);
+    console.error(`[${PROJECT_NAME}] Error enviando plantilla "${templateName}" a ${who}:`, detail);
     return { ok: false, error: detail };
   }
 }
@@ -3609,7 +3609,9 @@ app.get("/admin/api/health", async (req, res) => {
     if (redisClient) count = await redisClient.zCard("leads_index");
     else count = Object.keys(fallbackLeads).length;
   } catch (e) { /* best-effort */ }
-  res.json({ storage: redisClient ? "redis" : "ram", leads: count });
+  // Seguimiento: con variables del ERP, health fuerza una lectura (caché 30 s) para que el estado sea visible sin esperar al primer tick (30 min).
+  if (seguimientoCfg.enabled) { try { await seguimientoCfg.resolve(); } catch (e) { /* best-effort */ } }
+  res.json({ storage: redisClient ? "redis" : "ram", leads: count, seguimiento: seguimientoCfg.enabled ? seguimientoCfg.status() : { enabled: false, source: "env (FOLLOWUP_*)" } });
 });
 
 // Inventario de motos (Supabase, catálogo BBM): un catálogo por producto con su tarifa
