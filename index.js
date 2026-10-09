@@ -6,7 +6,8 @@ import fs from "fs";
 import https from "https";
 import Stripe from "stripe";
 import crypto from "crypto";
-import { inventario as inventarioRedis } from "./import_redis.js"; // TEMPORAL (S5/LAW-507): se retira en S9
+import { inventario as inventarioRedis, importar as importarRedis } from "./import_redis.js"; // TEMPORAL (S5/LAW-507): se retira en S9
+import { creaTransporte as creaTransporteImportar } from "./import_transporte.js"; // TEMPORAL (S5/LAW-507): se retira en S9
 import { VACIA as CFG_VACIA, validaConfig, bloqueEquipo, ttlPausaHumana } from "./botcfg.js";
 import {
   initRedis, redisActivo, almacenNombre, lectorImportacion,
@@ -2387,6 +2388,25 @@ app.get("/admin/api/redis-inventario", async (req, res) => {
   if (!lector) return res.status(409).json({ error: "sin Redis conectado" });
   try { res.json(await inventarioRedis(lector)); }
   catch (e) { console.error(`[${PROJECT_NAME}] redis-inventario falló:`, e.message); res.status(500).json({ error: "inventario falló" }); }
+});
+
+// TEMPORAL (S5 fase B / LAW-507) — SE RETIRA EN S9. Importación UNICA de Redis a Postgres, dentro del proceso (el Redis solo es
+// alcanzable desde Railway). POST con x-admin-key; cuerpo {"dry":true} = solo lee y cuenta, no escribe. Repetible: la parte SQL no
+// duplica ni quita bajas/pausas. Devuelve SOLO conteos e informe de cuadre (nunca contenido ni teléfonos).
+let _importandoRedis = false;
+app.post("/admin/api/redis-importar", async (req, res) => {
+  if (!ADMIN_PASSWORD) return res.status(503).json({ error: "panel no configurado" });
+  if (req.get("x-admin-key") !== ADMIN_PASSWORD) return res.status(403).json({ error: "forbidden" });
+  const lector = lectorImportacion();
+  if (!lector) return res.status(409).json({ error: "sin Redis conectado" });
+  const dry = !!(req.body && req.body.dry === true);
+  const transporte = creaTransporteImportar({ url: BOT_API_URL, secreto: process.env.BOT_API_SECRET_IMPORTAR });
+  if (!dry && !transporte) return res.status(409).json({ error: "falta BOT_API_URL o BOT_API_SECRET_IMPORTAR" });
+  if (_importandoRedis) return res.status(409).json({ error: "importación en curso" });
+  _importandoRedis = true;
+  try { res.json(await importarRedis(lector, transporte, { dryRun: dry })); }
+  catch (e) { console.error(`[${PROJECT_NAME}] redis-importar falló:`, e && e.message); res.status(500).json({ error: "importación falló" }); }
+  finally { _importandoRedis = false; }
 });
 
 app.get("/admin/api/conv/:phone", async (req, res) => {
