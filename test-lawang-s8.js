@@ -61,8 +61,11 @@ test("STOP: frases claras de baja y borrado cortan; las normales y las preferenc
   for (const s of corta) assert.ok(PALABRAS_BAJA.test(s), `«${s}» debe cortar`);
   const no = ["can we stop by the villa tomorrow?", "Please stop by at 3pm", "don't call me before 10, write me here", "do not contact me before Monday", "no me llames, escríbeme por aquí",
     "no me escribas hasta el lunes", "what happens to my data?", "how do you handle my data", "is there a bus stop near the plot", "I can't delete my old chat, can you send the price again?",
-    "I want to book a visit", "quiero saber el precio", "apa kabar", "stopover in Bali next week", "remove the sofa from the villa please"];
+    "I want to book a visit", "quiero saber el precio", "apa kabar", "stopover in Bali next week", "remove the sofa from the villa please",
+    "no me mandes más correos, solo WhatsApp", "no me escribas más por mail, llámame", "don't message me again on instagram, here is fine", "I want to opt out of the lease option",
+    "no quiero recibir más mensajes de Sumba, solo de Bali", "remove my number from the group list", "baja el precio un poco?", "stop by the villa tomorrow", "no more than 2 bedrooms please"];
   for (const s of no) assert.ok(!PALABRAS_BAJA.test(s), `«${s}» NO debe cortar`);
+  const t0 = Date.now(); PALABRAS_BAJA.test("stop" + " ".repeat(100000) + "x"); assert.ok(Date.now() - t0 < 500, "regex lineal");
 });
 
 test("acuse de derechos: 30 días como máximo, nunca dice «borrado/deleted», en español e inglés", () => {
