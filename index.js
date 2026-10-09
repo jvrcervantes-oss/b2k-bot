@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { google } from "googleapis";
 import axios from "axios";
 import fs from "fs";
+import { deliveryFeeByKm } from "./delivery-rule.js";
 import https from "https";
 import { createClient } from "redis";
 import Stripe from "stripe";
@@ -197,8 +198,12 @@ async function runGetQuote({ bike_model, from, to, delivery_address, self_return
       // (delivery_fee = ida+vuelta, delivery.one_way_fee = un trayecto): la resta la hace el bot
       // aquí, NUNCA el modelo, que solo ve un único número ya correcto y lo cotiza tal cual.
       const oneWay = Math.round(Number(dv.one_way_fee) || 0);
-      const halved = self_return === true && dv.round_trip === true && oneWay > 0;
-      out.delivery_fee = halved ? oneWay : d.delivery_fee;
+      // Reglas de entrega por km del cliente (9-oct-2026, ver delivery-rule.js): se aplican sobre los km que
+      // devuelve su sistema, cuya tabla aún trae las tarifas viejas. null = no decidible → vale su importe.
+      const ruleFee = deliveryFeeByKm({ km: dv.km, days: d.duration_days, erpFee: d.delivery_fee });
+      const fullFee = ruleFee === null ? d.delivery_fee : ruleFee;
+      const halved = self_return === true && dv.round_trip === true && (ruleFee === null ? oneWay > 0 : fullFee > 0);
+      out.delivery_fee = halved ? (ruleFee === null ? oneWay : Math.round(fullFee / 2)) : fullFee;
       out.delivery_matched = dv.matched_area || dv.matched_address || delivery_address;
       // ⚠️ Esta nota se la come el modelo dentro del tool_result y la ha llegado a RECITAR al cliente
       // ("the system quotes this as the full delivery + pickup total, since you're self-returning...",
