@@ -249,19 +249,22 @@ const COT = { producto_id: PID, nombre: "Honda Scoopy", desde: FUT, hasta: FUT2,
   assert.equal(m.facturas.length, 1);
   assert.deepEqual([a.ok, b.ok].sort(), [false, true]); assert.ok([a, b].some((x) => x.motivo === "en_curso"));
   ok("dos [PAY] a la vez del mismo chat: una reserva, un enlace");
-  // tras un fallo posterior a la reserva, la cotización se borra (no se reserva otra unidad con el mismo [PAY])
-  for (const over of [{ cliente: () => [409, { error: "no_aplica" }] }]) {
-    const x = montaCierre(over);
-    await x.quotes.guarda(TEL, COT);
-    await x.cierre.cierra({ tel: TEL, mensajeId: "a", payAmount: 330000, nombre: "Ana", pais: "Spain" });
-    const r2 = await x.cierre.cierra({ tel: TEL, mensajeId: "b", payAmount: 330000, nombre: "Ana", pais: "Spain" });
-    assert.equal(r2.motivo, "sin_cotizacion"); assert.equal(x.calls.filter((c) => c.accion === "reserva").length, 1);
-  }
-  const y = montaCierre({}, { crearFactura: async () => null });
+  // fallo de cliente o de Xendit tras reservar: el segundo [PAY] reutiliza la reserva (una sola llamada a reserva)
+  let falla = true;
+  const x = montaCierre({ cliente: () => (falla ? [409, { error: "no_aplica" }] : [200, { r: { ok: true, cliente_identificado: true, creado: true, motivo: null } }]) }, {});
+  await x.quotes.guarda(TEL, COT);
+  assert.equal((await x.cierre.cierra({ tel: TEL, mensajeId: "a", payAmount: 330000, nombre: "Ana", pais: "Spain" })).ok, false);
+  falla = false;
+  const r2 = await x.cierre.cierra({ tel: TEL, mensajeId: "b", payAmount: 330000, nombre: "Ana", pais: "Spain" });
+  assert.equal(r2.ok, true); assert.equal(x.calls.filter((c) => c.accion === "reserva").length, 1, "una sola reserva");
+  assert.equal(x.calls.filter((c) => c.accion === "cliente").length, 2);
+  let xf = 0;
+  const y = montaCierre({}, { crearFactura: async () => (xf++ ? { url: "https://checkout.xendit.co/web/z", id: "i" } : null) });
   await y.quotes.guarda(TEL, COT);
-  await y.cierre.cierra({ tel: TEL, mensajeId: "a", payAmount: 330000, nombre: "Ana", pais: "Spain" });
-  assert.equal(await y.quotes.lee(TEL), null);
-  ok("fallo de cliente/Xendit tras reservar: la cotización se borra, el siguiente [PAY] no reserva otra unidad");
+  assert.equal((await y.cierre.cierra({ tel: TEL, mensajeId: "a", payAmount: 330000, nombre: "Ana", pais: "Spain" })).ok, false);
+  assert.equal((await y.cierre.cierra({ tel: TEL, mensajeId: "b", payAmount: 330000, nombre: "Ana", pais: "Spain" })).ok, true);
+  assert.equal(y.calls.filter((c) => c.accion === "reserva").length, 1);
+  ok("fallo de cliente o de Xendit tras reservar: el siguiente [PAY] reutiliza la reserva (una sola llamada a reserva)");
 }
 
 // ── 3) aviso al cliente cuando paga ───────────────────────────────────────────────────────────────────────────────────────────────────

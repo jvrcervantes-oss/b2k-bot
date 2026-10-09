@@ -39,7 +39,7 @@ function createKv({ redis = () => null, prefijo }) {
       const k = prefijo + id;
       const r = redis();
       if (r) await r.setEx(k, ttlS, JSON.stringify(valor));
-      else mem.set(k, { valor, hasta: now + ttlS * 1000 });
+      else mem.set(k, { valor: JSON.parse(JSON.stringify(valor)), hasta: now + ttlS * 1000 });   // copia, como haría Redis
     },
     async get(id, now = Date.now()) {
       const k = prefijo + id;
@@ -47,7 +47,7 @@ function createKv({ redis = () => null, prefijo }) {
       if (r) { const raw = await r.get(k); if (!raw) return null; try { return JSON.parse(raw); } catch { return null; } }
       const e = mem.get(k);
       if (!e || e.hasta <= now) { mem.delete(k); return null; }
-      return e.valor;
+      return JSON.parse(JSON.stringify(e.valor));
     },
     async del(id) { const k = prefijo + id; const r = redis(); if (r) await r.del(k); else mem.delete(k); },
     tel,
@@ -255,28 +255,40 @@ export function createCierreErp({ erp, quotes, pendingRsv, indice, backend, crea
 
     // 4) Reserva. El backend se fija ANTES: desde aquí la conversación es del ERP aunque el interruptor cambie.
     try { await backend.fija(t, COTIZACION_TTL_S, "erp"); } catch { /* el enlace vivo (pendingRsv) también ata la conversación */ }
-    const r = await erp.reserva({
-      fromVerificado: t, producto_id: q.producto_id, desde: q.desde, hasta: q.hasta,
-      entrega_direccion: q.entrega_direccion ?? undefined, recogida_direccion: q.recogida_direccion ?? undefined,
-      mensajeId, conversacion_ref: t,
-    });
-    if (!r.ok) {
-      if (r.motivo === "entrega_a_confirmar" || r.motivo === "entrega_no_configurada") return fallo("generico", r.motivo);
-      return fallo(MOTIVO_A_TEXTO[r.motivo] || "generico", r.motivo);
+    // Una reserva ya creada para ESTA cotización (un intento anterior falló en `cliente` o en Xendit) se reutiliza mientras le quede tiempo: reservar otra
+    // retendría una segunda unidad (o negaría la moto si solo hay una). No se confía en que la base la devuelva sola: con `clave` por mensaje no lo hace.
+    let rs = null;
+    if (q.reserva) {
+      const quedan = q.reserva.cobro.segundos_hasta_caducar - Math.floor((now() - q.reserva.creada_ms) / 1000);
+      if (quedan - MARGEN_CADUCIDAD_S >= MIN_ENLACE_S) rs = { ...q.reserva, cobro: { ...q.reserva.cobro, segundos_hasta_caducar: quedan } };
+      else { delete q.reserva; await quotes.guarda(t, q); }
     }
-    const rs = r.reserva;
-    if (rs.precio_total !== q.total || rs.moneda !== q.moneda) { await quotes.borra(t); return fallo("precio_cambio", `cotizado=${q.total} reserva=${rs.precio_total}`); }
+    if (!rs) {
+      const r = await erp.reserva({
+        fromVerificado: t, producto_id: q.producto_id, desde: q.desde, hasta: q.hasta,
+        entrega_direccion: q.entrega_direccion ?? undefined, recogida_direccion: q.recogida_direccion ?? undefined,
+        mensajeId, conversacion_ref: t,
+      });
+      if (!r.ok) {
+        if (r.motivo === "entrega_a_confirmar" || r.motivo === "entrega_no_configurada") return fallo("generico", r.motivo);
+        return fallo(MOTIVO_A_TEXTO[r.motivo] || "generico", r.motivo);
+      }
+      rs = r.reserva;
+      if (rs.precio_total !== q.total || rs.moneda !== q.moneda) { await quotes.borra(t); return fallo("precio_cambio", `cotizado=${q.total} reserva=${rs.precio_total}`); }
+      q.reserva = { ...rs, creada_ms: now() };
+      try { await quotes.guarda(t, q); } catch { /* sin guardar, un reintento reservaría otra: la base la devuelve si no hay `clave` por mensaje */ }
+    }
 
     // 5) Cliente (nombre y país) ANTES del enlace
     const c = await erp.cliente({ reserva_id: rs.reserva_id, nombre, pais });
-    if (!c.ok) { await quotes.borra(t); return fallo("generico", `cliente:${c.motivo}`); }   // la cotización se gasta: el siguiente intento recotiza y la base devuelve la MISMA reserva viva (teléfono+moto+fechas)
+    if (!c.ok) return fallo("generico", `cliente:${c.motivo}`);   // la reserva queda guardada en la cotización: el siguiente [PAY] reintenta SOLO cliente y enlace   // la cotización se gasta: el siguiente intento recotiza y la base devuelve la MISMA reserva viva (teléfono+moto+fechas)
     if (!c.cliente_identificado) log.warn(p(`cliente no identificado (${c.motivo || "?"}): lo decide una persona; el cobro sigue`));
 
     // 6) Enlace de pago con EL cobro de la base
     const duracionS = rs.cobro.segundos_hasta_caducar - MARGEN_CADUCIDAD_S;
     if (duracionS < MIN_ENLACE_S) { await quotes.borra(t); return fallo("sin_tiempo", `quedan=${rs.cobro.segundos_hasta_caducar}s`); }
     const inv = await crearFactura({ external_id: rs.cobro.external_id, importe: rs.cobro.importe, moneda: rs.cobro.moneda, descripcion: `${project} — ${q.nombre} ${q.desde}→${q.hasta}`, duracionS });
-    if (!inv || !str(inv.url)) { await quotes.borra(t); return fallo("generico", "xendit"); } // la reserva caduca sola (no hay acción `libera`)
+    if (!inv || !str(inv.url)) return fallo("generico", "xendit"); // igual: se reintenta el enlace sobre la misma reserva; si no, caduca sola (no hay acción `libera`)
 
     // 7) Registro: enlace pendiente + índice para avisar del pago. Si falla, el enlace sigue siendo válido: se manda igual.
     try { await pendingRsv.guarda(t, { external_id: rs.cobro.external_id, importe: rs.cobro.importe, moneda: rs.cobro.moneda, reserva_id: rs.reserva_id, caduca_en_ms: now() + duracionS * 1000, url: inv.url }); }
