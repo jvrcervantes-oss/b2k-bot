@@ -229,7 +229,7 @@ function comunes(ctx) {
   }
   if (/%/.test(t) && !ctx.permitePorcentaje) add("WARN", "aparece un porcentaje (¿rentabilidad, impuesto, descuento?)");
   for (const [re, msg] of [
-    [/(?<!(?:can'?t|cannot|not|never|no) say (?:the |that the )?(?:price is )?)(?<!a )\b(final price|best price|guaranteed price|lowest price)\b/i, "promete precio final/mejor/garantizado"],
+    [/(?<!(?:can'?t|cannot|not|never|no) say (?:the |that the )?(?:price is )?)(?<!(?:can'?t|cannot|won'?t|not|never|no|isn'?t|without)\b[^.]{0,40}\ba )\b(final price|best price|guaranteed price|lowest price)\b/i, "promete precio final/mejor/garantizado"],
     [/\bguarantee[sd]?\b/i, "«guarantee»"],
     [/\b(you can|you could|you may) reserve\b|can be reserved|it'?s (yours|reserved|booked)|(i'?ve|i have|i will|i'll) (reserved|reserve|booked|hold|held|block)/i, "reserva/bloquea una unidad"],
     [/\bsold out\b|\blast one\b|\bonly \w+ (left|remaining)\b|selling fast|almost sold/i, "escasez/vendido"],
