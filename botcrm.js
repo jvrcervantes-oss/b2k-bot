@@ -113,6 +113,9 @@ export async function ejecutaCrm({ modo, tel, msgId, nombre = "", notas = [], ci
     if (modo === "sombra") {
       notas.forEach((n, i) => log(`[CRM-SOMBRA] lead_nota tel=${me} msg=${msgId}:n${i + 1} texto="${n.slice(0, 80)}"`));
       citas.forEach((c, i) => log(`[CRM-SOMBRA] lead_cita tel=${me} msg=${msgId}:c${i + 1} ${c.tipo} ${c.cuando} zona=${c.zona || "Bali"} iso=${isoConZona(c.cuando, c.zona) || "ZONA-NO-ENTENDIDA"}`));
+      // En sombra el modelo solo ve [CITA] (ya no [APPT]), asi que la cita NO llega a ninguna agenda. Cada una deja su entrada para que quien llama avise
+      // al owner: el cliente ya oyo "queda agendada" y, sin este aviso, la cita seria un fallo mudo.
+      citas.forEach((c) => hechos.push({ accion: "lead_cita", resultado: "sombra", tipo: c.tipo, cuando: c.cuando, zona: c.zona }));
       return hechos;
     }
     if (modo !== "on" || typeof llama !== "function") return hechos;
@@ -169,6 +172,7 @@ const MOTIVOS_CITA = {
   fecha_invalida: "la fecha no era válida",
   tipo_invalido: "el tipo de cita no era válido",
   telefono_invalido: "el teléfono no era válido",
+  sombra: "el CRM esta en modo sombra (pruebas): la cita solo quedo en el log, no en la agenda",
   etiqueta_antigua: "el bot usó una etiqueta antigua ([APPT]) y no se guardó",
   etiqueta_ilegible: "la etiqueta de cita salió mal escrita y no se pudo leer",
   error: "la base no respondió",
@@ -201,6 +205,7 @@ const CAMBIOS_CITA = [
   ["  [APPT:YYYY-MM-DDTHH:MM|Short title incl. timezone]", "  [CITA:llamada|YYYY-MM-DDTHH:MM|TZ]   (use [CITA:visita|...] for an in-person visit; TZ is optional and means Bali time when omitted)"],
   ["  Example: [APPT:2026-07-15T10:00|Call w/ John re Bali-Komodo — 10:00 AEST]", "  Example: [CITA:llamada|2026-07-15T10:00|AEST]"],
   ["Output the APPT tag only when", "Output the CITA tag only when"],
+  ["  Example: [APPT:2026-10-14T10:00|Visit w/ John, Dali villa, Bali time]", "  Example: [CITA:visita|2026-10-14T10:00]"],   // ejemplo del cierre propio de Lawang (playbook-lawang.json)
 ];
 export function adaptaCierreACita(texto) {
   let t = String(texto);
@@ -261,3 +266,16 @@ export async function ejecutaTraspaso({ tel, estaPausado, pausa, avisa, nota = n
   if (nota) { try { await nota(); res.nota = true; } catch (e) { log(`[HUMANO] ${me} nota CRM falló (${e && e.message ? e.message : "error"})`); } }
   return res;
 }
+
+// ─── SOLICITUD DE DERECHOS (STOP / borrado) ──────────────────────────────────────────────────
+// Legal, bot_lawang_aviso_retencion_precio.md apartado b: el bot NUNCA dice que algo esta borrado; acusa recibo, dice que el equipo confirmara
+// en 30 dias como maximo y deja una tarea "solicitud de derechos". Un STOP se trata como oposicion Y como peticion de borrado hasta que el cliente diga otra cosa.
+export const ACUSE_DERECHOS = "Entendido: no volveremos a escribirte. He pasado tu solicitud a nuestro equipo y te lo confirmará en un máximo de 30 días. Gracias por tu tiempo. / Understood: we won't message you again. I've passed your request to our team, who will confirm within 30 days at most. Thank you for your time.";
+
+/** Nota del CRM que hace de tarea (la edge de hoy no tiene entidad "tarea": la nota con este prefijo es lo que el equipo busca). El texto del cliente va recortado y sin corchetes. */
+export const notaDerechos = (textoCliente) =>
+  limpiaNota(`SOLICITUD DE DERECHOS (STOP / borrado / no contactar): confirmar al cliente en un maximo de 30 dias que se ha atendido. No contactar. El bot NO ha dicho que este borrado. Mensaje del cliente: "${String(textoCliente || "").slice(0, 160)}"`);
+
+/** Aviso al owner (el CRM puede estar en sombra o caido: la solicitud tiene plazo legal y no puede depender de que la nota se guarde). */
+export const avisoDerechos = ({ proyecto = "Bot", nombre = "", tel = "", texto = "" }) =>
+  `🔒 ${proyecto} — SOLICITUD DE DERECHOS (STOP / borrado)\n\n*${limpiaNota(nombre).slice(0, 80).replace(/\*/g, "") || tel}*\nTel: ${tel}\nEscribió: "${limpiaNota(texto).slice(0, 160)}"\n\nPlazo: confirmarle en un máximo de 30 días. El bot ya no le escribe y NO le ha dicho que esté borrado.`;

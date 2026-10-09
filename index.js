@@ -21,7 +21,7 @@ import {
   unsubAgregar, unsubLeer, getScheduled, setScheduled,
 } from "./store/redis.js";
 import { creaCatalogo, cifrasPermitidas, postCheckCifras } from "./botcat.js";
-import { extraeEtiquetas, bloquesSistema, contenidoParaModelo, creaTopes, ejecutaCrm, avisoCita, adaptaCierreACita, isoConZona, citasIlegibles, pideTraspaso, ejecutaTraspaso } from "./botcrm.js";
+import { extraeEtiquetas, bloquesSistema, contenidoParaModelo, creaTopes, ejecutaCrm, avisoCita, adaptaCierreACita, isoConZona, citasIlegibles, pideTraspaso, ejecutaTraspaso, ACUSE_DERECHOS, notaDerechos, avisoDerechos } from "./botcrm.js";
 
 const app = express();
 // verify: guarda el body crudo — la firma X-Hub-Signature-256 de Meta se calcula sobre los bytes
@@ -370,13 +370,17 @@ async function setPausedHumano(phone) {
    claves del bot: una baja no caduca a los 30 días.
    No es solo cortesía — si los leads marcan como spam, Meta degrada la calidad del
    número y se acaba sin poder escribir a nadie. La baja protege el canal. */
-/* Anclado al PRINCIPIO del mensaje a propósito: "¿dónde está el bus stop?" no es una
+/* (9-oct-2026: además de lo anclado al principio, hay frases claras de baja/borrado en cualquier sitio; ver el comentario de la constante.)
+   Anclado al PRINCIPIO del mensaje a propósito: "¿dónde está el bus stop?" no es una
    baja. Y `cancelar` NO está en la lista aunque parezca obvia — en español quien escribe
    "cancelar" casi siempre quiere anular una cita, no dejar de recibir mensajes, y dar de
    baja en silencio a un lead caliente por esa confusión es de los errores más caros que
    puede cometer este bot. Las que sí están son las que WhatsApp y el uso han hecho
    inequívocas. */
-const PALABRAS_BAJA = /^\s*(stop|baja|darme de baja|unsubscribe|berhenti|no more|remove me)\b/i;
+// Baja / oposicion / borrado. Antes solo cortaba lo que EMPEZABA por la palabra; ahora tambien las frases claras («please stop messaging me», «no me escribas mas», «delete my data»,
+// «borra mis datos», «hentikan»...). Cuidado con lo que NO debe cortar: «can we stop by tomorrow», «don't call me before 10, write me here», «no me llames, escribeme» (preferencia de canal).
+// Va en UNA linea de literal: la bateria S8 (test-bateria-adversaria.js) la extrae del fuente.
+const PALABRAS_BAJA = /^\s*(stop|baja|darme de baja|unsubscribe|berhenti|hentikan|no more|remove me|opt[ -]?out)\b|^\s*(please|pls|plz|por favor|tolong)\s+(stop|para|basta)\s*[.!]*\s*$|\b(stop|quit)\s+(messaging|texting|contacting|writing\s+to|sending|emailing|bothering|spamming)\b|\b(don['’]?t|do\s+not|never)\s+(contact|message|text|write\s+to|email)\s+me\s*(anymore|any\s+more|again|ever|at\s+all|[.!]*\s*$)|\b(unsubscribe|opt[ -]?out)\b|\b(delete|erase|remove|wipe)\s+(all\s+)?(of\s+)?(my|our)\s+(personal\s+)?(data|information|details|phone\s+number|number|chat|messages|conversation|history)\b|\bno\s+me\s+(escribas|escriban|contactes|contacten|molestes|molesten|mandes|manden|envíes|envíen)\s*(más|mas|nunca|otra\s+vez|de\s+nuevo|[.!]*\s*$)|\bdeja(d|r)?\s+de\s+(escribirme|contactarme|molestarme|enviarme\s+mensajes)\b|\bno\s+quiero\s+(recibir\s+)?(más|mas)\s+mensajes\b|\b(borra|borrar|borrad|borren|elimina|eliminar|eliminad|eliminen|suprime|suprimir)\s+(todos\s+)?(mis|mi)\s+(datos|información|informacion|número|numero|chat|conversación|conversacion)\b|\bhentikan\b|\bjangan\s+(hubungi|ganggu)\s+(saya|aku)\b|\bjangan\s+kirim\s+(pesan|chat)\s+(lagi|ke\s+saya)\b|\bhapus(kan)?\s+(semua\s+)?data\s+(saya|aku)\b/i;
 async function setOptOut(phone) {
   const p = normalizePhone(phone);
   await optOutPoner(p);
@@ -1204,11 +1208,15 @@ const _gathering = PLAYBOOK.gathering || (PLAYBOOK.closeStyle === "direct" ? REN
 const _close = PLAYBOOK.close || (PLAYBOOK.closeStyle === "direct" ? RENTAL_CLOSE_AND_TAGGING : TOUR_CLOSE_AND_TAGGING);
 // Con BOT_CRM=on (efectivo) el modelo agenda con [CITA:...] y la base guarda la cita (S5): ni se le enseña [APPT:...] ni el bot la guarda en Redis. Apagado o en sombra, el
 // texto es EXACTAMENTE el de siempre (test: "BOT_CRM off/sombra: el prompt de cierre no cambia").
-let BASE_INSTRUCTIONS = BASE_INSTRUCTIONS_HEAD + _gathering + BASE_INSTRUCTIONS_MIDDLE + _close;
-if (CRM_EFECTIVO === "on") {
+// middle (opcional, solo lo trae playbook-lawang.json): sustituye a BASE_INSTRUCTIONS_MIDDLE, cuyo SELF-SUFFICIENCY ("nunca digas que el equipo lo confirmara") es del bot de tours.
+// B2K/BBM no lo definen: para ellos el texto es EXACTAMENTE el de siempre.
+const _middle = typeof PLAYBOOK.middle === "string" && PLAYBOOK.middle.trim() ? PLAYBOOK.middle : BASE_INSTRUCTIONS_MIDDLE;
+let BASE_INSTRUCTIONS = BASE_INSTRUCTIONS_HEAD + _gathering + _middle + _close;
+// En sombra Y en on el modelo solo ve [CITA]: si en sombra viera tambien [APPT] (el cierre viejo) las emitiria las dos y la cita real iria por la via vieja.
+if (CRM_EFECTIVO !== "off") {
   const adaptado = adaptaCierreACita(BASE_INSTRUCTIONS);
   BASE_INSTRUCTIONS = adaptado.texto;
-  if (adaptado.restantes) console.error(`[${PROJECT_NAME}] CRM=on: quedan ${adaptado.restantes} menciones de APPT en las instrucciones de cierre: el modelo recibirá dos etiquetas de cita. Revisar adaptaCierreACita.`);
+  if (adaptado.restantes) console.error(`[${PROJECT_NAME}] CRM=${CRM_EFECTIVO}: quedan ${adaptado.restantes} menciones de APPT en las instrucciones de cierre: el modelo recibirá dos etiquetas de cita. Revisar adaptaCierreACita.`);
 }
 
 // Profundidad de persona opcional por config (PERSONA_BIO en Railway): trasfondo humano del
@@ -2005,7 +2013,12 @@ app.post("/webhook", async (req, res) => {
          y un bloqueo sin excepciones es el que no se rompe al añadir la siguiente. */
       if (!(await getOptOutAck(from))) {
         await setOptOutAck(from);
-        await sendWhatsAppResult(from, "Hecho: no volveremos a escribirte. Gracias por tu tiempo. / Done — you won't hear from us again.");
+        await sendWhatsAppResult(from, ACUSE_DERECHOS); // nunca dice «borrado»: el equipo confirma en 30 dias como maximo (Legal, b.1)
+        // Solicitud de derechos: tarea en el CRM (nota con prefijo; en sombra solo log) + aviso al owner, que no depende del CRM. Nunca rompe la baja.
+        try { await aplicaCrm({ notas: [notaDerechos(text)], citas: [] }, from, `${message.id}d`, profileName); }
+        catch (e) { console.error(`[${PROJECT_NAME}] nota de solicitud de derechos falló: ${e.message}`); }
+        try { if (OWNER_PHONE) await sendWhatsApp(OWNER_PHONE, avisoDerechos({ proyecto: PROJECT_NAME, nombre: profileName, tel: String(from), texto: text })); }
+        catch (e) { console.error(`[${PROJECT_NAME}] aviso de solicitud de derechos falló: ${e.message}`); }
       }
       await setOptOut(from);
       await setPaused(from, true);
@@ -2090,7 +2103,7 @@ app.post("/webhook", async (req, res) => {
     let leadFields = parseLeadTag(reply); // datos confirmados en la charla → ficha/BD
     const traspaso = pideTraspaso(reply); // [HUMANO]: solo la escribe el modelo (al cliente se le sanea en paraModelo); se ejecuta tras responder
     const crmTags = BOT_CRM_MODE !== "off" ? extraeEtiquetas(reply) : null; // [NOTA]/[CITA] del modelo: se ejecutan con el teléfono del webhook, tras responder
-    const crmIlegibles = CRM_EFECTIVO === "on" ? citasIlegibles(reply) : 0; // [CITA:...] mal escritas: sin esto cleanReply las borra y la cita queda muda
+    const crmIlegibles = CRM_EFECTIVO !== "off" ? citasIlegibles(reply) : 0; // [CITA:...] mal escritas: sin esto cleanReply las borra y la cita queda muda
     reply = cleanReply(reply); // etiquetas internas + guion + markdown de WhatsApp (helper compartido)
     if (traspaso && !reply.trim()) reply = "I'll pass you to a team member who can help you personally."; // solo escribió la etiqueta: el cliente no puede quedarse sin la frase de cierre
     postCheckPrecios(reply, cat, history, from); // solo log
@@ -2189,8 +2202,9 @@ app.post("/webhook", async (req, res) => {
     // ── Cita agendada por el bot en la conversación ───────────────
     // Con BOT_CRM=on las citas van por [CITA:...] (la base es su único dueño): una [APPT] que el modelo emita igualmente NO se guarda en Redis,
     // y se avisa al owner con los datos, porque el cliente ya cree que está agendada.
-    if (CRM_EFECTIVO === "on" && (apptMatch || crmIlegibles > 0)) {
-      console.error(`[${PROJECT_NAME}] cita sin registrar con BOT_CRM=on: …${String(from).slice(-4)} appt=${apptMatch ? apptMatch[1].trim().slice(0, 40) : "no"} ilegibles=${crmIlegibles}`);
+    // En sombra el modelo ya no ve [APPT]: solo una [CITA] ilegible se queda sin guardar (la [APPT] suelta, rara, sigue por la via vieja).
+    if ((CRM_EFECTIVO === "on" && (apptMatch || crmIlegibles > 0)) || (CRM_EFECTIVO === "sombra" && crmIlegibles > 0 && !apptMatch)) {
+      console.error(`[${PROJECT_NAME}] cita sin registrar con BOT_CRM=${CRM_EFECTIVO}: …${String(from).slice(-4)} appt=${apptMatch ? apptMatch[1].trim().slice(0, 40) : "no"} ilegibles=${crmIlegibles}`);
       // Si además hay una [CITA] legible, esa ya avisa por su cuenta: no se duplica el aviso por la [APPT].
       const yaAvisa = crmTags && crmTags.citas.length > 0;
       if (OWNER_PHONE && !(apptMatch && !crmIlegibles && yaAvisa)) {

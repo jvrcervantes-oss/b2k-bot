@@ -12,8 +12,9 @@ const plantilla = (nombre) => {
   assert.ok(m, "no se encontró la plantilla " + nombre + " en index.js");
   return m[1];
 };
-// Lo que recibe el modelo de Lawang (closeStyle appointment = bloques de tour)
-const PROMPT_LAWANG = plantilla("BASE_INSTRUCTIONS_HEAD") + plantilla("BASE_INSTRUCTIONS_MIDDLE") + plantilla("TOUR_CLOSE_AND_TAGGING");
+// Lo que recibe el modelo de Lawang: su playbook trae gathering, middle y close propios (9-oct, hallazgo 1 de S8: antes cargaba los de tours)
+const PB = JSON.parse(fs.readFileSync(new URL("./playbook-lawang.json", import.meta.url), "utf8"));
+const PROMPT_LAWANG = plantilla("BASE_INSTRUCTIONS_HEAD") + PB.gathering + PB.middle + PB.close;
 
 test("adaptaCierreACita: del prompt de cierre de Lawang no queda ni un APPT y aparece la etiqueta nueva", () => {
   assert.ok(/APPT/.test(PROMPT_LAWANG), "la prueba no tiene sentido si el original ya no menciona APPT");
@@ -24,7 +25,7 @@ test("adaptaCierreACita: del prompt de cierre de Lawang no queda ni un APPT y ap
   assert.match(texto, /\[CITA:visita\|/);
   // el ejemplo que se le enseña al modelo lo entiende el parser real
   const ej = texto.match(/Example: (\[CITA:[^\]]+\])/)[1];
-  assert.deepStrictEqual(extraeEtiquetas(ej).citas, [{ tipo: "llamada", cuando: "2026-07-15T10:00", zona: "AEST" }]);
+  assert.deepStrictEqual(extraeEtiquetas(ej).citas, [{ tipo: "visita", cuando: "2026-10-14T10:00", zona: "" }]);
 });
 
 test("adaptaCierreACita: es un reemplazo literal; un texto sin APPT sale idéntico", () => {
@@ -33,13 +34,13 @@ test("adaptaCierreACita: es un reemplazo literal; un texto sin APPT sale idénti
   assert.strictEqual(adaptaCierreACita("x [APPT:2026-01-01T10:00|raro]").restantes, 1);   // lo que no conoce lo cuenta, no lo oculta
 });
 
-test("BOT_CRM off/sombra: el prompt de cierre no cambia (la adaptación solo corre con CRM_EFECTIVO === on)", () => {
-  assert.match(SRC, /if \(CRM_EFECTIVO === "on"\) \{\s*const adaptado = adaptaCierreACita\(BASE_INSTRUCTIONS\);/);
+test("BOT_CRM apagado: el prompt de cierre no cambia; en sombra Y en on el modelo solo ve [CITA] (9-oct, hallazgo 5 de S8)", () => {
+  assert.match(SRC, /if \(CRM_EFECTIVO !== "off"\) \{\s*const adaptado = adaptaCierreACita\(BASE_INSTRUCTIONS\);/);
   assert.strictEqual((SRC.match(/adaptaCierreACita\(/g) || []).length, 1);   // un solo uso, el guardado
 });
 
 test("index.js: con CRM on la [APPT] no se guarda en Redis y avisa al owner; el panel viejo no escribe citas", () => {
-  assert.match(SRC, /if \(CRM_EFECTIVO === "on" && \(apptMatch \|\| crmIlegibles > 0\)\) \{[\s\S]*?etiqueta_antigua[\s\S]*?\} else if \(apptMatch\) \{\s*try \{\s*const appt = await createAppt/);
+  assert.match(SRC, /\(CRM_EFECTIVO === "on" && \(apptMatch \|\| crmIlegibles > 0\)\) \|\| \(CRM_EFECTIVO === "sombra" && crmIlegibles > 0 && !apptMatch\)\) \{[\s\S]*?etiqueta_antigua[\s\S]*?\} else if \(apptMatch\) \{\s*try \{\s*const appt = await createAppt/);
   assert.match(SRC, /app\.post\("\/admin\/api\/appts"[\s\S]*?if \(CRM_EFECTIVO === "on"\) return citasEnLaIntranet\(res\);/);
   assert.match(SRC, /app\.delete\("\/admin\/api\/appts\/:id"[\s\S]*?if \(CRM_EFECTIVO === "on"\) return citasEnLaIntranet\(res\);/);
   // y ningún otro sitio crea citas en Redis
@@ -93,7 +94,7 @@ test("citasIlegibles: una [CITA] mal escrita se cuenta (si no, cleanReply la bor
   assert.strictEqual(citasIlegibles("sin etiquetas"), 0);
   const t = avisoCita({ proyecto: "L", nombre: "Ana\n*URGENTE*", tel: "1", hecho: { accion: "lead_cita", resultado: "etiqueta_ilegible", tipo: "llamada", cuando: "?" } });
   assert.match(t, /mal escrita/); assert.ok(!/\*URGENTE\*/.test(t) && !/Ana\n/.test(t));
-  assert.match(SRC, /const crmIlegibles = CRM_EFECTIVO === "on" \? citasIlegibles\(reply\) : 0;\s*[^\n]*\n\s*reply = cleanReply\(reply\)/);
+  assert.match(SRC, /const crmIlegibles = CRM_EFECTIVO !== "off" \? citasIlegibles\(reply\) : 0;\s*[^\n]*\n\s*reply = cleanReply\(reply\)/);
 });
 
 const SQL_CITA = new URL("../../proyectos/Lawang/supabase/migrations/20261010080000_bot_catalogo_crm_s3.sql", import.meta.url);
