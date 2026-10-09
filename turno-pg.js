@@ -15,6 +15,8 @@ import { bloqueEquipo } from "./botcfg.js";
 import { ErrorEdge, enmascara } from "./store/postgres.js";
 import { filtraSensibles, TEXTO_RESUMEN_OMITIDO } from "./resumen-filtro.js";
 import { VERSION as CONSENT_VERSION, PREGUNTA, REPREGUNTA, PLANTILLAS, idiomaPregunta, decidePregunta, bloqueRespuesta } from "./consentimiento.js";
+import { idiomaDe, nombrePila } from "./idioma-lead.js";
+export { idiomaDe, nombrePila };
 export { filtraSensibles, TEXTO_RESUMEN_OMITIDO };
 
 const VENTANA_MS = 24 * 3600 * 1000;
@@ -201,39 +203,15 @@ export function limpiaResumen(texto) {
 
 // ─── RECORDATORIO DE CITA ──────────────────────────────────────────────────────────────────────
 const TIPO_CITA = { en: { llamada: "call", visita: "visit" }, es: { llamada: "llamada", visita: "visita" }, id: { llamada: "panggilan", visita: "kunjungan" } };
-const SIN_NOMBRE = { en: "there", es: "cliente", id: "Bapak/Ibu" };
 // Mismas palabras que las plantillas de Meta (encargos/20261009_lawang_plantillas_meta.md §2): el texto libre lleva el aviso de asistente (IA) y STOP.
 const TEXTO_RECORDATORIO = {
   en: (n, t, h) => `Hi ${n}, this is Lawang's automated assistant (AI). A reminder that your ${t} with our team is today at ${h} (Bali time). If you need to change it, just reply here and a team member will help. Reply STOP to stop these messages.`,
   es: (n, t, h) => `Hola ${n}, soy el asistente automático (IA) de Lawang. Te recordamos que tu ${t} con nuestro equipo es hoy a las ${h} (hora de Bali). Si necesitas cambiarla, responde aquí y una persona del equipo te ayudará. Responde STOP para dejar de recibir estos mensajes.`,
   id: (n, t, h) => `Halo ${n}, saya asisten otomatis (AI) Lawang. Pengingat bahwa ${t} Anda dengan tim kami hari ini pukul ${h} (waktu Bali). Jika perlu mengubahnya, balas pesan ini dan anggota tim akan membantu. Balas STOP untuk berhenti menerima pesan ini.`,
 };
-const PALABRAS_EN = new Set(["hello", "hi", "thanks", "thank", "you", "want", "would", "like", "the", "and", "price", "how", "much", "when", "can", "please", "land", "visit", "call", "info", "interested", "what", "where", "is", "are"]);
-const PALABRAS_ES = new Set(["hola", "gracias", "quiero", "quisiera", "para", "una", "por", "favor", "cuando", "puedo", "tengo", "buenas", "buenos", "dias", "días", "tardes", "informacion", "información", "precio", "cuanto", "cuánto", "terreno", "villa", "llamada", "visita", "si", "sí", "estoy", "como", "cómo", "que", "qué", "donde", "dónde", "mañana"]);
-const PALABRAS_ID = new Set(["halo", "terima", "kasih", "saya", "mau", "ingin", "untuk", "bisa", "berapa", "harga", "tanah", "vila", "apakah", "tolong", "selamat", "pagi", "siang", "sore", "malam", "dan", "yang", "dengan", "ada", "besok", "boleh", "informasi", "kapan", "dimana", "tidak", "iya", "ya"]);
-/** Idioma del lead (en/es/id; en por defecto) a partir de lo que ESCRIBIÓ él en el historial. Sin mensajes o sin señal clara → en. */
-export function idiomaDe(historial) {
-  const textos = (Array.isArray(historial) ? historial : []).filter((h) => h && h.rol === "user" && h.texto).slice(-6).map((h) => String(h.texto));
-  let es = 0, id = 0, en = 0;
-  for (const t of textos) for (const w of t.toLowerCase().split(/[^\p{L}]+/u)) {
-    if (!w) continue;
-    if (PALABRAS_ES.has(w)) es++;
-    if (PALABRAS_ID.has(w)) id++;
-    if (PALABRAS_EN.has(w)) en++;
-  }
-  if (es >= 2 && es > id && es > en) return "es";
-  if (id >= 2 && id > es && id > en) return "id";
-  return "en";
-}
 /** Hora de Bali (WITA) de la cita: "15:00". */
 export function horaBali(cuando_ts, tz = "Asia/Makassar") {
   return new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(cuando_ts));
-}
-/** Primer nombre limpio para {{1}} (Meta rechaza vacíos, saltos y tabuladores). Sin nombre usable → fórmula neutra del idioma. */
-export function nombrePila(nombre, idioma = "en") {
-  const t = String(nombre || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim().split(/\s+/)[0] || "";
-  const limpio = t.replace(/[^\p{L}\p{M}'’.-]/gu, "").slice(0, 30);
-  return limpio.length >= 1 ? limpio : (SIN_NOMBRE[idioma] || SIN_NOMBRE.en);
 }
 /** Variables de la plantilla en el orden {{1}} nombre · {{2}} tipo (idioma de la plantilla) · {{3}} hora de Bali. */
 export function paramsRecordatorio({ nombre, tipo, cuando_ts }, idioma = "en", tz = "Asia/Makassar") {

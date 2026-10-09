@@ -23,6 +23,7 @@ import {
   unsubAgregar, unsubLeer, getScheduled, setScheduled,
 } from "./store/redis.js";
 import { creaCatalogo, cifrasPermitidas, postCheckCifras } from "./botcat.js";
+import { creaAvisos, paramsAlertaEquipo, ENV_PLANTILLA, normalizaHistorial } from "./avisos-plantilla.js";   // S13: plantillas utility (cita, traspaso, alerta al equipo)
 import { extraeEtiquetas, bloquesSistema, contenidoParaModelo, creaTopes, ejecutaCrm, avisoCita, adaptaCierreACita, isoConZona, citasIlegibles, pideTraspaso, ejecutaTraspaso, ACUSE_DERECHOS, notaDerechos, avisoDerechos, aplicaAviso, debeAvisar } from "./botcrm.js";
 
 const app = express();
@@ -57,9 +58,6 @@ const {
   STRIPE_SUCCESS_URL,
   STRIPE_CANCEL_URL,
   ADMIN_PASSWORD,
-  ALERT_TEMPLATE_NAME,
-  ALERT_TEMPLATE_LANG,
-  ALERT_TEMPLATE_VARS,
   CALENDAR_ID,
   CALENDAR_TZ,
   REMINDER_LEAD_MIN,
@@ -1743,7 +1741,10 @@ async function sendIntro(phone) {
   return { ok: true };
 }
 
-// Avisa al owner. Usa plantilla si está configurada; si no, texto libre (solo llega si su ventana 24h está abierta).
+// Avisa al equipo (OWNER_PHONE). Con ALERTA_EQUIPO_TEMPLATE_NAME usa la plantilla utility `lawang_alerta_equipo` (es, 2 variables: contacto y último mensaje,
+// SIN saltos de línea ni tabuladores: Meta rechaza el envío); sin ella, texto libre (solo llega si la ventana de 24 h del owner está abierta).
+// Sustituye a `lawang_alerta_lead` (MARKETING) y a ALERT_TEMPLATE_NAME/_LANG/_VARS, que este motor ya no lee (S13, LAW-507).
+const ALERTA_EQUIPO_TEMPLATE_NAME = String(process.env[ENV_PLANTILLA.alerta] || "").trim();
 async function notifyOwner(kind, lead) {
   if (!OWNER_PHONE) return;
   const label = kind === "booking" ? "🔔 LEAD CALIENTE — quiere reservar"
@@ -1752,18 +1753,18 @@ async function notifyOwner(kind, lead) {
   const who = lead.name || lead.phone;
   const msg = lead.lastMessage || "";
 
-  if (ALERT_TEMPLATE_NAME) {
-    const vars = ALERT_TEMPLATE_VARS != null ? parseInt(ALERT_TEMPLATE_VARS) : 2;
-    let params = [];
-    if (vars === 1) params = [`${label}: ${who} — "${msg}"`];
-    else if (vars === 2) params = [who, msg];
-    else if (vars >= 3) params = [label, who, msg];
-    await sendWhatsAppTemplate(OWNER_PHONE, ALERT_TEMPLATE_NAME, ALERT_TEMPLATE_LANG, params);
+  if (ALERTA_EQUIPO_TEMPLATE_NAME) {
+    await sendWhatsAppTemplate(OWNER_PHONE, ALERTA_EQUIPO_TEMPLATE_NAME, "es", paramsAlertaEquipo({ nombre: lead.name, telefono: lead.phone, ultimoMensaje: msg }));
   } else {
     // Plan B: texto libre (puede fallar si el owner no escribió al bot en las últimas 24h)
     await sendWhatsApp(
       OWNER_PHONE,
-      `${label} — ${PROJECT_NAME}\n\n${who}\nÚltimo mensaje: "${msg}"\n\n(Configura ALERT_TEMPLATE_NAME para recibir esto siempre.)`
+      `${label} — ${PROJECT_NAME}
+
+${who}
+Último mensaje: "${msg}"
+
+(Configura ${ENV_PLANTILLA.alerta} para recibir esto siempre.)`
     );
   }
 }
@@ -2342,7 +2343,7 @@ const webhookRedis = async (req, res) => {
 };
 // ─── BOT_STORE=postgres: webhook, rutas del panel y recordatorio de turno-pg.js ─────────────────────────────
 // El handler de arriba (webhookRedis) no se ha tocado: con BOT_STORE=redis el comportamiento es el de siempre. S9 lo borra.
-let webhookPg = null, turnoPg = null;
+let webhookPg = null, turnoPg = null, estadoLeadPg = null;
 if (STORE_PG) {
   const { creaPg } = await import("./store/postgres.js");
   const logPg = (m) => console.log(`[${PROJECT_NAME}] ${m}`);
@@ -2364,6 +2365,7 @@ if (STORE_PG) {
       if (OWNER_PHONE) await sendWhatsAppResult(OWNER_PHONE, `✅ ${PROJECT_NAME}: la base de datos del bot vuelve a responder.`);
     },
   });
+  estadoLeadPg = (tel) => pgCli.estado({ tel });   // S13: el aviso de plantilla consulta el estado (y la baja) del teléfono ANTES de enviar
   // Cita que el cliente cree agendada y no se guardó: mismo aviso al dueño que en modo redis.
   const avisoCitaSinRegistrar = async ({ apptMatch, from, profileName }) => {
     const texto = avisoCita({ proyecto: PROJECT_NAME, nombre: profileName, tel: String(from),
@@ -2404,7 +2406,7 @@ if (STORE_PG) {
   });
   webhookPg = turnoPg.webhook;
   // Lo que el bot ya no tiene (lo vacío o sin configurar en Lawang, decisión 7 del owner) responde 410 en vez de tocar un almacén que no existe.
-  const PG_ADMIN_VIVO = new Set(["/admin/api/health", "/admin/api/wa-status", "/admin/api/templates", "/admin/api/send", "/admin/api/send-template", "/admin/api/pause", "/admin/api/simulate", "/admin/api/simulate/reset"]);
+  const PG_ADMIN_VIVO = new Set(["/admin/api/health", "/admin/api/wa-status", "/admin/api/templates", "/admin/api/send", "/admin/api/send-template", "/admin/api/aviso-cliente", "/admin/api/pause", "/admin/api/simulate", "/admin/api/simulate/reset"]);
   app.use(["/admin/api", "/media", "/unsubscribe"], (req, res, next) => (PG_ADMIN_VIVO.has(req.baseUrl + req.path) ? next() : res.status(410).json({ error: "retirado_con_postgres" })));
   turnoPg.rutasAdmin(app, { adminAuth });
   // /admin/api/health y el simulador, con su memoria de proceso
@@ -2630,6 +2632,40 @@ app.get("/admin/api/templates", async (req, res) => {
   } catch (e) {
     res.status(502).json({ error: e.response?.data ? JSON.stringify(e.response.data) : e.message });
   }
+});
+
+// ── Avisos de cita y de traspaso al cliente con plantilla utility (S13, LAW-507) ──
+// Habla el BOT, así que todo pasa por el freno de testing (sendWhatsApp / sendWhatsAppTemplate) y por la baja. Ventana de 24 h abierta → texto libre con
+// aviso de asistente; cerrada → la plantilla de CITA_*_TEMPLATE_NAME / TRASPASO_TEMPLATE_NAME en el idioma del lead (en/es). Nace CERRADO: sin
+// BOT_AVISOS_CLIENTE=on responde 404. Llamador previsto: lawang-bot-proxy / la intranet cuando una persona del equipo confirma, mueve o cancela una cita.
+const AVISOS_CLIENTE_ON = String(process.env.BOT_AVISOS_CLIENTE || "").trim().toLowerCase() === "on";
+const avisosCliente = creaAvisos({
+  plantillas: Object.fromEntries(["confirmada", "reprogramada", "cancelada", "traspaso"].map((e) => [e, process.env[ENV_PLANTILLA[e]] || ""])),
+  estadoLead: async (tel) => {
+    if (STORE_PG) {
+      const est = await estadoLeadPg(tel);
+      if (est && est.error) return { error: est.error };
+      const h = normalizaHistorial(est && est.historial);
+      return { baja: !!(est && est.baja), historial: h, ultimoEntranteTs: Math.max(0, ...h.filter((m) => m.rol === "user").map((m) => Number(m.ts) || 0)), nombre: est && est.nombre };
+    }
+    const [baja, conv, lastIn, lead] = await Promise.all([getOptOut(tel), getConversation(tel), getInbound(tel), getLead(tel)]);
+    return { baja: !!baja, historial: normalizaHistorial(conv), ultimoEntranteTs: Number(lastIn) || 0, nombre: lead && lead.name };
+  },
+  isAllowed,
+  concede: (tel) => (STORE_PG ? autorizaciones.concede(tel, "turno") : null),
+  revoca: (tel, token) => { if (STORE_PG) autorizaciones.revoca(tel, token); },
+  enviaLibre: (tel, texto) => sendWhatsApp(tel, texto),
+  enviaPlantilla: (tel, nombre, idioma, params) => sendWhatsAppTemplate(tel, nombre, idioma, params),
+  log: (m) => console.log(`[${PROJECT_NAME}] ${m}`),
+});
+app.post("/admin/api/aviso-cliente", async (req, res) => {
+  if (!adminAuth(req, res)) return;
+  if (!AVISOS_CLIENTE_ON) return res.status(404).json({ error: "avisos_cliente_apagados", detalle: "Pon BOT_AVISOS_CLIENTE=on para activarlos." });
+  const { evento, phone, tipo, cuando, nombre } = req.body || {};
+  try {
+    const r = await avisosCliente.enviaAviso({ evento, tel: phone, tipo, cuando, nombre });
+    res.status(r.ok ? 200 : r.motivo === "estado_no_disponible" ? 503 : 409).json(r);
+  } catch (e) { console.error(`[${PROJECT_NAME}] aviso al cliente falló: ${e.message}`); res.status(500).json({ ok: false, motivo: "error" }); }
 });
 
 // ── Enviar una plantilla aprobada COMO PERSONA (no como bot) ──
@@ -3323,6 +3359,8 @@ app.listen(PORT, async () => {
     if (String(process.env.BOT_RECORDATORIO || "").trim().toLowerCase() === "postgres" && !String(process.env.BOT_API_SECRET_RECORDATORIO || "").trim()) console.error(`[${PROJECT_NAME}] 🚨 BOT_RECORDATORIO=postgres pero falta BOT_API_SECRET_RECORDATORIO`);
     if (OWNER_PHONE && normalizePhone(OWNER_PHONE).length < 10) console.error(`[${PROJECT_NAME}] ⚠️ OWNER_PHONE parece sin prefijo de país: con BOT_STORE=postgres el dueño se reconoce por dígitos EXACTOS`);
   }
+  if (process.env.ALERT_TEMPLATE_NAME) console.error(`[${PROJECT_NAME}] ⚠️ ALERT_TEMPLATE_NAME está puesta y este motor YA NO la lee (S13): la alerta al equipo usa ${ENV_PLANTILLA.alerta}=lawang_alerta_equipo. ${ALERTA_EQUIPO_TEMPLATE_NAME ? "Borra la vieja." : "SIN ella el aviso al equipo sale como texto libre (solo llega con su ventana de 24 h abierta): configúrala y borra la vieja."}`);
+  console.log(`[${PROJECT_NAME}] Avisos de cita/traspaso al cliente (BOT_AVISOS_CLIENTE): ${AVISOS_CLIENTE_ON ? "ON" : "off"} · alerta al equipo: ${ALERTA_EQUIPO_TEMPLATE_NAME ? "plantilla " + ALERTA_EQUIPO_TEMPLATE_NAME : "texto libre"}`);
   console.log(`[${PROJECT_NAME}] Firma webhook: ${META_APP_SECRET ? "🟢 X-Hub-Signature-256 activa" : "⚠️  SIN verificar — añade META_APP_SECRET en Railway"}`);
   console.log(`[${PROJECT_NAME}] Email (Brevo): ${MAIL_READY ? "🟢 listo" : `⚠️  NO configurado → BREVO_API_KEY=${BREVO_API_KEY ? "ok" : "FALTA"}, MAIL_FROM=${MAIL_FROM ? "ok" : "FALTA"}`}`);
   if (!MAIL_READY) {
