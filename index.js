@@ -7,6 +7,8 @@ import https from "https";
 import { createClient } from "redis";
 import Stripe from "stripe";
 import crypto from "crypto";
+// S8 (10-oct-2026): quita el razonamiento del modelo que se cuela en el texto (se llama desde cleanReply).
+import { quitaRazonamiento } from "./razonamiento.js";
 
 const app = express();
 // Railway pone su edge delante: sin esto req.ip es SIEMPRE la IP interna del proxy y
@@ -1842,12 +1844,14 @@ async function sendHumanized(to, text, messageId, startedAt) {
 // Limpia la respuesta del modelo para el cliente: quita las etiquetas internas ([INTENT], [LEAD]…),
 // arregla el guion medio (pilla "palabra—palabra" y guion final; NO toca "self-guided"/"3-6") y
 // convierte el markdown que WhatsApp no entiende. Webhook y simulador comparten esto — antes estaba
-// duplicado en dos sitios y un fix en uno se olvidaba en el otro.
+// duplicado en dos sitios y un fix en uno se olvidaba en el otro. También quita el razonamiento del modelo que se cuela en el
+// texto (razonamiento.js, batería S8 T07, mismo módulo que la rama lawang): webhook y simulador pasan los dos por aquí. Si TODO
+// era razonamiento, queda la frase neutra RESPUESTA_TRAS_FUGA (nunca vacío por esta vía; b2k no tiene traspaso a humano).
 function cleanReply(reply) {
-  return reply
+  return quitaRazonamiento(reply
     .replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "")
     .replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "")
-    .replace(/\[EMAIL:[^\]]*\]/gi, "").trim()
+    .replace(/\[EMAIL:[^\]]*\]/gi, "").trim())
     .replace(/[ \t]*(—|–|--)[ \t]*$/gm, ".").replace(/[ \t]*(—|–|--)[ \t]*/g, ", ")
     .replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1")  // **URL** → URL
     .replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
@@ -2376,9 +2380,11 @@ app.post("/webhook", async (req, res) => {
     const response = await claudeMessage({
       model: MODEL,
       // Thinking ADAPTIVE, no disabled: sin borrador privado el modelo razonaba EN el texto visible
-      // ("self-thought" que el cliente vio en el chat, 23-jul-2026). Con adaptive, el cálculo va a un
-      // bloque thinking que este server nunca envía (solo se extrae el bloque type==="text") — el
-      // razonamiento no puede llegar al cliente por construcción. effort:low contiene el gasto.
+      // ("self-thought" que el cliente vio en el chat, 23-jul-2026). Con adaptive, CUANDO piensa, el cálculo
+      // va a un bloque thinking que este server nunca envía (solo se extrae el bloque type==="text").
+      // NO es "por construcción": adaptive puede decidir no pensar, y con effort low Haiku 5.5 razonó en
+      // voz alta dentro del texto (batería S8 T07 de Lawang, 10-oct-2026). La red es cleanReply → quitaRazonamiento.
+      // effort:low contiene el gasto.
       // max_tokens cubre pensamiento + respuesta; la respuesta sigue corta por prompt.
       thinking: { type: "adaptive" },
       output_config: { effort: "low" },
@@ -2453,10 +2459,13 @@ app.post("/webhook", async (req, res) => {
       if (rescued.length) console.warn(`[${PROJECT_NAME}] [MEDIA] RESCATE: el modelo escribió los títulos sin etiqueta (${rescued.map((r) => r.label).join(", ")}) — se envían de verdad`);
     }
 
-    history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
+    // Nunca un WhatsApp vacío (S8, 11-oct-2026): si el modelo solo escribió etiquetas ([MEDIA:…] sin texto), se salta el
+    // texto y siguen la media y el email. Un turno de assistant vacío en el historial además rompería la siguiente llamada.
+    // El mensaje del cliente se guarda igual en los dos casos.
+    if (reply.trim()) history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
     await saveConversation(from, history);
-
-    await sendHumanized(from, reply, message.id, replyStart);
+    if (reply.trim()) await sendHumanized(from, reply, message.id, replyStart);
+    else console.warn(`[${PROJECT_NAME}] Respuesta vacía tras limpiar (solo etiquetas) — no se envía texto a ${from}`);
     // Fotos/vídeos que el bot decidió enviar ([MEDIA:label]) → se buscan en la biblioteca, se mandan y se anotan en el historial.
     if (mediaMatch || rescued.length) {
       const wanted = mediaMatch
