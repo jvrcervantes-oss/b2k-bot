@@ -32,9 +32,10 @@ export function chatParaEdge(c) {
 }
 export function configParaEdge(c) { return { extra: c.extra, bienvenida: c.bienvenida, pausa_horas: c.pausa_horas, updated_by: c.updated_by ?? null }; }
 
+import { cabeceraRegion } from "./store/postgres.js";
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function creaTransporte({ url, secreto, http = axios, timeoutMs = 25000, espera = dormir, max429 = 5, tope429Ms = 30000 } = {}) {
+export function creaTransporte({ url, secreto, http = axios, timeoutMs = 25000, espera = dormir, max429 = 5, tope429Ms = 30000, region = "" } = {}) {
   const base = String(url || "").trim().replace(/\/+$/, "");
   const sec = String(secreto || "").trim();
   if (!base || !sec) return null;
@@ -46,7 +47,7 @@ export function creaTransporte({ url, secreto, http = axios, timeoutMs = 25000, 
       let r;
       try {
         r = await http.post(`${base}/importar`, { accion, ...cuerpo }, {
-          headers: { "X-Bot-Secret": sec, "content-type": "application/json" },
+          headers: { "X-Bot-Secret": sec, "content-type": "application/json", ...cabeceraRegion(region) },
           timeout: timeoutMs, validateStatus: () => true, maxContentLength: 1024 * 1024, maxBodyLength: 4 * 1024 * 1024,
         });
       } catch (_) {

@@ -7,6 +7,7 @@ import https from "https";
 import Stripe from "stripe";
 import crypto from "crypto";
 import { inventario as inventarioRedis, importar as importarRedis } from "./import_redis.js"; // TEMPORAL (S5/LAW-507): se retira en S9
+import { cabeceraRegion } from "./store/postgres.js";
 import { creaTransporte as creaTransporteImportar } from "./import_transporte.js"; // TEMPORAL (S5/LAW-507): se retira en S9
 import { VACIA as CFG_VACIA, validaConfig, bloqueEquipo, ttlPausaHumana } from "./botcfg.js";
 import {
@@ -299,6 +300,7 @@ const BOT_HUMANO_VERIFICA = _modo(process.env.BOT_HUMANO_VERIFICA, ["off", "somb
 const HUMANO_VERIFICA_EFECTIVO = STORE_PG ? BOT_HUMANO_VERIFICA : "off";
 console.log(`[${PROJECT_NAME}] humano_verifica=${BOT_HUMANO_VERIFICA}${HUMANO_VERIFICA_EFECTIVO !== BOT_HUMANO_VERIFICA ? " (NO EFECTIVO: solo existe con BOT_STORE=supabase; en redis los envíos de la intranet NO se verifican)" : ""}`);
 const BOT_API_URL = String(process.env.BOT_API_URL || "").trim().replace(/\/+$/, "");
+const BOT_API_REGION = String(process.env.BOT_API_REGION || "").trim(); // LAW-507: p. ej. ap-southeast-1; vacio = sin fijar
 const BOT_API_SECRET_CATALOGO = String(process.env.BOT_API_SECRET_CATALOGO || "").trim();
 const BOT_API_SECRET_CRM = String(process.env.BOT_API_SECRET_CRM || "").trim();
 const CRM_EFECTIVO = BOT_CRM_MODE === "on" && (!BOT_API_URL || !BOT_API_SECRET_CRM) ? "off" : BOT_CRM_MODE;
@@ -307,7 +309,7 @@ if (BOT_CATALOGO_MODE === "on" && (!BOT_API_URL || !BOT_API_SECRET_CATALOGO)) co
 
 async function _llamaEdge(ruta, secreto, cuerpo) {
   const r = await axios.post(`${BOT_API_URL}/${ruta}`, cuerpo, {
-    headers: { "X-Bot-Secret": secreto, "content-type": "application/json" },
+    headers: { "X-Bot-Secret": secreto, "content-type": "application/json", ...cabeceraRegion(BOT_API_REGION) },
     timeout: 5000, validateStatus: () => true, maxContentLength: 1024 * 1024,
   });
   if (r.status !== 200 || !r.data || r.data.ok !== true) throw new Error(`bot-api/${ruta} HTTP ${r.status}`); // sin cuerpo: no se vuelca nada ajeno al log
@@ -2366,7 +2368,7 @@ if (STORE_PG) {
   setInterval(volcarLatencia, 60 * 60_000).unref(); // dentro de if (STORE_PG)
   process.once("SIGTERM", () => { volcarLatencia(); process.exit(0); });
   const pgCli = creaPg({
-    url: BOT_API_URL, log: logPg, latencia: latenciaPg,
+    url: BOT_API_URL, log: logPg, latencia: latenciaPg, region: BOT_API_REGION,
     timeoutMs: numMs(process.env.BOT_API_TIMEOUT_MS, 10000, 60000), pausaReintentoMs: numMs(process.env.BOT_API_PAUSA_REINTENTO_MS, 300, 10000),
     secretos: { estado: edgeSecret("BOT_API_SECRET_ESTADO"), recordatorio: edgeSecret("BOT_API_SECRET_RECORDATORIO") },
     // El aviso al dueño NO depende de la base: va directo a WhatsApp.
@@ -2587,7 +2589,7 @@ app.post("/admin/api/redis-importar", async (req, res) => {
   const lector = lectorImportacion();
   if (!lector) return res.status(409).json({ error: "sin Redis conectado" });
   const dry = !!(req.body && req.body.dry === true);
-  const transporte = creaTransporteImportar({ url: BOT_API_URL, secreto: process.env.BOT_API_SECRET_IMPORTAR });
+  const transporte = creaTransporteImportar({ url: BOT_API_URL, secreto: process.env.BOT_API_SECRET_IMPORTAR, region: BOT_API_REGION });
   if (!dry && !transporte) return res.status(409).json({ error: "falta BOT_API_URL o BOT_API_SECRET_IMPORTAR" });
   if (_importandoRedis) return res.status(409).json({ error: "importación en curso" });
   _importandoRedis = true;

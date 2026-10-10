@@ -1,7 +1,7 @@
 // S4b: el cliente de la edge `bot-api` (store/postgres.js). Sin red: la edge es una función falsa que anota cada petición.
 import test from "node:test";
 import assert from "node:assert";
-import { creaPg, ErrorEdge } from "./store/postgres.js";
+import { creaPg, ErrorEdge, cabeceraRegion } from "./store/postgres.js";
 
 const SEC = { estado: "se-estado", recordatorio: "se-recordatorio", humano: "se-humano" };
 const T = "6281234567890";
@@ -226,4 +226,15 @@ test("verificar: un 401 (token que no vale), un 503 (Auth caída) y la red caíd
   // un error de negocio de la edge no es un permiso
   const x = edge([{ status: 200, data: { ok: false, accion: "verificar", error: "permiso_invalido" } }]);
   assert.deepStrictEqual(await x.pg.verificar({ jwt: "j" }), { error: "permiso_invalido" });
+});
+
+test("LAW-507: region fija la cabecera x-region; vacia o rara = sin cabecera", async () => {
+  const con = edge([ok({ citas: [] })], { region: "ap-southeast-1" });
+  await con.pg.citasRecordar();
+  assert.strictEqual(con.peticiones[0].headers["x-region"], "ap-southeast-1");
+  const sin = edge([ok({ citas: [] })]);
+  await sin.pg.citasRecordar();
+  assert.ok(!("x-region" in sin.peticiones[0].headers));
+  assert.deepStrictEqual(cabeceraRegion("  AP-Southeast-1 "), { "x-region": "ap-southeast-1" });
+  for (const raro of ["", undefined, "x\r\nfoo: bar", "singapur", "ap-southeast-1; drop"]) assert.deepStrictEqual(cabeceraRegion(raro), {});
 });

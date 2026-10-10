@@ -22,6 +22,13 @@ export class ErrorEdge extends Error {
   }
 }
 
+// LAW-507: la edge se lanza en la region mas cercana a quien llama (Railway sfo -> us-west-1) pero la base esta en Singapur: ~1,9 s por llamada
+// frente a ~0,2 s con la edge en ap-southeast-1. `x-region` la fija. Vacio o con forma rara = sin cabecera (comportamiento de siempre).
+export function cabeceraRegion(valor) {
+  const v = String(valor || "").trim().toLowerCase();
+  return /^[a-z]{2}-[a-z]+-\d$/.test(v) ? { "x-region": v } : {};
+}
+
 const RUTA_DE = {
   mensaje_recibir: "estado", turno_estado: "estado", turno_cerrar: "estado", eco_operadora: "estado", pausar: "estado", baja: "estado",
   entrega_fallida: "estado", escalar: "estado", escalacion_tomar: "estado", lead_resumen: "estado",
@@ -43,7 +50,7 @@ async function postAxios(url, cuerpo, { headers, timeout }) {
 
 export function creaPg({
   url, secretos = {}, post = postAxios, timeoutMs = 10_000, reintentos = 1, pausaReintentoMs = 300, umbral = 3,
-  onAlarma = () => {}, onRecuperado = () => {}, log = () => {}, latencia = null,
+  onAlarma = () => {}, onRecuperado = () => {}, log = () => {}, latencia = null, region = "",
 }) {
   const base = String(url || "").trim().replace(/\/+$/, "");
   const estado = { fallosSeguidos: 0, alarmado: false, umbral: Number.isInteger(umbral) && umbral > 0 ? umbral : 3, llamadas: 0 };
@@ -69,7 +76,7 @@ export function creaPg({
     const ruta = RUTA_DE[accion];
     const secreto = ruta ? secretos[ruta] : "";
     if (!base || !secreto) { const e = new ErrorEdge(accion, "sin_configurar", 0); falloContado(accion, e); throw e; }   // sin URL o sin secreto no se sale: fallo cerrado y ruidoso
-    const headers = { "X-Bot-Secret": secreto, "content-type": "application/json", ...(opciones.jwt ? { authorization: `Bearer ${opciones.jwt}` } : {}) };
+    const headers = { "X-Bot-Secret": secreto, "content-type": "application/json", ...cabeceraRegion(region), ...(opciones.jwt ? { authorization: `Bearer ${opciones.jwt}` } : {}) };
     // sinCuenta: ni el fallo ni el éxito de esta llamada tocan el contador de la base (un `verificar` bueno no puede apagar la alarma de una caída real; uno malo no la enciende).
     const cuenta = opciones.sinCuenta === true ? () => {} : falloContado;
     const exito = opciones.sinCuenta === true ? () => {} : exitoContado;
