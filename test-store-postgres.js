@@ -238,3 +238,14 @@ test("LAW-507: region fija la cabecera x-region; vacia o rara = sin cabecera", a
   assert.deepStrictEqual(cabeceraRegion("  AP-Southeast-1 "), { "x-region": "ap-southeast-1" });
   for (const raro of ["", undefined, "x\r\nfoo: bar", "singapur", "ap-southeast-1; drop"]) assert.deepStrictEqual(cabeceraRegion(raro), {});
 });
+
+test("LAW-507: si la region fijada falla, el reintento sale SIN x-region; un solo intento no cambia", async () => {
+  const a = edge([new Error("ECONNRESET"), ok({ citas: [] })], { region: "ap-southeast-1" });
+  await a.pg.citasRecordar();
+  assert.strictEqual(a.peticiones.length, 2);
+  assert.strictEqual(a.peticiones[0].headers["x-region"], "ap-southeast-1");
+  assert.ok(!("x-region" in a.peticiones[1].headers));
+  const b = edge([{ status: 503, data: {} }, ok({ citas: [] })], { region: "ap-southeast-1" });
+  await b.pg.citasRecordar();
+  assert.ok(!("x-region" in b.peticiones[1].headers));
+});

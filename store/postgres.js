@@ -78,6 +78,8 @@ export function creaPg({
     if (!base || !secreto) { const e = new ErrorEdge(accion, "sin_configurar", 0); falloContado(accion, e); throw e; }   // sin URL o sin secreto no se sale: fallo cerrado y ruidoso
     const headers = { "X-Bot-Secret": secreto, "content-type": "application/json", ...cabeceraRegion(region), ...(opciones.jwt ? { authorization: `Bearer ${opciones.jwt}` } : {}) };
     // sinCuenta: ni el fallo ni el éxito de esta llamada tocan el contador de la base (un `verificar` bueno no puede apagar la alarma de una caída real; uno malo no la enciende).
+    // Si la región fijada cae no hay reenrutado automático (doc de Supabase): el REINTENTO sale sin `x-region`, la edge elige la suya y el bot no se queda mudo.
+    const headersSinRegion = { ...headers }; delete headersSinRegion["x-region"];
     const cuenta = opciones.sinCuenta === true ? () => {} : falloContado;
     const exito = opciones.sinCuenta === true ? () => {} : exitoContado;
     const maxIntentos = opciones.unIntento === true ? 1 : 1 + reintentos;     // una persona espera la respuesta: nada de cadenas de reintentos
@@ -91,7 +93,7 @@ export function creaPg({
     for (let intento = 1; intento <= maxIntentos; intento++) {
       let resp = null;
       let t0 = 0; try { if (latencia) t0 = latencia.reloj(); } catch { /* medir no rompe */ }
-      try { resp = await post(`${base}/${ruta}`, cuerpoFinal, { headers, timeout: timeoutMs }); mide(t0); }
+      try { resp = await post(`${base}/${ruta}`, cuerpoFinal, { headers: intento > 1 ? headersSinRegion : headers, timeout: timeoutMs }); mide(t0); }
       catch (e) {
         mide(t0);
         ultimo = new ErrorEdge(accion, e && (e.code === "ECONNABORTED" || e.code === "ETIMEDOUT" || /timeout/i.test(e.message || "")) ? "timeout" : "red");
