@@ -8,7 +8,7 @@ import { createClient } from "redis";
 import Stripe from "stripe";
 import crypto from "crypto";
 // S8 (10-oct-2026): quita el razonamiento del modelo que se cuela en el texto (se llama desde cleanReply).
-import { quitaRazonamiento } from "./razonamiento.js";
+import { quitaRazonamiento, idiomaCliente, textoDelTurno } from "./razonamiento.js";
 
 const app = express();
 // Railway pone su edge delante: sin esto req.ip es SIEMPRE la IP interna del proxy y
@@ -1846,12 +1846,13 @@ async function sendHumanized(to, text, messageId, startedAt) {
 // convierte el markdown que WhatsApp no entiende. Webhook y simulador comparten esto — antes estaba
 // duplicado en dos sitios y un fix en uno se olvidaba en el otro. También quita el razonamiento del modelo que se cuela en el
 // texto (razonamiento.js, batería S8 T07, mismo módulo que la rama lawang): webhook y simulador pasan los dos por aquí. Si TODO
-// era razonamiento, queda la frase neutra RESPUESTA_TRAS_FUGA (nunca vacío por esta vía; b2k no tiene traspaso a humano).
-function cleanReply(reply) {
+// era razonamiento, por defecto queda la frase neutra RESPUESTA_TRAS_FUGA (el simulador); el webhook pasa { siVacio: "" } y
+// decide él al final, cuando ya sabe si van enlace de pago, media o email (2ª revisión del 11-oct).
+function cleanReply(reply, opts) {
   return quitaRazonamiento(reply
     .replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "")
     .replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "")
-    .replace(/\[EMAIL:[^\]]*\]/gi, "").trim())
+    .replace(/\[EMAIL:[^\]]*\]/gi, "").trim(), opts)
     .replace(/[ \t]*(—|–|--)[ \t]*$/gm, ".").replace(/[ \t]*(—|–|--)[ \t]*/g, ", ")
     .replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1")  // **URL** → URL
     .replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
@@ -2416,7 +2417,8 @@ app.post("/webhook", async (req, res) => {
     const emailMatch = reply.match(/\[EMAIL:\s*([^\]\s]+@[^\]\s]+)\s*\]/i);
     const resendMatch = /\[RESEND_LINK\]/i.test(reply); // el cliente pide reenviar el link que ya recibió
     let leadFields = parseLeadTag(reply); // datos confirmados en la charla → ficha/BD
-    reply = cleanReply(reply); // etiquetas internas + guion + markdown de WhatsApp (helper compartido)
+    // siVacio "": si todo era razonamiento, qué se manda se decide abajo, cuando ya se sabe si van enlace, media o email.
+    reply = cleanReply(reply, { siVacio: "" }); // etiquetas internas + guion + markdown de WhatsApp (helper compartido)
 
     // ── Stripe checkout session dinámica ──────────────────────────
     // SIEMPRE quitar cualquier link de pago que el modelo haya alucinado.
@@ -2432,16 +2434,18 @@ app.post("/webhook", async (req, res) => {
 
     // Adjuntar el link real SOLO si el cliente pide pagar ya (intent booking + riders).
     // El cierre por defecto es la LLAMADA, no el pago — el link es la excepción.
+    // El enlace se pega al texto más abajo (textoDelTurno): si el modelo no dejó texto propio, va con una línea neutra de pago.
+    let enlace = "";
     if (numRiders && stripeClient && intent === "booking") {
       const sessionUrl = await createStripeSession(numRiders, from);
-      if (sessionUrl) { reply = reply + "\n\n" + sessionUrl; await setLastLink(from, sessionUrl); }
+      if (sessionUrl) { enlace = sessionUrl; await setLastLink(from, sessionUrl); }
       else console.error(`[${PROJECT_NAME}] booking detectado pero no se pudo crear la sesión Stripe`);
     } else if (numRiders && intent === "booking" && !stripeClient) {
       console.error(`[${PROJECT_NAME}] booking detectado pero stripeClient es null — falta STRIPE_SECRET_KEY en el entorno`);
     } else if (resendMatch) {
       // El cliente pidió reenviar el link que YA recibió → mismo link, sin crear un cobro nuevo.
       const last = await getLastLink(from);
-      if (last) reply = reply + "\n\n" + last;
+      if (last) enlace = last;
       else console.warn(`[${PROJECT_NAME}] [RESEND_LINK] pedido pero no hay link previo para ${from} (el bot no debería prometerlo)`);
     }
 
@@ -2459,19 +2463,30 @@ app.post("/webhook", async (req, res) => {
       if (rescued.length) console.warn(`[${PROJECT_NAME}] [MEDIA] RESCATE: el modelo escribió los títulos sin etiqueta (${rescued.map((r) => r.label).join(", ")}) — se envían de verdad`);
     }
 
+    // Fotos/vídeos que el bot decidió enviar ([MEDIA:label]). Se calculan ANTES del texto (mediaToSend es pura: solo mira la
+    // media ya anotada en el historial) para saber si el turno lleva algo aunque el texto haya quedado vacío.
+    const wanted = mediaMatch
+      ? mediaMatch[1].split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+      : rescued.map((r) => String(r.label).toLowerCase());
+    const toSend = wanted.length ? mediaToSend({ wanted, mediaLib, history, askedAgain: customerAskedAgain(text), narrated: rescued.length > 0 }) : [];
+
+    // Texto final (2ª revisión del 11-oct): el enlace va con el texto del modelo o con una línea neutra de pago en el idioma del
+    // cliente (un turno de reserva todo razonamiento ya no antepone «could you tell me more?» al enlace de Stripe); y si no sale
+    // NADA (ni texto, ni enlace, ni media, ni email), la frase neutra, para no dejar al lead sin respuesta.
+    const idioma = idiomaCliente(history.filter((m) => m.role === "user" && typeof m.content === "string").slice(-3).map((m) => m.content).join("\n"));
+    const antes = reply;
+    reply = textoDelTurno({ texto: reply, enlace, idioma, hayMedia: toSend.length > 0, hayEmail: !!emailMatch });
+    if (!antes.trim() && reply.trim() && !enlace) console.warn(`[${PROJECT_NAME}] Respuesta vacía tras limpiar y sin media/email — se envía la frase neutra (${idioma}) a ${from}`);
+
     // Nunca un WhatsApp vacío (S8, 11-oct-2026): si el modelo solo escribió etiquetas ([MEDIA:…] sin texto), se salta el
     // texto y siguen la media y el email. Un turno de assistant vacío en el historial además rompería la siguiente llamada.
     // El mensaje del cliente se guarda igual en los dos casos.
     if (reply.trim()) history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
     await saveConversation(from, history);
     if (reply.trim()) await sendHumanized(from, reply, message.id, replyStart);
-    else console.warn(`[${PROJECT_NAME}] Respuesta vacía tras limpiar (solo etiquetas) — no se envía texto a ${from}`);
-    // Fotos/vídeos que el bot decidió enviar ([MEDIA:label]) → se buscan en la biblioteca, se mandan y se anotan en el historial.
-    if (mediaMatch || rescued.length) {
-      const wanted = mediaMatch
-        ? mediaMatch[1].split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
-        : rescued.map((r) => String(r.label).toLowerCase());
-      const toSend = mediaToSend({ wanted, mediaLib, history, askedAgain: customerAskedAgain(text), narrated: rescued.length > 0 });
+    else console.warn(`[${PROJECT_NAME}] Respuesta vacía tras limpiar (solo etiquetas, con media o email) — no se envía texto a ${from}`);
+    // Se mandan y se anotan en el historial.
+    if (wanted.length) {
       for (const item of toSend) {
         await sendWhatsAppMedia(from, item);
         history.push({ role: "assistant", content: item.caption || (item.type === "video" ? "[vídeo]" : "[foto]"), ts: Date.now(), by: "bot", media: { type: item.type, url: item.url, caption: item.caption || "" } });

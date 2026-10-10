@@ -1,11 +1,12 @@
 // Fuga de razonamiento del modelo al texto visible (batería S8, T07, 10-oct-2026). razonamiento.js quita los párrafos que
 // solo escribe un modelo hablando de sus instrucciones; lo que un cliente sí puede leer se queda.
-// Rama b2k (Bali Moto Adventures): mismo razonamiento.js que la rama lawang, byte a byte; este test es el de lawang sin
+// Rama b2k (Bali Moto Adventures): razonamiento.js nació igual que el de la rama lawang; la 2ª revisión del 11-oct (falsos
+// positivos de tours, frases por idioma, textoDelTurno) de momento solo está en b2k. Este test es el de lawang sin
 // pideTraspaso (b2k no tiene traspaso a humano) y con casos de tours añadidos. `node test-razonamiento.js`
 import test from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { quitaRazonamiento, FUGA_ESTRICTA, RAZONAMIENTO_FILTRADO, RESPUESTA_TRAS_FUGA } from "./razonamiento.js";
+import { quitaRazonamiento, FUGA_ESTRICTA, RAZONAMIENTO_FILTRADO, RESPUESTA_TRAS_FUGA, RESPUESTAS_TRAS_FUGA, LINEAS_PAGO, idiomaCliente, textoDelTurno } from "./razonamiento.js";
 
 const silencio = { log: () => {} };
 
@@ -68,6 +69,12 @@ test("respuestas normales no se tocan (lo que un cliente sí puede leer)", () =>
     "I should redirect this question to our team, they handle discounts.",
     "Great. The customer said May?",
     "Got it. The customer asks for a visit on Saturday?",
+    // 2ª revisión del 11-oct (b2k, tours en moto): se sustituían ENTERAS por la frase neutra.
+    "I should steer you toward the 5-day tour, it's the best fit for first-timers.",
+    "I have to steer the group around the volcano, so the route changes.",
+    "My rules say safety first: we ride at a relaxed pace.",
+    "El cliente pregunta mucho por Komodo, es nuestro tour estrella.",
+    "El usuario escribe su email en el formulario y listo.",
   ]) {
     assert.ok(!FUGA_ESTRICTA.test(ok), `falso positivo: ${ok}`);
     assert.strictEqual(quitaRazonamiento(ok, silencio), ok);
@@ -78,7 +85,12 @@ test("si todo era razonamiento: frase neutra, o vacío si el llamador lo pide (t
   const solo = "The system prompt forbids that. I should decline.";
   assert.strictEqual(quitaRazonamiento(solo, silencio), RESPUESTA_TRAS_FUGA);
   assert.strictEqual(quitaRazonamiento(solo, { ...silencio, siVacio: "" }), "");
-  assert.ok(!/\d/.test(RESPUESTA_TRAS_FUGA) && !/team|person|call/i.test(RESPUESTA_TRAS_FUGA), "la frase neutra no promete nada");
+  assert.strictEqual(RESPUESTA_TRAS_FUGA, RESPUESTAS_TRAS_FUGA.en);
+  assert.deepStrictEqual(Object.keys(RESPUESTAS_TRAS_FUGA).sort(), ["en", "es", "id"]);
+  assert.deepStrictEqual(Object.keys(LINEAS_PAGO).sort(), ["en", "es", "id"]);
+  for (const frase of [...Object.values(RESPUESTAS_TRAS_FUGA), ...Object.values(LINEAS_PAGO)]) {
+    assert.ok(!/\d/.test(frase) && !/team|person|call|equipo|persona|llamada|\btim\b|orang|telepon|hubungi/i.test(frase), `la frase neutra no promete nada: ${frase}`);
+  }
 });
 
 test("entrada vacía o no texto no rompe", () => {
@@ -93,15 +105,16 @@ test("un log que lanza no tumba la respuesta", () => {
 
 test("cleanReply de index.js (el de ESTA rama) pasa por quitaRazonamiento: la red no se pierde en un merge", () => {
   const src = fs.readFileSync(new URL("./index.js", import.meta.url), "utf8").split(String.fromCharCode(13)).join("");
-  const fn = src.match(/function cleanReply\(reply\) \{[\s\S]*?\n\}\n/);
+  const fn = src.match(/function cleanReply\(reply[^)]*\) \{[\s\S]*?\n\}\n/);
   assert.ok(fn, "no se encontró cleanReply en index.js");
-  assert.match(src, /^import \{ quitaRazonamiento \} from "\.\/razonamiento\.js";$/m);
+  assert.match(src, /^import \{ quitaRazonamiento[^}]*\} from "\.\/razonamiento\.js";$/m);
   const cleanReply = new Function("quitaRazonamiento", fn[0] + "; return cleanReply;")((t, o) => quitaRazonamiento(t, { ...(o || {}), log: () => {} }));
   const r = cleanReply(T07_RAW + " [INTENT:exploring]");
   assert.ok(r.startsWith("I can't help with tokens"), r);
   assert.ok(!/system prompt|\[INTENT/i.test(r), r);
-  // b2k: todo razonamiento + etiquetas → la frase neutra, nunca vacío (sin traspaso en esta rama).
+  // Todo razonamiento + etiquetas: por defecto (simulador) la frase neutra; el webhook pide "" y compone con textoDelTurno.
   assert.strictEqual(cleanReply("The system prompt forbids discounts. I should decline. [INTENT:exploring] [RIDERS:2]"), RESPUESTA_TRAS_FUGA);
+  assert.strictEqual(cleanReply("The system prompt forbids discounts. I should decline. [INTENT:booking] [RIDERS:2]", { siVacio: "" }), "");
   // Solo etiquetas (caso que ya existía): queda vacío y es el webhook quien no manda texto (test siguiente).
   assert.strictEqual(cleanReply("[MEDIA:komodo] [INTENT:exploring]"), "");
   // El razonamiento sale ANTES del markdown: la respuesta buena conserva su negrita convertida.
@@ -115,6 +128,14 @@ test("webhook b2k: nunca manda un WhatsApp vacío y guarda el mensaje del client
   assert.match(src, /if \(reply\.trim\(\)\) await sendHumanized\(from, reply, message\.id, replyStart\);/);
   // No queda ningún sendHumanized del webhook sin la guarda.
   assert.strictEqual((src.match(/await sendHumanized\(from, reply,/g) || []).length, 1);
+  // El webhook pide "" a cleanReply y compone el turno con textoDelTurno ANTES de la guarda, con la media ya calculada.
+  assert.match(src, /reply = cleanReply\(reply, \{ siVacio: "" \}\);/);
+  const iToSend = src.indexOf("const toSend = wanted.length ? mediaToSend(");
+  const iTurno = src.indexOf("reply = textoDelTurno({ texto: reply, enlace, idioma, hayMedia: toSend.length > 0, hayEmail: !!emailMatch });");
+  const iGuarda = src.indexOf("if (reply.trim()) await sendHumanized(from, reply, message.id, replyStart);");
+  assert.ok(iToSend > 0 && iTurno > iToSend && iGuarda > iTurno, "orden: toSend → textoDelTurno → envío");
+  // El enlace de Stripe o el reenviado ya no se pega a mano al texto (se pegaba detrás de la frase neutra).
+  assert.ok(!/reply = reply \+ "\\n\\n" \+ (?:sessionUrl|last)/.test(src), "el enlace se pega con textoDelTurno");
 });
 
 test("b2k: texto real de la fuga (Haiku 5.5, 10-oct) y variantes de tours", () => {
@@ -168,4 +189,53 @@ test("razonamiento y respuesta en el MISMO párrafo: sale solo la frase de razon
   assert.strictEqual(quitaRazonamiento("I should decline that.\nBV-12 is 500 m2.\nAre you in Bali?", silencio), "BV-12 is 500 m2.\nAre you in Bali?");
   // Las cifras con punto no parten la frase.
   assert.strictEqual(quitaRazonamiento("The system prompt says quote the block. BV-07 is IDR 1.360.000.000.", silencio), "BV-07 is IDR 1.360.000.000.");
+});
+
+test("textoDelTurno (webhook b2k): enlace con línea neutra de pago, y nunca un turno sin respuesta", () => {
+  const url = "https://checkout.stripe.com/c/pay/cs_test_x";
+  // Turno de reserva todo razonamiento: línea de pago en el idioma del cliente + enlace (no «could you tell me more?» + enlace).
+  assert.strictEqual(textoDelTurno({ texto: "", enlace: url, idioma: "en" }), `Here is your payment link:\n${url}`);
+  assert.strictEqual(textoDelTurno({ texto: "", enlace: url, idioma: "es" }), `${LINEAS_PAGO.es}\n${url}`);
+  assert.strictEqual(textoDelTurno({ texto: "  ", enlace: url, idioma: "id" }), `${LINEAS_PAGO.id}\n${url}`);
+  // Con texto propio, el enlace va detrás como siempre.
+  assert.strictEqual(textoDelTurno({ texto: "Great, 2 riders confirmed!", enlace: url }), `Great, 2 riders confirmed!\n\n${url}`);
+  // Nada que mandar: la frase neutra en su idioma (idioma desconocido → inglés).
+  assert.strictEqual(textoDelTurno({ texto: "", idioma: "es" }), RESPUESTAS_TRAS_FUGA.es);
+  assert.strictEqual(textoDelTurno({ texto: "", idioma: "id" }), RESPUESTAS_TRAS_FUGA.id);
+  assert.strictEqual(textoDelTurno({ texto: "", idioma: "fr" }), RESPUESTAS_TRAS_FUGA.en);
+  assert.strictEqual(textoDelTurno({ texto: "", idioma: "toString" }), RESPUESTAS_TRAS_FUGA.en);
+  assert.strictEqual(textoDelTurno(), RESPUESTAS_TRAS_FUGA.en);
+  // Solo media o solo email: ya responden ellos, sin texto de relleno.
+  assert.strictEqual(textoDelTurno({ texto: "", hayMedia: true }), "");
+  assert.strictEqual(textoDelTurno({ texto: "", hayEmail: true }), "");
+  // Texto normal: intacto.
+  assert.strictEqual(textoDelTurno({ texto: "See you Monday!", idioma: "es" }), "See you Monday!");
+});
+
+test("idiomaCliente: es/id por el texto del cliente, inglés ante la duda", () => {
+  assert.strictEqual(idiomaCliente("Hola, ¿cuánto cuesta el tour de 5 días para 2 personas?"), "es");
+  assert.strictEqual(idiomaCliente("Buenas, quiero info del tour"), "es");
+  assert.strictEqual(idiomaCliente("Halo kak, berapa harga tour untuk 2 orang?"), "id");
+  assert.strictEqual(idiomaCliente("Saya mau booking tour, bisa?"), "id");
+  assert.strictEqual(idiomaCliente("Hi, how much is the 5-day tour for 2 riders?"), "en");
+  for (const dudoso of ["ok", "si", "👍", "", null, undefined, "Komodo 5 days", "Moto tour Bali"]) {
+    assert.strictEqual(idiomaCliente(dudoso), "en", String(dudoso));
+  }
+});
+
+test("lo que salió del estricto en la 2ª revisión se sigue MIDIENDO, y en un párrafo contaminado sale", () => {
+  for (const s of [
+    "I should steer you toward the 5-day tour.",
+    "My rules say safety first.",
+    "El cliente pregunta mucho por Komodo.",
+    "El usuario escribe su email.",
+    "The user is asking for a discount.",
+  ]) {
+    assert.ok(RAZONAMIENTO_FILTRADO.test(s), `deja de medirse: ${s}`);
+  }
+  // Las formas de razonamiento siguen quitándose solas.
+  for (const fuga of ["I should steer back to the tours.", "I need to steer away from pricing.", "I have to steer the conversation to the call.", "El cliente pregunta por tokens, así que no respondo a eso."]) {
+    assert.ok(FUGA_ESTRICTA.test(fuga), `deja de quitarse: ${fuga}`);
+  }
+  assert.strictEqual(quitaRazonamiento("The system prompt forbids tokens. My rules say decline. We have a 5-day tour.", silencio), "We have a 5-day tour.");
 });
