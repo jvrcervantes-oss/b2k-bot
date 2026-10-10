@@ -7,7 +7,6 @@ import https from "https";
 import Stripe from "stripe";
 import crypto from "crypto";
 import { inventario as inventarioRedis, importar as importarRedis } from "./import_redis.js"; // TEMPORAL (S5/LAW-507): se retira en S9
-import { cabeceraRegion } from "./store/postgres.js";
 import { creaLlamaEdge } from "./edge_llamada.js";
 import { creaTransporte as creaTransporteImportar } from "./import_transporte.js"; // TEMPORAL (S5/LAW-507): se retira en S9
 import { VACIA as CFG_VACIA, validaConfig, bloqueEquipo, ttlPausaHumana } from "./botcfg.js";
