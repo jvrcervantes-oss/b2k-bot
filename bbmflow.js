@@ -31,7 +31,7 @@ const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const KO = (motivo, extra = {}) => ({ ok: false, motivo, ...extra });
 
 // ── almacenes pequeños (Redis, o memoria sin Redis: mismas reglas) ─────────────────────────────────────────────────────────────────
-function createKv({ redis = () => null, prefijo }) {
+export function createKv({ redis = () => null, prefijo }) {
   const mem = new Map();
   const tel = (t) => String(t).replace(/\D/g, "");
   return {
@@ -128,7 +128,7 @@ export const ERP_PROMPT_BLOCK =
 
 // ── ejecución de la herramienta ────────────────────────────────────────────────────────────────────────────────────────────────────
 // Devuelve SIEMPRE un objeto (nunca lanza): un error controlado vuelve al modelo como texto para que reaccione.
-export function createErpTools({ erp, quotes, log = console, project = "bot", hoy = () => new Date().toISOString().slice(0, 10) }) {
+export function createErpTools({ erp, quotes, seg = null, log = console, project = "bot", hoy = () => new Date().toISOString().slice(0, 10) }) {
   const p = (m) => `[${project}] [bbmflow] ${m}`;
   const SIN_PRECIO = "Tell the customer you're confirming the exact price with the team and add tags: pricing_check. Do NOT give a price.";
 
@@ -183,6 +183,8 @@ export function createErpTools({ erp, quotes, log = console, project = "bot", ho
         entrega_direccion: direccion, recogida_direccion: direccion && self_return !== true ? direccion : null,
         total: q.total, moneda: q.moneda,
       });
+      // Para el seguimiento (F8 pieza 6): solo producto y fechas que devolvió la base, nunca texto del chat. Un fallo aquí no rompe la cotización.
+      if (seg) { try { await seg.guarda(tel, { producto_id: q.producto_id, desde: q.desde, hasta: q.hasta }); } catch (e) { log.error(p(`bbmseg no guardado: ${e && e.message ? e.message.slice(0, 80) : "?"}`)); } }
       log.log(p(`get_quote erp ok: total=${q.total} ${q.moneda}`));
       return {
         ok: true, bike: hit.nombre, from, to, available: true, days: q.dias, total: q.total, currency: q.moneda,

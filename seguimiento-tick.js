@@ -23,6 +23,10 @@ import crypto from "crypto";
 
 export const FOLLOWUP_ERP_DAILY_CAP = 40;          // envíos de seguimiento por día y por bot en modo ERP (constante; no la toca el ERP)
 export const FOLLOWUP_FAIL_REST_MS = 6 * 3600 * 1000; // descanso de un lead tras un envío fallido (modo ERP)
+// Filtro «cotización aún vendible» (F8 pieza 6, seguimiento-viva.js). Constantes del motor: el ERP no las toca.
+export const VIVA_MAX_CONSULTAS_TICK = 10;            // consultas `cotiza` por pasada (cotiza no tiene tope en la edge: el freno es este). NO gastan el tope diario de ENVÍOS
+export const VIVA_FALLOS_SEGUIDOS_MAX = 2;            // dos «el ERP no contesta» seguidos cortan las consultas de la pasada
+export const VIVA_REST_MS = 6 * 3600 * 1000;          // un lead con veredicto negativo no se vuelve a consultar en 6 h
 // TTL del contador followup:<tel> en modo ERP. El de siempre es 30 días, y con horas altas caduca ANTES de que el lead llegue al tope
 // (horas=720,max=5 → la escalera dura 180 días): el contador volvería a 0 y el bot repetiría la tanda para siempre. 190 días cubre el
 // máximo posible (HORAS_MAX*(MAX_MAX+1) = 4320 h = 180 días) con margen. El modo env conserva sus 30 días.
@@ -79,6 +83,8 @@ export function createFollowupRunner(d) {
   const log = d.log || console;
   const now = d.now || (() => Date.now());
   const failedAt = new Map();   // teléfono → ms del último fallo de envío (modo ERP)
+  const vivaRest = new Map();   // teléfono → ms del último veredicto negativo del filtro «vendible»
+  let lastPass = null;          // resumen de la última pasada (lo lee /admin/api/health)
   let running = false;
   let lastStateKey = "";
   // HMAC con una clave del bot (d.hashKey = el secreto del ERP): un sha256 sin clave sobre teléfonos se revierte por fuerza bruta.
@@ -119,6 +125,11 @@ export function createFollowupRunner(d) {
     const skipped = {};
     const skip = (why) => { skipped[why] = (skipped[why] || 0) + 1; };
     let sentNow = 0, failedNow = 0, capHit = false;
+    // Filtro «solo cotizaciones aún vendibles» (solo origen ERP). viva = verificador (seguimiento-viva.js) o null; vivaRequerida = el interruptor ERP_SEGUIMIENTO_VIVA no está en 0.
+    // Requerido y sin verificador (bot sin BBM_ERP_URL) ⇒ no se envía a nadie: fail-closed, nunca «sin filtro por si acaso».
+    const viva = erp && d.viva ? d.viva() : null;
+    const vivaOn = erp && (d.vivaRequerida ? d.vivaRequerida() : false);
+    let consultas = 0, fallosSeguidos = 0;
     for (const l of leads) {
       if (d.isOwner(l.phone)) { skip("owner"); continue; }
       if (l.paused) { skip("pausado"); continue; }                              // humano al mando
@@ -171,6 +182,25 @@ export function createFollowupRunner(d) {
       const rest = failedAt.get(l.phone);
       if (rest && t - rest < FOLLOWUP_FAIL_REST_MS) { skip("descanso_tras_fallo"); continue; }
       if ((await d.dayCount()) >= FOLLOWUP_ERP_DAILY_CAP) { skip("tope_diario"); capHit = true; break; }
+      if (vivaOn) {
+        // Va DESPUÉS de todos los filtros baratos y del tope diario, y ANTES de dayBump: la consulta no gasta el tope de envíos.
+        if (!viva) { skip("sin_verificador"); continue; }
+        const vr = vivaRest.get(l.phone);
+        if (vr && t - vr < VIVA_REST_MS) { skip("descanso_vendible"); continue; }
+        if (consultas >= VIVA_MAX_CONSULTAS_TICK) { skip("tope_consultas"); continue; }
+        if (fallosSeguidos >= VIVA_FALLOS_SEGUIDOS_MAX) { skip("erp_caido"); continue; }
+        let v;
+        try { v = await viva.verifica(l.phone); } catch { v = { ok: false, motivo: "erp_no_confirma", descansa: true, llamo: true }; }
+        if (v && v.llamo) consultas++;      // solo cuenta la que salió a la red: un lead sin cotización guardada (p. ej. los de Dion) no gasta presupuesto
+        if (!v || v.ok !== true) {
+          const motivo = v && v.motivo ? v.motivo : "erp_no_confirma";
+          skip(motivo);
+          if (motivo === "erp_no_confirma") fallosSeguidos++; else fallosSeguidos = 0;
+          if (!v || v.descansa) vivaRest.set(l.phone, t);
+          continue;
+        }
+        fallosSeguidos = 0;
+      }
       const params = plan.vars.map((v) => VAR_RESOLVERS[v](l));
       const id = hashId(l.phone);
       await d.dayBump(); // cuenta el INTENTO (también el fallido): un bucle de fallos tampoco puede pasar del tope
@@ -191,8 +221,9 @@ export function createFollowupRunner(d) {
       const resumen = Object.entries(skipped).map(([k, n]) => `${k}=${n}`).join(" ") || "-";
       log.log(`[${d.project}] Seguimiento (ERP v${plan.version}): enviados ${sentNow}, fallidos ${failedNow}${capHit ? ", TOPE DIARIO alcanzado" : ""}; omitidos: ${resumen}`);
     }
+    lastPass = { en: t, sentNow, failedNow, skipped, capHit, consultas };
     return { sentNow, failedNow, skipped, capHit };
   }
 
-  return { tick, pass, hashId };
+  return { tick, pass, hashId, last: () => lastPass };
 }

@@ -10,6 +10,7 @@ import Stripe from "stripe";
 import crypto from "crypto";
 import { createSeguimientoConfig } from "./seguimiento-config.js";
 import { createFollowupRunner } from "./seguimiento-tick.js";
+import { createCotizacionViva } from "./seguimiento-viva.js";
 import { createRsvForwarder, createXenditGate } from "./xendit-rsv.js";
 import { createBackendSwitch, createBbmErp, createPendingRsv } from "./bbmerp.js";
 import { createQuoteStore, createReservaIndex, createErpTools, createCierreErp, createAvisoPago, createSombra, ERP_QUOTE_TOOL, ERP_PROMPT_BLOCK, COTIZACION_TTL_S } from "./bbmflow.js";
@@ -1377,6 +1378,9 @@ const followupRunner = createFollowupRunner({
   send: (phone, tpl, lang, params, logId) => sendWhatsAppTemplate(phone, tpl, lang, params, logId),
   skipStatus: FOLLOWUP_SKIP_STATUS,
   skipIntent: FOLLOWUP_SKIP_INTENT,
+  // Filtro «cotización aún vendible» (solo origen ERP). Lazy: bbmViva se crea más abajo. `ERP_SEGUIMIENTO_VIVA=0` es la única forma de quitarlo.
+  viva: () => bbmViva,
+  vivaRequerida: () => process.env.ERP_SEGUIMIENTO_VIVA !== "0",
   // Tope global por día (modo ERP). Redis si hay (sobrevive a un reinicio); si no, memoria.
   dayCount: async () => {
     const k = followupDayKey();
@@ -2683,7 +2687,10 @@ const bbmErp = createBbmErp({ url: process.env.BBM_ERP_URL, secret: process.env.
 const bbmPendingRsv = createPendingRsv({ redis: () => redisClient });
 const bbmQuotes = createQuoteStore({ redis: () => redisClient });
 const bbmIndiceRsv = createReservaIndex({ redis: () => redisClient });
-const bbmErpTools = createErpTools({ erp: bbmErp, quotes: bbmQuotes, project: PROJECT_NAME });
+// «Solo seguir cotizaciones aún vendibles» (F8 pieza 6): `bbmseg:<tel>` guarda producto+fechas de la última cotización del ERP y el tick pregunta a `cotiza` antes de cada envío.
+// Solo existe con BBM_ERP_URL + BBM_RESERVAS_SECRET; el tick lo exige salvo ERP_SEGUIMIENTO_VIVA=0 (sin verificador y exigido ⇒ no se envía a nadie).
+const bbmViva = bbmErp.enabled ? createCotizacionViva({ erp: bbmErp, redis: () => redisClient, hoy: todayBiz, project: PROJECT_NAME }) : null;
+const bbmErpTools = createErpTools({ erp: bbmErp, quotes: bbmQuotes, seg: bbmViva, project: PROJECT_NAME });
 const bbmSombraN = Math.max(1, parseInt(process.env.BBM_SOMBRA_N || "30", 10) || 30);
 const bbmSombra = process.env.BBM_SOMBRA === "1" && bbmErp.enabled ? createSombra({ erp: bbmErp, redis: () => redisClient, n: bbmSombraN, project: PROJECT_NAME }) : null;
 async function avisaEquipoBbm(texto) {
@@ -2732,6 +2739,7 @@ function bbmDionCotizo(tel, out) {
 async function marcaLeadPagadoErp(phone, importe, moneda) {
   const prev = await getStatus(phone);
   if (prev !== "won") await setStatus(phone, "won");
+  if (bbmViva) { try { await bbmViva.borra(phone); } catch (e) { console.error(`[${PROJECT_NAME}] bbmseg no borrado al pagar: ${e.message}`); } } // pagado: ya no hay nada que seguir
   await logEvent(phone, "payment", { provider: "xendit-erp", amount: Math.round(importe || 0), from: prev || "", to: "won" });
 }
 const avisoPagoRsv = createAvisoPago({
@@ -3730,7 +3738,7 @@ app.get("/admin/api/health", async (req, res) => {
   try { bbmBackend = await bbmBackendSw.porDefecto(); } catch (e) { /* best-effort */ }
   const bbm = { backend: bbmBackend, erp_configurado: !!(process.env.BBM_ERP_URL && process.env.BBM_RESERVAS_SECRET), webhook_rsv: !!process.env.BBM_ERP_URL };
   if (bbmSombra) { try { bbm.sombra = await bbmSombra.estado(); } catch (e) { /* best-effort */ } }
-  res.json({ storage: redisClient ? "redis" : "ram", leads: count, bbm, seguimiento: seguimientoCfg.enabled ? seguimientoCfg.status() : { enabled: false, source: "env (FOLLOWUP_*)" } });
+  res.json({ storage: redisClient ? "redis" : "ram", leads: count, bbm, seguimiento: seguimientoCfg.enabled ? { ...seguimientoCfg.status(), vendible: process.env.ERP_SEGUIMIENTO_VIVA !== "0" ? (bbmViva ? "on" : "sin_verificador") : "off", ultima_pasada: followupRunner.last() } : { enabled: false, source: "env (FOLLOWUP_*)" } });
 });
 
 // Inventario de motos (Supabase, catálogo BBM): un catálogo por producto con su tarifa
