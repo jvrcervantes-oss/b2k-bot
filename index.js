@@ -8,6 +8,7 @@ import Stripe from "stripe";
 import crypto from "crypto";
 import { inventario as inventarioRedis, importar as importarRedis } from "./import_redis.js"; // TEMPORAL (S5/LAW-507): se retira en S9
 import { cabeceraRegion } from "./store/postgres.js";
+import { creaLlamaEdge } from "./edge_llamada.js";
 import { creaTransporte as creaTransporteImportar } from "./import_transporte.js"; // TEMPORAL (S5/LAW-507): se retira en S9
 import { VACIA as CFG_VACIA, validaConfig, bloqueEquipo, ttlPausaHumana } from "./botcfg.js";
 import {
@@ -307,14 +308,7 @@ const CRM_EFECTIVO = BOT_CRM_MODE === "on" && (!BOT_API_URL || !BOT_API_SECRET_C
 console.log(`[${PROJECT_NAME}] catálogo=${BOT_CATALOGO_MODE} crm=${BOT_CRM_MODE}${CRM_EFECTIVO !== BOT_CRM_MODE ? " (EFECTIVO off: falta BOT_API_URL o BOT_API_SECRET_CRM)" : ""}`);
 if (BOT_CATALOGO_MODE === "on" && (!BOT_API_URL || !BOT_API_SECRET_CATALOGO)) console.error(`[${PROJECT_NAME}] BOT_CATALOGO=on pero falta BOT_API_URL o BOT_API_SECRET_CATALOGO: el bot verá "catálogo no disponible" y no citará precios`);
 
-async function _llamaEdge(ruta, secreto, cuerpo) {
-  const r = await axios.post(`${BOT_API_URL}/${ruta}`, cuerpo, {
-    headers: { "X-Bot-Secret": secreto, "content-type": "application/json", ...cabeceraRegion(BOT_API_REGION) },
-    timeout: 5000, validateStatus: () => true, maxContentLength: 1024 * 1024,
-  });
-  if (r.status !== 200 || !r.data || r.data.ok !== true) throw new Error(`bot-api/${ruta} HTTP ${r.status}`); // sin cuerpo: no se vuelca nada ajeno al log
-  return r.data;
-}
+const _llamaEdge = creaLlamaEdge({ url: BOT_API_URL, region: BOT_API_REGION, http: axios });
 
 const catalogoSvc = BOT_CATALOGO_MODE === "on"
   ? creaCatalogo({
