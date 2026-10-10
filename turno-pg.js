@@ -236,7 +236,7 @@ export function creaTurnoPg(d) {
     botCrmMode = "off", crmEfectivo = "off", aplicaCrm, getCatalogoBlock, postCheckPrecios, sendBot, sendHumanized, sendOwner, sendCliente,
     sendClienteTemplate, notifyOwner, notifyOwnerTesting, markRead, transcribeAudio, avisoCitaSinRegistrar, notaDerechos, avisoDerechos,
     clasificaEntrega, setWaBlocked, clearWaBlocked, resume, projectName = "Bot", ahora = Date.now,
-    reintentosEstadoMs = [20_000, 90_000], reintentosCierreMs = [1_000, 3_000, 8_000], minAvisoMs = 10 * 60_000, tz = "Asia/Makassar",
+    reintentosEstadoMs = [20_000, 90_000], reintentosCierreMs = [1_000, 3_000, 8_000], minAvisoMs = 10 * 60_000, tz = "Asia/Makassar", latencia = null,
     modoRecordatorio = "off", plantillaRecordatorio = "", idiomaIndonesioAprobado = false,
     // BOT_HUMANO_VERIFICA = off | sombra | on (defecto off): el bot comprueba por sí mismo que la PERSONA que envía desde la intranet tiene la casilla (acción `verificar`).
     humanoVerifica = "off",
@@ -572,7 +572,7 @@ export function creaTurnoPg(d) {
   }
 
   // ═══ WEBHOOK ═══
-  async function webhook(req, res) {
+  async function webhookInterno(req, res) {
     if (!firmaValida(req)) { log("Webhook POST con firma inválida o sin META_APP_SECRET — descartado"); return res.sendStatus(403); }
     const ok200 = () => { if (!res.headersSent) res.sendStatus(200); };
     const reintentable = (e) => !(e instanceof ErrorEdge && e.tipo === "http" && e.status >= 400 && e.status < 500);   // un 4xx es nuestro: reentregar no lo arregla
@@ -839,5 +839,7 @@ export function creaTurnoPg(d) {
     }));
   }
 
+  // LAW-507: lo que la edge cueste durante el tratamiento de un mensaje se acumula en SU turno (latencia.js). Sin contador, no cambia nada.
+  const webhook = (req, res) => (latencia ? latencia.enTurno(() => webhookInterno(req, res)) : webhookInterno(req, res));
   return { webhook, recordatorioTick, seguimientoTick, rutasAdmin, atiende, turno, generaResumen, resumenStats, procesaEstados, mensajeDelDueno, _vistos: vistos };
 }

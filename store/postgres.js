@@ -43,7 +43,7 @@ async function postAxios(url, cuerpo, { headers, timeout }) {
 
 export function creaPg({
   url, secretos = {}, post = postAxios, timeoutMs = 10_000, reintentos = 1, pausaReintentoMs = 300, umbral = 3,
-  onAlarma = () => {}, onRecuperado = () => {}, log = () => {},
+  onAlarma = () => {}, onRecuperado = () => {}, log = () => {}, latencia = null,
 }) {
   const base = String(url || "").trim().replace(/\/+$/, "");
   const estado = { fallosSeguidos: 0, alarmado: false, umbral: Number.isInteger(umbral) && umbral > 0 ? umbral : 3, llamadas: 0 };
@@ -76,27 +76,33 @@ export function creaPg({
     const maxIntentos = opciones.unIntento === true ? 1 : 1 + reintentos;     // una persona espera la respuesta: nada de cadenas de reintentos
     const cuerpoFinal = { accion, ...cuerpo };
     estado.llamadas += 1;
+    // Contador de latencia (LAW-507): suma de los intentos SIN la pausa entre reintentos; nunca puede afectar a la llamada.
+    let msTotal = 0;
+    const mide = (t0) => { try { if (latencia) msTotal += latencia.reloj() - t0; } catch { /* medir no rompe */ } };
+    const anota = (ok, tipo) => { try { if (latencia) latencia.registra({ accion, ms: msTotal, ok, tipo }); } catch { /* medir no rompe */ } };
     let ultimo = null;
     for (let intento = 1; intento <= maxIntentos; intento++) {
       let resp = null;
-      try { resp = await post(`${base}/${ruta}`, cuerpoFinal, { headers, timeout: timeoutMs }); }
+      let t0 = 0; try { if (latencia) t0 = latencia.reloj(); } catch { /* medir no rompe */ }
+      try { resp = await post(`${base}/${ruta}`, cuerpoFinal, { headers, timeout: timeoutMs }); mide(t0); }
       catch (e) {
+        mide(t0);
         ultimo = new ErrorEdge(accion, e && (e.code === "ECONNABORTED" || e.code === "ETIMEDOUT" || /timeout/i.test(e.message || "")) ? "timeout" : "red");
       }
       if (resp) {
         const st = resp.status;
         if (st === 200 && resp.data && typeof resp.data === "object" && typeof resp.data.ok === "boolean") {
-          exito();
+          exito(); anota(true);
           return { data: resp.data, intentos: intento };
         }
-        if (st === 429) { exito(); throw new ErrorEdge(accion, "ritmo", 429); }              // la edge está viva: no cuenta como caída
-        if (st >= 400 && st < 500) { const e = new ErrorEdge(accion, "http", st); cuenta(accion, e); throw e; }   // 4xx: no se reintenta
+        if (st === 429) { exito(); anota(true); throw new ErrorEdge(accion, "ritmo", 429); }              // la edge está viva: no cuenta como caída
+        if (st >= 400 && st < 500) { const e = new ErrorEdge(accion, "http", st); cuenta(accion, e); anota(false, "http"); throw e; }   // 4xx: no se reintenta
         if (st === 200) { ultimo = new ErrorEdge(accion, "forma", 200); break; }                    // 200 sin la forma esperada: no se reintenta
         ultimo = new ErrorEdge(accion, "http", st);                                                 // 5xx u otro: se reintenta
       }
       if (intento < maxIntentos) await espera(pausaReintentoMs);
     }
-    cuenta(accion, ultimo);
+    cuenta(accion, ultimo); anota(false, ultimo.tipo);
     log(`bot-api ${accion} sin respuesta tras ${maxIntentos} intento(s): ${ultimo.tipo}${ultimo.status ? " HTTP " + ultimo.status : ""} (fallos seguidos: ${estado.fallosSeguidos})`);
     throw ultimo;
   }
