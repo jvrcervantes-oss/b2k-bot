@@ -47,6 +47,12 @@ test("BOT_STORE=supabase: el camino normal de un mensaje de texto son 3 llamadas
   const h = await E.bot.get("/admin/api/health", { "x-admin-key": "admin-test" });
   assert.strictEqual(h.json.storage, "postgres");
   assert.strictEqual(h.json.firma, true);
+  // LAW-507: el contador de latencia de la edge se ve en el health autenticado, con el turno medido y sin datos del cliente
+  const lat = h.json.edge.latencia;
+  assert.strictEqual(lat.turno.n, 1, "un turno completo medido (de mensaje_recibir a turno_cerrar)");
+  assert.deepStrictEqual(Object.keys(lat.por_accion).sort(), ["mensaje_recibir", "turno_cerrar", "turno_estado"]);
+  assert.ok(!JSON.stringify(lat).includes(T), "el contador no guarda teléfonos");
+  assert.strictEqual((await E.bot.get("/health", {})).json.edge, undefined, "el /health público no expone la latencia");
 });
 
 test("segundo mensaje: otras 3 llamadas, el aviso de asistente ya NO se repite y el historial viene de la base", async (t) => {

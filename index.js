@@ -2344,7 +2344,7 @@ const webhookRedis = async (req, res) => {
 };
 // ─── BOT_STORE=supabase: webhook, rutas del panel y recordatorio de turno-pg.js ─────────────────────────────
 // El handler de arriba (webhookRedis) no se ha tocado: con BOT_STORE=redis el comportamiento es el de siempre. S9 lo borra.
-let webhookPg = null, turnoPg = null, estadoLeadPg = null;
+let webhookPg = null, turnoPg = null, estadoLeadPg = null, latenciaPg = null;
 if (STORE_PG) {
   const { creaPg } = await import("./store/postgres.js");
   const logPg = (m) => console.log(`[${PROJECT_NAME}] ${m}`);
@@ -2352,8 +2352,14 @@ if (STORE_PG) {
   // Plazos de fiabilidad (valores por defecto del plan; las variables existen para poder ajustarlos sin tocar código y para las pruebas).
   const listaMs = (v, def) => { const l = String(v || "").split(",").map((x) => parseInt(x, 10)).filter((n) => Number.isFinite(n) && n >= 0 && n <= 600000); return l.length ? l : def; };
   const numMs = (v, def, max) => { const n = parseInt(v, 10); return Number.isFinite(n) && n > 0 && n <= max ? n : def; };
+  // Contador de latencia de la edge (LAW-507): en memoria, sin PII; se publica en /admin/api/health y se vuelca al log cada hora y al apagar.
+  const { creaLatencia } = await import("./latencia.js");
+  latenciaPg = creaLatencia();
+  const volcarLatencia = () => { try { logPg(latenciaPg.linea()); } catch { /* medir no rompe */ } };
+  setInterval(volcarLatencia, 60 * 60_000).unref(); // dentro de if (STORE_PG)
+  process.once("SIGTERM", () => { volcarLatencia(); process.exit(0); });
   const pgCli = creaPg({
-    url: BOT_API_URL, log: logPg,
+    url: BOT_API_URL, log: logPg, latencia: latenciaPg,
     timeoutMs: numMs(process.env.BOT_API_TIMEOUT_MS, 10000, 60000), pausaReintentoMs: numMs(process.env.BOT_API_PAUSA_REINTENTO_MS, 300, 10000),
     secretos: { estado: edgeSecret("BOT_API_SECRET_ESTADO"), recordatorio: edgeSecret("BOT_API_SECRET_RECORDATORIO") },
     // El aviso al dueño NO depende de la base: va directo a WhatsApp.
@@ -2374,7 +2380,7 @@ if (STORE_PG) {
     if (texto) await sendWhatsApp(OWNER_PHONE, texto);
   };
   turnoPg = turnoMod.creaTurnoPg({
-    pg: pgCli, autoriza: autorizaciones, avisoIA: PLAYBOOK.avisoIA === true, aplicaAviso, log: logPg, projectName: PROJECT_NAME, ownerPhone: OWNER_PHONE || "",
+    pg: pgCli, latencia: latenciaPg, autoriza: autorizaciones, avisoIA: PLAYBOOK.avisoIA === true, aplicaAviso, log: logPg, projectName: PROJECT_NAME, ownerPhone: OWNER_PHONE || "",
     esOwner: esOwnerExacto, isAllowed, testingMode: TESTING_MODE, humanOnly: HUMAN_ONLY_MODE,
     firmaValida: validSignatureEstricta, waitMyTurn, palabrasBaja: PALABRAS_BAJA, acuse: ACUSE_DERECHOS,
     claude: (params) => claudeMessage({ model: MODEL, ...params }),
@@ -2416,7 +2422,7 @@ if (STORE_PG) {
     if (!adminAuth(req, res)) return;
     res.json({
       storage: "postgres",
-      edge: { fallos_seguidos: pgCli.fallosSeguidos, umbral_alarma: pgCli.umbral, llamadas: pgCli.llamadas },
+      edge: { fallos_seguidos: pgCli.fallosSeguidos, umbral_alarma: pgCli.umbral, llamadas: pgCli.llamadas, latencia: latenciaPg.instantanea() },
       firma: !!META_APP_SECRET,
       envios_rechazados: autorizaciones.rechazos,
       testing: { on: TESTING_MODE, allowlist: ALLOWLIST.size, malformados: ALLOWLIST_BAD },
