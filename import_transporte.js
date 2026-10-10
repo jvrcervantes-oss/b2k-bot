@@ -6,6 +6,7 @@
 // (con tope) y reintenta hasta `max429` veces; un 4xx NO se reintenta. Nada de lo que viaja (teléfono, contenido) se
 // escribe jamás en un error ni en el log: los errores llevan solo la acción y el código HTTP.
 import axios from "axios";
+import { cabeceraRegion } from "./store/postgres.js";
 
 // La edge tiene el esquema CERRADO: una clave de más (p. ej. `_media_descartada`, `updated_ms`) o un wamid/media con caracteres fuera de su
 // patrón tumbaría el teléfono entero con un 400. Aquí se deja pasar SOLO lo que la edge reconoce, y un wamid o media ilegible se vuelve null
@@ -32,7 +33,6 @@ export function chatParaEdge(c) {
 }
 export function configParaEdge(c) { return { extra: c.extra, bienvenida: c.bienvenida, pausa_horas: c.pausa_horas, updated_by: c.updated_by ?? null }; }
 
-import { cabeceraRegion } from "./store/postgres.js";
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function creaTransporte({ url, secreto, http = axios, timeoutMs = 25000, espera = dormir, max429 = 5, tope429Ms = 30000, region = "" } = {}) {

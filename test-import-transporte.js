@@ -158,3 +158,12 @@ test("valores fuera de rango o no enteros se normalizan y el 400 deja su razón 
   assert.equal(c.creado_ms, 1790000000000); assert.equal(c.actualizado_ms, 1790000000001); assert.equal(c.pausa_hasta_ms, null); assert.equal(c.aviso_nivel, 2); assert.equal(c.seguimientos, 1000000);
   assert.deepStrictEqual(t.razones, { "400:chat:mensajes": 1, "200:chat:?": 1 });
 });
+
+test("LAW-507: region fija x-region en /importar; sin region no hay cabecera", async () => {
+  const con = mk([ok({})], { region: "ap-southeast-1" });
+  await con.t.cuadre("1");
+  assert.equal(con.http.llamadas[0].cfg.headers["x-region"], "ap-southeast-1");
+  const sin = mk([ok({})]);
+  await sin.t.cuadre("1");
+  assert.ok(!("x-region" in sin.http.llamadas[0].cfg.headers));
+});
