@@ -238,6 +238,8 @@ export function creaTurnoPg(d) {
     clasificaEntrega, setWaBlocked, clearWaBlocked, resume, projectName = "Bot", ahora = Date.now,
     reintentosEstadoMs = [20_000, 90_000], reintentosCierreMs = [1_000, 3_000, 8_000], minAvisoMs = 10 * 60_000, tz = "Asia/Makassar",
     modoRecordatorio = "off", plantillaRecordatorio = "", idiomaIndonesioAprobado = false,
+    // BOT_HUMANO_VERIFICA = off | sombra | on (defecto off): el bot comprueba por sí mismo que la PERSONA que envía desde la intranet tiene la casilla (acción `verificar`).
+    humanoVerifica = "off",
     // S12 (LAW-507): ambas APAGADAS por defecto. consentimientoOn = hacer la pregunta de seguimiento; modoSeguimiento = enviar las dos plantillas de reenganche.
     consentimientoOn = false, modoSeguimiento = "off", plantillasSeguimiento = PLANTILLAS, pausaPreguntaMs = 2500, horaSeguimiento = [9, 20],
   } = d;
@@ -768,17 +770,48 @@ export function creaTurnoPg(d) {
   // los hace lawang-bot-proxy por la ruta /humano de la edge (secreto y JWT de la persona que solo el proxy tiene; el bot no los ve).
   const quedaCorto = (e) => (e instanceof ErrorEdge ? e.status || 502 : 500);
   function rutasAdmin(app, { adminAuth }) {
+    // Si esta ruta se reactivara alguna vez, tendría que pasar por verificaPersona igual que enviaComoPersona: hoy no escribe nada (410).
     app.post("/admin/api/pause", (req, res) => {
       if (!adminAuth(req, res)) return;
       res.status(410).json({ error: "retirado_con_postgres", detalle: "La pausa de una persona la escribe lawang-bot-proxy por /humano; el bot ya no la guarda." });
     });
 
+    // La sesión de la persona llega en X-User-Jwt (la pone lawang-bot-proxy, sin «Bearer »). Nunca se registra, nunca sale en una respuesta.
+    const jwtDe = (req) => { const h = req.headers && req.headers["x-user-jwt"]; const v = typeof h === "string" ? h.replace(/^Bearer\s+/i, "").trim() : ""; return v && v.length <= 4096 ? v : ""; };
+    /** Pregunta a la edge si esa sesión tiene la casilla. Devuelve {veredicto: "si"|"no"|"sin_sesion"|"invalida"|"no_disponible", email}. Nunca lanza. */
+    async function verificaPersona(jwt) {
+      if (!jwt) return { veredicto: "sin_sesion", email: null };
+      try {
+        const v = await pg.verificar({ jwt, permiso: "bot_escribir" });
+        if (v && v.permitido === true) return { veredicto: "si", email: typeof v.email === "string" ? v.email : null };
+        if (v && v.permitido === false) return { veredicto: "no", email: null };
+        return { veredicto: "no_disponible", email: null };               // {error} de negocio o forma inesperada: no se sabe, no se deja pasar
+      } catch (e) {
+        const es401 = e instanceof ErrorEdge && e.tipo === "http" && e.status === 401;
+        // Un 401 de la edge es «sesión que no vale» O «el secreto de /estado del bot mal puesto»: la edge los contesta igual a propósito. Si TODOS los envíos dan esto, es el secreto.
+        if (es401) log("verificar: la edge contestó 401 (sesión no válida, o el secreto de /estado mal puesto si ocurre con todas las personas)");
+        return { veredicto: es401 ? "invalida" : "no_disponible", email: null };
+      }
+    }
     async function enviaComoPersona(req, res, { construye }) {
       if (!adminAuth(req, res)) return;
       const { phone } = req.body || {};
       if (!phone) return res.status(400).json({ error: "phone requerido" });
       const tel = digitos(phone);
       let token = null;
+      let porEmail = null;
+      if (humanoVerifica === "on") {
+        // FALLA CERRADO: sin sesión, con sesión que no vale, sin casilla o sin poder comprobarlo, no se envía nada a nadie.
+        const v = await verificaPersona(jwtDe(req));
+        if (v.veredicto === "sin_sesion") { log(`envío humano a ${enmascara(tel)} rechazado: sin sesión de la persona`); return res.status(401).json({ error: "sin_sesion" }); }
+        if (v.veredicto === "invalida") { log(`envío humano a ${enmascara(tel)} rechazado: sesión no válida`); return res.status(401).json({ error: "sesion_invalida" }); }
+        if (v.veredicto === "no") { log(`envío humano a ${enmascara(tel)} rechazado: sin permiso`); return res.status(403).json({ error: "sin_permiso" }); }
+        if (v.veredicto !== "si") { log(`envío humano a ${enmascara(tel)} rechazado: no se pudo verificar a la persona`); return res.status(503).json({ error: "verificacion_no_disponible" }); }
+        porEmail = v.email;        // el autor es el que devuelve la base; el `byUser` del cuerpo se ignora SIEMPRE
+      } else if (humanoVerifica === "sombra") {
+        // Solo compara y cuenta: el envío sigue su camino pase lo que pase (el proxy ya autoriza hoy). Sin esperarla: el envío no cambia ni un milisegundo.
+        verificaPersona(jwtDe(req)).then((v) => { if (v.veredicto !== "si") log(`verificar (sombra): DISCREPANCIA en el envío a ${enmascara(tel)}: ${v.veredicto}`); }).catch(() => {});
+      }
       try {
         const est = await pg.estado({ tel });
         if (est.error) return res.status(est.error === "sin_chat" ? 404 : 400).json({ error: est.error === "sin_chat" ? "lead_desconocido" : est.error });
@@ -790,7 +823,7 @@ export function creaTurnoPg(d) {
         if (!r.ok) return res.status(502).json({ error: r.error, code: r.code ?? null });
         const wamid = r.wamid || r.id || null;
         // El proxy registra el envío en la base con este wamid y este texto (por /humano, con la persona del JWT).
-        res.json({ ok: true, wamid, registrar: { texto: plan.registro, wamid: wamid || null } });
+        res.json({ ok: true, wamid, ...(porEmail ? { por: porEmail } : {}), registrar: { texto: plan.registro, wamid: wamid || null } });
       } catch (e) { res.status(quedaCorto(e) === 401 ? 401 : 502).json({ error: "bot-api" }); }
       finally { autoriza.revoca(tel, token); }
     }

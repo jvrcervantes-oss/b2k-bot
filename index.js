@@ -291,6 +291,13 @@ async function getBotCfg(force = false) {
 const _modo = (v, validos) => { const x = String(v || "").trim().toLowerCase(); return validos.includes(x) ? x : "off"; };
 const BOT_CATALOGO_MODE = _modo(process.env.BOT_CATALOGO, ["off", "on"]);
 const BOT_CRM_MODE = _modo(process.env.BOT_CRM, ["off", "sombra", "on"]);
+// BOT_HUMANO_VERIFICA = off | sombra | on (defecto off; valor desconocido = off). Solo con BOT_STORE=supabase (rutas de turno-pg.js): el bot comprueba por sí mismo,
+// con la sesión de la persona (X-User-Jwt) y la acción `verificar` de la edge, que quien envía desde la intranet tiene la casilla bot_escribir.
+// sombra: solo registra la discrepancia. on: sin sesión / sesión inválida / sin casilla = 401/403, y con la edge o Auth caídas = 503 (falla cerrado). Va en `on` antes de abrir a leads reales.
+const BOT_HUMANO_VERIFICA = _modo(process.env.BOT_HUMANO_VERIFICA, ["off", "sombra", "on"]);
+// EFECTIVO solo con BOT_STORE=supabase: las rutas de envío de BOT_STORE=redis (index.js) son las de siempre y NO verifican a nadie. Se dice a gritos para que un `on` no parezca activo (se mide en /admin/api/health).
+const HUMANO_VERIFICA_EFECTIVO = STORE_PG ? BOT_HUMANO_VERIFICA : "off";
+console.log(`[${PROJECT_NAME}] humano_verifica=${BOT_HUMANO_VERIFICA}${HUMANO_VERIFICA_EFECTIVO !== BOT_HUMANO_VERIFICA ? " (NO EFECTIVO: solo existe con BOT_STORE=supabase; en redis los envíos de la intranet NO se verifican)" : ""}`);
 const BOT_API_URL = String(process.env.BOT_API_URL || "").trim().replace(/\/+$/, "");
 const BOT_API_SECRET_CATALOGO = String(process.env.BOT_API_SECRET_CATALOGO || "").trim();
 const BOT_API_SECRET_CRM = String(process.env.BOT_API_SECRET_CRM || "").trim();
@@ -2392,6 +2399,7 @@ if (STORE_PG) {
     },
     reintentosEstadoMs: listaMs(process.env.BOT_TURNO_REINTENTOS_MS, [20000, 90000]), reintentosCierreMs: listaMs(process.env.BOT_CIERRE_REINTENTOS_MS, [1000, 3000, 8000]),
     modoRecordatorio: String(process.env.BOT_RECORDATORIO || "off").trim().toLowerCase() === "postgres" ? "postgres" : "off",
+    humanoVerifica: HUMANO_VERIFICA_EFECTIVO,     // una sola fuente de verdad: lo que health enseña es lo que turno-pg aplica
     tz: CALENDAR_TZ || "Asia/Makassar",
     // Plantilla de utilidad para la cita con la ventana cerrada (S6b la activa: REMINDER_TEMPLATE_NAME=lawang_cita_recordatorio). El idioma lo elige el código.
     // El indonesio no se usa hasta la lectura de un hablante nativo (LAW-507): BOT_RECORDATORIO_ID=on lo habilita.
@@ -2422,6 +2430,7 @@ if (STORE_PG) {
       testing: { on: TESTING_MODE, allowlist: ALLOWLIST.size, malformados: ALLOWLIST_BAD },
       catalogo: BOT_CATALOGO_MODE !== "on" ? { modo: "off" } : await (async () => { const c = await getCatalogoBlock(); return { modo: "on", estado: c ? c.estado : "error", unidades: c ? c.unidades.length : 0, desde: c && c.ts ? new Date(c.ts).toISOString() : null }; })(),
       crm: { modo: BOT_CRM_MODE, efectivo: CRM_EFECTIVO },
+      humano_verifica: { modo: BOT_HUMANO_VERIFICA, efectivo: HUMANO_VERIFICA_EFECTIVO },
       recordatorio: String(process.env.BOT_RECORDATORIO || "off"),
       consentimiento: { pregunta: String(process.env.BOT_CONSENTIMIENTO || "").trim().toLowerCase() === "on", seguimiento: String(process.env.BOT_SEGUIMIENTO || "").trim().toLowerCase() === "postgres" ? "postgres" : "off" },
       resumenes: { modelo: EXTRACT_MODEL, ...turnoPg.resumenStats },
@@ -2545,6 +2554,7 @@ app.get("/admin/api/health", async (req, res) => {
       return { modo: "on", estado: c ? c.estado : "error", unidades: c ? c.unidades.length : 0, desde: c && c.ts ? new Date(c.ts).toISOString() : null };
     })(),
     crm: { modo: BOT_CRM_MODE, efectivo: CRM_EFECTIVO },
+    humano_verifica: { modo: BOT_HUMANO_VERIFICA, efectivo: HUMANO_VERIFICA_EFECTIVO },
   });
 });
 

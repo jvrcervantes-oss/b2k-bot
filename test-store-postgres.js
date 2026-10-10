@@ -176,3 +176,54 @@ test("el log no lleva cuerpos ni teléfonos completos", async () => {
   const todo = e.logs.join("\n");
   assert.ok(!todo.includes(T) && !todo.includes("pasaporte") && !todo.includes("secreto"));
 });
+
+// ═════════ verificar: la sesión de la PERSONA va solo en Authorization; sus fallos no cuentan como «la base no responde» ═════════
+test("verificar: va a /estado con el secreto de estado Y la sesión en Authorization; el cuerpo solo lleva el permiso (ni teléfono ni usuario)", async () => {
+  const e = edge([ok({ accion: "verificar", permitido: true, email: "ana@lawang.com" })]);
+  const r = await e.pg.verificar({ jwt: "jwt-secreto-1" });
+  assert.deepStrictEqual(r, { permitido: true, email: "ana@lawang.com" });
+  assert.strictEqual(e.peticiones[0].url, "https://x.supabase.co/functions/v1/bot-api/estado");
+  assert.strictEqual(e.peticiones[0].headers["X-Bot-Secret"], "se-estado");
+  assert.strictEqual(e.peticiones[0].headers.authorization, "Bearer jwt-secreto-1");
+  assert.deepStrictEqual(e.peticiones[0].cuerpo, { accion: "verificar", permiso: "bot_escribir" });
+  assert.ok(!JSON.stringify(e.peticiones[0].cuerpo).includes("jwt-secreto-1"), "el token no va en el cuerpo");
+  // las demás acciones NO llevan Authorization
+  const o = edge([ok({ baja: "nueva", pausado: true })]);
+  await o.pg.baja({ tel: T, wamid: "wamid.B1" });
+  assert.ok(!("authorization" in o.peticiones[0].headers));
+});
+
+test("verificar: un 401 (token que no vale), un 503 (Auth caída) y la red caída lanzan ErrorEdge y NUNCA disparan la alarma de la base", async () => {
+  const casos = [[{ status: 401, data: { error: "no_autorizado" } }, "http", 401], [{ status: 503, data: { error: "auth_conexion" } }, "http", 503], [new Error("ECONNRESET"), "red", null]];
+  for (const [resp, tipo, status] of casos) {
+    const e = edge([resp], { umbral: 2 });
+    for (let i = 0; i < 5; i++) {
+      await assert.rejects(() => e.pg.verificar({ jwt: "jwt-x" }), (x) => x instanceof ErrorEdge && x.tipo === tipo && x.status === status);
+    }
+    await nada();
+    assert.strictEqual(e.pg.fallosSeguidos, 0, "verificar no suma fallos seguidos");
+    assert.strictEqual(e.alarmas.length, 0, "ninguna alarma por verificar");
+    assert.ok(!e.logs.some((l) => l.includes("jwt-x")), "el token no sale en ningún log");
+  }
+  // un solo intento (una persona espera) y un éxito de verificar NO apaga la alarma de una caída real
+  const un = edge([{ status: 503, data: { error: "auth_conexion" } }]);
+  await assert.rejects(() => un.pg.verificar({ jwt: "j" }), ErrorEdge);
+  assert.strictEqual(un.peticiones.length, 1, "verificar no reintenta");
+  const real = edge([{ status: 502, data: {} }, { status: 502, data: {} }, { status: 502, data: {} }, { status: 502, data: {} }, ok({ accion: "verificar", permitido: true, email: "a@b.c" })], { umbral: 2 });
+  await assert.rejects(() => real.pg.baja({ tel: T, wamid: "wamid.C1" }), ErrorEdge);
+  await assert.rejects(() => real.pg.baja({ tel: T, wamid: "wamid.C2" }), ErrorEdge);
+  await nada();
+  assert.strictEqual(real.alarmas.length, 1, "la caída real alarma");
+  assert.strictEqual((await real.pg.verificar({ jwt: "j" })).permitido, true);
+  assert.ok(real.pg.fallosSeguidos >= 2, "un verificar bueno no pone a cero los fallos de la base: " + real.pg.fallosSeguidos);
+  assert.strictEqual(real.recuperados.length, 0, "ni dispara un falso «ya responde»");
+  // 429 (ritmo propio de verificar) también lanza y no es caída
+  const r = edge([{ status: 429, data: { error: "demasiadas_peticiones" } }]);
+  await assert.rejects(() => r.pg.verificar({ jwt: "j" }), (x) => x instanceof ErrorEdge && x.tipo === "ritmo");
+  // permitido:false se devuelve tal cual, sin email
+  const n = edge([ok({ accion: "verificar", permitido: false, email: null })]);
+  assert.deepStrictEqual(await n.pg.verificar({ jwt: "j" }), { permitido: false, email: null });
+  // un error de negocio de la edge no es un permiso
+  const x = edge([{ status: 200, data: { ok: false, accion: "verificar", error: "permiso_invalido" } }]);
+  assert.deepStrictEqual(await x.pg.verificar({ jwt: "j" }), { error: "permiso_invalido" });
+});

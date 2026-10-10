@@ -567,3 +567,119 @@ test("BOT_STORE=postgres sigue valiendo como alias de supabase, avisando del nom
   const h = await E.bot.get("/admin/api/health", { "x-admin-key": "admin-test" });
   assert.strictEqual(h.json.storage, "postgres");
 });
+
+// ═════════ BOT_HUMANO_VERIFICA (acción `verificar`): el bot comprueba por sí mismo QUIÉN envía y si puede ═════════
+const JWT_BUENO = "jwt-ana-bueno", JWT_SIN_CASILLA = "jwt-bea-sin-casilla", JWT_FALSO = "jwt-que-auth-rechaza";
+const conPersonas = (E) => { E.edge.personas.set(JWT_BUENO, { email: "ana@lawang.com", permitido: true }); E.edge.personas.set(JWT_SIN_CASILLA, { email: "bea@lawang.com", permitido: false }); };
+const enviaPanel = (E, ruta, cuerpo, jwt) => E.bot.enviaJson(ruta, cuerpo, { "x-admin-key": "admin-test", ...(jwt === undefined ? {} : { "x-user-jwt": jwt }) });
+async function hiloAbierto(E, k) { const T = tel(k); await E.bot.post(payloadTexto(T, "Hello", wamid())); await hasta(() => E.edge.de("turno_cerrar").length === 1, "turno"); return T; }
+
+test("BOT_HUMANO_VERIFICA=off (defecto): el bot no pregunta nada a la edge ni mira X-User-Jwt; el envío es el de siempre", async (t) => {
+  const E = await entorno();
+  t.after(() => E.cierra());
+  const T = await hiloAbierto(E, 40);
+  const r = await enviaPanel(E, "/admin/api/send", { phone: T, text: "Hi" });
+  assert.strictEqual(r.status, 200);
+  const r2 = await enviaPanel(E, "/admin/api/send", { phone: T, text: "Hi again" }, JWT_FALSO);
+  assert.strictEqual(r2.status, 200, "con off, ni un token malo molesta");
+  assert.strictEqual(E.edge.de("verificar").length, 0);
+  assert.strictEqual(r.json.por, undefined, "sin verificación no hay autor verificado");
+  assert.match(E.bot.texto(), /crm=off/);
+  assert.match(E.bot.texto(), /humano_verifica=off(?![a-z])/);
+  const h = await E.bot.get("/admin/api/health", { "x-admin-key": "admin-test" });
+  assert.deepStrictEqual(h.json.humano_verifica, { modo: "off", efectivo: "off" }, "el interruptor se MIDE en health");
+});
+
+test("BOT_HUMANO_VERIFICA=on: sin sesión 401, sesión que Auth rechaza 401, sin casilla 403, Auth o la edge caídas 503 — y en ningún caso sale un mensaje", async (t) => {
+  const E = await entorno({ env: { BOT_HUMANO_VERIFICA: "on" } });
+  t.after(() => E.cierra());
+  conPersonas(E);
+  const T = await hiloAbierto(E, 41);
+  const antes = E.graph.a(T).length;
+  for (const ruta of ["/admin/api/send", "/admin/api/send-template"]) {
+    const cuerpo = ruta.endsWith("send") ? { phone: T, text: "Hola" } : { phone: T, template: "lawang_x", lang: "es", params: ["a"] };
+    const sin = await enviaPanel(E, ruta, cuerpo);
+    assert.deepStrictEqual([sin.status, sin.json], [401, { error: "sin_sesion" }], ruta + ": sin cabecera");
+    const falso = await enviaPanel(E, ruta, cuerpo, JWT_FALSO);
+    assert.deepStrictEqual([falso.status, falso.json], [401, { error: "sesion_invalida" }], ruta + ": token que Auth rechaza");
+    const nop = await enviaPanel(E, ruta, cuerpo, JWT_SIN_CASILLA);
+    assert.deepStrictEqual([nop.status, nop.json], [403, { error: "sin_permiso" }], ruta + ": sin la casilla");
+    E.edge.authEstado.caida = true;
+    const caida = await enviaPanel(E, ruta, cuerpo, JWT_BUENO);
+    assert.deepStrictEqual([caida.status, caida.json], [503, { error: "verificacion_no_disponible" }], ruta + ": Auth caída = falla cerrado");
+    E.edge.authEstado.caida = false;
+  }
+  assert.strictEqual(E.graph.a(T).length, antes, "nada salió a WhatsApp en ninguno de los casos");
+  // la cabecera sale con la forma exacta (permiso fijo, sin tel ni usuario) y la sesión viaja SOLO en Authorization
+  const v = E.edge.de("verificar");
+  assert.ok(v.length >= 6);
+  assert.match(E.bot.texto(), /humano_verifica=on(?![a-z ])/);
+  assert.deepStrictEqual((await E.bot.get("/admin/api/health", { "x-admin-key": "admin-test" })).json.humano_verifica, { modo: "on", efectivo: "on" });
+  for (const c of v) assert.deepStrictEqual(c.cuerpo, { accion: "verificar", permiso: "bot_escribir" });
+  assert.strictEqual(v[v.length - 1].jwt, JWT_BUENO);
+  assert.ok(!E.bot.texto().includes(JWT_BUENO) && !E.bot.texto().includes(JWT_FALSO) && !E.bot.texto().includes(JWT_SIN_CASILLA), "ningún token en los logs del bot");
+  // un 401 de verificar (token malo) o Auth caída NO cuentan como «la base no responde»: ninguna alarma al dueño
+  assert.ok(!E.graph.a(OWNER).some((m) => /no responde/.test(m.texto)), "no hay alarma de bot-api por verificar");
+});
+
+test("BOT_HUMANO_VERIFICA=on: con casilla se envía, el autor es el email que devuelve la base y el byUser del cuerpo se ignora; la baja sigue mandando", async (t) => {
+  const E = await entorno({ env: { BOT_HUMANO_VERIFICA: "on" } });
+  t.after(() => E.cierra());
+  conPersonas(E);
+  const T = await hiloAbierto(E, 42);
+  const r = await enviaPanel(E, "/admin/api/send", { phone: T, text: "Hola de verdad", byUser: "jefe@falso.com", usuario: "otro@falso.com" }, JWT_BUENO);
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.json.por, "ana@lawang.com", "el autor lo da la base");
+  assert.ok(!JSON.stringify(r.json).includes("falso.com"), "lo del cuerpo no vuelve");
+  assert.ok(E.graph.a(T).some((m) => m.texto === "Hola de verdad"));
+  assert.strictEqual(r.json.registrar.texto, "Hola de verdad");
+  const t2 = await enviaPanel(E, "/admin/api/send-template", { phone: T, template: "lawang_x", lang: "es", params: ["a"], byUser: "jefe@falso.com" }, JWT_BUENO);
+  assert.strictEqual(t2.status, 200); assert.strictEqual(t2.json.por, "ana@lawang.com");
+  // sin sesión y con un lead dado de baja: manda la autenticación (401), no el 409 que filtraría el estado del lead
+  await E.bot.post(payloadTexto(T, "stop", wamid()));
+  await hasta(() => E.edge.de("baja").length === 1, "baja");
+  assert.strictEqual((await enviaPanel(E, "/admin/api/send", { phone: T, text: "x" })).status, 401);
+  assert.strictEqual((await enviaPanel(E, "/admin/api/send", { phone: T, text: "x" }, JWT_BUENO)).status, 409, "con casilla, la baja sigue bloqueando");
+  // el resto del panel no se ve afectado: la pausa sigue retirada (410) y no verifica a nadie
+  const v = E.edge.de("verificar").length;
+  assert.strictEqual((await enviaPanel(E, "/admin/api/pause", { phone: T, paused: true })).status, 410);
+  assert.strictEqual(E.edge.de("verificar").length, v);
+});
+
+test("BOT_HUMANO_VERIFICA=sombra: nunca bloquea; registra la discrepancia (teléfono enmascarado, sin token) y calla cuando coincide", async (t) => {
+  const E = await entorno({ env: { BOT_HUMANO_VERIFICA: "sombra" } });
+  t.after(() => E.cierra());
+  conPersonas(E);
+  const T = await hiloAbierto(E, 43);
+  assert.strictEqual((await enviaPanel(E, "/admin/api/send", { phone: T, text: "1" }, JWT_BUENO)).status, 200);
+  await hasta(() => E.edge.de("verificar").length === 1, "la sombra verificó (sin esperarla el envío)");
+  await esperar(150);
+  assert.ok(!/DISCREPANCIA/.test(E.bot.texto()), "con casilla no hay discrepancia");
+  for (const jwt of [undefined, JWT_FALSO, JWT_SIN_CASILLA]) assert.strictEqual((await enviaPanel(E, "/admin/api/send", { phone: T, text: "2" }, jwt)).status, 200, "la sombra no bloquea " + jwt);
+  E.edge.authEstado.caida = true;
+  assert.strictEqual((await enviaPanel(E, "/admin/api/send", { phone: T, text: "3" }, JWT_BUENO)).status, 200, "ni con la edge caída");
+  await hasta(() => (E.bot.texto().match(/DISCREPANCIA/g) || []).length === 4, "cuatro discrepancias anotadas: " + E.bot.texto().split(String.fromCharCode(10)).filter((l) => /DISCREP|verificar/.test(l)).join(" // "));
+  E.edge.authEstado.caida = false;     // la verificación de la sombra corre DESPUÉS de contestar: solo se repone cuando ya se vio la discrepancia
+  const log = E.bot.texto();
+  for (const motivo of ["sin_sesion", "invalida", "no", "no_disponible"]) assert.ok(new RegExp("DISCREPANCIA[^" + String.fromCharCode(10) + "]*: " + motivo + "(?![a-z_])").test(log), "motivo " + motivo);
+  assert.ok(!log.includes(T) && /…\d{4}/.test(log), "el teléfono sale enmascarado");
+  assert.ok(![JWT_BUENO, JWT_FALSO, JWT_SIN_CASILLA].some((j) => log.includes(j)), "ningún token en los logs");
+  assert.strictEqual(E.graph.a(T).filter((m) => ["1", "2", "3"].includes(m.texto)).length, 5, "los envíos salieron todos");
+});
+
+test("BOT_HUMANO_VERIFICA con un valor desconocido = off", async (t) => {
+  const E = await entorno({ env: { BOT_HUMANO_VERIFICA: "ON!" } });
+  t.after(() => E.cierra());
+  const T = await hiloAbierto(E, 44);
+  assert.strictEqual((await enviaPanel(E, "/admin/api/send", { phone: T, text: "Hi" })).status, 200);
+  assert.strictEqual(E.edge.de("verificar").length, 0);
+});
+
+test("BOT_HUMANO_VERIFICA=on con BOT_STORE=redis NO es efectivo y lo dice (log y health): los envíos de la intranet en redis no se verifican", async (t) => {
+  const E = await entorno({ modo: "redis", env: { BOT_HUMANO_VERIFICA: "on" } });
+  t.after(() => E.cierra());
+  assert.match(E.bot.texto(), /humano_verifica=on \(NO EFECTIVO/);
+  const h = await E.bot.get("/admin/api/health", { "x-admin-key": "admin-test" });
+  assert.deepStrictEqual(h.json.humano_verifica, { modo: "on", efectivo: "off" });
+  assert.strictEqual(E.edge.llamadas.length, 0);
+});

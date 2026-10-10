@@ -28,6 +28,7 @@ const RUTA_DE = {
   citas_recordar: "recordatorio", cita_recordatorio_res: "recordatorio",
   consentimiento_preguntar: "estado", consentimiento_enviada: "estado", consentimiento_responder: "estado",     // S12
   seguimiento_candidatos: "recordatorio", seguimiento_reservar: "recordatorio", seguimiento_registrar: "recordatorio",
+  verificar: "estado",     // ¿esta PERSONA (su JWT) tiene la casilla bot_escribir? La única acción de /estado con JWT (encargo «bot sin Redis», apartado c)
 };
 // /humano NO está aquí a propósito: su secreto vive solo en la edge y en lawang-bot-proxy (que reenvía el JWT de la persona y registra pausas y envíos).
 // El bot no lo lee, no lo tiene en Railway y no puede llamar a esa ruta.
@@ -62,15 +63,21 @@ export function creaPg({
   }
 
   // Devuelve { data, intentos }. Lanza ErrorEdge si la edge no contesta como debe.
-  async function llama(accion, cuerpo) {
+  // `opciones.jwt` (solo `verificar`): la sesión de la PERSONA, en Authorization; nunca entra en un log. `opciones.sinCuenta`: un fallo NO cuenta para la alarma de
+  // «la base no responde» (un token malo o Auth caída no es la base caída).
+  async function llama(accion, cuerpo, opciones = {}) {
     const ruta = RUTA_DE[accion];
     const secreto = ruta ? secretos[ruta] : "";
     if (!base || !secreto) { const e = new ErrorEdge(accion, "sin_configurar", 0); falloContado(accion, e); throw e; }   // sin URL o sin secreto no se sale: fallo cerrado y ruidoso
-    const headers = { "X-Bot-Secret": secreto, "content-type": "application/json" };
+    const headers = { "X-Bot-Secret": secreto, "content-type": "application/json", ...(opciones.jwt ? { authorization: `Bearer ${opciones.jwt}` } : {}) };
+    // sinCuenta: ni el fallo ni el éxito de esta llamada tocan el contador de la base (un `verificar` bueno no puede apagar la alarma de una caída real; uno malo no la enciende).
+    const cuenta = opciones.sinCuenta === true ? () => {} : falloContado;
+    const exito = opciones.sinCuenta === true ? () => {} : exitoContado;
+    const maxIntentos = opciones.unIntento === true ? 1 : 1 + reintentos;     // una persona espera la respuesta: nada de cadenas de reintentos
     const cuerpoFinal = { accion, ...cuerpo };
     estado.llamadas += 1;
     let ultimo = null;
-    for (let intento = 1; intento <= 1 + reintentos; intento++) {
+    for (let intento = 1; intento <= maxIntentos; intento++) {
       let resp = null;
       try { resp = await post(`${base}/${ruta}`, cuerpoFinal, { headers, timeout: timeoutMs }); }
       catch (e) {
@@ -79,18 +86,18 @@ export function creaPg({
       if (resp) {
         const st = resp.status;
         if (st === 200 && resp.data && typeof resp.data === "object" && typeof resp.data.ok === "boolean") {
-          exitoContado();
+          exito();
           return { data: resp.data, intentos: intento };
         }
-        if (st === 429) { exitoContado(); throw new ErrorEdge(accion, "ritmo", 429); }              // la edge está viva: no cuenta como caída
-        if (st >= 400 && st < 500) { const e = new ErrorEdge(accion, "http", st); falloContado(accion, e); throw e; }   // 4xx: no se reintenta
+        if (st === 429) { exito(); throw new ErrorEdge(accion, "ritmo", 429); }              // la edge está viva: no cuenta como caída
+        if (st >= 400 && st < 500) { const e = new ErrorEdge(accion, "http", st); cuenta(accion, e); throw e; }   // 4xx: no se reintenta
         if (st === 200) { ultimo = new ErrorEdge(accion, "forma", 200); break; }                    // 200 sin la forma esperada: no se reintenta
         ultimo = new ErrorEdge(accion, "http", st);                                                 // 5xx u otro: se reintenta
       }
-      if (intento <= reintentos) await espera(pausaReintentoMs);
+      if (intento < maxIntentos) await espera(pausaReintentoMs);
     }
-    falloContado(accion, ultimo);
-    log(`bot-api ${accion} sin respuesta tras ${1 + reintentos} intento(s): ${ultimo.tipo}${ultimo.status ? " HTTP " + ultimo.status : ""} (fallos seguidos: ${estado.fallosSeguidos})`);
+    cuenta(accion, ultimo);
+    log(`bot-api ${accion} sin respuesta tras ${maxIntentos} intento(s): ${ultimo.tipo}${ultimo.status ? " HTTP " + ultimo.status : ""} (fallos seguidos: ${estado.fallosSeguidos})`);
     throw ultimo;
   }
 
@@ -145,6 +152,9 @@ export function creaPg({
     },
     // EXCEPCIÓN 1: devuelve el teléfono de OTRO cliente. Solo se llama cuando el remitente firmado es el dueño.
     async escalacionTomar({ wamid = null } = {}) { return cuerpoDe(await llama("escalacion_tomar", { wamid: wamid || undefined })); },
+    // ¿La persona que pide enviar/pausar desde la intranet tiene la casilla? `jwt` = su sesión (la edge la verifica contra Auth y la base decide). Devuelve
+    // {permitido, email} o {error}. Lanza ErrorEdge si no se pudo comprobar (401 = token que no vale, 5xx/red = Auth o la edge caídas): el llamador FALLA CERRADO.
+    async verificar({ jwt, permiso = "bot_escribir" }) { return cuerpoDe(await llama("verificar", { permiso }, { jwt, sinCuenta: true, unIntento: true })); },
     async leadResumen({ tel, texto, hastaId }) { return cuerpoDe(await llama("lead_resumen", { tel, texto, hasta_id: hastaId })); },
     // EXCEPCIÓN 2 (reloj de recordatorios).
     async citasRecordar() { return cuerpoDe(await llama("citas_recordar", {})); },

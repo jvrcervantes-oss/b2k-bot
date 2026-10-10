@@ -38,6 +38,7 @@ export const ESQUEMA = {
     consentimiento_enviada: { claves: ["accion", "tel", "wamid", "repregunta"], tel: true },
     consentimiento_responder: { claves: ["accion", "tel", "wamid", "texto", "cita"], tel: true },
     lead_resumen: { claves: ["accion", "tel", "texto", "hasta_id"], tel: true },
+    verificar: { claves: ["accion", "permiso"], tel: false },      // ¿esta persona (JWT) tiene la casilla? único caso de /estado con Authorization
   },
   recordatorio: {
     citas_recordar: { claves: ["accion"], tel: false },
@@ -90,6 +91,7 @@ export function validaContrato(ruta, b) {
   }
   if (b.accion === "turno_estado" && b.testing !== undefined && typeof b.testing !== "boolean") return "testing";
   if (b.accion === "baja" && typeof b.wamid !== "string") return "wamid";
+  if (b.accion === "verificar" && b.permiso !== "bot_escribir") return "permiso";
   if (ruta === "humano" && b.usuario !== undefined) return "campo_no_permitido";
   return null;
 }
@@ -107,6 +109,8 @@ export async function creaEdgeFalsa({ secretos }) {
   let idMsg = 0;
   const S12 = accionesConsentimiento({ chats, chat: (t) => chat(t) });
   const { estadoConsentimiento: _e, revocaPorBaja: _r, envejece: _v, cs: _c, ...S12acciones } = S12;
+  const personas = new Map();            // verificar: jwt → { email, permitido } (la «base» de usuarios + el Auth de la edge real)
+  const authEstado = { caida: false };
   const cfg = { extra: "", bienvenida: "", pausa_horas: 0, resumen_cada_n: 30, fallos_alarma: 3, version: 1, actualizado_en: null };
   const estado = { reprocesar: new Set(), tope: new Set(), resumirSiempre: false };
   const chat = (tel) => { if (!chats.has(tel)) chats.set(tel, { baja: false, bajaWamid: null, pausado: false, esperando: false, avisoNivel: 0, avisoTestingEn: null, msgs: [] }); return chats.get(tel); };
@@ -213,6 +217,14 @@ export async function creaEdgeFalsa({ secretos }) {
     if (ruta === "humano") accion = b.accion === "pausar" ? "pausar_humano" : b.accion === "enviar" ? "enviar_humano" : accion;
     const jwt = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "") || null;
     llamadas.push({ ruta, accion, cuerpo: b, jwt, t: Date.now() });
+    if (accion === "verificar") {
+      // La edge real: sin JWT o con uno que Auth rechaza = 401 (mismo cuerpo que cualquier no_autorizado); Auth caída = 503; si no, lo que dice la base.
+      if (!jwt) return salida(401, { error: "no_autorizado" });
+      if (authEstado.caida) return salida(503, { error: "auth_conexion" });
+      const p = personas.get(jwt);
+      if (!p) return salida(401, { error: "no_autorizado" });
+      return salida(200, { ok: true, accion, permitido: p.permitido === true, email: p.permitido === true ? p.email : null });
+    }
     const rt = retrasos.find((x) => x.accion === accion && x.veces > 0);
     if (rt) { rt.veces -= 1; await esperar(rt.ms); }
     const f = fallos.find((x) => x.accion === accion && x.veces > 0);
@@ -225,7 +237,7 @@ export async function creaEdgeFalsa({ secretos }) {
     return salida(200, { ok: true, accion, ...(typeof r === "object" ? r : {}) });
   });
   return {
-    url: `http://127.0.0.1:${srv.puerto}/edge`, llamadas, chats, wamids, escalaciones, resumenes, citas, cfg, estado, cierra: srv.cierra,
+    url: `http://127.0.0.1:${srv.puerto}/edge`, llamadas, chats, wamids, escalaciones, resumenes, citas, cfg, estado, cierra: srv.cierra, personas, authEstado,
     falla(accion, status = 502, veces = Infinity) { fallos.push({ accion, status, veces }); },
     retrasa(accion, ms, veces = 1) { retrasos.push({ accion, ms, veces }); },
     quitaFallos() { fallos.length = 0; },
