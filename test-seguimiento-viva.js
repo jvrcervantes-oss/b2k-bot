@@ -146,8 +146,13 @@ const SIN_DISP = { ok: false, motivo: "sin_disponibilidad", descansa: true, llam
   const tools = createErpTools({ erp, quotes, seg: { guarda: async (t, d) => guardado.push([t, d]) }, log: silent(), hoy: () => HOY });
   const r = await tools.runGetQuote("62811", { bike_model: "honda vario", from: "2026-10-20", to: "2026-10-22" });
   assert.equal(r.available, true); assert.deepEqual(guardado, [["62811", { producto_id: P1, desde: "2026-10-20", hasta: "2026-10-22" }]]);
-  const sinDisp = createErpTools({ erp: { ...erp, cotiza: async () => ({ ok: false, motivo: "sin_disponibilidad" }) }, quotes, seg: { guarda: async () => { throw new Error("no debe"); } }, log: silent(), hoy: () => HOY });
+  const borrados = [];
+  const sinDisp = createErpTools({ erp: { ...erp, cotiza: async () => ({ ok: false, motivo: "sin_disponibilidad" }) }, quotes, seg: { guarda: async () => { throw new Error("no debe"); }, borra: async (t) => borrados.push(t) }, log: silent(), hoy: () => HOY });
   assert.equal((await sinDisp.runGetQuote("62811", { bike_model: "honda vario", from: "2026-10-20", to: "2026-10-22" })).available, false);
+  assert.deepEqual(borrados, ["62811"]); // una cotización nueva sin unidad no deja viva la anterior
+  const cero = createErpTools({ erp: { ...erp, cotiza: async () => cot(0).ok && ({ ok: true, cotizacion: { producto_id: P1, desde: "2026-10-20", hasta: "2026-10-22", dias: 2, total: 1, moneda: "IDR", lineas: [], disponibles: 0 } }) }, quotes, seg: { guarda: async () => { throw new Error("no debe"); }, borra: async (t) => borrados.push(t) }, log: silent(), hoy: () => HOY });
+  assert.equal((await cero.runGetQuote("62811", { bike_model: "honda vario", from: "2026-10-20", to: "2026-10-22" })).available, false);
+  assert.deepEqual(borrados, ["62811", "62811"]);
   const rota = createErpTools({ erp, quotes, seg: { guarda: async () => { throw new Error("redis caído"); } }, log: silent(), hoy: () => HOY });
   assert.equal((await rota.runGetQuote("62811", { bike_model: "honda vario", from: "2026-10-20", to: "2026-10-22" })).available, true);
   ok("al cotizar guarda solo producto+fechas devueltos por la base; sin disponibilidad no guarda; un fallo al guardar no rompe la cotización");

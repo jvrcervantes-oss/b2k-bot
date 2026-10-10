@@ -195,7 +195,7 @@ export function createFollowupRunner(d) {
         if (!v || v.ok !== true) {
           const motivo = v && v.motivo ? v.motivo : "erp_no_confirma";
           skip(motivo);
-          if (motivo === "erp_no_confirma") fallosSeguidos++; else fallosSeguidos = 0;
+          if (motivo === "erp_no_confirma") fallosSeguidos++; else if (v && v.llamo) fallosSeguidos = 0; // solo una respuesta real del ERP rompe la racha
           if (!v || v.descansa) vivaRest.set(l.phone, t);
           continue;
         }

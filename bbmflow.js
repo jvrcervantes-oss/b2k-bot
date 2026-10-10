@@ -170,12 +170,13 @@ export function createErpTools({ erp, quotes, seg = null, log = console, project
       });
       if (!c.ok) {
         if (c.motivo === "entrega_a_confirmar" || c.motivo === "entrega_no_configurada") return { ok: false, error: `The delivery price must be confirmed by the team. ${SIN_PRECIO}` };
-        if (c.motivo === "sin_disponibilidad") return { ok: true, bike: hit.nombre, from, to, available: false, note: "No unit of this bike is free for those dates. Do not offer to book it: offer other dates or another model." };
+        if (c.motivo === "sin_disponibilidad") { if (seg) { try { await seg.borra(tel); } catch { /* best-effort */ } } return { ok: true, bike: hit.nombre, from, to, available: false, note: "No unit of this bike is free for those dates. Do not offer to book it: offer other dates or another model." }; }
         return { ok: false, error: `The booking system could not price this right now. ${SIN_PRECIO}` };
       }
       const q = c.cotizacion;
       if (q.disponibles < 1) {
         await quotes.borra(tel);
+        if (seg) { try { await seg.borra(tel); } catch { /* best-effort */ } }
         return { ok: true, bike: hit.nombre, from, to, available: false, note: "No unit of this bike is free for those dates. Do not offer to book it: offer other dates or another model." };
       }
       await quotes.guarda(tel, {
