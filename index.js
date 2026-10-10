@@ -1845,7 +1845,7 @@ async function sendHumanized(to, text, messageId, startedAt) {
 // arregla el guion medio (pilla "palabra—palabra" y guion final; NO toca "self-guided"/"3-6") y
 // convierte el markdown que WhatsApp no entiende. Webhook y simulador comparten esto — antes estaba
 // duplicado en dos sitios y un fix en uno se olvidaba en el otro. También quita el razonamiento del modelo que se cuela en el
-// texto (razonamiento.js, batería S8 T07, mismo módulo que la rama lawang): webhook y simulador pasan los dos por aquí. Si TODO
+// texto (razonamiento.js, batería S8 T07; nació del de la rama lawang, pero desde el 11-oct b2k lleva los patrones acotados a frases de tours): webhook y simulador pasan los dos por aquí. Si TODO
 // era razonamiento, por defecto queda la frase neutra RESPUESTA_TRAS_FUGA (el simulador); el webhook pasa { siVacio: "" } y
 // decide él al final, cuando ya sabe si van enlace de pago, media o email (2ª revisión del 11-oct).
 function cleanReply(reply, opts) {
@@ -2404,9 +2404,11 @@ app.post("/webhook", async (req, res) => {
 
     const _textBlock = response.content.find((b) => b.type === "text");
     let reply = (_textBlock && _textBlock.text) || "";
-    if (!reply.trim()) { // sin texto (p.ej. refusal / respuesta vacía) → no mandamos vacío
-      console.warn(`[${PROJECT_NAME}] Respuesta del modelo sin texto (stop_reason: ${response.stop_reason}) — no se envía nada a ${from}`);
-      return;
+    if (!reply.trim()) { // sin texto (refusal, o el thinking agotó los tokens): NO se corta el turno
+      // Antes había un `return` aquí que se saltaba saveConversation/setWaiting/recordLead: el lead se perdía sin aviso
+      // (revisor, 11-oct). Ahora sigue con reply = "" y textoDelTurno manda la frase neutra en su idioma; el turno se guarda.
+      console.warn(`[${PROJECT_NAME}] Respuesta del modelo sin texto (stop_reason: ${response.stop_reason}) — sale la frase neutra`);
+      reply = "";
     }
     const intentMatch = reply.match(/\[INTENT:(\w+)\]/);
     const intent = intentMatch ? intentMatch[1] : "exploring";

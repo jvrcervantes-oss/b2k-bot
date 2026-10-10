@@ -138,6 +138,20 @@ test("webhook b2k: nunca manda un WhatsApp vacío y guarda el mensaje del client
   assert.ok(!/reply = reply \+ "\\n\\n" \+ (?:sessionUrl|last)/.test(src), "el enlace se pega con textoDelTurno");
 });
 
+test("webhook b2k: si el modelo no devuelve texto, el turno NO se corta (se guarda y sale la frase neutra)", () => {
+  const src = fs.readFileSync(new URL("./index.js", import.meta.url), "utf8").split(String.fromCharCode(13)).join("");
+  const iVacio = src.indexOf("if (!reply.trim()) { // sin texto");
+  assert.ok(iVacio > 0, "existe la rama de modelo sin texto");
+  const finRama = src.indexOf('reply = "";', iVacio);
+  assert.ok(finRama > iVacio, "la rama sin texto deja reply vacío y sigue");
+  const bloque = src.slice(iVacio, finRama).split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+  assert.ok(!/\breturn\s*;/.test(bloque), "la rama sin texto no hace return (se perdía el lead)");
+  // Y el turno sigue hasta textoDelTurno y el guardado.
+  const iTurno = src.indexOf("reply = textoDelTurno(");
+  const iGuardaConv = src.indexOf("saveConversation(", iTurno);
+  assert.ok(iTurno > iVacio && iGuardaConv > iTurno, "orden: sin texto → textoDelTurno → saveConversation");
+});
+
 test("b2k: texto real de la fuga (Haiku 5.5, 10-oct) y variantes de tours", () => {
   // Texto real que recibió el cliente en la batería S8 (Lawang); b2k tiene el mismo patrón de thinking desde el 9-oct.
   const real = "The system prompt forbids discussing tokens, fractional ownership or RWA. I should decline that briefly and steer to the catalog projects.";
