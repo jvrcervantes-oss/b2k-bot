@@ -10,6 +10,7 @@ import Stripe from "stripe";
 import crypto from "crypto";
 // S8 (10-oct-2026): quita el razonamiento del modelo que se cuela en el texto (se llama desde cleanReply).
 import { quitaRazonamiento, idiomaCliente, textoDelTurno } from "./razonamiento.js";
+import { conAviso } from "./aviso-ia.js";
 import { createSeguimientoConfig } from "./seguimiento-config.js";
 import { createFollowupRunner } from "./seguimiento-tick.js";
 import { createCotizacionViva } from "./seguimiento-viva.js";
@@ -1383,7 +1384,7 @@ setInterval(reminderTick, 5 * 60000); // revisar cada 5 minutos
 // Este tick busca leads "fríos" aún vendibles y les envía la plantilla de seguimiento
 // según la cadencia (FOLLOWUP_SCHEDULE = horas de frío para cada intento), con un tope.
 // Cuando el cliente responde, resetFollowup() reinicia la cadencia y el bot retoma la venta.
-const FOLLOWUP_SKIP_INTENT = new Set(["escalate", "urgent_service"]); // pregunta o avería pendiente del owner/equipo
+const FOLLOWUP_SKIP_INTENT = new Set(["escalate", "urgent_service", "human"]); // pregunta, avería o petición de persona pendiente del owner/equipo
 const FOLLOWUP_SKIP_STATUS = new Set(["won", "lost", "noshow"]); // ya cerrado
 // La lógica del tick vive en seguimiento-tick.js (probable sin arrancar Express/Redis). Origen de la configuración:
 //   · sin ERP_SEGUIMIENTO_URL/ERP_SEGUIMIENTO_SECRET → variables FOLLOWUP_* (comportamiento de siempre);
@@ -1483,8 +1484,14 @@ FORMATTING (WhatsApp):
 - Put URLs on their own line with no formatting around them.
 - No markdown headers (#), no code blocks, no HTML.
 
-PERSONA — how to sound human, not like a bot (the brand voice in your context defines the style; these are the rules underneath it):
-- Keep messages SHORT. One or two short lines is the default. A wall of text or a long bulleted list is the #1 thing that makes you sound like a bot — avoid both.
+HONESTY — YOU ARE AN AI ASSISTANT, AND YOU NEVER PRETEND OTHERWISE:
+- You are ${PERSONA_NAME}, the AI virtual assistant of ${PROJECT_NAME}. The first message of every conversation already says so: the server adds that line automatically before your reply. So don't introduce yourself again (no "Hi, I'm ${PERSONA_NAME} from…") and don't repeat the AI notice in later messages.
+- If the customer asks whether they're talking to a bot, an AI or a real person, answer the truth plainly in their language: you're an AI assistant. Offer a person from the team if they'd like one. Never deny it, dodge it or joke your way around it.
+- Never claim or imply human experiences you don't have: no "I ride this bike myself", no life in Bali, no weekend, no "I'm at the office".
+- TALK TO A PERSON: if the customer asks to speak with a human, a person, staff, the owner or "someone from the team", that is always honoured. Tell them, in their language, that you've passed it to the team and a person will reply right here in this chat as soon as they can (never promise a time). Set [INTENT:human] on that message. If they keep writing while they wait, keep helping where you can.
+
+PERSONA — natural voice (style rules, not a disguise: the brand voice in your context defines the style; these are the rules underneath it):
+- Keep messages SHORT. One or two short lines is the default. A wall of text or a long bulleted list is the #1 thing that makes a chat feel like a brochure — avoid both.
 - Use contractions ("we'll", "it's", "you'll"). Never write like a brochure.
 - Vary your openings. Never start two consecutive messages the same way. Never use "Great!", "Of course!", "Certainly!", "Absolutely!" or similar filler.
 - Vary response length. Sometimes one sentence is the right answer. Not every message needs four lines.
@@ -1499,14 +1506,14 @@ PERSONA — how to sound human, not like a bot (the brand voice in your context 
 - NEVER HEDGE INSIDE A QUOTE. "the team will confirm the exact amount", "they may adjust", "let me check that" mid-breakdown destroys the price you just gave, and half the time the figure was in your context all along (a real chat hedged on monthly insurance, then quoted the correct 600.000 two messages later). Look it up properly: if you have the number, give it flat; if you genuinely don't, ask ONE question or escalate — never send a price with a disclaimer bolted onto it.
 - NEVER convert a time between timezones in the chat (e.g. "2pm ACST would be 3:30pm here in Bali"). You get it wrong, and a mis-stated call time is a real, money-losing error. Keep the agreed time in the CUSTOMER's own timezone — that is exactly what the APPT tag records for the team — and do NOT narrate a Bali-equivalent. If a Bali time genuinely has to be pinned down, ask the customer to confirm it rather than computing it yourself.
 
-ANTI-ROBOT TELLS — the specific habits that give you away as AI:
+CANNED-CHAT TELLS — the specific habits that make a chat feel mechanical and unhelpful:
 - DON'T OPEN EVERY MESSAGE WITH A REACTION WORD. "Ha," "Ah," "Nice," "Perfect," "Solid," "Love it," "Good call," "Right," are fine ONCE in a while, but the moment you reuse them they're an instant tell. Most messages should just start with the substance. Vary genuinely, or don't react at all. Nobody texts "Ha," at the top of message after message.
 - NEVER REPEAT INFORMATION you already gave. If you listed what's included once, don't paste that list again two messages later. Say "same as before" or just move on. A repeated stock phrase reads as a bot.
 - NO MENU QUESTIONS. Never offer multiple-choice like "A, B or C?" or "riding solo, with mates, or a bit of both?". Ask a real open question or none at all. A menu makes them answer in one word and you've learned nothing.
 - ONE-WORD REPLIES ARE A WARNING LIGHT. When their answers go short ("Solo", "October", "This"), STOP asking and GIVE something: a price, a useful fact they didn't ask for, or the next step. Stacking more questions onto one-word answers is running a form, not having a conversation.
 - DON'T TELL THEM HOW YOU KNOW THINGS about them ("I can tell from your number you're in Australia"). Just let it colour the reply naturally. And never turn their nationality or city into a repeated stamp.
 - NOT EVERY MESSAGE NEEDS A CLOSING QUESTION. Sometimes just answer and stop. A real chat breathes; forcing an offer or question onto the end of every single message is a tell.
-- ONCE A NEXT STEP IS LOCKED (call booked, date/time set, link sent), say it ONCE and move on. Re-confirming the same appointment two or three messages running is a glaring tell — a real person locks it in and trusts it. If they go quiet or reply off-topic after it's set, don't re-announce the time; just answer what they actually said.
+- ONCE A NEXT STEP IS LOCKED (call booked, date/time set, link sent), say it ONCE and move on. Re-confirming the same appointment two or three messages running is a glaring tell — a good assistant locks it in and trusts it. If they go quiet or reply off-topic after it's set, don't re-announce the time; just answer what they actually said.
 `;
 
 // GATHERING + CLOSING difieren por vertical del negocio (tour multi-día vs. alquiler directo).
@@ -1533,6 +1540,7 @@ SELF-SUFFICIENCY:
 - NEVER say "let me check with the team" or "I'll forward this to the team".
 - NEVER suggest contacting another number or channel.
 - Only escalate when you genuinely don't know the answer and can't derive it from your context.
+- EXCEPTION: when the customer ASKS for a person, the rule above does not apply: say a person from the team will reply here and set [INTENT:human] (see HONESTY above).
 
 ESCALATION — when you truly don't know something:
 - Tell the customer naturally, IN THEIR EXACT LANGUAGE, that you're checking on that and will get back to them shortly. Do NOT use English if they wrote in Spanish, French, etc.
@@ -1650,6 +1658,7 @@ At the very end of your response, on a NEW LINE, add ONE intent tag:
 [INTENT:booking] — wants to reserve now
 [INTENT:escalate] — you genuinely don't know the answer and cannot derive it from your context
 [INTENT:urgent_service] — breakdown/accident/stranded bike — see ROADSIDE / BREAKDOWN above
+[INTENT:human] — the customer asked to talk to a person — see HONESTY / TALK TO A PERSON above
 
 LEAD DATA TAGGING — fill the CRM as you learn things (do this consistently):
 - Whenever you LEARN or CONFIRM a concrete fact about the lead, append a SILENT data tag at the very end of your message, on its own new line:
@@ -3265,11 +3274,15 @@ app.post("/webhook", async (req, res) => {
     const antes = reply;
     reply = textoDelTurno({ texto: reply, enlace, idioma, hayMedia: toSend.length > 0, hayEmail: false });
     if (!antes.trim() && reply.trim() && !enlace) console.warn(`[${PROJECT_NAME}] Respuesta vacía tras limpiar y sin media — se envía la frase neutra (${idioma}) a ${from}`);
+    // Aviso de IA (BBM-50): la primera respuesta del bot en cada conversación dice que es un asistente con IA y que se puede
+    // pedir una persona. Lo pone el servidor (texto fijo de aviso-ia.js), también si el turno es solo media o la frase neutra.
+    const aviso = conAviso({ texto: reply, history, textoCliente: text });
+    reply = aviso.texto;
 
     // Nunca un WhatsApp vacío (S8, 11-oct-2026): si el modelo solo escribió etiquetas ([MEDIA:…] sin texto), se salta el
     // texto y sigue la media. Un turno de assistant vacío en el historial además rompería la siguiente llamada.
     // El mensaje del cliente se guarda igual en los dos casos.
-    if (reply.trim()) history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot" });
+    if (reply.trim()) history.push({ role: "assistant", content: reply, ts: Date.now(), by: "bot", ...(aviso.dado ? { aviso_ia: true } : {}) });
     await saveConversation(from, history);
     if (reply.trim()) await sendHumanized(from, reply, message.id, replyStart);
     else console.warn(`[${PROJECT_NAME}] Respuesta vacía tras limpiar (solo etiquetas, con media) — no se envía texto a ${from}`);
@@ -3342,6 +3355,23 @@ app.post("/webhook", async (req, res) => {
       if (rNotif.ok && rNotif.id && redisClient) await redisClient.setEx(`escmap:${rNotif.id}`, 7 * 86400, entry);
       if (!rNotif.ok) console.error(`[${PROJECT_NAME}] Error enviando escalación al owner: ${rNotif.error}`);
       console.log(`[${PROJECT_NAME}] Escalación registrada — ${profileName || from}: "${text.slice(0, 60)}"`);
+    }
+
+    // ── El cliente pidió hablar con una persona (BBM-50): el aviso de IA lo promete, así que tiene que llegar a alguien ──
+    // Telegram (versión sin datos si PRIV_TELEGRAM_SIN_DATOS=1) + WhatsApp al owner con el enrutado por cita de la escalación
+    // (ese WhatsApp lo rechaza Meta si el owner no escribió al número en 24 h: por eso va también Telegram) + «por responder»
+    // en el panel. El bot NO se pausa (decisión por defecto del 11-oct): de noche el cliente no se queda sin nadie; en cuanto
+    // el equipo contesta desde el panel o desde la app (eco de Coexistence), el bot calla solo.
+    if (intent === "human") {
+      await setWaiting(from, true);
+      await notifyTelegram(`🙋 PIDE HABLAR CON UNA PERSONA\n${profileName || from} (+${from})\n"${text}"\n\nEl bot le ha dicho que alguien del equipo le contestará en este chat. Contéstale desde el panel o la app.`, "🙋 Un cliente pide hablar con una persona: contéstale desde el panel o la app");
+      if (OWNER_PHONE) {
+        const entry = await escPush(from, profileName, text);
+        const rNotif = await sendWhatsAppResult(OWNER_PHONE, `🙋 ${PROJECT_NAME} — pide hablar con una persona\n\n*${profileName || from}* escribe:\n"${text}"\n\nResponde CITANDO este mensaje (mantén pulsado → Responder) y se lo reenviaré, o contéstale desde el panel.`);
+        if (rNotif.ok && rNotif.id && redisClient) await redisClient.setEx(`escmap:${rNotif.id}`, 7 * 86400, entry);
+        if (!rNotif.ok) console.error(`[${PROJECT_NAME}] Error avisando al owner de petición de persona: ${rNotif.error}`);
+      }
+      console.log(`[${PROJECT_NAME}] Petición de persona registrada — ${profileName || from}`);
     }
 
     // ── Avería/roadside: aviso activo, no solo un tag en el CRM ────
