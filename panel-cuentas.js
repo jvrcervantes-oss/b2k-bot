@@ -48,12 +48,15 @@ export const nombreValido = (u) => typeof u === "string" && /^[a-z0-9._-]{3,32}$
 export const claveValida = (c) => typeof c === "string" && c.length >= 12 && c.length <= 200;
 const sha = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest("hex");
 
-// IP del cliente tras el proxy de Railway: el ÚLTIMO salto de X-Forwarded-For (lo pone el proxy; el primero lo puede
-// escribir cualquiera). Cuántos saltos llegan no está medido en producción: `saltos` se enseña en /admin/api/health
-// para medirlo ANTES de fiarse del límite por IP (Seguridad, punto 5).
+// IP del cliente tras el proxy de Railway: el PENÚLTIMO salto de X-Forwarded-For. Medido en bbm-bot el 11-oct-2026 (despliegue
+// 7162e576): llegan 2 saltos, [cliente, proxy]; el penúltimo (= el primero) coincide con X-Real-IP y el último no; y una
+// X-Forwarded-For inventada por el cliente no cambia el número (Railway la sustituye). El penúltimo es el cliente tanto si
+// Railway sustituye como si añade. Con un solo salto (sin proxy) se toma ese. Antes era el último, que es el del proxy.
+// Si Railway cambia su proxy, el log del arranque lo enseña (saltos y qué entrada coincide con X-Real-IP).
 export function ipCliente(req) {
   const xff = String((req.get && req.get("x-forwarded-for")) || "").split(",").map((s) => s.trim()).filter(Boolean);
-  return { ip: xff.length ? xff[xff.length - 1] : String(req.socket?.remoteAddress || ""), saltos: xff.length };
+  const ip = xff.length >= 2 ? xff[xff.length - 2] : xff.length === 1 ? xff[0] : String(req.socket?.remoteAddress || "");
+  return { ip, saltos: xff.length };
 }
 
 export function leeCookie(req, nombre = COOKIE) {

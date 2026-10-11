@@ -229,7 +229,9 @@ async function siembra(now) {
   assert.equal(igualSeguro("abc", "abc"), true); assert.equal(igualSeguro("abc", "abd"), false);
   assert.equal(igualSeguro("abc", ""), false, "sin clave configurada nunca entra"); assert.equal(igualSeguro(["abc"], "abc"), false);
   const req = (h) => ({ get: (k) => h[k.toLowerCase()], socket: { remoteAddress: "10.0.0.1" } });
-  assert.deepEqual(ipCliente(req({ "x-forwarded-for": "1.1.1.1, 2.2.2.2" })), { ip: "2.2.2.2", saltos: 2 }, "el último salto, no el que escribe el cliente");
+  assert.deepEqual(ipCliente(req({ "x-forwarded-for": "1.1.1.1, 2.2.2.2" })), { ip: "1.1.1.1", saltos: 2 }, "Railway (medido 11-oct): [cliente, proxy] → el penúltimo");
+  assert.deepEqual(ipCliente(req({ "x-forwarded-for": "6.6.6.6, 1.1.1.1, 2.2.2.2" })), { ip: "1.1.1.1", saltos: 3 }, "si el proxy añadiera a una cabecera inventada, sigue siendo el penúltimo, no la inventada");
+  assert.deepEqual(ipCliente(req({ "x-forwarded-for": "3.3.3.3" })), { ip: "3.3.3.3", saltos: 1 });
   assert.deepEqual(ipCliente(req({})), { ip: "10.0.0.1", saltos: 0 });
   assert.equal(leeCookie(req({ cookie: "a=1; panel_sesion=tok%2Bx; b=2" })), "tok+x");
   assert.equal(leeCookie(req({})), "");
