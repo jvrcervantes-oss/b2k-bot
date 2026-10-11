@@ -33,6 +33,9 @@ export function leeConfigPrivacidad(env = {}) {
   let modo = "off";
   if (modoRaw === "contar" || modoRaw === "aplicar") modo = modoRaw;
   else if (modoRaw !== "" && modoRaw !== "off") avisos.push(`PRIV_PURGA="${modoRaw.slice(0, 20)}" no es contar ni aplicar: la purga queda apagada`);
+  // Condición de Legal (11-oct) puesta en código: borrar por plazo sin el borrado completo dejaría fotos, citas y escalaciones
+  // con el teléfono de un contacto que ya no existe. Sin PRIV_BORRADO_COMPLETO=1, `aplicar` se queda en `contar`.
+  if (modo === "aplicar" && env.PRIV_BORRADO_COMPLETO !== "1") { modo = "contar"; avisos.push("PRIV_PURGA=aplicar exige PRIV_BORRADO_COMPLETO=1: la purga solo cuenta"); }
   const plazo = (nombre, suelo) => {
     const raw = env[nombre];
     if (raw == null || String(raw).trim() === "") return null;

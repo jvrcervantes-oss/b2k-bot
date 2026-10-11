@@ -134,7 +134,8 @@ const silencio = { log() {}, error() {}, warn() {} };
   assert.equal(c.borradoCompleto, true); assert.equal(c.docTtlDias, 30); assert.deepEqual(c.purga, { modo: "contar", convDias: 365, leadDias: 730 });
   const mal = leeConfigPrivacidad({ DOC_TTL_DAYS: "0", PRIV_PURGA: "aplicar", PRIV_CONV_DIAS: "7", PRIV_LEAD_DIAS: "abc" });
   assert.equal(mal.docTtlDias, 60); assert.equal(mal.purga.convDias, null, "por debajo del suelo de 30: nada"); assert.equal(mal.purga.leadDias, null);
-  assert.equal(mal.avisos.length, 3);
+  assert.equal(mal.avisos.length, 4, "incluye: aplicar sin borrado completo se queda en contar");
+  assert.equal(mal.purga.modo, "contar", "Legal: aplicar exige PRIV_BORRADO_COMPLETO=1");
   assert.equal(leeConfigPrivacidad({ PRIV_PURGA: "borrar" }).purga.modo, "off", "un valor raro deja la purga apagada");
   ok("configuración: valores válidos se aplican; ilegibles o bajo el suelo no hacen nada y avisan");
 }
@@ -203,7 +204,7 @@ async function siembra(now) {
   const now = Date.UTC(2026, 9, 11);
   const r = await siembra(now);
   const borrados = [];
-  const cfg = leeConfigPrivacidad({ PRIV_PURGA: "aplicar", PRIV_CONV_DIAS: "365", PRIV_LEAD_DIAS: "730" });
+  const cfg = leeConfigPrivacidad({ PRIV_PURGA: "aplicar", PRIV_BORRADO_COMPLETO: "1", PRIV_CONV_DIAS: "365", PRIV_LEAD_DIAS: "730" });
   const res = await purgaPasada({ redis: r, cfg, now, deleteLead: async (t) => borrados.push(t), tieneCitaFutura: async (t) => t === "555", log: silencio });
   assert.equal(await r.get("conv:viejo"), null, "conversación vencida: borrada");
   for (const k of ["conv:nuevo", "conv:sinfecha", "conv:roto", "conv:222", "conv:555"]) assert.ok(await r.get(k), `${k} sigue`);
@@ -218,7 +219,7 @@ async function siembra(now) {
   const now = Date.UTC(2026, 9, 11);
   const r = fakeRedis();
   for (let i = 0; i < TOPE_PURGA + 15; i++) await r.set(`conv:${i}`, JSON.stringify([{ ts: now - 400 * DIA }]));
-  const res = await purgaPasada({ redis: r, cfg: leeConfigPrivacidad({ PRIV_PURGA: "aplicar", PRIV_CONV_DIAS: "365" }), now, deleteLead: async () => {}, log: silencio });
+  const res = await purgaPasada({ redis: r, cfg: leeConfigPrivacidad({ PRIV_PURGA: "aplicar", PRIV_BORRADO_COMPLETO: "1", PRIV_CONV_DIAS: "365" }), now, deleteLead: async () => {}, log: silencio });
   assert.equal(res.conv.borradas, TOPE_PURGA); assert.equal(res.conv.vencidas, TOPE_PURGA + 15); assert.equal(res.leads, null);
   ok(`purga: como mucho ${TOPE_PURGA} borrados por categoría y pasada; sin plazo de leads, los leads no se miran`);
 }

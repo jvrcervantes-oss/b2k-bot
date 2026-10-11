@@ -34,7 +34,13 @@ app.use("/admin", async (req, _res, next) => {
   // Cuántos saltos de X-Forwarded-For llegan tras el proxy de Railway: se mide SIEMPRE (solo el número, nunca la IP) y se
   // escribe una vez en el log, para saber si el límite por IP distingue clientes ANTES de encender las cuentas (Seguridad, p. 5).
   const { ip, saltos } = ipCliente(req);
-  if (panelUltimosSaltos === null) console.log(`[${PROJECT_NAME}] panel: X-Forwarded-For llega con ${saltos} salto(s)`);
+  // Se escribe cada vez que cambia el número (una VPN añade un salto). Medido el 11-oct: 2 saltos, así que el último puede
+  // ser del proxy. Para saber cuál es el cliente, sin escribir ninguna IP: si coincide con X-Real-IP el primero o el penúltimo.
+  if (panelUltimosSaltos !== saltos) {
+    const xff = String(req.get("x-forwarded-for") || "").split(",").map((x) => x.trim()).filter(Boolean);
+    const real = String(req.get("x-real-ip") || "").trim();
+    console.log(`[${PROJECT_NAME}] panel: X-Forwarded-For llega con ${saltos} salto(s); X-Real-IP ${real ? "presente" : "ausente"}; primero=X-Real-IP ${!!real && xff[0] === real}; penúltimo=X-Real-IP ${!!real && xff.length > 1 && xff[xff.length - 2] === real}; último=X-Real-IP ${!!real && xff[xff.length - 1] === real}`);
+  }
   panelUltimosSaltos = saltos;
   if (!panelCfg.cuentas) return next();
   try {
