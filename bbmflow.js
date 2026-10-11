@@ -340,7 +340,7 @@ export function textoPagoRecibido(cuerpo, { importe, moneda } = {}) {
   const fac = f && str(f.numero) && /^[A-Za-z0-9._\/-]{1,40}$/.test(f.numero)
     ? ` Your invoice number is ${f.numero}.`
     : " Your invoice is on its way.";
-  return `✅ Payment received${cant}. Thank you! Your booking is confirmed.${fac} Our team will be in touch to arrange delivery.`;
+  return `✅ Payment received${cant}. Thank you! Your booking is confirmed.${fac} Our team will be in touch about the handover.`;
 }
 
 // Quien cuelga de la puerta del webhook: busca el teléfono por el índice, avisa una sola vez por factura y limpia el estado de la conversación.

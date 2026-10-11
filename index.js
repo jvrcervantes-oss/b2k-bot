@@ -10,7 +10,7 @@ import Stripe from "stripe";
 import crypto from "crypto";
 // S8 (10-oct-2026): quita el razonamiento del modelo que se cuela en el texto (se llama desde cleanReply).
 import { quitaRazonamiento, idiomaCliente, textoDelTurno } from "./razonamiento.js";
-import { conAviso } from "./aviso-ia.js";
+import { conAviso, configAviso, conservaMarca } from "./aviso-ia.js";
 import { createSeguimientoConfig } from "./seguimiento-config.js";
 import { createFollowupRunner } from "./seguimiento-tick.js";
 import { createCotizacionViva } from "./seguimiento-viva.js";
@@ -156,6 +156,8 @@ async function claudeMessage(params, tries = 3) {
 }
 const MODEL = BOT_MODEL || "claude-sonnet-5";
 const PERSONA_NAME = BOT_PERSONA_NAME || "Daniel"; // default = persona de B2K (retrocompatible)
+// Aviso de IA del primer mensaje (BBM-50): activo por defecto solo en Bali Best; AVISO_IA=on|off y AVISO_IA_MARCA lo cambian (aviso-ia.js).
+const AVISO = configAviso(process.env, PERSONA_NAME);
 
 // ─── COTIZACIÓN AUTORITATIVA VÍA ERP (rental) ─────────────────────────────
 // El cliente (Dion) actualizó su ERP: GET /api/chat/v1/quote?product_id&from&to devuelve el
@@ -359,7 +361,7 @@ async function getConversation(phone) {
 // afecta al coste del bot, que ya solo manda los últimos 20 al modelo (línea del comentario
 // de arriba, ver history.slice(-20) al construir `messages`).
 async function saveConversation(phone, messages) {
-  const trimmed = messages.slice(-100);
+  const trimmed = conservaMarca(messages, messages.slice(-100)); // el recorte no pierde la marca del aviso de IA (BBM-50)
   if (redisClient) {
     await redisClient.set(`conv:${phone}`, JSON.stringify(trimmed));
   } else {
@@ -400,7 +402,9 @@ async function recordLead(phone, name, intent, lastMessage, lastBy, lastAuto = f
     // debe revertirse a eso en el turno siguiente. Solo se usa `name` para el alta inicial,
     // cuando el lead todavía no tiene ninguno.
     name: prev.name || name || "",
-    intent: intent || prev.intent || "exploring",
+    // Pidió una persona y nadie del equipo le ha contestado todavía (BBM-50): el intent sigue en «human» aunque el bot siga ayudando,
+    // para que el panel lo enseñe y el seguimiento automático lo salte. Lo limpia atendidoPorPersona().
+    intent: prev.pidePersona ? "human" : (intent || prev.intent || "exploring"),
     lastMessage: (lastMessage || "").slice(0, 200),
     lastBy: lastBy || prev.lastBy || "client", // quién mandó el último mensaje (client|bot|human) → preview del panel
     // lastAuto: el último mensaje del bot NO lo escribió el modelo (frase neutra o línea de pago, BBM-37): el panel lo marca para que el equipo
@@ -534,6 +538,27 @@ async function setPaused(phone, val) {
     if (val) fallbackPaused[phone] = true;
     else delete fallbackPaused[phone];
   }
+}
+// Una persona del equipo contestó a este cliente (panel, eco de la app o el owner citando el aviso): se cierra su petición de
+// persona (BBM-50) y salen de la cola de escalación las entradas de ese teléfono, para que el siguiente mensaje del owner SIN cita
+// no se reenvíe a un cliente ya atendido (escPop toma la más antigua; revisor, 12-oct).
+async function atendidoPorPersona(phone) {
+  try {
+    const lead = await getLead(phone);
+    if (lead && lead.pidePersona) await updateLeadFields(phone, { pidePersona: null, intent: lead.intent === "human" ? "interested" : lead.intent });
+    const telN = normalizePhone(String(phone || ""));
+    if (redisClient) {
+      for (const raw of await redisClient.lRange("esc_queue", 0, -1)) {
+        let e = null; try { e = JSON.parse(raw); } catch { /* entrada ilegible: no se toca */ }
+        if (e && normalizePhone(String(e.customerPhone || "")) === telN) await redisClient.lRem("esc_queue", 0, raw);
+      }
+    } else {
+      for (let k = fallbackEscQueue.length - 1; k >= 0; k--) {
+        let e = null; try { e = JSON.parse(fallbackEscQueue[k]); } catch { /* */ }
+        if (e && normalizePhone(String(e.customerPhone || "")) === telN) fallbackEscQueue.splice(k, 1);
+      }
+    }
+  } catch (e) { console.error(`[${PROJECT_NAME}] atendidoPorPersona(${phone}): ${e.message}`); }
 }
 async function isPaused(phone) {
   if (redisClient) return (await redisClient.get(`paused:${phone}`)) === "1";
@@ -1485,7 +1510,7 @@ FORMATTING (WhatsApp):
 - No markdown headers (#), no code blocks, no HTML.
 
 HONESTY — YOU ARE AN AI ASSISTANT, AND YOU NEVER PRETEND OTHERWISE:
-- You are ${PERSONA_NAME}, the AI virtual assistant of ${PROJECT_NAME}. The first message of every conversation already says so: the server adds that line automatically before your reply. So don't introduce yourself again (no "Hi, I'm ${PERSONA_NAME} from…") and don't repeat the AI notice in later messages.
+- You are ${PERSONA_NAME}, the AI virtual assistant of ${PROJECT_NAME}.${AVISO.activo ? ` The first message of every conversation already says so: the server adds that line automatically before your reply. So don't introduce yourself again (no "Hi, I'm ${PERSONA_NAME} from…") and don't repeat the AI notice in later messages.` : ""}
 - If the customer asks whether they're talking to a bot, an AI or a real person, answer the truth plainly in their language: you're an AI assistant. Offer a person from the team if they'd like one. Never deny it, dodge it or joke your way around it.
 - Never claim or imply human experiences you don't have: no "I ride this bike myself", no life in Bali, no weekend, no "I'm at the office".
 - TALK TO A PERSON: if the customer asks to speak with a human, a person, staff, the owner or "someone from the team", that is always honoured. Tell them, in their language, that you've passed it to the team and a person will reply right here in this chat as soon as they can (never promise a time). Set [INTENT:human] on that message. If they keep writing while they wait, keep helping where you can.
@@ -2219,6 +2244,7 @@ function cleanReply(reply, opts) {
   return quitaRazonamiento(reply
     .replace(/\[INTENT:\w+\]/g, "").replace(/\[RIDERS:\d+\]/g, "").replace(/\[APPT:[^\]]+\]/g, "")
     .replace(/\[LEAD[^\]]*\]/gi, "").replace(/\[MEDIA:[^\]]*\]/gi, "").replace(/\[RESEND_LINK\]/gi, "").replace(/\[PAY:[^\]]*\]/gi, "").trim(), opts)
+    .replace(/(\d)[ \t]*(?:—|–)[ \t]*(?=\d)/g, "$1-") // rango de fechas o importes («20–23 October»): guion corto, no coma (ensayo 12-oct: salía «20, 23»)
     .replace(/[ \t]*(—|–|--)[ \t]*$/gm, ".").replace(/[ \t]*(—|–|--)[ \t]*/g, ", ")
     .replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, "$1")  // **URL** → URL
     .replace(/\*\*([^*\n]+)\*\*/g, "*$1*");          // **bold** → *bold*
@@ -2700,7 +2726,7 @@ async function markLeadPaid(phone, provider, amountIDR, receiptUrl) {
   console.log(`[${PROJECT_NAME}] Pago confirmado (${provider}): ${phone} — ${amountIDR} IDR → status=won`);
 
   // Confirmación al propio cliente (no solo al owner) — queda en el chat como un mensaje más del bot.
-  const custMsg = `✅ Payment received — ${Math.round(amountIDR).toLocaleString("id-ID")} IDR. Thank you! Your booking is confirmed, our team will follow up shortly to arrange delivery.`
+  const custMsg = `✅ Payment received — ${Math.round(amountIDR).toLocaleString("id-ID")} IDR. Thank you! Your booking is confirmed, our team will follow up shortly about the handover.`
     + (receiptUrl ? `\n\nYour receipt: ${receiptUrl}` : "");
   const rCust = await sendWhatsAppResult(phone, custMsg);
   if (rCust.ok) {
@@ -2993,6 +3019,7 @@ app.post("/webhook", async (req, res) => {
           if (await alreadyProcessed(e.id)) continue; // reintento de Meta → no duplicar
           await setPaused(cust, true);                // humano al mando → el bot calla
           await setWaiting(cust, false);              // ya atendido por el staff
+          await atendidoPorPersona(cust);             // cierra una petición de persona (BBM-50)
           const body = e.type === "text" ? (e.text?.body || "").trim() : "";
           if (body) {                                 // edit/revoke no traen texto: pausan igual, sin ensuciar el historial
             const history = await getConversation(cust);
@@ -3071,10 +3098,12 @@ app.post("/webhook", async (req, res) => {
         : (message.type === "audio" || message.type === "voice")
           ? "Sorry! I can't listen to voice notes on this end yet. Could you type it out for me? 🙏"
           : "I can't open attachments on this end yet. Could you type out the details for me? 🙏";
-      await sendWhatsApp(from, ask);
-      history.push({ role: "assistant", content: ask, ts: Date.now(), by: "bot" });
+      // Aviso de IA también aquí: un cliente puede abrir la conversación con una foto o una nota de voz (revisor, 12-oct).
+      const avisoMedia = conAviso({ texto: ask, history, textoCliente: "", textos: AVISO.textos, activo: AVISO.activo });
+      await sendWhatsApp(from, avisoMedia.texto);
+      history.push({ role: "assistant", content: avisoMedia.texto, ts: Date.now(), by: "bot", ...(avisoMedia.dado ? { aviso_ia: true } : {}) });
       await saveConversation(from, history);
-      await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "exploring", ask, "bot");
+      await recordLead(from, profileName || (prev && prev.name), (prev && prev.intent) || "exploring", avisoMedia.texto, "bot");
       return;
       }
     } else {
@@ -3103,6 +3132,7 @@ app.post("/webhook", async (req, res) => {
           pending.customerPhone,
           text
         );
+        await atendidoPorPersona(pending.customerPhone); // el owner le contestó: cierra su petición de persona (BBM-50)
       } else {
         console.log(`[${PROJECT_NAME}] Mensaje del owner pero no hay escalaciones pendientes`);
       }
@@ -3276,7 +3306,7 @@ app.post("/webhook", async (req, res) => {
     if (!antes.trim() && reply.trim() && !enlace) console.warn(`[${PROJECT_NAME}] Respuesta vacía tras limpiar y sin media — se envía la frase neutra (${idioma}) a ${from}`);
     // Aviso de IA (BBM-50): la primera respuesta del bot en cada conversación dice que es un asistente con IA y que se puede
     // pedir una persona. Lo pone el servidor (texto fijo de aviso-ia.js), también si el turno es solo media o la frase neutra.
-    const aviso = conAviso({ texto: reply, history, textoCliente: text });
+    const aviso = conAviso({ texto: reply, history, textoCliente: text, textos: AVISO.textos, activo: AVISO.activo });
     reply = aviso.texto;
 
     // Nunca un WhatsApp vacío (S8, 11-oct-2026): si el modelo solo escribió etiquetas ([MEDIA:…] sin texto), se salta el
@@ -3358,13 +3388,15 @@ app.post("/webhook", async (req, res) => {
     }
 
     // ── El cliente pidió hablar con una persona (BBM-50): el aviso de IA lo promete, así que tiene que llegar a alguien ──
-    // Telegram (versión sin datos si PRIV_TELEGRAM_SIN_DATOS=1) + WhatsApp al owner con el enrutado por cita de la escalación
-    // (ese WhatsApp lo rechaza Meta si el owner no escribió al número en 24 h: por eso va también Telegram) + «por responder»
-    // en el panel. El bot NO se pausa (decisión por defecto del 11-oct): de noche el cliente no se queda sin nadie; en cuanto
-    // el equipo contesta desde el panel o desde la app (eco de Coexistence), el bot calla solo.
-    if (intent === "human") {
-      await setWaiting(from, true);
-      await notifyTelegram(`🙋 PIDE HABLAR CON UNA PERSONA\n${profileName || from} (+${from})\n"${text}"\n\nEl bot le ha dicho que alguien del equipo le contestará en este chat. Contéstale desde el panel o la app.`, "🙋 Un cliente pide hablar con una persona: contéstale desde el panel o la app");
+    // La petición queda en la ficha (`pidePersona`) hasta que una persona le conteste de verdad (panel, app con Coexistence o el
+    // owner citando el aviso: atendidoPorPersona). Mientras tanto el bot sigue ayudando, pero el lead sigue «por responder», con el
+    // intent «human» (recordLead) y fuera del seguimiento automático. Se avisa UNA vez por petición: Telegram (sin datos si
+    // PRIV_TELEGRAM_SIN_DATOS=1) + WhatsApp al owner con el enrutado por cita de la escalación (ese WhatsApp lo rechaza Meta si el
+    // owner no escribió al número en 24 h: por eso va también Telegram). El bot NO se pausa (decisión por defecto del 11-oct).
+    const leadPersona = await getLead(from);
+    if (intent === "human" && !(leadPersona && leadPersona.pidePersona)) {
+      await updateLeadFields(from, { pidePersona: Date.now(), intent: "human" });
+      await notifyTelegram(`🙋 PIDE HABLAR CON UNA PERSONA\n${profileName || from} (+${from})\n"${text}"\n\nEl bot le ha dicho que alguien del equipo le contestará en este chat. Contéstale desde el panel o la app.`, "🙋 Un cliente pide hablar con una persona: lo tienes arriba en «por responder» del panel");
       if (OWNER_PHONE) {
         const entry = await escPush(from, profileName, text);
         const rNotif = await sendWhatsAppResult(OWNER_PHONE, `🙋 ${PROJECT_NAME} — pide hablar con una persona\n\n*${profileName || from}* escribe:\n"${text}"\n\nResponde CITANDO este mensaje (mantén pulsado → Responder) y se lo reenviaré, o contéstale desde el panel.`);
@@ -3373,6 +3405,7 @@ app.post("/webhook", async (req, res) => {
       }
       console.log(`[${PROJECT_NAME}] Petición de persona registrada — ${profileName || from}`);
     }
+    if (intent === "human" || (leadPersona && leadPersona.pidePersona)) await setWaiting(from, true); // tras el setWaiting(false) de arriba
 
     // ── Avería/roadside: aviso activo, no solo un tag en el CRM ────
     // Antes de hoy "urgent"/"roadside_issue" eran solo tags de [LEAD] — nadie recibía nada, y el
@@ -4049,6 +4082,7 @@ app.post("/admin/api/send", async (req, res) => {
   await saveConversation(phone, history);
   await setPaused(phone, true); // al responder a mano, el bot deja de contestar a ese lead
   await setWaiting(phone, false); // ya respondido por el estudio → quitar el pendiente
+  await atendidoPorPersona(phone); // cierra una petición de persona (BBM-50)
   const prev = await getLead(phone);
   await recordLead(phone, prev && prev.name, (prev && prev.intent) || "interested", text, "human");
   res.json({ ok: true });
@@ -4067,6 +4101,7 @@ app.post("/admin/api/send-media", async (req, res) => {
   await saveConversation(phone, history);
   await setPaused(phone, true);
   await setWaiting(phone, false);
+  await atendidoPorPersona(phone); // cierra una petición de persona (BBM-50)
   const prev = await getLead(phone);
   await recordLead(phone, prev && prev.name, (prev && prev.intent) || "interested", caption || "[media]", "human");
   res.json({ ok: true });
