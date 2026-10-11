@@ -355,7 +355,7 @@ async function escPop() {
 const fallbackLeads = {};      // phone → { phone, name, intent, lastMessage, updatedAt }
 const fallbackNotified = {};   // phone → "interested" | "booking"
 
-async function recordLead(phone, name, intent, lastMessage, lastBy) {
+async function recordLead(phone, name, intent, lastMessage, lastBy, lastAuto = false) {
   const prev = (await getLead(phone)) || {};
   const info = {
     ...prev,                                  // conserva email/package/travelDate/riders… ya capturados
@@ -368,6 +368,9 @@ async function recordLead(phone, name, intent, lastMessage, lastBy) {
     intent: intent || prev.intent || "exploring",
     lastMessage: (lastMessage || "").slice(0, 200),
     lastBy: lastBy || prev.lastBy || "client", // quién mandó el último mensaje (client|bot|human) → preview del panel
+    // lastAuto: el último mensaje del bot NO lo escribió el modelo (frase neutra o línea de pago, BBM-37): el panel lo marca para que el equipo
+    // no lo lea como una respuesta del asistente. Se pone o se quita en cada llamada: no se hereda de `prev`.
+    lastAuto: lastAuto === true,
     updatedAt: Date.now(),
   };
   if (!info.createdAt) {                       // primera vez que vemos este lead → fecha de alta + evento
@@ -3251,7 +3254,8 @@ app.post("/webhook", async (req, res) => {
     }
     await setWaiting(from, false); // el bot ya respondió → no queda pendiente
     await saveLead(from, profileName, text, intent);
-    await recordLead(from, profileName, intent, reply, "bot");  // índice para el panel web (preview = última respuesta del bot)
+    // `antes` = lo que dejó el modelo tras limpiar; si estaba vacío y hay texto, lo envió textoDelTurno (frase neutra o línea de pago), no el modelo.
+    await recordLead(from, profileName, intent, reply, "bot", !antes.trim() && !!reply.trim());  // índice para el panel web (preview = última respuesta del bot)
     // Backstop de waitlist: si el bot PROMETIÓ seguir más adelante pero no fijó followup,
     // lo fijamos igual → el lead no se pierde, se suprime el auto-nudge (followupTick salta los
     // /waitlist/) y el owner recibe recordatorio en fecha (followUpReminderTick). La persona

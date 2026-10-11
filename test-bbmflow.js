@@ -4,7 +4,7 @@ import assert from "node:assert";
 import { createBbmErp, createBackendSwitch, createPendingRsv } from "./bbmerp.js";
 import {
   createQuoteStore, createReservaIndex, createErpTools, createCierreErp, createAvisoPago, createSombra, textoPagoRecibido,
-  ERP_PROMPT_BLOCK, ERP_QUOTE_TOOL, MARGEN_CADUCIDAD_S,
+  ERP_PROMPT_BLOCK, ERP_QUOTE_TOOL, MARGEN_CADUCIDAD_S, normNombre, coincidenciasExactas,
 } from "./bbmflow.js";
 
 const silent = { warn() {}, error() {}, log() {} };
@@ -117,6 +117,65 @@ ok("entrega ambigua/sin resultado/tope/pausado/error: no se cotiza, no se guarda
   const r = await createErpTools({ erp: caido, quotes: createQuoteStore(), log: silent }).runGetQuote(TEL, { bike_model: "Honda Scoopy", from: FUT, to: FUT2 });
   assert.equal(r.ok, false); assert.match(r.error, /Do NOT give a price/);
   ok("moto inexistente, fechas en el pasado, invertidas o mal formadas, ERP caído: error controlado, nunca precio");
+}
+
+// ── 1b) la moto se busca por nombre EXACTO (10-oct-2026) ─────────────────────────────────────────────────────────────────────────────
+// Medido en bbm: «Honda Vario 160» (todas en taller, fuera del catálogo) casaba por «contiene» con «Honda Vario», otro modelo y otro precio.
+const PID_VARIO = "11111111-1111-4111-8111-111111111111", PID_VARIO160 = "22222222-2222-4222-8222-222222222222", PID_NMAX = "33333333-3333-4333-8333-333333333333";
+const prod = (id, nombre) => ({ id, numero_producto: null, nombre, descripcion: null, unidad: "moto", tarifas: [{ dias: 1, precio: 120000, moneda: "IDR", etiqueta: null }], unidades: 1 });
+const catalogoDe = (...ps) => ({ catalogo: () => [200, { r: ps.map(([id, nombre]) => prod(id, nombre)) }] });
+{
+  assert.equal(normNombre("  HONDA   Vario 160 "), "honda vario 160", "mayúsculas, espacios a los lados, seguidos y el espacio duro");
+  assert.notEqual(normNombre("Honda PCX ABS"), normNombre("Honda PCX STD"));
+  assert.notEqual(normNombre("Yamaha Nmax Turbo / ABS"), normNombre("Yamaha Nmax Turbo ABS"), "la puntuación no se quita");
+  const ps = [prod(PID_VARIO, "Honda Vario"), prod(PID_VARIO160, "Honda Vario 160")];
+  assert.deepEqual(coincidenciasExactas(ps, "honda vario").map((x) => x.id), [PID_VARIO]);
+  assert.deepEqual(coincidenciasExactas(ps, "Honda Vario 160").map((x) => x.id), [PID_VARIO160]);
+  assert.deepEqual(coincidenciasExactas(ps, "Vario"), []); assert.deepEqual(coincidenciasExactas(ps, ""), []); assert.deepEqual(coincidenciasExactas(null, "x"), []);
+  ok("normNombre/coincidenciasExactas: solo mayúsculas y espacios; un trozo del nombre no es el nombre");
+}
+{
+  // El caso medido: el ERP solo ofrece «Honda Vario» y se pide «Honda Vario 160»
+  const { erp, calls } = mkErp(catalogoDe([PID_VARIO, "Honda Vario"]));
+  const quotes = createQuoteStore();
+  const r = await createErpTools({ erp, quotes, log: silent }).runGetQuote(TEL, { bike_model: "Honda Vario 160", from: FUT, to: FUT2 });
+  assert.equal(r.ok, false); assert.equal(r.total, undefined); assert.equal(r.bike, undefined); assert.equal(r.available, undefined);
+  assert.ok(!calls.some((c) => c.accion === "cotiza"), "sin nombre exacto NO se pide precio de ninguna otra moto");
+  assert.equal(await quotes.lee(TEL), null, "y no queda ninguna cotización con la que pagar");
+  assert.deepEqual(r.bookable_models, ["Honda Vario"], "el modelo recibe la lista de lo que sí se puede reservar");
+  assert.match(r.note, /^INTERNAL INSTRUCTION — never quote, paraphrase or explain/); assert.match(r.note, /Never give the price of one model for another/);
+  assert.ok(!/\d{4,}/.test(JSON.stringify(r)), "ni un importe en la respuesta");
+  ok("get_quote: «Honda Vario 160» con solo «Honda Vario» en el catálogo NO cotiza la otra moto");
+}
+{
+  // Al revés (el nombre pedido es un trozo del que hay) y un trozo suelto
+  const { erp, calls } = mkErp(catalogoDe([PID_VARIO160, "Honda Vario 160"]));
+  const tools = createErpTools({ erp, quotes: createQuoteStore(), log: silent });
+  for (const pedido of ["Honda Vario", "Vario", "Honda", "Honda Vario 160 ABS"]) assert.equal((await tools.runGetQuote(TEL, { bike_model: pedido, from: FUT, to: FUT2 })).ok, false, pedido);
+  assert.ok(!calls.some((c) => c.accion === "cotiza"));
+  ok("get_quote: un nombre que contiene o está contenido en otro no casa");
+}
+{
+  // Con los dos en el catálogo, cada nombre elige SU producto; se normalizan mayúsculas y espacios y nada más
+  const { erp, calls } = mkErp(catalogoDe([PID_VARIO, "Honda Vario"], [PID_VARIO160, "Honda Vario 160"], [PID_NMAX, "Yamaha Nmax Turbo / ABS"]));
+  const tools = createErpTools({ erp, quotes: createQuoteStore(), log: silent });
+  const pide = async (bike_model) => { const antes = calls.length; const r = await tools.runGetQuote(TEL, { bike_model, from: FUT, to: FUT2 }); return { r, cotiza: calls.slice(antes).find((c) => c.accion === "cotiza") }; };
+  let x = await pide("Honda Vario"); assert.equal(x.r.ok, true); assert.equal(x.cotiza.producto_id, PID_VARIO); assert.equal(x.r.bike, "Honda Vario");
+  x = await pide("Honda Vario 160"); assert.equal(x.cotiza.producto_id, PID_VARIO160); assert.equal(x.r.bike, "Honda Vario 160");
+  x = await pide("  honda   VARIO 160 "); assert.equal(x.cotiza.producto_id, PID_VARIO160);
+  x = await pide("yamaha nmax turbo / abs"); assert.equal(x.cotiza.producto_id, PID_NMAX);
+  x = await pide("Yamaha Nmax Turbo"); assert.equal(x.r.ok, false); assert.equal(x.cotiza, undefined);
+  assert.deepEqual(x.r.bookable_models, ["Honda Vario", "Honda Vario 160", "Yamaha Nmax Turbo / ABS"]);
+  ok("get_quote: con «Honda Vario» y «Honda Vario 160» en el catálogo cada nombre cotiza su producto");
+}
+{
+  // Dos productos que se llaman igual: no se elige «el primero»
+  const errores = [];
+  const { erp, calls } = mkErp(catalogoDe([PID_VARIO, "Honda Vario"], [PID_VARIO160, "honda  vario"]));
+  const r = await createErpTools({ erp, quotes: createQuoteStore(), log: { ...silent, error: (m) => errores.push(m) } }).runGetQuote(TEL, { bike_model: "Honda Vario", from: FUT, to: FUT2 });
+  assert.equal(r.ok, false); assert.match(r.error, /pricing_check/); assert.equal(r.bookable_models, undefined);
+  assert.ok(!calls.some((c) => c.accion === "cotiza")); assert.ok(errores.some((m) => /se llaman igual/.test(m)), "y queda en el log");
+  ok("get_quote: nombre repetido en el catálogo → no cotiza ninguno y lo pasa al equipo");
 }
 
 // ── 2) cierre ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -369,6 +428,146 @@ const COT = { producto_id: PID, nombre: "Honda Scoopy", desde: FUT, hasta: FUT2,
   const s2 = createSombra({ erp, redis: () => redis, n: 1, log: silent });
   assert.equal((await s2.estado()).coincide, 1); assert.equal((await s2.estado()).listo, true);
   ok("sombra: los contadores viven en Redis (sobreviven a un reinicio)");
+}
+
+// ── 4b) sombra: nombre exacto y contadores por tipo (10-oct-2026) ────────────────────────────────────────────────────────────────────
+// cotización del ERP a medida: mismo contrato que la edge, con lo que cambia en cada caso
+const cotizaCon = (cambios = {}) => ({ cotiza: (b) => [200, { r: { dias: 3, precio: 330000, total: 330000, moneda: "IDR", precio_alquiler: 300000, incluye_impuesto: false, impuesto: null,
+  lineas: [{ descripcion: "x", base: 300000, cuota: 30000, bruto: 330000 }], producto_id: b.producto_id, desde: b.desde, hasta: b.hasta, disponibles: 2, ...cambios } }] });
+const DION = { ok: true, bike: "Honda Scoopy", from: FUT, to: FUT2, duration_days: 3, rental_rate: 300000 };
+const CERO = { coincide: 0, diverge: 0, sin_dato: 0, ultima_divergencia: null };
+{
+  // El caso medido, en la sombra: Dion cotiza «Honda Vario 160» y el ERP solo tiene «Honda Vario»
+  const { erp, calls } = mkErp(catalogoDe([PID_VARIO, "Honda Vario"]));
+  const s = createSombra({ erp, n: 3, log: silent });
+  await s.observa({ ...DION, bike: "Honda Vario 160" });
+  assert.ok(!calls.some((c) => c.accion === "cotiza"), "no se compara con el precio de otra moto");
+  const e = await s.estado();
+  assert.equal(e.coincide, 0); assert.equal(e.diverge, 1); assert.deepEqual(e.ultima_divergencia.motivos, ["moto_sin_equivalente"]);
+  assert.deepEqual(e.precio, CERO, "sin equivalente no hay comparación de precio: ni coincide ni diverge"); assert.deepEqual(e.dias, CERO);
+  assert.equal(e.disponibilidad.sin_equivalente, 1); assert.equal(e.disponibilidad.diverge, 0); assert.equal(e.disponibilidad.ultima_sin_equivalente.moto, "Honda Vario 160");
+  ok("sombra: «Honda Vario 160» no se compara con «Honda Vario»; cuenta como moto sin equivalente");
+  // nombre repetido en el catálogo del ERP: tampoco se compara
+  const d = mkErp(catalogoDe([PID_VARIO, "Honda Vario"], [PID_VARIO160, "HONDA VARIO"]));
+  const s2 = createSombra({ erp: d.erp, log: silent });
+  await s2.observa({ ...DION, bike: "Honda Vario" });
+  const e2 = await s2.estado();
+  assert.ok(!d.calls.some((c) => c.accion === "cotiza")); assert.deepEqual(e2.ultima_divergencia.motivos, ["nombre_duplicado"]); assert.equal(e2.disponibilidad.sin_equivalente, 1);
+  ok("sombra: nombre repetido en el catálogo del ERP → no elige «el primero»");
+}
+{
+  // Para esto existen: el PRECIO coincide aunque el inventario diverja
+  const { erp } = mkErp(cotizaCon({ disponibles: 0 }));
+  const s = createSombra({ erp, n: 2, log: silent });
+  await s.observa(DION); await s.observa(DION); await s.observa(DION);
+  const e = await s.estado();
+  assert.deepEqual({ ...e.precio }, { coincide: 3, diverge: 0, sin_dato: 0, ultima_divergencia: null }, "el precio se ve aparte: 3 de 3 iguales");
+  assert.equal(e.dias.coincide, 3); assert.equal(e.disponibilidad.diverge, 3); assert.equal(e.disponibilidad.coincide, 0);
+  assert.deepEqual(e.disponibilidad.ultima_divergencia, { moto: "Honda Scoopy", desde: FUT, hasta: FUT2, disponibles: 0, en: e.disponibilidad.ultima_divergencia.en });
+  // …y el criterio de «listo» NO ha cambiado: sigue siendo el agregado (cotizaciones sin NINGUNA divergencia)
+  assert.equal(e.coincide, 0); assert.equal(e.diverge, 3); assert.equal(e.listo, false, "3 precios iguales ≥ N no dan «listo» si la cotización divergió en algo");
+  ok("sombra: precio 3/3 igual con el inventario divergiendo; «listo» sigue saliendo del agregado de siempre");
+}
+{
+  // Una cotización que diverge en dos cosas: +1 en el agregado, +1 en cada tipo; la última de precio no la pisa una de inventario
+  let disponibles = 0, alquiler = 310000;
+  const { erp } = mkErp({ cotiza: (b) => cotizaCon({ disponibles, precio_alquiler: alquiler }).cotiza(b) });
+  const s = createSombra({ erp, log: silent });
+  await s.observa(DION);
+  let e = await s.estado();
+  assert.equal(e.diverge, 1, "una cotización = una divergencia en el agregado, tenga los motivos que tenga"); assert.deepEqual(e.ultima_divergencia.motivos, ["precio", "disponibilidad"]);
+  assert.equal(e.precio.diverge, 1); assert.equal(e.disponibilidad.diverge, 1); assert.equal(e.dias.coincide, 1); assert.equal(e.dias.diverge, 0);
+  assert.equal(e.precio.ultima_divergencia.dion, 300000); assert.equal(e.precio.ultima_divergencia.erp, 310000);
+  alquiler = 300000;
+  await s.observa(DION); await s.observa({ ...DION, duration_days: 4 });
+  e = await s.estado();
+  assert.equal(e.precio.ultima_divergencia.erp, 310000, "dos divergencias de inventario después, la de precio sigue a la vista");
+  assert.deepEqual(e.ultima_divergencia.motivos, ["dias", "disponibilidad"]); assert.equal(e.dias.diverge, 1); assert.equal(e.dias.ultima_divergencia.dias_dion, 4);
+  assert.deepEqual([e.precio.coincide, e.precio.diverge, e.disponibilidad.diverge, e.diverge, e.coincide], [2, 1, 3, 3, 0]);
+  ok("sombra: una cotización con varias divergencias cuenta una vez en el agregado y una en cada tipo, con su última por tipo");
+}
+{
+  // Sin dato no es coincidencia: el ERP cotiza sin `precio_alquiler`, o Dion sin días
+  const { erp } = mkErp(cotizaCon({ precio_alquiler: undefined }));
+  const s = createSombra({ erp, log: silent });
+  await s.observa(DION); await s.observa({ ...DION, duration_days: undefined });
+  const e = await s.estado();
+  assert.deepEqual([e.precio.coincide, e.precio.diverge, e.precio.sin_dato], [0, 0, 2], "un precio que no se pudo comparar NO suma como precio igual");
+  assert.deepEqual([e.dias.coincide, e.dias.sin_dato], [1, 1]);
+  assert.equal(e.coincide, 2, "el agregado de siempre no cambia: sin divergencia cuenta como coincide (va a la propuesta de criterio)");
+  ok("sombra: precio o días sin dato se cuentan aparte, nunca como coincidencia de ese tipo");
+}
+{
+  // «ERP sin respuesta», por motivo. Hoy en bbm todas caen aquí (sin sociedad no hay impuesto y el ERP no cotiza)
+  const { erp } = mkErp({ cotiza: () => [409, { error: "sociedad_sin_definir", mensaje: "hay 0 sociedades activas" }] });
+  const s = createSombra({ erp, log: silent });
+  await s.observa(DION); await s.observa(DION);
+  let e = await s.estado();
+  assert.equal(e.sin_erp, 2); assert.equal(e.diverge, 0); assert.equal(e.coincide, 0); assert.deepEqual(e.ultima_divergencia.motivo, "datos");
+  assert.deepEqual(e.erp_sin_respuesta.por_motivo, { datos: 2 }); assert.equal(e.erp_sin_respuesta.total, 2);
+  assert.deepEqual({ ...e.erp_sin_respuesta.ultima, en: 0 }, { accion: "cotiza", motivo: "datos", codigo: "sociedad_sin_definir", en: 0 });
+  assert.deepEqual([e.precio, e.dias], [CERO, CERO]); assert.equal(e.disponibilidad.coincide + e.disponibilidad.diverge + e.disponibilidad.sin_equivalente, 0);
+  assert.ok(!JSON.stringify(e).includes("sociedades activas"), "el mensaje libre de la edge no se guarda, solo su código");
+  // un `error` que no es un código (texto libre) no se guarda
+  const t = mkErp({ cotiza: () => [409, { error: "No hay sociedad para 628123456789" }] });
+  const s3 = createSombra({ erp: t.erp, log: silent });
+  await s3.observa(DION);
+  e = await s3.estado();
+  assert.deepEqual({ ...e.erp_sin_respuesta.ultima, en: 0 }, { accion: "cotiza", motivo: "datos", en: 0 }); assert.ok(!JSON.stringify(e).includes("628123456789"));
+  // catálogo caído
+  const caido = createBbmErp({ url: "https://erp.test", secret: "s".repeat(20), fetchImpl: async () => { throw new Error("red"); }, log: silent });
+  const s2 = createSombra({ erp: caido, log: silent });
+  await s2.observa(DION);
+  e = await s2.estado();
+  assert.deepEqual(e.erp_sin_respuesta.por_motivo, { no_disponible: 1 }); assert.equal(e.erp_sin_respuesta.ultima.accion, "catalogo"); assert.equal(e.ultima_divergencia.motivo, "catalogo");
+  ok("sombra: «ERP sin respuesta» va aparte, por motivo y con el código de la edge (nunca su texto)");
+}
+{
+  // Las cuentas cuadran: agregado = cotizaciones vistas; por tipo = las que llegaron a compararse
+  let modo = "igual";
+  const { erp } = mkErp({
+    ...catalogoDe([PID, "Honda Scoopy"]),
+    cotiza: (b) => (modo === "caido" ? [409, { error: "x" }] : cotizaCon(modo === "caro" ? { precio_alquiler: 1 } : modo === "sin_moto" ? { disponibles: 0 } : {}).cotiza(b)),
+  });
+  const s = createSombra({ erp, log: silent });
+  const vistas = ["igual", "igual", "caro", "sin_moto", "caido", "otra", "igual", "caido", "sin_moto"];
+  for (const m of vistas) { modo = m; await s.observa(m === "otra" ? { ...DION, bike: "Honda Scoopy 2" } : DION); }
+  const e = await s.estado();
+  assert.equal(e.coincide + e.diverge + e.sin_erp, vistas.length);
+  const comparadas = e.coincide + e.diverge - e.disponibilidad.sin_equivalente;
+  assert.equal(e.precio.coincide + e.precio.diverge + e.precio.sin_dato, comparadas); assert.equal(e.dias.coincide + e.dias.diverge + e.dias.sin_dato, comparadas);
+  assert.equal(e.disponibilidad.coincide + e.disponibilidad.diverge, comparadas);
+  assert.deepEqual([e.coincide, e.diverge, e.sin_erp, e.precio.coincide, e.precio.diverge, e.disponibilidad.diverge, e.disponibilidad.sin_equivalente], [3, 4, 2, 5, 1, 2, 1]);
+  assert.ok(!JSON.stringify(e).match(/\b62\d{8,}\b/));
+  ok("sombra: agregado y contadores por tipo cuadran entre sí");
+}
+{
+  // Redis: todo en UNA transacción por cotización, y el hash que ya hay en producción (solo los cuatro campos de siempre) se lee sin romperse
+  const h = {}; let transacciones = 0;
+  const redis = {
+    multi() { const ops = []; const tx = { hIncrBy: (k, f, v) => { ops.push(() => { h[f] = String(Number(h[f] || 0) + v); }); return tx; }, hSet: (k, f, v) => { ops.push(() => { h[f] = v; }); return tx; }, exec: async () => { transacciones++; ops.forEach((o) => o()); } }; return tx; },
+    hGetAll: async () => ({ ...h }),
+  };
+  Object.assign(h, { coincide: "4", diverge: "1", sin_erp: "7", ultima: JSON.stringify({ motivo: "datos", en: 5 }) });   // hash de antes de este cambio
+  const { erp } = mkErp(cotizaCon({ disponibles: 0, precio_alquiler: 299000 }));
+  const s = createSombra({ erp, redis: () => redis, n: 30, log: silent });
+  let e = await s.estado();
+  assert.deepEqual([e.coincide, e.diverge, e.sin_erp, e.listo], [4, 1, 7, false]); assert.deepEqual(e.ultima_divergencia, { motivo: "datos", en: 5 });
+  assert.deepEqual([e.precio, e.dias], [CERO, CERO]); assert.deepEqual(e.erp_sin_respuesta, { total: 7, por_motivo: {}, ultima: null });
+  await s.observa(DION);
+  assert.equal(transacciones, 1, "una cotización = una transacción");
+  assert.deepEqual([h.diverge, h.precio_dif, h.dias_ok, h.disp_dif, h.coincide], ["2", "1", "1", "1", "4"]);
+  assert.ok(h.ultima && h.ultima_precio && h.ultima_disp && !h.ultima_dias);
+  // otro proceso (reinicio) lee lo mismo; y una `ultima_*` ilegible no tira la lectura a la memoria vacía de ese proceso
+  h.ultima_precio = "{roto";
+  e = await createSombra({ erp, redis: () => redis, log: silent }).estado();
+  assert.deepEqual([e.diverge, e.precio.diverge, e.disponibilidad.diverge, e.precio.ultima_divergencia], [2, 1, 1, null]); assert.equal(e.disponibilidad.ultima_divergencia.disponibles, 0);
+  // un Redis que falla al escribir no rompe la conversación ni la lectura
+  const roto = { multi() { throw new Error("redis"); }, hGetAll: async () => { throw new Error("redis"); } };
+  const s4 = createSombra({ erp, redis: () => roto, log: silent });
+  await s4.observa(DION);
+  assert.equal((await s4.estado()).precio.diverge, 1, "sin Redis se lee la memoria del proceso");
+  ok("sombra en Redis: una transacción por cotización, hash viejo legible, campo roto aislado, Redis caído no rompe");
 }
 
 // ── 5) prompt y herramienta ──────────────────────────────────────────────────────────────────────────────────────────────────────────

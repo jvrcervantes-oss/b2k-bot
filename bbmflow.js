@@ -16,6 +16,9 @@
 //     índice `rsvtel:<uuid>` → teléfono (7 días). Sin él, el cliente que paga nunca recibiría el «reserva confirmada».
 //   · SOMBRA: nunca bloquea (se lanza sin esperar), nunca llama a `entrega` (gastaría el turno de 1 consulta/s de Nominatim de las reservas
 //     reales y trataría una dirección sin la frase de privacidad), nunca llama a `reserva` ni `cliente`. Cuenta coincidencias y divergencias.
+//   · LA MOTO SE BUSCA POR NOMBRE EXACTO (10-oct-2026). Solo se normalizan mayúsculas y espacios. Antes valía «contiene»: «Honda Vario 160»
+//     (en taller, fuera del catálogo) casaba con «Honda Vario», otro modelo con otro precio. Sin coincidencia exacta y única NO se cotiza:
+//     ni la herramienta le da un precio al cliente ni la sombra compara. Una sola función (`coincidenciasExactas`) para los dos caminos.
 //   · Logs sin PII: ids, importes, motivos. Nunca teléfonos, nombres, direcciones ni mensajes.
 
 import { telefonoVerificado } from "./bbmerp.js";
@@ -24,8 +27,18 @@ export const COTIZACION_TTL_S = 30 * 60;
 export const INDICE_RSV_TTL_S = 7 * 24 * 3600;
 export const MARGEN_CADUCIDAD_S = 120;       // el enlace caduca antes que la reserva: pagar a las puertas de la caducidad es lo que genera pagos tardíos
 export const MIN_ENLACE_S = 300;             // con menos de 5 minutos de reserva viva no se manda un enlace
+const MAX_NOMBRES = 80;                      // tope de nombres del catálogo que se devuelven al modelo cuando no encuentra la moto (hoy son 21)
 
-const norm = (s) => String(s ?? "").trim().toLowerCase();
+// Nombre de producto comparable: sin espacios a los lados, espacios seguidos (también el duro) en uno, minúsculas. NADA más: la puntuación y los
+// números distinguen modelos («Honda Vario» ≠ «Honda Vario 160», «Honda PCX ABS» ≠ «Honda PCX STD», «Yamaha Nmax Turbo / ABS»).
+export const normNombre = (s) => String(s ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+// Todos los productos del catálogo que se llaman EXACTAMENTE así. Quien llama decide qué hace con 0, 1 o varios; solo 1 se puede cotizar:
+// dos productos con el mismo nombre no se distinguen por el nombre, y elegir «el primero» sería cotizar una moto que quizá no es la pedida.
+export function coincidenciasExactas(productos, nombre) {
+  const n = normNombre(nombre);
+  if (!n || !Array.isArray(productos)) return [];
+  return productos.filter((x) => x && normNombre(x.nombre) === n);
+}
 const str = (x) => typeof x === "string";
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const KO = (motivo, extra = {}) => ({ ok: false, motivo, ...extra });
@@ -132,13 +145,14 @@ export function createErpTools({ erp, quotes, seg = null, log = console, project
   const p = (m) => `[${project}] [bbmflow] ${m}`;
   const SIN_PRECIO = "Tell the customer you're confirming the exact price with the team and add tags: pricing_check. Do NOT give a price.";
 
-  function buscaProducto(productos, nombre) {
-    const n = norm(nombre);
-    if (!n) return null;
-    return productos.find((x) => norm(x.nombre) === n)
-      || productos.find((x) => norm(x.nombre).includes(n) || n.includes(norm(x.nombre)))
-      || null;
-  }
+  // Lo que se le devuelve al modelo cuando el nombre no existe tal cual: NINGÚN precio, y la lista de lo que sí se puede reservar (en modo erp el
+  // modelo no tiene otra lista de nombres). La nota va marcada como interna: el modelo ha llegado a recitar notas de un tool_result al cliente.
+  const NOTA_SIN_NOMBRE = "INTERNAL INSTRUCTION — never quote, paraphrase or explain any part of this note to the customer. "
+    + "Nothing was priced. bookable_models is the complete list of bikes that can be booked right now; each one is a DIFFERENT bike with its own price. "
+    + "Only if a name on the list is the SAME bike the customer asked for (same brand, same model AND same engine size or version) call get_quote again "
+    + "with that name copied character by character. A similar name with a different number or version (\"Vario\" vs \"Vario 160\", \"ABS\" vs \"STD\") "
+    + "is a different bike: in that case the bike the customer asked for cannot be booked right now — say so and offer models from the list. "
+    + "Never give the price of one model for another.";
 
   async function runGetQuote(tel, { bike_model, from, to, delivery_address, self_return } = {}) {
     try {
@@ -147,8 +161,19 @@ export function createErpTools({ erp, quotes, seg = null, log = console, project
       if (from < hoy()) return { ok: false, error: "The start date is in the past. Ask the customer for the real dates." };
       const cat = await erp.catalogo();
       if (!cat.ok) return { ok: false, error: `The booking system is unreachable right now. ${SIN_PRECIO}` };
-      const hit = buscaProducto(cat.productos, bike_model);
-      if (!hit) return { ok: false, error: `No bike named "${bike_model}" is available to book. Offer the models you do have and let the customer pick one, then call get_quote again.` };
+      const iguales = coincidenciasExactas(cat.productos, bike_model);
+      if (iguales.length > 1) {
+        // Dato mal en el catálogo del ERP (dos productos con el mismo nombre): no es elección del cliente, lo arregla el equipo.
+        log.error(p(`get_quote erp: ${iguales.length} productos del catálogo se llaman igual; no se cotiza ninguno`));
+        return { ok: false, error: `The booking system has more than one bike under that name. ${SIN_PRECIO}` };
+      }
+      const hit = iguales[0];
+      if (!hit) {
+        return {
+          ok: false, error: `No bike is named exactly "${bike_model.trim().slice(0, 60)}" in the booking system.`,
+          bookable_models: cat.productos.map((x) => x.nombre).slice(0, MAX_NOMBRES), note: NOTA_SIN_NOMBRE,
+        };
+      }
 
       const direccion = str(delivery_address) && delivery_address.trim() ? delivery_address.trim() : null;
       if (direccion) {
@@ -347,55 +372,140 @@ export function createAvisoPago({ indice, pendingRsv, backend, dedupe, enviaClie
 // ── 7a SOMBRA ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 // Compara, SIN mostrar nada al cliente, lo que Dion cotizó (resultado de runGetQuote de Dion) con lo que cotiza el ERP para la misma moto y fechas.
 // Solo `catalogo` y `cotiza` y SIN dirección: nada de `entrega` (ver cabecera), nada de `reserva`/`cliente`.
-// Contadores en Redis (`bbm:sombra`, hash) y última divergencia (sin PII) para /admin/api/health.
+// Contadores en Redis (`bbm:sombra`, hash), sin PII, para /admin/api/health. DOS juegos en el mismo hash:
+//   · LOS DE SIEMPRE (`coincide`, `diverge`, `sin_erp`, `ultima`): una cuenta por COTIZACIÓN de Dion. `diverge` = la cotización tuvo al menos una
+//     diferencia, de la clase que sea. De ellos, y solo de ellos, sale `listo`. Ni su cuenta ni la fórmula han cambiado.
+//   · POR TIPO (10-oct-2026): la misma cotización se apunta además en cada cosa que se comparó. Existen para poder ver si el PRECIO coincide aunque
+//     el inventario no: 30 de los 51 modelos no tienen moto libre en el ERP y Dion tiene reservas que el ERP no ve, así que con un solo contador
+//     una moto en taller y un precio distinto eran el mismo número. Los contadores por tipo NO deciden `listo`: qué debe contar lo decide el owner.
+//       precio_ok / precio_dif / precio_sin_dato   alquiler del ERP contra el de Dion (sin_dato: el ERP cotizó sin `precio_alquiler` o Dion sin importe;
+//                                                  esa cotización NO es una coincidencia de precio aunque el agregado la cuente como «coincide»)
+//       dias_ok / dias_dif / dias_sin_dato         días que cuenta cada uno
+//       disp_ok / disp_dif                         el ERP tiene, o no, una unidad libre de ESA moto en esas fechas
+//       sin_equivalente                            ningún producto del catálogo del ERP se llama exactamente igual (o hay más de uno): no se compara nada
+//       sin_erp_m:<motivo>                         el ERP no dio respuesta que comparar, por motivo (los de bbmerp.js)
+//     y la última de cada clase (`ultima_precio`, `ultima_dias`, `ultima_disp`, `ultima_sin_equivalente`, `ultima_sin_erp`): con un solo `ultima`
+//     las de inventario, que son muchas, tapan la de precio en minutos.
+// Cuentas que cuadran siempre: coincide + diverge + sin_erp = cotizaciones vistas; precio_ok + precio_dif + precio_sin_dato = coincide + diverge − sin_equivalente.
+const SOMBRA_CLAVE = "bbm:sombra";
+const SOMBRA_MOTIVO = "sin_erp_m:";
+const SOMBRA_CONTADORES = ["coincide", "diverge", "sin_erp", "precio_ok", "precio_dif", "precio_sin_dato", "dias_ok", "dias_dif", "dias_sin_dato", "disp_ok", "disp_dif", "sin_equivalente"];
+const SOMBRA_ULTIMAS = ["ultima", "ultima_precio", "ultima_dias", "ultima_disp", "ultima_sin_equivalente", "ultima_sin_erp"];
+const CODIGO_OK = /^[A-Za-z0-9_]{1,40}$/;   // motivos y códigos vienen de bbmerp.js o del campo `error` de la edge: solo se guardan si son un código, nunca un texto
+
 export function createSombra({ erp, redis = () => null, n = 30, log = console, project = "bot", now = () => Date.now() }) {
   const p = (m) => `[${project}] [bbm-sombra] ${m}`;
-  const mem = { coincide: 0, diverge: 0, sin_erp: 0, ultima: null };
-  const norma = (s) => norm(s);
+  const mem = { n: {}, ultimas: {} };   // misma forma que el hash: contador → número, ultima_* → objeto
 
-  function compara(dion, q) {
-    const motivos = [];
+  // Qué salió de comparar UNA cotización de Dion con la del ERP, cosa por cosa.
+  function clasifica(dion, q) {
     // OJO: el total del ERP lleva impuesto, seguro y entrega; el de Dion no. Se compara lo comparable: el alquiler.
-    if (q.precio_alquiler != null && Number.isFinite(Number(dion.rental_rate)) && Math.round(q.precio_alquiler) !== Math.round(Number(dion.rental_rate))) motivos.push("precio");
-    if (Number.isInteger(dion.duration_days) && q.dias !== dion.duration_days) motivos.push("dias");
-    if (q.disponibles < 1) motivos.push("disponibilidad");
+    const precio = q.precio_alquiler != null && Number.isFinite(Number(dion.rental_rate))
+      ? (Math.round(q.precio_alquiler) !== Math.round(Number(dion.rental_rate)) ? "dif" : "ok") : "sin_dato";
+    const dias = Number.isInteger(dion.duration_days) ? (q.dias !== dion.duration_days ? "dif" : "ok") : "sin_dato";
+    const disp = q.disponibles < 1 ? "dif" : "ok";
+    return { precio, dias, disp };
+  }
+  // Los motivos del agregado de siempre, en su orden de siempre.
+  function compara(dion, q) {
+    const c = clasifica(dion, q);
+    const motivos = [];
+    if (c.precio === "dif") motivos.push("precio");
+    if (c.dias === "dif") motivos.push("dias");
+    if (c.disp === "dif") motivos.push("disponibilidad");
     return motivos;
   }
 
-  async function cuenta(campo, extra) {
-    mem[campo] += 1;
-    if (extra) mem.ultima = { ...extra, en: now() };
+  // Suma 1 a cada contador y guarda las «últimas». Con Redis va en UNA transacción: un corte a medias no puede dejar el agregado y los
+  // contadores por tipo contando cotizaciones distintas.
+  async function apunta(contadores, ultimas = {}) {
+    const en = now();
+    const sellos = Object.entries(ultimas).map(([campo, v]) => [campo, { ...v, en }]);
+    for (const c of contadores) mem.n[c] = (mem.n[c] || 0) + 1;
+    for (const [campo, v] of sellos) mem.ultimas[campo] = v;
     const r = redis();
-    if (r) { try { await r.hIncrBy("bbm:sombra", campo, 1); if (extra) await r.hSet("bbm:sombra", "ultima", JSON.stringify({ ...extra, en: now() })); } catch { /* mejor esfuerzo */ } }
+    if (!r) return;
+    try {
+      const tx = typeof r.multi === "function" ? r.multi() : null;
+      const destino = tx || r;
+      const pendientes = [];
+      for (const c of contadores) pendientes.push(destino.hIncrBy(SOMBRA_CLAVE, c, 1));
+      for (const [campo, v] of sellos) pendientes.push(destino.hSet(SOMBRA_CLAVE, campo, JSON.stringify(v)));
+      if (tx) await tx.exec(); else await Promise.all(pendientes);
+    } catch { /* mejor esfuerzo */ }
+  }
+
+  // El ERP no dio nada que comparar. `accion` = dónde se quedó; `r` = la respuesta KO de bbmerp.js.
+  async function sinRespuesta(accion, r) {
+    const motivo = r && CODIGO_OK.test(String(r.motivo)) ? r.motivo : "otro";
+    const codigo = r ? (r.codigo ?? r.detalle) : null;
+    const detalle = { accion, motivo, ...(typeof codigo === "string" && CODIGO_OK.test(codigo) ? { codigo } : {}) };
+    // `ultima` (la del agregado) se escribe como siempre: «catalogo» si falló el catálogo, el motivo si falló la cotización.
+    await apunta(["sin_erp", SOMBRA_MOTIVO + motivo], { ultima: { motivo: accion === "catalogo" ? "catalogo" : r.motivo }, ultima_sin_erp: detalle });
   }
 
   // dion = { ok, bike, from, to, duration_days, rental_rate } de la herramienta de Dion. NUNCA lanza, NUNCA se espera en el camino del cliente.
   async function observa(dion) {
     try {
       if (!erp.enabled || !dion || dion.ok !== true || !dion.from || !dion.to || !dion.bike) return;
+      const moto = String(dion.bike).slice(0, 40);
       const cat = await erp.catalogo();
-      if (!cat.ok) { await cuenta("sin_erp", { motivo: "catalogo" }); return; }
-      const hit = cat.productos.find((x) => norma(x.nombre) === norma(dion.bike)) || cat.productos.find((x) => norma(x.nombre).includes(norma(dion.bike)) || norma(dion.bike).includes(norma(x.nombre)));
-      if (!hit) { await cuenta("diverge", { motivos: ["moto_sin_equivalente"], moto: String(dion.bike).slice(0, 40) }); return; }
-      const c = await erp.cotiza({ producto_id: hit.id, desde: dion.from, hasta: dion.to });
-      if (!c.ok) { await cuenta("sin_erp", { motivo: c.motivo }); return; }
-      const m = compara(dion, c.cotizacion);
-      if (m.length) { await cuenta("diverge", { motivos: m, moto: String(dion.bike).slice(0, 40), desde: dion.from, hasta: dion.to, dion: Math.round(Number(dion.rental_rate)), erp: Math.round(c.cotizacion.precio_alquiler ?? NaN), dias_dion: dion.duration_days, dias_erp: c.cotizacion.dias }); log.warn(p(`divergencia: ${m.join(",")}`)); }
-      else await cuenta("coincide");
+      if (!cat.ok) { await sinRespuesta("catalogo", cat); return; }
+      // Nombre EXACTO (ver cabecera). `dion.bike` es el nombre del producto en el sistema de Dion y el catálogo del ERP se copió de él letra por letra.
+      const iguales = coincidenciasExactas(cat.productos, dion.bike);
+      if (iguales.length !== 1) {
+        const u = { motivos: [iguales.length ? "nombre_duplicado" : "moto_sin_equivalente"], moto };
+        await apunta(["diverge", "sin_equivalente"], { ultima: u, ultima_sin_equivalente: u });
+        return;
+      }
+      const c = await erp.cotiza({ producto_id: iguales[0].id, desde: dion.from, hasta: dion.to });
+      if (!c.ok) { await sinRespuesta("cotiza", c); return; }
+      const q = c.cotizacion;
+      const t = clasifica(dion, q);
+      const m = compara(dion, q);
+      const u = { moto, desde: dion.from, hasta: dion.to, dion: Math.round(Number(dion.rental_rate)), erp: Math.round(q.precio_alquiler ?? NaN), dias_dion: dion.duration_days, dias_erp: q.dias };
+      await apunta(
+        [m.length ? "diverge" : "coincide", `precio_${t.precio}`, `dias_${t.dias}`, `disp_${t.disp}`],
+        {
+          ...(m.length ? { ultima: { motivos: m, ...u } } : {}),
+          ...(t.precio === "dif" ? { ultima_precio: u } : {}),
+          ...(t.dias === "dif" ? { ultima_dias: u } : {}),
+          ...(t.disp === "dif" ? { ultima_disp: { moto, desde: dion.from, hasta: dion.to, disponibles: q.disponibles } } : {}),
+        },
+      );
+      if (m.length) log.warn(p(`divergencia: ${m.join(",")}`));
     } catch { /* la sombra jamás rompe una conversación */ }
   }
 
   async function estado() {
-    let c = { ...mem };
+    let num = { ...mem.n }, ult = { ...mem.ultimas };
     const r = redis();
     if (r) {
       try {
-        const h = await r.hGetAll("bbm:sombra");
-        c = { coincide: Number(h.coincide || 0), diverge: Number(h.diverge || 0), sin_erp: Number(h.sin_erp || 0), ultima: h.ultima ? JSON.parse(h.ultima) : null };
+        const h = await r.hGetAll(SOMBRA_CLAVE);
+        // Campo a campo: un hash de antes de los contadores por tipo solo trae los cuatro de siempre (el resto sale a 0), y una `ultima_*` ilegible
+        // no puede tirar la lectura entera a la memoria de este proceso.
+        num = {}; ult = {};
+        for (const [campo, v] of Object.entries(h || {})) {
+          if (SOMBRA_ULTIMAS.includes(campo)) { try { ult[campo] = JSON.parse(v); } catch { ult[campo] = null; } }
+          else if (SOMBRA_CONTADORES.includes(campo) || campo.startsWith(SOMBRA_MOTIVO)) num[campo] = Number(v) || 0;
+        }
       } catch { /* RAM */ }
     }
-    // Criterio del owner (9-oct): N cotizaciones reales SIN divergencia. Una divergencia reinicia la cuenta (quien la ve decide si se arregla y se resetea).
-    return { n_objetivo: n, coincide: c.coincide, diverge: c.diverge, sin_erp: c.sin_erp, listo: c.diverge === 0 && c.coincide >= n, ultima_divergencia: c.ultima };
+    const c = (campo) => num[campo] || 0;
+    const u = (campo) => ult[campo] ?? null;
+    const porMotivo = Object.fromEntries(Object.keys(num).filter((k) => k.startsWith(SOMBRA_MOTIVO)).sort().map((k) => [k.slice(SOMBRA_MOTIVO.length), num[k]]));
+    return {
+      n_objetivo: n, coincide: c("coincide"), diverge: c("diverge"), sin_erp: c("sin_erp"),
+      // Criterio del owner (9-oct): N cotizaciones reales SIN divergencia. Una divergencia reinicia la cuenta (quien la ve decide si se arregla y se resetea).
+      // NO mira los contadores por tipo de abajo: son para leer, y cambiar qué cuenta para «listo» es decisión del owner.
+      listo: c("diverge") === 0 && c("coincide") >= n,
+      ultima_divergencia: u("ultima"),
+      precio: { coincide: c("precio_ok"), diverge: c("precio_dif"), sin_dato: c("precio_sin_dato"), ultima_divergencia: u("ultima_precio") },
+      dias: { coincide: c("dias_ok"), diverge: c("dias_dif"), sin_dato: c("dias_sin_dato"), ultima_divergencia: u("ultima_dias") },
+      disponibilidad: { coincide: c("disp_ok"), diverge: c("disp_dif"), sin_equivalente: c("sin_equivalente"), ultima_divergencia: u("ultima_disp"), ultima_sin_equivalente: u("ultima_sin_equivalente") },
+      erp_sin_respuesta: { total: c("sin_erp"), por_motivo: porMotivo, ultima: u("ultima_sin_erp") },
+    };
   }
   return { observa, estado, _compara: compara };
 }

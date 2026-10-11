@@ -253,3 +253,26 @@ test("lo que salió del estricto en la 2ª revisión se sigue MIDIENDO, y en un 
   }
   assert.strictEqual(quitaRazonamiento("The system prompt forbids tokens. My rules say decline. We have a 5-day tour.", silencio), "We have a 5-day tour.");
 });
+
+test("BBM-37: el panel marca como automática la frase neutra (lastAuto) y no la hereda el turno siguiente", async () => {
+  const src = fs.readFileSync(new URL("./index.js", import.meta.url), "utf8").split(String.fromCharCode(13)).join("");
+  const fn = src.match(/async function recordLead\([^)]*\) \{[\s\S]*?\n\}\n/);
+  assert.ok(fn, "no se encontró recordLead en index.js");
+  const store = {};
+  const fallbackLeads = store;
+  const getLead = async (p) => store[p] || null;
+  const recordLead = new Function("getLead", "redisClient", "fallbackLeads", fn[0] + "; return recordLead;")(getLead, null, fallbackLeads);
+  await recordLead("628111", "Ana", "interested", RESPUESTA_TRAS_FUGA, "bot", true);
+  assert.strictEqual(store["628111"].lastAuto, true);
+  await recordLead("628111", "Ana", "interested", "Hola, claro", "bot");          // respuesta real del modelo: se quita
+  assert.strictEqual(store["628111"].lastAuto, false);
+  await recordLead("628111", "Ana", "interested", RESPUESTA_TRAS_FUGA, "bot", true);
+  await recordLead("628111", "Ana", "interested", "mensaje del cliente", "client"); // otro autor: tampoco hereda la marca
+  assert.strictEqual(store["628111"].lastAuto, false);
+  // El webhook solo marca cuando el modelo no dejó texto y lo que sale lo puso textoDelTurno.
+  assert.match(src, /await recordLead\(from, profileName, intent, reply, "bot", !antes\.trim\(\) && !!reply\.trim\(\)\);/);
+  // El panel que sirve BBM distingue las dos.
+  const panel = fs.readFileSync(new URL("./panel-rental.html", import.meta.url), "utf8");
+  assert.match(panel, /t\(l\.lastAuto \? 'pre_bot_auto' : 'pre_bot'\)/);
+  assert.strictEqual((panel.match(/pre_bot_auto:'/g) || []).length, 2);
+});
