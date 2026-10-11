@@ -159,9 +159,9 @@ export function createPanelCuentas({ redis, now = () => Date.now(), log = consol
       return { ok: false, status: 429 };
     }
     const cuenta = await leeUsuario(u);
-    const valido = cuenta && cuenta.activo !== false && typeof clave === "string"
+    const valido = cuenta && cuenta.activo !== false && typeof clave === "string" && clave.length <= 200 // tope: una clave de 30 MB no llega a scrypt
       ? await verificaClave(clave, cuenta.hash)
-      : (await verificaClave(String(clave || ""), await hashFicticio()), false);
+      : (await verificaClave(String(clave || "").slice(0, 200), await hashFicticio()), false);
     if (!valido) {
       const k = kFalloUI(u, ip);
       const n = await r.incr(k);
