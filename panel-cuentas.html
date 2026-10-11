@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Cuentas del panel · __PROJECT__</title>
+<!-- BBM-40: alta y baja de las cuentas personales del panel y registro de accesos. Solo existe con PANEL_CUENTAS=1.
+     Hace falta haber entrado en /admin con una cuenta (la cookie de sesión) Y la clave maestra (PANEL_MASTER_PASSWORD),
+     como el borrado total. Todo lo que llega del servidor se pinta con textContent, nunca como HTML. -->
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:0;padding:24px 16px;background:#f5f6f8;color:#141a27}
+  main{max-width:760px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px} p{color:#5b6475;font-size:13px;margin:0 0 18px}
+  section{background:#fff;border:1px solid #e3e6ec;border-radius:12px;padding:16px;margin-bottom:14px}
+  h2{font-size:15px;margin:0 0 10px}
+  input,select,button{font:inherit;font-size:14px;padding:9px 11px;border:1px solid #d5d9e2;border-radius:8px;margin:0 6px 8px 0}
+  button{background:#1e3a8a;color:#fff;border:0;cursor:pointer}
+  table{width:100%;border-collapse:collapse;font-size:13px} td,th{text-align:left;padding:6px 4px;border-bottom:1px solid #eef0f4}
+  .msg{font-size:13px;min-height:18px;color:#1e3a8a} .err{color:#b42318}
+  .tabla{overflow-x:auto}
+</style>
+</head>
+<body>
+<main>
+  <h1>Cuentas del panel</h1>
+  <p>__PROJECT__ · entra antes en <a href="/admin">/admin</a> con tu cuenta. Para crear la PRIMERA cuenta todavía no hay sesión: escribe también la clave compartida del panel. Cada acción pide la clave maestra.</p>
+  <section>
+    <h2>Clave maestra</h2>
+    <input id="pass" type="password" autocomplete="off" placeholder="Clave maestra">
+    <input id="kc" type="password" autocomplete="off" placeholder="Clave compartida (solo sin sesión)">
+    <button id="ver">Ver cuentas y accesos</button>
+    <div class="msg" id="msg"></div>
+  </section>
+  <section>
+    <h2>Nueva cuenta</h2>
+    <input id="nu" placeholder="usuario (a-z 0-9 . _ -)" autocapitalize="none" spellcheck="false">
+    <input id="nc" type="password" autocomplete="new-password" placeholder="clave (mín. 12)">
+    <button id="crear">Crear</button>
+  </section>
+  <section>
+    <h2>Cambiar clave · activar · desactivar</h2>
+    <input id="cu" placeholder="usuario" autocapitalize="none" spellcheck="false">
+    <input id="cc" type="password" autocomplete="new-password" placeholder="nueva clave (mín. 12)">
+    <button id="clave">Cambiar clave</button>
+    <button id="desactiva">Desactivar</button>
+    <button id="activa">Activar</button>
+  </section>
+  <section><h2>Cuentas</h2><div class="tabla"><table id="tcuentas"></table></div></section>
+  <section><h2>Últimos accesos</h2><div class="tabla"><table id="taccesos"></table></div></section>
+</main>
+<script>
+  function $(id){ return document.getElementById(id); }
+  function msg(t, err){ var m=$('msg'); m.textContent=t||''; m.className='msg'+(err?' err':''); }
+  function llama(body){
+    body.pass = $('pass').value;
+    return fetch('/admin/api/cuentas', { method:'POST', headers: Object.assign({ 'Content-Type':'application/json', 'X-Panel':'1' }, $('kc').value ? { 'X-Admin-Key': $('kc').value } : {}), body: JSON.stringify(body) })
+      .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ if(!r.ok) throw (j && j.error) || ('HTTP '+r.status); return j; }); });
+  }
+  function fila(tabla, celdas, th){
+    var tr=document.createElement('tr');
+    celdas.forEach(function(c){ var td=document.createElement(th?'th':'td'); td.textContent=c==null?'':String(c); tr.appendChild(td); });
+    tabla.appendChild(tr);
+  }
+  function fecha(ts){ return ts ? new Date(ts).toLocaleString() : ''; }
+  function carga(){
+    llama({ accion:'lista' }).then(function(j){
+      var t=$('tcuentas'); t.textContent=''; fila(t,['Usuario','Activa','Creada'],true);
+      (j.cuentas||[]).forEach(function(c){ fila(t,[c.usuario, c.activo?'sí':'no', fecha(c.creado)]); });
+      return llama({ accion:'accesos' });
+    }).then(function(j){
+      var t=$('taccesos'); t.textContent=''; fila(t,['Cuándo','Quién','Qué','Bien','IP','Detalle'],true);
+      (j.accesos||[]).forEach(function(a){ fila(t,[fecha(a.ts), a.quien, a.accion, a.ok?'sí':'no', a.ip, a.extra||'']); });
+      msg('Al día');
+    }).catch(function(e){ msg(String(e), true); });
+  }
+  function hecho(j){ msg(j.sesiones_cerradas ? ('Hecho · sesiones cerradas: '+j.sesiones_cerradas) : 'Hecho'); carga(); }
+  $('ver').onclick = carga;
+  $('crear').onclick = function(){ llama({ accion:'crea', usuario:$('nu').value.trim().toLowerCase(), clave:$('nc').value }).then(function(j){ $('nc').value=''; hecho(j); }).catch(function(e){ msg(String(e), true); }); };
+  $('clave').onclick = function(){ llama({ accion:'clave', usuario:$('cu').value.trim().toLowerCase(), clave:$('cc').value }).then(function(j){ $('cc').value=''; hecho(j); }).catch(function(e){ msg(String(e), true); }); };
+  $('desactiva').onclick = function(){ llama({ accion:'desactiva', usuario:$('cu').value.trim().toLowerCase() }).then(hecho).catch(function(e){ msg(String(e), true); }); };
+  $('activa').onclick = function(){ llama({ accion:'activa', usuario:$('cu').value.trim().toLowerCase() }).then(hecho).catch(function(e){ msg(String(e), true); }); };
+</script>
+</body>
+</html>

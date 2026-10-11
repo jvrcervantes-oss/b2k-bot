@@ -16,6 +16,9 @@ import { createCotizacionViva } from "./seguimiento-viva.js";
 import { createRsvForwarder, createXenditGate } from "./xendit-rsv.js";
 import { createBackendSwitch, createBbmErp, createPendingRsv } from "./bbmerp.js";
 import { createQuoteStore, createReservaIndex, createErpTools, createCierreErp, createAvisoPago, createSombra, ERP_QUOTE_TOOL, ERP_PROMPT_BLOCK, COTIZACION_TTL_S } from "./bbmflow.js";
+// BBM-40 (11-oct-2026): privacidad antes de abrir. Todo apagado salvo que el owner ponga sus variables (ver privacidad.js).
+import { leeConfigPrivacidad, docKeysDeLead, textoTelegram, purgaPasada } from "./privacidad.js";
+import { leeConfigPanel, createPanelCuentas, igualSeguro, ipCliente, leeCookie, COOKIE as PANEL_COOKIE } from "./panel-cuentas.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -25,6 +28,20 @@ app.use("/assets", express.static(path.join(__dirname, "assets")));
 // verify: guarda el body crudo — la firma X-Hub-Signature-256 de Meta se calcula sobre los bytes
 // exactos recibidos, no sobre el JSON re-serializado (re-serializar cambia el orden/espacios y rompe el HMAC).
 app.use(express.json({ limit: "30mb", verify: (req, _res, buf) => { req.rawBody = buf; } })); // 30mb: un vídeo de 16MB en base64 ocupa ~21.3MB; con 20mb el upload del panel fallaba en el parser
+// BBM-40: con PANEL_CUENTAS=1 se resuelve aquí (async) la sesión de la cookie y si la IP está bloqueada, para que
+// adminAuth/masterAuth sigan siendo síncronas en sus ~70 llamadas. Apagado: next() sin tocar nada.
+app.use("/admin", async (req, _res, next) => {
+  if (!panelCfg.cuentas) return next();
+  try {
+    const { ip, saltos } = ipCliente(req);
+    req.panelIp = ip;
+    panelUltimosSaltos = saltos;
+    const tok = leeCookie(req, PANEL_COOKIE);
+    if (tok) req.panelUsuario = await panelCuentas.sesion(tok);
+    req.panelIpBloqueada = await panelCuentas.ipBloqueada(ip);
+  } catch (e) { console.error(`[${PROJECT_NAME}] panel: no se pudo leer la sesión: ${e.message}`); } // sin sesión = sin acceso
+  next();
+});
 
 // ─── CONFIGURACIÓN (variables de entorno — distintas por proyecto) ──
 const {
@@ -95,6 +112,12 @@ const {
 // JSON.parse("") una vez por mensaje ("Error guardando lead — HTTP ?: Unexpected end of JSON
 // input", visto en producción de BBM el 23-jul) mientras el arranque decía "desactivado".
 const SHEET_SYNC = (CRM_SHEET_SYNC === "1" || CRM_SHEET_SYNC === "true") && !!SHEET_ID && !!GOOGLE_SERVICE_ACCOUNT;
+
+// BBM-40: interruptores de privacidad (variables de Railway; ausentes = como siempre). Se leen una vez al arrancar.
+const privCfg = leeConfigPrivacidad(process.env);
+const PANEL_URL = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/admin` : "";
+const panelCfg = leeConfigPanel(process.env); // PANEL_CUENTAS / PANEL_CLAVE_URL / PANEL_SESION_HORAS (ver panel-cuentas.js)
+let panelUltimosSaltos = null; // saltos de X-Forwarded-For de la última petición al panel: medirlo antes de fiarse del límite por IP
 
 const stripeClient = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
@@ -1420,7 +1443,7 @@ async function followUpReminderTick() {
       const who = l.name || ("+" + l.phone);
       const extra = [l.package, l.owner ? "· " + l.owner : ""].filter(Boolean).join(" ");
       await sendWhatsApp(OWNER_PHONE, `📅 ${PROJECT_NAME} — Seguimiento pendiente\n\n*${who}* ${extra}\nTel: +${l.phone}\nVencía: ${fu}\n\nToca contactarle 👇`);
-      await notifyTelegram(`📅 Seguimiento pendiente\n${who} ${extra}\nTel: +${l.phone}\nVencía: ${fu}`);
+      await notifyTelegram(`📅 Seguimiento pendiente\n${who} ${extra}\nTel: +${l.phone}\nVencía: ${fu}`, "📅 Seguimiento vencido de un contacto");
       await updateLeadFields(l.phone, { fuReminded: fu });
       await logEvent(l.phone, "fu_reminded", { date: fu });
       console.log(`[${PROJECT_NAME}] Recordatorio de seguimiento (owner) para ${l.phone} — vencía ${fu}`);
@@ -2201,7 +2224,7 @@ async function downloadWhatsAppMedia(mediaId, maxBytes = 25 * 1024 * 1024) {
 // público y cacheable (Meta descarga de ahí lo que enviamos) — un pasaporte ahí quedaría publicado.
 // Estos solo salen por /admin/api/doc/:id, con clave de admin y sin caché.
 const DOC_MIMES = ["image/jpeg", "image/png", "image/webp", "application/pdf"]; // nada de HTML/SVG: se sirven al navegador
-const DOC_TTL_DAYS = 60; // dato personal: caduca solo, no se guarda indefinidamente
+const DOC_TTL_DAYS = privCfg.docTtlDias; // dato personal: caduca solo, no se guarda indefinidamente. 60 salvo DOC_TTL_DAYS (BBM-40; solo afecta a las fotos nuevas)
 async function saveInboundDoc(phone, mediaId) {
   try {
     const { data, mime } = await downloadWhatsAppMedia(mediaId, 8 * 1024 * 1024);
@@ -2484,10 +2507,14 @@ async function sendIntro(phone) {
 // Canal de aviso compartido del estudio (mismo bot/chat de Telegram que ya usa B2K) — no depende
 // de plantillas de Meta ni de la ventana de 24h de WhatsApp, así que sigue funcionando aunque
 // ALERT_TEMPLATE_NAME no esté puesta. Best-effort: un fallo aquí nunca tumba el flujo que lo llama.
-async function notifyTelegram(text) {
+// `minimo` (BBM-40): la versión sin datos personales del mismo aviso — solo el tipo, sin nombre, teléfono, texto del
+// cliente ni importe. Se usa únicamente con PRIV_TELEGRAM_SIN_DATOS=1 (Legal A.4: el chat lo comparte el estudio con
+// B2K y Telegram guarda los mensajes en su nube). El freno va aquí, en el embudo, y no en cada llamada: un aviso nuevo
+// que se olvide de pasar `minimo` sale como «Aviso nuevo» y no con los datos.
+async function notifyTelegram(text, minimo) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
   try {
-    await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, { chat_id: TELEGRAM_CHAT_ID, text: `🏍️ [${PROJECT_NAME}] ${text}` });
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, { chat_id: TELEGRAM_CHAT_ID, text: textoTelegram(privCfg, PROJECT_NAME, text, minimo, PANEL_URL) });
   } catch (e) {
     console.error(`[${PROJECT_NAME}] Error notificando a Telegram: ${e.message}`);
   }
@@ -2513,7 +2540,7 @@ async function notifyOwner(kind, lead) {
   const label = kind === "booking" ? "🔔 LEAD CALIENTE — quiere reservar" : "🟡 Nuevo cliente interesado";
   const who = lead.name || lead.phone;
   const msg = lead.lastMessage || "";
-  await notifyTelegram(`${label}\n${who}\nÚltimo mensaje: "${msg}"`);
+  await notifyTelegram(`${label}\n${who}\nÚltimo mensaje: "${msg}"`, label);
 
   if (!OWNER_PHONE) return;
   if (ALERT_TEMPLATE_NAME) {
@@ -2680,7 +2707,7 @@ async function markLeadPaid(phone, provider, amountIDR, receiptUrl) {
       + (detalle ? `\n\n${detalle}` : "")
       + `\n\nMarcado como Ganado en el CRM automáticamente.`
       + (BOT_VERTICAL === "rental" ? `\n⚠️ Falta crear la reserva en el ERP (el bot no la crea).` : "");
-    await notifyTelegram(textoPago);
+    await notifyTelegram(textoPago, `💰 Pago recibido (${provider === "xendit" ? "Xendit" : "Stripe"})` + (BOT_VERTICAL === "rental" ? ". Falta crear la reserva en el ERP." : ""));
     if (OWNER_PHONE) await sendWhatsApp(OWNER_PHONE, `${textoPago.replace("💰 PAGO", `💰 ${PROJECT_NAME} — PAGO`)}`);
   }
 }
@@ -2702,7 +2729,7 @@ const bbmErpTools = createErpTools({ erp: bbmErp, quotes: bbmQuotes, seg: bbmViv
 const bbmSombraN = Math.max(1, parseInt(process.env.BBM_SOMBRA_N || "30", 10) || 30);
 const bbmSombra = process.env.BBM_SOMBRA === "1" && bbmErp.enabled ? createSombra({ erp: bbmErp, redis: () => redisClient, n: bbmSombraN, project: PROJECT_NAME }) : null;
 async function avisaEquipoBbm(texto) {
-  await notifyTelegram(texto);
+  await notifyTelegram(texto, "⚠️ Aviso del flujo de reservas del ERP (el detalle va al WhatsApp del responsable)");
   if (OWNER_PHONE) await sendWhatsApp(OWNER_PHONE, texto);
 }
 // El enlace de pago del modo erp: importe y external_id los pone la base (cobro de la reserva), NO pasa por createRentalPayLink (sin comisión del 3 %, sin Stripe).
@@ -3312,7 +3339,7 @@ app.post("/webhook", async (req, res) => {
     // wasUrgentAlerted): una avería nueva del mismo lead más tarde vuelve a avisar.
     if (intent === "urgent_service" && !(await wasUrgentAlerted(from))) {
       await markUrgentAlerted(from);
-      await notifyTelegram(`🚨 AVERÍA / URGENTE\n${profileName || from} (+${from})\n"${text}"\n\nEl bot ya le dijo que el equipo va — contactar YA.`);
+      await notifyTelegram(`🚨 AVERÍA / URGENTE\n${profileName || from} (+${from})\n"${text}"\n\nEl bot ya le dijo que el equipo va — contactar YA.`, "🚨 AVERÍA / URGENTE: el bot ya le dijo al cliente que el equipo va — contactar YA");
       console.log(`[${PROJECT_NAME}] Aviso de avería enviado — ${profileName || from}`);
     }
 
@@ -3350,9 +3377,23 @@ const ADMIN_HTML = fs.existsSync(panelFileName)
 
 function adminAuth(req, res) {
   if (!ADMIN_PASSWORD) { res.status(503).json({ error: "panel no configurado (falta ADMIN_PASSWORD)" }); return false; }
-  // La key viaja por cabecera (X-Admin-Key); se acepta ?key= como fallback retrocompatible.
-  const key = req.get("x-admin-key") || req.query.key;
-  if (key !== ADMIN_PASSWORD) { res.status(403).json({ error: "forbidden" }); return false; }
+  // La key viaja por cabecera (X-Admin-Key); se acepta ?key= como fallback retrocompatible salvo con PANEL_CLAVE_URL=0 (BBM-40).
+  const key = req.get("x-admin-key") || (panelCfg.claveUrl ? req.query.key : undefined);
+  if (panelCfg.cuentas) {
+    // Con cuentas: la clave compartida sigue valiendo por cabecera (herramientas del estudio); las personas entran con
+    // su cookie de sesión, y lo que cambia algo con cookie exige X-Panel: 1 (anti-CSRF además de SameSite=Strict).
+    if (req.panelIpBloqueada) { res.status(429).json({ error: "demasiados intentos, espera unos minutos" }); return false; }
+    if (typeof key === "string" && igualSeguro(key, ADMIN_PASSWORD)) { req.panelQuien = "clave compartida"; return true; }
+    if (req.panelUsuario) {
+      if (req.method !== "GET" && req.method !== "HEAD" && req.get("x-panel") !== "1") { res.status(403).json({ error: "forbidden" }); return false; }
+      req.panelQuien = req.panelUsuario;
+      return true;
+    }
+    if (key) { panelCuentas.cuentaFalloIP(req.panelIp).catch(() => {}); panelCuentas.registra("clave compartida", "clave_incorrecta", false, req.panelIp); }
+    res.status(403).json({ error: "forbidden" });
+    return false;
+  }
+  if (typeof key !== "string" || !igualSeguro(key, ADMIN_PASSWORD)) { res.status(403).json({ error: "forbidden" }); return false; }
   return true;
 }
 
@@ -3362,20 +3403,81 @@ function adminAuth(req, res) {
 // olvidar configurar la clave.
 function masterAuth(req, res) {
   if (!PANEL_MASTER_PASSWORD) { res.status(503).json({ error: "acción bloqueada: falta PANEL_MASTER_PASSWORD en el entorno" }); return false; }
-  if (!req.body || req.body.pass !== PANEL_MASTER_PASSWORD) { res.status(403).json({ error: "clave incorrecta" }); return false; }
+  if (!req.body || typeof req.body.pass !== "string" || !igualSeguro(req.body.pass, PANEL_MASTER_PASSWORD)) {
+    if (panelCfg.cuentas) { panelCuentas.cuentaFalloIP(req.panelIp).catch(() => {}); panelCuentas.registra(req.panelQuien || "?", "clave_maestra_incorrecta", false, req.panelIp); }
+    res.status(403).json({ error: "clave incorrecta" });
+    return false;
+  }
   return true;
 }
 
-app.get("/admin", (req, res) => {
+// ── BBM-40: cuentas personales del panel. Sin PANEL_CUENTAS=1 no existe ninguna de estas rutas (nace cerrado). ──
+const panelCuentas = createPanelCuentas({ redis: () => redisClient, log: console, proyecto: PROJECT_NAME, sesionHoras: panelCfg.sesionHoras });
+function anotaAcceso(req, accion, extra) {
+  if (panelCfg.cuentas) panelCuentas.registra(req.panelQuien || "?", accion, true, req.panelIp, extra);
+}
+const PANEL_CUENTAS_HTML = fs.existsSync("panel-cuentas.html") ? fs.readFileSync("panel-cuentas.html", "utf8") : "";
+const cookieSesion = (valor, maxAgeS) => `${PANEL_COOKIE}=${valor}; HttpOnly; Secure; SameSite=Strict; Path=/admin; Max-Age=${maxAgeS}`;
+if (panelCfg.cuentas) {
+  app.post("/admin/api/sesion", async (req, res) => {
+    if (req.get("x-panel") !== "1") return res.status(403).json({ error: "forbidden" });
+    if (!redisClient) return res.status(503).json({ error: "sin almacén de sesiones" }); // sin Redis no se entra: nunca acceso por defecto
+    const { usuario, clave } = req.body || {};
+    try {
+      const r = await panelCuentas.login(usuario, clave, req.panelIp);
+      if (!r.ok) return res.status(r.status).json({ error: r.status === 429 ? "demasiados intentos, espera unos minutos" : "usuario o clave incorrectos" });
+      res.set("Set-Cookie", cookieSesion(encodeURIComponent(r.token), r.maxAgeS));
+      res.set("Cache-Control", "no-store");
+      res.json({ ok: true, usuario: r.usuario });
+    } catch (e) { res.status(e.status || 500).json({ error: e.status === 503 ? "ocupado, reintenta" : "error" }); }
+  });
+  app.get("/admin/api/sesion", (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!req.panelUsuario) return res.status(401).json({ ok: false });
+    res.json({ ok: true, usuario: req.panelUsuario });
+  });
+  app.post("/admin/api/sesion/salir", async (req, res) => {
+    if (req.get("x-panel") !== "1") return res.status(403).json({ error: "forbidden" });
+    try { await panelCuentas.logout(leeCookie(req, PANEL_COOKIE), req.panelIp); } catch (e) { /* la cookie se borra igual */ }
+    res.set("Set-Cookie", cookieSesion("", 0));
+    res.json({ ok: true });
+  });
+  // Gestión de cuentas: sesión (o cabecera) Y clave maestra, como el borrado total (wipe).
+  app.get("/admin/cuentas", (req, res) => {
+    if (!PANEL_CUENTAS_HTML) return res.status(404).send("not found");
+    res.set("Cache-Control", "no-store");
+    res.type("html").send(PANEL_CUENTAS_HTML.replace(/__PROJECT__/g, PROJECT_NAME || "Bot"));
+  });
+  app.post("/admin/api/cuentas", async (req, res) => {
+    if (!adminAuth(req, res)) return;
+    if (!masterAuth(req, res)) return;
+    const { accion, usuario, clave } = req.body || {};
+    try {
+      let r;
+      if (accion === "lista") r = { ok: true, cuentas: await panelCuentas.lista() };
+      else if (accion === "crea") r = await panelCuentas.crea(usuario, clave);
+      else if (accion === "clave") r = await panelCuentas.cambiaClave(usuario, clave);
+      else if (accion === "desactiva" || accion === "activa") r = await panelCuentas.activa(usuario, accion === "activa");
+      else if (accion === "accesos") r = { ok: true, accesos: await panelCuentas.accesos(500) };
+      else return res.status(400).json({ error: "accion: lista | crea | clave | activa | desactiva | accesos" });
+      if (accion !== "lista" && accion !== "accesos") anotaAcceso(req, `cuenta_${accion}`, r.ok ? String(usuario || "").slice(0, 32) : "fallo");
+      res.status(r.ok ? 200 : 400).json(r);
+    } catch (e) { res.status(e.status || 500).json({ error: e.status === 503 ? "ocupado, reintenta" : "error" }); }
+  });
+}
+
+// BBM-40: el panel sabe si hay cuentas y si la clave en la URL vale. Con PANEL_CLAVE_URL=0, `/admin?key=` se redirige
+// sin la clave (no se queda en el historial ni en los registros del proxy más de una vez).
+const ADMIN_HTML_FINAL = ADMIN_HTML.replace(/__CUENTAS__/g, panelCfg.cuentas ? "1" : "0").replace(/__CLAVE_URL__/g, panelCfg.claveUrl ? "1" : "0");
+function sirvePanel(req, res) {
   if (!ADMIN_PASSWORD) return res.status(503).send("Panel no configurado: define ADMIN_PASSWORD en Railway.");
-  res.type("html").send(ADMIN_HTML.replace(/__PROJECT__/g, PROJECT_NAME || "Bot"));
-});
+  if (!panelCfg.claveUrl && req.query && req.query.key !== undefined) return res.redirect(302, req.path);
+  res.type("html").send(ADMIN_HTML_FINAL.replace(/__PROJECT__/g, PROJECT_NAME || "Bot"));
+}
+app.get("/admin", sirvePanel);
 
 // URLs dedicadas a vistas del panel (BD, dashboard): sirven el mismo panel; la página abre la vista al cargar.
-app.get(["/admin/db", "/admin/dash"], (req, res) => {
-  if (!ADMIN_PASSWORD) return res.status(503).send("Panel no configurado: define ADMIN_PASSWORD en Railway.");
-  res.type("html").send(ADMIN_HTML.replace(/__PROJECT__/g, PROJECT_NAME || "Bot"));
-});
+app.get(["/admin/db", "/admin/dash"], sirvePanel);
 
 app.get("/admin/api/leads", async (req, res) => {
   if (!adminAuth(req, res)) return;
@@ -3425,6 +3527,7 @@ app.get("/admin/api/doc/:id", async (req, res) => {
     res.set("Cache-Control", "no-store, private");
     res.set("X-Content-Type-Options", "nosniff");
     res.set("Content-Disposition", "inline"); // sin nombre de archivo: no filtra el teléfono
+    anotaAcceso(req, "ver_documento", String(req.params.id).slice(0, 32));
     res.send(Buffer.from(blob.data, "base64"));
   } catch (e) { res.status(500).send("error"); }
 });
@@ -3753,6 +3856,34 @@ app.post("/admin/api/import", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// BBM-40: estado visible de los interruptores de privacidad (un freno mudo es la forma exacta del fallo de LAW-106).
+// null si están todos apagados: entonces /admin/api/health responde exactamente lo de antes. Sin secretos.
+let privUltimaPurga = null;
+function privacidadEstado() {
+  const algo = privCfg.borradoCompleto || privCfg.telegramSinDatos || privCfg.docTtlDias !== 60 || privCfg.purga.modo !== "off" || panelCfg.cuentas || !panelCfg.claveUrl;
+  if (!algo) return null;
+  return {
+    borrado_completo: privCfg.borradoCompleto, telegram_sin_datos: privCfg.telegramSinDatos, doc_ttl_dias: privCfg.docTtlDias,
+    purga: { ...privCfg.purga, ultima: privUltimaPurga },
+    panel: { cuentas: panelCfg.cuentas, clave_url: panelCfg.claveUrl, sesion_horas: panelCfg.sesionHoras, xff_saltos: panelUltimosSaltos },
+    avisos: privCfg.avisos,
+  };
+}
+// Pasada diaria de la purga (solo con PRIV_PURGA=contar|aplicar). Un candado en Redis la deja en una por día aunque
+// haya reinicios; si algo falla, se registra y no se borra nada más.
+async function privPurgaTick() {
+  if (privCfg.purga.modo === "off" || !redisClient) return;
+  try {
+    const dia = new Date().toISOString().slice(0, 10);
+    const primero = await redisClient.set(`priv:purga:${dia}`, "1", { NX: true, EX: 2 * 86400 });
+    if (!primero) return;
+    privUltimaPurga = await purgaPasada({
+      redis: redisClient, cfg: privCfg, now: Date.now(), deleteLead, proyecto: PROJECT_NAME,
+      tieneCitaFutura: async (tel) => (await listAppts()).some((a) => a && normalizePhone(a.phone || "") === normalizePhone(tel) && apptTs(a.when) > Date.now()),
+    });
+  } catch (e) { console.error(`[${PROJECT_NAME}] Purga de privacidad: error, no se borra nada más: ${e.message}`); }
+}
+
 // Estado del almacén: si la "base de datos" persiste (Redis) o es volátil (RAM), y cuántos leads hay.
 app.get("/admin/api/health", async (req, res) => {
   if (!adminAuth(req, res)) return;
@@ -3768,7 +3899,8 @@ app.get("/admin/api/health", async (req, res) => {
   try { bbmBackend = await bbmBackendSw.porDefecto(); } catch (e) { /* best-effort */ }
   const bbm = { backend: bbmBackend, erp_configurado: !!(process.env.BBM_ERP_URL && process.env.BBM_RESERVAS_SECRET), webhook_rsv: !!process.env.BBM_ERP_URL };
   if (bbmSombra) { try { bbm.sombra = await bbmSombra.estado(); } catch (e) { /* best-effort */ } }
-  res.json({ storage: redisClient ? "redis" : "ram", leads: count, bbm, seguimiento: seguimientoCfg.enabled ? { ...seguimientoCfg.status(), vendible: process.env.ERP_SEGUIMIENTO_VIVA !== "0" ? (bbmViva ? "on" : "sin_verificador") : "off", ultima_pasada: followupRunner.last() } : { enabled: false, source: "env (FOLLOWUP_*)" } });
+  const priv = privacidadEstado();
+  res.json({ storage: redisClient ? "redis" : "ram", leads: count, bbm, ...(priv ? { privacidad: priv } : {}), seguimiento: seguimientoCfg.enabled ? { ...seguimientoCfg.status(), vendible: process.env.ERP_SEGUIMIENTO_VIVA !== "0" ? (bbmViva ? "on" : "sin_verificador") : "off", ultima_pasada: followupRunner.last() } : { enabled: false, source: "env (FOLLOWUP_*)" } });
 });
 
 // Inventario de motos (Supabase, catálogo BBM): un catálogo por producto con su tarifa
@@ -3970,6 +4102,7 @@ app.post("/admin/api/wipe", async (req, res) => {
   try {
     const r = await wipeConversationState();
     console.log(`[${PROJECT_NAME}] WIPE ejecutado por el dueño — borrado: ${JSON.stringify(r.deleted)}`);
+    anotaAcceso(req, "wipe");
     res.json({ ok: true, ...r });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -4153,7 +4286,27 @@ app.post("/admin/api/archive", async (req, res) => {
 
 // ── CRM: borrar definitivamente un lead (irreversible) ──
 async function deleteLead(phone) {
+  // PRIV_BORRADO_COMPLETO=1 (BBM-40): las fotos del cliente (`doc:<id>` de lead.docs) caen ANTES que la ficha que las lista;
+  // sin el interruptor quedaban huérfanas hasta su caducidad. Apagado: docKeys vacío, borrado idéntico al de siempre.
+  const docKeys = privCfg.borradoCompleto ? docKeysDeLead(await getLead(phone)) : [];
+  const telN = normalizePhone(String(phone || ""));
+  if (privCfg.borradoCompleto && telN) {
+    // Citas y cola de escalación también guardan su teléfono (Seguridad, revisión previa 11-oct).
+    for (const a of await listAppts()) if (a && a.phone && normalizePhone(a.phone) === telN) await deleteAppt(a.id);
+    if (redisClient) {
+      for (const raw of await redisClient.lRange("esc_queue", 0, -1)) {
+        let e = null; try { e = JSON.parse(raw); } catch { /* entrada ilegible: no se toca */ }
+        if (e && normalizePhone(String(e.customerPhone || "")) === telN) await redisClient.lRem("esc_queue", 0, raw);
+      }
+    } else {
+      for (let i = fallbackEscQueue.length - 1; i >= 0; i--) {
+        let e = null; try { e = JSON.parse(fallbackEscQueue[i]); } catch { /* */ }
+        if (e && normalizePhone(String(e.customerPhone || "")) === telN) fallbackEscQueue.splice(i, 1);
+      }
+    }
+  }
   if (redisClient) {
+    if (docKeys.length) await redisClient.del(docKeys);
     await redisClient.del(`lead:${phone}`, `notes:${phone}`, `status:${phone}`, `conv:${phone}`, `paused:${phone}`, `waiting:${phone}`, `inbound:${phone}`, `followup:${phone}`, `followupat:${phone}`, `notified:${phone}`, `lastlink:${phone}`, `pendingpay:${phone}`, `urgentalert:${phone}`);
     await redisClient.zRem("leads_index", phone);
   } else {
@@ -4161,13 +4314,14 @@ async function deleteLead(phone) {
     delete fallbackPaused[phone]; delete fallbackWaiting[phone]; delete fallbackInbound[phone];
     delete fallbackFollowup[phone]; delete fallbackNotified[phone];
     delete fallbackMemory[phone];
+    for (const k of docKeys) delete fallbackBlobs[k];
   }
 }
 app.post("/admin/api/lead/delete", async (req, res) => {
   if (!adminAuth(req, res)) return;
   const { phone } = req.body || {};
   if (!phone) return res.status(400).json({ error: "phone requerido" });
-  try { await deleteLead(phone); res.json({ ok: true }); }
+  try { await deleteLead(phone); anotaAcceso(req, "borrar_lead"); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -4206,6 +4360,7 @@ app.post("/admin/api/bulk", async (req, res) => {
       } else { continue; }
       n++;
     }
+    if (action === "delete") anotaAcceso(req, "borrar_leads", String(n));
     res.json({ ok: true, count: n, failed });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -4793,4 +4948,13 @@ app.listen(PORT, async () => {
   // Auto-relleno de la BD: barrido inicial (tras conectar Redis) + periódico cada 30 min.
   setTimeout(() => enrichSweep(20), 8000);
   setInterval(() => enrichSweep(10), 30 * 60 * 1000);
+
+  // BBM-40: privacidad. Con todo apagado solo imprime esta línea; la purga ni se programa.
+  const pe = privacidadEstado();
+  console.log(`[${PROJECT_NAME}] Privacidad (BBM-40): ${pe ? `borrado completo ${pe.borrado_completo ? "🟢" : "off"} · Telegram sin datos ${pe.telegram_sin_datos ? "🟢" : "off"} · fotos ${pe.doc_ttl_dias} d · purga ${pe.purga.modo} (conv ${pe.purga.convDias ?? "-"} d, leads ${pe.purga.leadDias ?? "-"} d) · cuentas del panel ${pe.panel.cuentas ? "🟢" : "off"} · clave en URL ${pe.panel.clave_url ? "sí" : "no"}` : "todo apagado (como siempre)"}`);
+  for (const a of privCfg.avisos) console.warn(`[${PROJECT_NAME}] ⚠️  ${a}`);
+  if (privCfg.purga.modo !== "off") {
+    setTimeout(privPurgaTick, 10 * 60 * 1000);
+    setInterval(privPurgaTick, 6 * 3600 * 1000);
+  }
 });
