@@ -345,7 +345,8 @@ async function getConversation(phone) {
 
 // Se guardan hasta 100 mensajes (historial que ve el panel/CRM en un takeover humano);
 // el prompt del bot usa solo los últimos 20 (slice al construir los messages de Claude).
-// Sin TTL (`set`, no `setEx`): la conversación no se borra nunca — decisión del owner
+// Sin TTL (`set`, no `setEx`): la conversación no caduca sola — decisión del owner (BBM-40: solo la borra la purga si el owner
+// pone PRIV_PURGA=aplicar con PRIV_CONV_DIAS, ver privacidad.js)
 // 16-sep-2026. El tope de 100 es solo para no crecer sin límite el JSON guardado; no
 // afecta al coste del bot, que ya solo manda los últimos 20 al modelo (línea del comentario
 // de arriba, ver history.slice(-20) al construir `messages`).
@@ -3385,8 +3386,10 @@ function adminAuth(req, res) {
   if (panelCfg.cuentas) {
     // Con cuentas: la clave compartida sigue valiendo por cabecera (herramientas del estudio); las personas entran con
     // su cookie de sesión, y lo que cambia algo con cookie exige X-Panel: 1 (anti-CSRF además de SameSite=Strict).
-    if (typeof key === "string" && igualSeguro(key, ADMIN_PASSWORD)) { req.panelQuien = "clave compartida"; return true; }
+    // El bloqueo por IP va PRIMERO y vale también para la clave compartida: si el acierto pasara por encima del bloqueo,
+    // el límite no frenaría a quien la adivina (revisor-codigo, 11-oct). Condición de encendido: saltos medidos (BBM-40).
     if (req.panelIpBloqueada) { res.status(429).json({ error: "demasiados intentos, espera unos minutos" }); return false; }
+    if (typeof key === "string" && igualSeguro(key, ADMIN_PASSWORD)) { req.panelQuien = "clave compartida"; return true; }
     if (req.panelUsuario) {
       if (req.method !== "GET" && req.method !== "HEAD" && req.get("x-panel") !== "1") { res.status(403).json({ error: "forbidden" }); return false; }
       req.panelQuien = req.panelUsuario;
@@ -3880,9 +3883,11 @@ async function privPurgaTick() {
     const dia = new Date().toISOString().slice(0, 10);
     const primero = await redisClient.set(`priv:purga:${dia}`, "1", { NX: true, EX: 2 * 86400 });
     if (!primero) return;
+    // Citas futuras: se leen UNA vez por pasada, no una por lead.
+    const conCita = new Set((await listAppts()).filter((a) => a && a.phone && apptTs(a.when) > Date.now()).map((a) => normalizePhone(a.phone)));
     privUltimaPurga = await purgaPasada({
       redis: redisClient, cfg: privCfg, now: Date.now(), deleteLead, proyecto: PROJECT_NAME,
-      tieneCitaFutura: async (tel) => (await listAppts()).some((a) => a && normalizePhone(a.phone || "") === normalizePhone(tel) && apptTs(a.when) > Date.now()),
+      tieneCitaFutura: async (tel) => conCita.has(normalizePhone(tel)),
     });
   } catch (e) { console.error(`[${PROJECT_NAME}] Purga de privacidad: error, no se borra nada más: ${e.message}`); }
 }

@@ -95,9 +95,9 @@ const silencio = { log() {}, error() {}, warn() {} };
   const corteMw = mw.indexOf("if (!panelCfg.cuentas) return next();");
   assert.ok(corteMw > 0 && mw.slice(0, corteMw).includes("panelUltimosSaltos = saltos;"), "sin cuentas solo cuenta saltos (un número) y sigue");
   assert.ok(!/req\.panel\w+ =/.test(mw.slice(0, corteMw)), "sin cuentas no marca nada en la petición");
-  // la clave compartida correcta no la frena el bloqueo por IP (si el proxy junta a todos, las herramientas siguen)
+  // con cuentas, el bloqueo por IP va antes que la clave compartida: si no, el límite no frenaría a quien la adivina
   const aa2 = trozo("function adminAuth(req, res) {", "\n}\n");
-  assert.ok(aa2.indexOf('igualSeguro(key, ADMIN_PASSWORD)) { req.panelQuien = "clave compartida"; return true; }') < aa2.indexOf("if (req.panelIpBloqueada)"));
+  assert.ok(aa2.indexOf("if (req.panelIpBloqueada)") < aa2.indexOf('igualSeguro(key, ADMIN_PASSWORD)) { req.panelQuien = "clave compartida"; return true; }'));
   // las rutas nuevas del panel solo existen con cuentas
   const bloque = src.indexOf("if (panelCfg.cuentas) {\n  app.post(\"/admin/api/sesion\"");
   assert.ok(bloque > 0);
@@ -171,6 +171,8 @@ async function siembra(now) {
   await r.set("conv:nuevo", JSON.stringify([{ role: "user", content: "hola", ts: viejo }, { role: "assistant", content: "hey", ts: nuevo }]));
   await r.set("conv:sinfecha", JSON.stringify([{ role: "user", content: "hola" }]));
   await r.set("conv:roto", "{no es json");
+  await r.set("conv:222", JSON.stringify([{ role: "user", content: "pago hecho", ts: viejo }]));          // chat viejo de quien pagó → se retiene
+  await r.set("conv:555", JSON.stringify([{ role: "user", content: "llego el día 20", ts: viejo }]));     // chat viejo de quien tiene cita → se retiene
   const lead = async (tel, upd, extra = {}) => { await r.set(`lead:${tel}`, JSON.stringify({ phone: tel, updatedAt: upd, history: [{ ts: upd, type: "created" }], ...extra })); await r.zAdd("leads_index", { score: upd, value: tel }); };
   await lead("111", now - 800 * DIA);                                                         // vencido, sin compra → se borra
   await lead("222", now - 800 * DIA, { history: [{ type: "payment", amount: 100 }] });         // pagó → se retiene
@@ -193,7 +195,7 @@ async function siembra(now) {
   const res = await purgaPasada({ redis: r, cfg, now, deleteLead: async (t) => borrados.push(t), tieneCitaFutura: async (t) => t === "555", log: silencio });
   assert.equal(JSON.stringify([...r._kv]), antes, "contar no cambia ninguna clave");
   assert.deepEqual(borrados, []);
-  assert.deepEqual(res.conv, { dias: 365, total: 4, vencidas: 1, sin_fecha: 2, borradas: 0 });
+  assert.deepEqual(res.conv, { dias: 365, total: 6, vencidas: 1, retenidas: 2, sin_fecha: 2, borradas: 0 });
   assert.equal(res.leads.vencidos, 1); assert.equal(res.leads.retenidos, 6); assert.equal(res.leads.borrados, 0);
   ok("purga en contar: no cambia nada y cuenta 1 conversación y 1 lead vencidos, 6 leads retenidos");
 }
@@ -204,7 +206,7 @@ async function siembra(now) {
   const cfg = leeConfigPrivacidad({ PRIV_PURGA: "aplicar", PRIV_CONV_DIAS: "365", PRIV_LEAD_DIAS: "730" });
   const res = await purgaPasada({ redis: r, cfg, now, deleteLead: async (t) => borrados.push(t), tieneCitaFutura: async (t) => t === "555", log: silencio });
   assert.equal(await r.get("conv:viejo"), null, "conversación vencida: borrada");
-  for (const k of ["conv:nuevo", "conv:sinfecha", "conv:roto"]) assert.ok(await r.get(k), `${k} sigue`);
+  for (const k of ["conv:nuevo", "conv:sinfecha", "conv:roto", "conv:222", "conv:555"]) assert.ok(await r.get(k), `${k} sigue`);
   assert.deepEqual(borrados, ["111"], "solo el lead vencido que no compró");
   assert.ok(await r.get("lead:222"), "el lead que pagó sigue intacto (su pago solo vive en su historial)");
   assert.ok(await r.get("lead:888"), "el alquiler ganado sin evento de pago sigue"); assert.ok(await r.get("lead:999"), "la reserva del ERP a medias sigue");
@@ -230,6 +232,7 @@ async function siembra(now) {
   assert.deepEqual(ipCliente(req({})), { ip: "10.0.0.1", saltos: 0 });
   assert.equal(leeCookie(req({ cookie: "a=1; panel_sesion=tok%2Bx; b=2" })), "tok+x");
   assert.equal(leeCookie(req({})), "");
+  assert.equal(leeCookie(req({ cookie: "panel_sesion=%" })), "", "cookie mal formada: sin sesión y sin excepción");
   assert.deepEqual(leeConfigPanel({ PANEL_CUENTAS: "1", PANEL_CLAVE_URL: "0", PANEL_SESION_HORAS: "999" }), { cuentas: true, claveUrl: false, sesionHoras: 12 });
   ok("comparación en tiempo constante, IP del último salto, cookie y configuración del panel");
 }

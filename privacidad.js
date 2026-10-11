@@ -99,14 +99,26 @@ export async function purgaPasada({ redis, cfg, now = Date.now(), deleteLead, ti
   const r = { modo: p ? p.modo : "off", ts: now, conv: null, leads: null };
   if (!redis || !p || p.modo === "off") return r;
   const aplicar = p.modo === "aplicar";
+  // Retención común a conversaciones y leads: cobro, ganado, reserva (también la del ERP a medias), pago pendiente o cita.
+  async function retenidoPorTel(tel) {
+    const raw = await redis.get(`lead:${tel}`);
+    let lead = null; try { lead = raw ? JSON.parse(raw) : null; } catch { lead = null; }
+    if (lead && leadRetenido(lead)) return true;
+    return !!((await redis.get(`pendingpay:${tel}`)) || (await redis.get(`pendingrsv:${String(tel).replace(/\D/g, "")}`))
+      || (await redis.get(`status:${tel}`)) === "won" || (await tieneCitaFutura(tel)));
+  }
   if (p.convDias) {
     const corte = now - p.convDias * DIA_MS;
-    const c = { dias: p.convDias, total: 0, vencidas: 0, sin_fecha: 0, borradas: 0 };
+    const c = { dias: p.convDias, total: 0, vencidas: 0, retenidas: 0, sin_fecha: 0, borradas: 0 };
     for await (const key of redis.scanIterator({ MATCH: "conv:*", COUNT: 100 })) {
       c.total++;
       const t = ultimoTs(await redis.get(key));
       if (t == null) { c.sin_fecha++; continue; }
       if (t >= corte) continue;
+      // La conversación de quien está retenido (pagó, ganó, reserva o cita) tampoco se borra: quien reserva para dentro de
+      // 45 días y deja de escribir no pierde su chat antes de llegar (revisor-codigo y Legal, 11-oct).
+      const telC = key.slice("conv:".length);
+      if (await retenidoPorTel(telC)) { c.retenidas++; continue; }
       c.vencidas++;
       if (aplicar && c.borradas < TOPE_PURGA) {
         // se vuelve a leer justo antes de borrar: si entró un mensaje entre medias, ya no está vencida
@@ -118,7 +130,8 @@ export async function purgaPasada({ redis, cfg, now = Date.now(), deleteLead, ti
           const tel = key.slice("conv:".length);
           const raw = await redis.get(`lead:${tel}`);
           let lead = null; try { lead = raw ? JSON.parse(raw) : null; } catch { lead = null; }
-          if (lead && lead.lastMessage && Number(lead.updatedAt) < corte) { lead.lastMessage = ""; await redis.set(`lead:${tel}`, JSON.stringify(lead)); }
+          // lastMessage solo cambia con un mensaje nuevo, así que si la conversación venció, la vista previa es de ella
+          if (lead && lead.lastMessage) { lead.lastMessage = ""; await redis.set(`lead:${tel}`, JSON.stringify(lead)); }
         }
       }
     }
@@ -137,15 +150,14 @@ export async function purgaPasada({ redis, cfg, now = Date.now(), deleteLead, ti
       // Legal A.2 fila 5: la purga es del «contacto que NO reservó». El cobro solo vive en lead.history (no hay almacén
       // aparte): borrar un lead que pagó borraría lo único que queda del pago. Se retiene, y también con un pago a medias,
       // estado «won» o una cita futura (Seguridad, revisión previa del 11-oct).
-      if (leadRetenido(lead) || (await redis.get(`pendingpay:${tel}`)) || (await redis.get(`pendingrsv:${String(tel).replace(/\D/g, "")}`))
-        || (await redis.get(`status:${tel}`)) === "won" || (await tieneCitaFutura(tel))) { l.retenidos++; continue; }
+      if (await retenidoPorTel(tel)) { l.retenidos++; continue; }
       l.vencidos++;
       if (aplicar && l.borrados < TOPE_PURGA) { await deleteLead(tel); l.borrados++; }
     }
     r.leads = l;
   }
   const partes = [];
-  if (r.conv) partes.push(`conversaciones vencidas ${r.conv.vencidas} de ${r.conv.total} (${r.conv.dias} d${aplicar ? `, borradas ${r.conv.borradas}` : ""}; sin fecha ${r.conv.sin_fecha})`);
+  if (r.conv) partes.push(`conversaciones vencidas ${r.conv.vencidas} de ${r.conv.total} (${r.conv.dias} d${aplicar ? `, borradas ${r.conv.borradas}` : ""}; retenidas ${r.conv.retenidas}; sin fecha ${r.conv.sin_fecha})`);
   if (r.leads) partes.push(`leads vencidos ${r.leads.vencidos} de ${r.leads.total} (${r.leads.dias} d${aplicar ? `, borrados ${r.leads.borrados}` : ""}; retenidos por pago, reserva o cita ${r.leads.retenidos})`);
   log.log(`[${proyecto}] Purga de privacidad (${p.modo}): ${partes.join(" · ") || "sin plazos válidos, no hace nada"}`);
   return r;

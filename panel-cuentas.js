@@ -9,6 +9,9 @@
 //                          que la usan (infraestructura/voz-app/server.mjs; receta de contexto/datos_clientes.md).
 //   PANEL_SESION_HORAS     caducidad absoluta de una sesión (1-72, por defecto 12).
 //
+// Límite por IP: vale para TODO (cuentas, clave compartida por cabecera y clave maestra); si no, el bloqueo no frenaría
+// a quien adivina la compartida. Por eso, ANTES de encender PANEL_CUENTAS hay que mirar en el log cuántos saltos de
+// X-Forwarded-For llegan (se mide siempre): si el proxy juntara a todos en una IP, 20 fallos bloquearían a todo el equipo.
 // Seguridad: claves con scrypt (N=2^15, r=8, p=1; maxmem explícito o Node rechaza los parámetros) y comparación en tiempo
 // constante; el token de sesión se guarda solo como sha256; límite de intentos ANTES de calcular el hash (cada hash son
 // ~32 MB, como mucho 2 a la vez); un usuario inexistente cuesta lo mismo que uno real; el bloqueo es por usuario+IP (por
@@ -57,7 +60,7 @@ export function leeCookie(req, nombre = COOKIE) {
   const raw = String((req.get && req.get("cookie")) || "");
   for (const parte of raw.split(";")) {
     const i = parte.indexOf("=");
-    if (i > 0 && parte.slice(0, i).trim() === nombre) return decodeURIComponent(parte.slice(i + 1).trim());
+    if (i > 0 && parte.slice(0, i).trim() === nombre) { try { return decodeURIComponent(parte.slice(i + 1).trim()); } catch { return ""; } } // `%` suelto: sin sesión, sin excepción
   }
   return "";
 }
@@ -68,7 +71,7 @@ export function createPanelCuentas({ redis, now = () => Date.now(), log = consol
   let activos = 0;
   const cola = [];
   async function conHueco(fn) {
-    if (activos >= 2) {
+    while (activos >= 2) { // `while`: si otro entra justo al liberarse el hueco, se vuelve a esperar (nunca 3 a la vez)
       if (cola.length >= 20) throw Object.assign(new Error("ocupado"), { status: 503 });
       await new Promise((r) => cola.push(r));
     }
