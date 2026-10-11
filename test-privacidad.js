@@ -91,7 +91,13 @@ const silencio = { log() {}, error() {}, warn() {} };
   assert.ok(aa.includes('const key = req.get("x-admin-key") || (panelCfg.claveUrl ? req.query.key : undefined);'));
   assert.ok(aa.includes('if (typeof key !== "string" || !igualSeguro(key, ADMIN_PASSWORD)) { res.status(403).json({ error: "forbidden" }); return false; }'));
   // el middleware no toca nada sin cuentas
-  assert.ok(src.includes('app.use("/admin", async (req, _res, next) => {\n  if (!panelCfg.cuentas) return next();'));
+  const mw = trozo('app.use("/admin", async (req, _res, next) => {', "\n});\n");
+  const corteMw = mw.indexOf("if (!panelCfg.cuentas) return next();");
+  assert.ok(corteMw > 0 && mw.slice(0, corteMw).includes("panelUltimosSaltos = saltos;"), "sin cuentas solo cuenta saltos (un número) y sigue");
+  assert.ok(!/req\.panel\w+ =/.test(mw.slice(0, corteMw)), "sin cuentas no marca nada en la petición");
+  // la clave compartida correcta no la frena el bloqueo por IP (si el proxy junta a todos, las herramientas siguen)
+  const aa2 = trozo("function adminAuth(req, res) {", "\n}\n");
+  assert.ok(aa2.indexOf('igualSeguro(key, ADMIN_PASSWORD)) { req.panelQuien = "clave compartida"; return true; }') < aa2.indexOf("if (req.panelIpBloqueada)"));
   // las rutas nuevas del panel solo existen con cuentas
   const bloque = src.indexOf("if (panelCfg.cuentas) {\n  app.post(\"/admin/api/sesion\"");
   assert.ok(bloque > 0);
@@ -154,6 +160,8 @@ const silencio = { log() {}, error() {}, warn() {} };
   assert.equal(leadRetenido({ history: [{ type: "paylink" }] }), true);
   assert.equal(leadRetenido({ history: [{ type: "payment" }] }), true);
   assert.equal(leadRetenido(null), true, "sin ficha legible: no se toca");
+  assert.equal(leadRetenido({ deals: [{ status: "won" }] }), true); assert.equal(leadRetenido({ deals: [{ status: "open" }] }), false);
+  assert.equal(leadRetenido({ deals: [{ status: "open", erpCreated: true }] }), true); assert.equal(leadRetenido({ status: "won" }), true);
   ok("fecha de la última conversación y retención de leads con cobro");
 }
 async function siembra(now) {
@@ -170,6 +178,9 @@ async function siembra(now) {
   await lead("444", now - 800 * DIA); await r.set("status:444", "won");                      // ganado → se retiene
   await lead("555", now - 800 * DIA);                                                         // cita futura → se retiene
   await lead("666", now - 30 * DIA);                                                          // reciente → no vence
+  await lead("888", now - 800 * DIA, { deals: [{ id: "d1", status: "won", model: "NMAX" }] }); // alquiler ganado sin evento de pago → se retiene
+  await lead("999", now - 800 * DIA); await r.set("pendingrsv:999", "{}");                    // reserva del ERP a medias → se retiene
+  await r.set("lead:viejo", JSON.stringify({ phone: "viejo", updatedAt: now - 400 * DIA, lastMessage: "me alojo en Canggu" }));
   await r.zAdd("leads_index", { score: now - 900 * DIA, value: "777" });                     // índice sin ficha → no se toca
   return r;
 }
@@ -183,8 +194,8 @@ async function siembra(now) {
   assert.equal(JSON.stringify([...r._kv]), antes, "contar no cambia ninguna clave");
   assert.deepEqual(borrados, []);
   assert.deepEqual(res.conv, { dias: 365, total: 4, vencidas: 1, sin_fecha: 2, borradas: 0 });
-  assert.equal(res.leads.vencidos, 1); assert.equal(res.leads.retenidos, 4); assert.equal(res.leads.borrados, 0);
-  ok("purga en contar: no cambia nada y cuenta 1 conversación y 1 lead vencidos, 4 leads retenidos");
+  assert.equal(res.leads.vencidos, 1); assert.equal(res.leads.retenidos, 6); assert.equal(res.leads.borrados, 0);
+  ok("purga en contar: no cambia nada y cuenta 1 conversación y 1 lead vencidos, 6 leads retenidos");
 }
 {
   const now = Date.UTC(2026, 9, 11);
@@ -196,6 +207,8 @@ async function siembra(now) {
   for (const k of ["conv:nuevo", "conv:sinfecha", "conv:roto"]) assert.ok(await r.get(k), `${k} sigue`);
   assert.deepEqual(borrados, ["111"], "solo el lead vencido que no compró");
   assert.ok(await r.get("lead:222"), "el lead que pagó sigue intacto (su pago solo vive en su historial)");
+  assert.ok(await r.get("lead:888"), "el alquiler ganado sin evento de pago sigue"); assert.ok(await r.get("lead:999"), "la reserva del ERP a medias sigue");
+  assert.equal(JSON.parse(await r.get("lead:viejo")).lastMessage, "", "con la conversación se va también la vista previa del último mensaje");
   assert.equal(res.conv.borradas, 1); assert.equal(res.leads.borrados, 1);
   ok("purga en aplicar: borra exactamente lo vencido y deja intactos pagados, pago pendiente, ganados, citas, recientes y sin fecha");
 }

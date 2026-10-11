@@ -31,11 +31,14 @@ app.use(express.json({ limit: "30mb", verify: (req, _res, buf) => { req.rawBody 
 // BBM-40: con PANEL_CUENTAS=1 se resuelve aquí (async) la sesión de la cookie y si la IP está bloqueada, para que
 // adminAuth/masterAuth sigan siendo síncronas en sus ~70 llamadas. Apagado: next() sin tocar nada.
 app.use("/admin", async (req, _res, next) => {
+  // Cuántos saltos de X-Forwarded-For llegan tras el proxy de Railway: se mide SIEMPRE (solo el número, nunca la IP) y se
+  // escribe una vez en el log, para saber si el límite por IP distingue clientes ANTES de encender las cuentas (Seguridad, p. 5).
+  const { ip, saltos } = ipCliente(req);
+  if (panelUltimosSaltos === null) console.log(`[${PROJECT_NAME}] panel: X-Forwarded-For llega con ${saltos} salto(s)`);
+  panelUltimosSaltos = saltos;
   if (!panelCfg.cuentas) return next();
   try {
-    const { ip, saltos } = ipCliente(req);
     req.panelIp = ip;
-    panelUltimosSaltos = saltos;
     const tok = leeCookie(req, PANEL_COOKIE);
     if (tok) req.panelUsuario = await panelCuentas.sesion(tok);
     req.panelIpBloqueada = await panelCuentas.ipBloqueada(ip);
@@ -3382,8 +3385,8 @@ function adminAuth(req, res) {
   if (panelCfg.cuentas) {
     // Con cuentas: la clave compartida sigue valiendo por cabecera (herramientas del estudio); las personas entran con
     // su cookie de sesión, y lo que cambia algo con cookie exige X-Panel: 1 (anti-CSRF además de SameSite=Strict).
-    if (req.panelIpBloqueada) { res.status(429).json({ error: "demasiados intentos, espera unos minutos" }); return false; }
     if (typeof key === "string" && igualSeguro(key, ADMIN_PASSWORD)) { req.panelQuien = "clave compartida"; return true; }
+    if (req.panelIpBloqueada) { res.status(429).json({ error: "demasiados intentos, espera unos minutos" }); return false; }
     if (req.panelUsuario) {
       if (req.method !== "GET" && req.method !== "HEAD" && req.get("x-panel") !== "1") { res.status(403).json({ error: "forbidden" }); return false; }
       req.panelQuien = req.panelUsuario;

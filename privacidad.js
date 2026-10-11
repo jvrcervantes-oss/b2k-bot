@@ -83,12 +83,15 @@ export function ultimoTs(raw) {
 // por categoría. Conversación vencida = su último mensaje con fecha es anterior al plazo. Lead vencido = su última
 // actividad (`updatedAt`, el score de leads_index) es anterior al plazo y no tiene un pago pendiente. Cualquier duda
 // (sin fecha, JSON roto, lead desaparecido) = no se borra.
-// Un lead con cualquier rastro de cobro (enlace de pago generado o pago confirmado) o con `paid` no se purga nunca aquí.
+// Un lead con cualquier rastro de cobro (enlace de pago generado o pago confirmado), marcado como pagado, ganado o con un
+// alquiler ganado o ya pasado al ERP (`deals`, de donde sale /admin/api/bookings) no se purga nunca aquí.
 export function leadRetenido(lead) {
   if (!lead) return true;
-  if (lead.paid === true || lead.paidAt) return true;
+  if (lead.paid === true || lead.paidAt || lead.status === "won" || lead.erpCreated) return true;
   const h = Array.isArray(lead.history) ? lead.history : [];
-  return h.some((e) => e && (e.type === "paylink" || e.type === "payment"));
+  if (h.some((e) => e && (e.type === "paylink" || e.type === "payment"))) return true;
+  const deals = Array.isArray(lead.deals) ? lead.deals : [];
+  return deals.some((d) => d && (d.status === "won" || d.erpCreated));
 }
 
 export async function purgaPasada({ redis, cfg, now = Date.now(), deleteLead, tieneCitaFutura = async () => false, log = console, proyecto = "bot" }) {
@@ -108,7 +111,15 @@ export async function purgaPasada({ redis, cfg, now = Date.now(), deleteLead, ti
       if (aplicar && c.borradas < TOPE_PURGA) {
         // se vuelve a leer justo antes de borrar: si entró un mensaje entre medias, ya no está vencida
         const t2 = ultimoTs(await redis.get(key));
-        if (t2 != null && t2 < corte) { await redis.del(key); c.borradas++; }
+        if (t2 != null && t2 < corte) {
+          await redis.del(key);
+          c.borradas++;
+          // la ficha guarda hasta 200 caracteres del último mensaje (vista previa del panel): con la conversación, se va
+          const tel = key.slice("conv:".length);
+          const raw = await redis.get(`lead:${tel}`);
+          let lead = null; try { lead = raw ? JSON.parse(raw) : null; } catch { lead = null; }
+          if (lead && lead.lastMessage && Number(lead.updatedAt) < corte) { lead.lastMessage = ""; await redis.set(`lead:${tel}`, JSON.stringify(lead)); }
+        }
       }
     }
     r.conv = c;
@@ -126,7 +137,8 @@ export async function purgaPasada({ redis, cfg, now = Date.now(), deleteLead, ti
       // Legal A.2 fila 5: la purga es del «contacto que NO reservó». El cobro solo vive en lead.history (no hay almacén
       // aparte): borrar un lead que pagó borraría lo único que queda del pago. Se retiene, y también con un pago a medias,
       // estado «won» o una cita futura (Seguridad, revisión previa del 11-oct).
-      if (leadRetenido(lead) || (await redis.get(`pendingpay:${tel}`)) || (await redis.get(`status:${tel}`)) === "won" || (await tieneCitaFutura(tel))) { l.retenidos++; continue; }
+      if (leadRetenido(lead) || (await redis.get(`pendingpay:${tel}`)) || (await redis.get(`pendingrsv:${String(tel).replace(/\D/g, "")}`))
+        || (await redis.get(`status:${tel}`)) === "won" || (await tieneCitaFutura(tel))) { l.retenidos++; continue; }
       l.vencidos++;
       if (aplicar && l.borrados < TOPE_PURGA) { await deleteLead(tel); l.borrados++; }
     }
