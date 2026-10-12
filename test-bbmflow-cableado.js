@@ -50,12 +50,16 @@ const trozo = (ini, fin) => { const i = src.indexOf(ini); assert.ok(i >= 0, `no 
   assert.ok(/else reply = reply \+ "\\n\\n" \+ cierre\.texto;/.test(c), "si falla, el texto de reserva se añade siempre (nunca un «aquí tienes tu enlace» sin enlace)");
   ok("la rama [PAY] de erp: no usa el flujo de pago de Dion; si falla, añade el texto de reserva");
 }
-// 5) el enlace de pago del erp: importe de la base, sin comisión, sin Stripe
+// 5) el enlace de pago del erp lo crea el ERP (F3 Entrega 2, camino B, 12-oct-2026): el modo erp no puede crear facturas con la clave de Railway
 {
-  const f = sinComentarios(trozo("async function crearFacturaRsv(", "\n}\n"));
-  assert.ok(/external_id, amount: importe, currency: moneda/.test(f) && /invoice_duration: duracionS/.test(f));
-  assert.ok(!/GATEWAY_FEE_PCT|1 \+/.test(f) && !/createStripe|stripeClient|checkout\.sessions/.test(f), "sin comisión ni Stripe");
-  ok("crearFacturaRsv: external_id e importe de la reserva, sin comisión, sin Stripe, con caducidad");
+  assert.ok(!/crearFacturaRsv|crearFactura:/.test(sinComentarios(src)), "el modo erp ya no tiene una función que cree facturas de Xendit");
+  const c = sinComentarios(trozo("const cierreErp = createCierreErp({", "});"));
+  assert.ok(!/XENDIT|axios|xendit/i.test(c), "el cierre del erp no recibe nada de Xendit");
+  assert.ok(/derivaPersona: derivaPersonaBbm/.test(c), "lo que promete «el equipo te escribe» deja la petición de persona en la ficha");
+  assert.ok(/derivaPersona: derivaPersonaBbm/.test(sinComentarios(trozo("const bbmErpTools = createErpTools(", "\n"))), "también la herramienta (sin configurar)");
+  const d = sinComentarios(trozo("async function derivaPersonaBbm(", "\n}\n"));
+  assert.ok(/pidePersona: Date\.now\(\), intent: "human"/.test(d) && /setWaiting\(tel, true\)/.test(d), "derivar = la misma petición de persona de BBM-50");
+  ok("el enlace del erp lo crea el ERP; el cierre no toca Xendit; derivar a una persona usa pidePersona (BBM-50)");
 }
 // 6) interruptores
 {
@@ -75,6 +79,7 @@ const trozo = (ini, fin) => { const i = src.indexOf(ini); assert.ok(i >= 0, `no 
 // 8) el aviso de pago cuelga de la puerta y se deduplica por factura
 {
   assert.ok(/onResultado: avisoPagoRsv/.test(src));
+  assert.ok(/ipDe: \(req\) => ipCliente\(req\)\.ip/.test(src), "el límite por IP de los avisos rsv: usa la IP del cliente tras el proxy (penúltimo salto)");
   assert.ok(/dedupe: async \(invoiceId\) => !\(await alreadyProcessedPayment\(`xendit-rsv:\$\{invoiceId\}`\)\)/.test(src));
   const m = trozo("async function marcaLeadPagadoErp(", "\n}\n");
   assert.ok(!/sendWhatsApp|notifyTelegram|Falta crear la reserva/.test(m), "marcar ganado no manda los avisos del flujo viejo");

@@ -2,25 +2,25 @@
 // Ejecutar: node test-webhook-rsv.js
 // index.js no se puede importar en un test (arranca Express + Redis); por eso la puerta vive en xendit-rsv.js y es la MISMA que usa index.js.
 import assert from "node:assert";
-import { createRsvForwarder, createXenditGate, esAvisoRsv, RSV_TIMEOUT_MS } from "./xendit-rsv.js";
+import { createRsvForwarder, createXenditGate, createLimitePorIp, esAvisoRsv, RSV_TIMEOUT_MS, RSV_MAX_BYTES, RSV_POR_IP_MIN } from "./xendit-rsv.js";
 
 const silent = { warn() {}, error() {}, log() {} };
 const TOKEN = "tok-xendit-0123456789";
 let n = 0;
 const ok = (m) => { n++; console.log("ok -", m); };
 
-function mkReq({ token = TOKEN, body, raw }) {
+function mkReq({ token = TOKEN, body, raw, ip = "1.2.3.4" }) {
   const rawBody = raw !== undefined ? Buffer.from(raw) : Buffer.from(JSON.stringify(body ?? {}));
-  return { get: (h) => (h.toLowerCase() === "x-callback-token" ? token : undefined), body, rawBody };
+  return { get: (h) => (h.toLowerCase() === "x-callback-token" ? token : undefined), body, rawBody, ip };
 }
 function mkRes() { const r = { code: null, sendStatus(c) { r.code = c; return r; } }; return r; }
 
-function harness({ erpUrl = "https://erp.test", fetchImpl, token = TOKEN } = {}) {
+function harness({ erpUrl = "https://erp.test", fetchImpl, token = TOKEN, admiteIp } = {}) {
   const calls = [];
   const f = fetchImpl || (async () => ({ status: 200 }));
   const wrapped = async (url, init) => { calls.push({ url, init }); return f(url, init, calls.length); };
   const forwarder = createRsvForwarder({ erpUrl, fetchImpl: wrapped, log: silent, project: "T" });
-  const gate = createXenditGate({ token, forwarder, log: silent, project: "T" });
+  const gate = createXenditGate({ token, forwarder, log: silent, project: "T", ...(admiteIp ? { admiteIp } : {}) });
   let nextCalls = 0;
   const run = async (req) => { const res = mkRes(); nextCalls = 0; await gate(req, res, () => { nextCalls++; }); return res; };
   return { run, calls, next: () => nextCalls };
@@ -116,16 +116,65 @@ ok("edge 200→200 · 400/413→mismo 4xx · 401/403/404/429/5xx→502");
 }
 
 {
+  // F3 Entrega 2 (consulta de Seguridad 12-oct): para un `rsv:` el token lo decide la EDGE (el de Ajustes › Cobros), no el de Railway
   const h = harness();
-  assert.equal((await h.run(mkReq({ body, token: "otro-token" }))).code, 403);
+  assert.equal((await h.run(mkReq({ body, token: "corto" }))).code, 403, "token sin forma (<16) → 403 sin reenvío");
   assert.equal((await h.run(mkReq({ body, token: "" }))).code, 403);
-  assert.equal((await h.run(mkReq({ body, token: TOKEN + "x" }))).code, 403);
+  assert.equal((await h.run(mkReq({ body, token: "tok con espacios 0123456789" }))).code, 403);
+  assert.equal((await h.run(mkReq({ body, token: "x".repeat(201) }))).code, 403);
   assert.equal(h.calls.length, 0);
+  const otro = "OTRO_token-de-Ajustes_0123456789";
+  assert.equal((await h.run(mkReq({ body, token: otro }))).code, 200, "un token con forma válida distinto del de Railway se reenvía: decide la edge");
+  assert.equal(h.calls[0].init.headers["x-callback-token"], otro, "y se reenvía ESE token");
+  const h401 = harness({ fetchImpl: async () => ({ status: 401 }) });
+  assert.equal((await h401.run(mkReq({ body, token: otro }))).code, 502, "si la edge lo rechaza (401) → 502, como siempre");
+  const h2 = harness({ token: "" });
+  assert.equal((await h2.run(mkReq({ body }))).code, 200, "sin XENDIT_CALLBACK_TOKEN en Railway un rsv: se reenvía igual (la edge tiene el suyo)");
+  assert.equal(h2.calls.length, 1);
+  assert.equal(h.next() + h2.next(), 0);
+  ok("rsv: token con forma → se reenvía tal cual y decide la edge (401 → 502); sin forma → 403; no hace falta el token de Railway");
+}
+{
+  // filtro de forma barato antes de reenviar
+  const h = harness();
+  for (const [b, esperado, que] of [
+    [{ ...body, external_id: "rsv:no-es-un-uuid" }, 400, "external_id rsv: sin uuid"],
+    [{ ...body, external_id: RSV + "x" }, 400, "uuid con cola"],
+    [{ ...body, id: "inv con espacio" }, 400, "id con espacio"],
+    [{ ...body, id: 5 }, 400, "id no texto"],
+    [{ ...body, id: "i".repeat(101) }, 400, "id largo"],
+  ]) assert.equal((await h.run(mkReq({ body: b }))).code, esperado, que);
+  assert.equal((await h.run(mkReq({ body, raw: JSON.stringify({ ...body, relleno: "x".repeat(RSV_MAX_BYTES) }) }))).code, 413, "cuerpo > 64 KB");
+  assert.equal(h.calls.length, 0, "nada de eso llega a la edge");
+  ok("rsv: external_id ^rsv:<uuid>$, id ^[A-Za-z0-9_-]{1,100}$ y tope de 64 KB, antes de reenviar");
+}
+{
+  // límite por IP: por encima del tope → 429 (Xendit reintenta), otras IPs no se ven afectadas, la ventana se renueva
+  let t = 0;
+  const admite = createLimitePorIp({ max: 3, now: () => t });
+  const h = harness({ admiteIp: admite });
+  for (let i = 0; i < 3; i++) assert.equal((await h.run(mkReq({ body, ip: "9.9.9.9" }))).code, 200);
+  assert.equal((await h.run(mkReq({ body, ip: "9.9.9.9" }))).code, 429);
+  assert.equal((await h.run(mkReq({ body, ip: "8.8.8.8" }))).code, 200, "otra IP sigue pasando");
+  t = 60_000;
+  assert.equal((await h.run(mkReq({ body, ip: "9.9.9.9" }))).code, 200, "ventana nueva");
+  assert.equal(h.calls.length, 5);
+  assert.ok(RSV_POR_IP_MIN >= 60, "el tope por defecto deja pasar los reintentos de Xendit (pocas IPs compartidas)");
+  const cuenta = createLimitePorIp({ max: 1, tope: 2, now: () => 0 });
+  cuenta("a"); cuenta("b"); assert.equal(cuenta("c"), true, "si crece demasiado se vacía, no bloquea a nadie nuevo");
+  ok("rsv: límite por IP (429 por encima, por IP, ventana de 1 min, memoria acotada)");
+}
+{
+  // el resto (paylink_) sigue exigiendo el token de Railway
+  const pay = { id: "x1", external_id: "paylink_628111_17", status: "PAID" };
+  const h = harness();
+  assert.equal((await h.run(mkReq({ body: pay, token: "OTRO_token-de-Ajustes_0123456789" }))).code, 403);
+  assert.equal((await h.run(mkReq({ body: pay, token: "" }))).code, 403);
   assert.equal(h.next(), 0);
   const h2 = harness({ token: "" });
-  assert.equal((await h2.run(mkReq({ body }))).code, 503);
-  assert.equal(h2.calls.length, 0);
-  ok("token inválido/ausente → 403 y sin reenvío; sin XENDIT_CALLBACK_TOKEN → 503 (como antes)");
+  assert.equal((await h2.run(mkReq({ body: pay }))).code, 503);
+  assert.equal(h.calls.length + h2.calls.length, 0);
+  ok("paylink_: token de Railway como siempre (403 si no coincide, 503 si falta)");
 }
 
 {

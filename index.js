@@ -2758,7 +2758,7 @@ async function markLeadPaid(phone, provider, amountIDR, receiptUrl) {
   }
 }
 
-// Interruptor de backend de BBM (F8-7c, parte segura): `dion` (hoy) o `erp`. Por defecto Redis `bbm:backend` (editable SIN redeploy) > BBM_BACKEND > dion.
+// Interruptor de backend de BBM (F8-7c, parte segura): `dion` (hoy) o `erp`. Por defecto Redis `bbm:backend` > BBM_BACKEND > dion. (Ningún panel escribe aún `bbm:backend`, medido 12-oct: se cambia con la variable.)
 // Todavía NO lo lee ninguna rama de la conversación: solo está cableado y visible en /admin/api/health. Con `dion` (o sin variables) nada cambia.
 const bbmBackendSw = createBackendSwitch({ redis: () => redisClient, envValue: process.env.BBM_BACKEND, project: PROJECT_NAME, enlaceVivo: async (tel) => !!(await bbmPendingRsv.lee(tel)) }); // un enlace rsv: vivo ata la conversación a erp aunque caduque el pin
 // ── F8-7 (7a sombra + 7c modo erp): cliente de reservas-bot y piezas de bbmflow.js ──────────────────────────────────────────────────
@@ -2771,32 +2771,27 @@ const bbmIndiceRsv = createReservaIndex({ redis: () => redisClient });
 // «Solo seguir cotizaciones aún vendibles» (F8 pieza 6): `bbmseg:<tel>` guarda producto+fechas de la última cotización del ERP y el tick pregunta a `cotiza` antes de cada envío.
 // Solo existe con BBM_ERP_URL + BBM_RESERVAS_SECRET; el tick lo exige salvo ERP_SEGUIMIENTO_VIVA=0 (sin verificador y exigido ⇒ no se envía a nadie).
 const bbmViva = bbmErp.enabled ? createCotizacionViva({ erp: bbmErp, redis: () => redisClient, hoy: todayBiz, project: PROJECT_NAME }) : null;
-const bbmErpTools = createErpTools({ erp: bbmErp, quotes: bbmQuotes, seg: bbmViva, project: PROJECT_NAME });
+const bbmErpTools = createErpTools({ erp: bbmErp, quotes: bbmQuotes, seg: bbmViva, derivaPersona: derivaPersonaBbm, project: PROJECT_NAME });
 const bbmSombraN = Math.max(1, parseInt(process.env.BBM_SOMBRA_N || "30", 10) || 30);
 const bbmSombra = process.env.BBM_SOMBRA === "1" && bbmErp.enabled ? createSombra({ erp: bbmErp, redis: () => redisClient, n: bbmSombraN, project: PROJECT_NAME }) : null;
+// El flujo del ERP le dijo al cliente que una persona del equipo seguirá (sin configurar, enlace fallido, precio a confirmar…): la petición queda en la ficha
+// (`pidePersona`, BBM-50) hasta que alguien le conteste de verdad (atendidoPorPersona), y el lead sale en «por responder» del panel. El aviso al equipo
+// ya lo manda bbmflow (avisaEquipoBbm). Lo hace el servidor, nunca el modelo (lección de Bots del 12-oct).
+async function derivaPersonaBbm(tel, motivo) {
+  const lead = await getLead(tel);
+  if (!(lead && lead.pidePersona)) await updateLeadFields(tel, { pidePersona: Date.now(), intent: "human" });
+  await setWaiting(tel, true);
+  console.log(`[${PROJECT_NAME}] [bbmflow] derivado a una persona (${String(motivo).slice(0, 40)})`);
+}
 async function avisaEquipoBbm(texto) {
   await notifyTelegram(texto, "⚠️ Aviso del flujo de reservas del ERP (el detalle va al WhatsApp del responsable)");
   if (OWNER_PHONE) await sendWhatsApp(OWNER_PHONE, texto);
 }
-// El enlace de pago del modo erp: importe y external_id los pone la base (cobro de la reserva), NO pasa por createRentalPayLink (sin comisión del 3 %, sin Stripe).
-async function crearFacturaRsv({ external_id, importe, moneda, descripcion, duracionS }) {
-  if (!XENDIT_SECRET_KEY) return null;
-  try {
-    const res = await axios.post("https://api.xendit.co/v2/invoices", {
-      external_id, amount: importe, currency: moneda, description: String(descripcion).slice(0, 250), invoice_duration: duracionS,
-      success_redirect_url: STRIPE_SUCCESS_URL || "https://balibestmotorcycle.com/?booking=confirmed",
-      failure_redirect_url: STRIPE_CANCEL_URL || "https://balibestmotorcycle.com/",
-    }, { auth: { username: XENDIT_SECRET_KEY, password: "" }, timeout: 15000 });
-    console.log(`[${PROJECT_NAME}] Xendit invoice rsv: ${importe} ${moneda}`);
-    return res.data && res.data.invoice_url ? { url: res.data.invoice_url, id: res.data.id } : null;
-  } catch (e) {
-    console.error(`[${PROJECT_NAME}] Xendit invoice rsv error:`, e.response ? JSON.stringify(e.response.data) : e.message);
-    return null;
-  }
-}
+// El enlace de pago del modo erp lo crea el ERP (edge reservas-enlace, F3 Entrega 2, camino B del owner 12-oct-2026): el modo erp ya NO crea facturas con
+// XENDIT_SECRET_KEY (esa clave sigue en Railway para el camino de Dion y el panel; se revoca cuando Dion deje de usarla).
 const cierreErp = createCierreErp({
   erp: bbmErp, quotes: bbmQuotes, pendingRsv: bbmPendingRsv, indice: bbmIndiceRsv, backend: bbmBackendSw,
-  crearFactura: crearFacturaRsv, avisaEquipo: avisaEquipoBbm, project: PROJECT_NAME,
+  avisaEquipo: avisaEquipoBbm, derivaPersona: derivaPersonaBbm, project: PROJECT_NAME,
 });
 // Backend de ESTE turno. Sin ERP configurado: dion, sin leer nada. Una sola vez por mensaje (ver el handler).
 async function bbmBackendTurno(tel) {
@@ -2831,13 +2826,14 @@ const avisoPagoRsv = createAvisoPago({
     if (r.ok) { const h = await getConversation(tel); h.push({ role: "assistant", content: texto, ts: Date.now(), by: "bot" }); await saveConversation(tel, h); }
     return r;
   },
-  marcaPagado: marcaLeadPagadoErp, avisaEquipo: avisaEquipoBbm, project: PROJECT_NAME,
+  marcaPagado: marcaLeadPagadoErp, avisaEquipo: avisaEquipoBbm, derivaPersona: derivaPersonaBbm, project: PROJECT_NAME,
 });
-// Puerta del webhook (xendit-rsv.js): valida el token (503 si falta, 403 si no coincide, tiempo constante) y, si el aviso es de una reserva del ERP
-// (`rsv:`), lo reenvía a la edge reservas-pago y ACABA ahí (F8-7b, independiente de BBM_BACKEND); el resto sigue a la rama `paylink_` de siempre.
-// Solo necesita BBM_ERP_URL: el token que reenvía es el del propio aviso de Xendit. Sin esa URL un `rsv:` recibe 503 (Xendit reintenta, no se pierde).
+// Puerta del webhook (xendit-rsv.js): un aviso de una reserva del ERP (`rsv:`) pasa un filtro de forma y un límite por IP y se reenvía a la edge
+// reservas-pago, que valida el token (el de Ajustes › Cobros, F3 E2) y ACABA ahí (F8-7b, independiente de BBM_BACKEND). El resto valida el token de
+// Railway (503 si falta, 403 si no coincide, tiempo constante) y sigue a la rama `paylink_` de siempre. Sin BBM_ERP_URL un `rsv:` recibe 503 (Xendit reintenta).
 const xenditGate = createXenditGate({
-  token: XENDIT_CALLBACK_TOKEN, forwarder: createRsvForwarder({ erpUrl: process.env.BBM_ERP_URL, project: PROJECT_NAME }), onResultado: avisoPagoRsv, project: PROJECT_NAME,
+  token: XENDIT_CALLBACK_TOKEN, forwarder: createRsvForwarder({ erpUrl: process.env.BBM_ERP_URL, project: PROJECT_NAME }), onResultado: avisoPagoRsv,
+  ipDe: (req) => ipCliente(req).ip, project: PROJECT_NAME,
 });
 app.post("/webhook/xendit", xenditGate, async (req, res) => {
   try {

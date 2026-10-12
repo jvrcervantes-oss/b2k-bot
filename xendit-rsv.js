@@ -8,6 +8,7 @@
 //   · Se reenvía el cuerpo EXACTO (req.rawBody) y el `x-callback-token` tal cual. Nunca JSON.stringify(req.body): re-serializar cambia
 //     bytes y rompe cualquier comprobación futura sobre el cuerpo original.
 //   · Independiente de BBM_BACKEND: un pago `rsv:` llegado con el interruptor en `dion` (vuelta atrás) no puede perderse.
+//   · El token de un `rsv:` lo valida la EDGE, no el bot (ver createXenditGate); el bot solo filtra la forma y limita por IP.
 //   · La idempotencia es de la EDGE. Aquí no se deduplica: dos avisos iguales se reenvían los dos.
 //   · Respuesta a Xendit (Xendit reintenta todo lo que no sea 2xx):
 //        edge 200                      → 200 (incluso si la edge dice «pago a revisar»: ya lo tiene la base y avisa al equipo)
@@ -68,19 +69,49 @@ export function createRsvForwarder(o = {}) {
   return { enabled, reenvia };
 }
 
-// Puerta del webhook de Xendit, como middleware de Express: token → (si es `rsv:`) reenvío → next() para todo lo demás.
-// El token se valida ANTES de mirar el cuerpo (un aviso sin token válido no llega a nada, ni siquiera al reenvío). Misma semántica que tenía
-// el handler: sin token configurado 503; token distinto 403, comparado en tiempo constante.
+// Filtro barato de un aviso `rsv:` ANTES de reenviarlo (condiciones de la consulta de Seguridad del 12-oct, F3 E2 Cobros, plan_f3_setup_modulos.md ›
+// Corte del bot (3)). Un aviso real de Xendit las cumple siempre; lo que no, no llega a la edge.
+export const RSV_MAX_BYTES = 64 * 1024;                 // un aviso de factura de Xendit ocupa ~2 KB
+export const RSV_POR_IP_MIN = 120;                      // avisos `rsv:` por IP y minuto. Xendit los manda desde pocas IPs compartidas por TODOS los avisos
+                                                       // de esta cuenta, así que el tope es por encima del volumen de BBM; frena el martilleo, no a Xendit
+const TOKEN_FORMA = /^[A-Za-z0-9_-]{16,200}$/;
+const RSV_EXTERNAL = /^rsv:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const INVOICE_ID = /^[A-Za-z0-9_-]{1,100}$/;
+
+// Límite por IP en memoria (un proceso): ventana fija de 1 minuto. Se vacía entero si crece demasiado (no es una lista de bloqueo).
+export function createLimitePorIp({ max = RSV_POR_IP_MIN, ventanaMs = 60_000, now = () => Date.now(), tope = 5000 } = {}) {
+  const m = new Map();
+  return function admite(ip) {
+    const t = now(), k = String(ip || "?").slice(0, 64);
+    let e = m.get(k);
+    if (!e || t - e.desde >= ventanaMs) { if (m.size >= tope) m.clear(); e = { desde: t, n: 0 }; m.set(k, e); }
+    e.n += 1;
+    return e.n <= max;
+  };
+}
+
+// Puerta del webhook de Xendit, como middleware de Express.
+//   · Aviso de una RESERVA del ERP (`rsv:`): filtro de forma (cabecera, external_id, id, tamaño) → límite por IP → reenvío a reservas-pago con el
+//     `x-callback-token` del aviso. NO se exige el XENDIT_CALLBACK_TOKEN de Railway: decide la edge, que lo compara con el de Ajustes › Cobros (Vault)
+//     o, si está vacío, con el de su entorno (F3 Entrega 2, 12-oct-2026). Si el bot exigiera el suyo, unas claves de otro modo o cuenta en Ajustes
+//     dejarían morir aquí los avisos de pagos reales. Un token falso lo rechaza la edge (401 → 502 aquí; nada cambia en la base).
+//   · Todo lo demás (`paylink_`, el flujo de Dion): el token de Railway, como siempre. Sin token configurado 503; distinto 403, en tiempo constante.
 export function createXenditGate(o = {}) {
   // onResultado({ externalId, invoiceId, cuerpo }) — opcional, mejor esfuerzo, DESPUÉS de responder 200: avisar al cliente de que pagó. Un fallo ahí
   // jamás cambia lo que se contesta a Xendit (el pago ya está en la base; reintentar solo duplicaría el aviso, que además se deduplica aguas abajo).
-  const { token: esperado, forwarder, onResultado, log = console, project = "bot" } = o;
+  // ipDe(req) → ip del cliente (ipCliente de panel-cuentas.js); admiteIp(ip) → bool (createLimitePorIp).
+  const { token: esperado, forwarder, onResultado, ipDe = (req) => String(req.ip || ""), admiteIp = createLimitePorIp(), log = console, project = "bot" } = o;
   return async function xenditGate(req, res, next) {
-    if (!esperado) { log.warn(`[${project}] /webhook/xendit recibido pero falta XENDIT_CALLBACK_TOKEN — ignorado`); return res.sendStatus(503); }
     const token = req.get("x-callback-token") || "";
-    const a = Buffer.from(token), b = Buffer.from(esperado);
-    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) { log.warn(`[${project}] /webhook/xendit token inválido`); return res.sendStatus(403); }
     if (esAvisoRsv(req.body)) {
+      const raw = req.rawBody;
+      const largo = Buffer.isBuffer(raw) ? raw.length : typeof raw === "string" ? Buffer.byteLength(raw) : 0;
+      if (!TOKEN_FORMA.test(token)) { log.warn(`[${project}] [xendit-rsv] aviso rsv sin token con forma válida: 403`); return res.sendStatus(403); }
+      if (!RSV_EXTERNAL.test(req.body.external_id) || typeof req.body.id !== "string" || !INVOICE_ID.test(req.body.id)) { log.warn(`[${project}] [xendit-rsv] aviso rsv con external_id o id inválidos: 400`); return res.sendStatus(400); }
+      if (largo > RSV_MAX_BYTES) { log.warn(`[${project}] [xendit-rsv] aviso rsv demasiado grande: 413`); return res.sendStatus(413); }
+      let ipOk = true;
+      try { ipOk = admiteIp(ipDe(req)); } catch { /* sin IP legible: se deja pasar, la edge decide */ }
+      if (!ipOk) { log.warn(`[${project}] [xendit-rsv] demasiados avisos rsv desde una IP: 429`); return res.sendStatus(429); }
       try {
         const r = await forwarder.reenvia({ rawBody: req.rawBody, token, invoiceId: req.body.id });
         res.sendStatus(r.status);
@@ -94,6 +125,9 @@ export function createXenditGate(o = {}) {
         return res.sendStatus(502);
       }
     }
+    if (!esperado) { log.warn(`[${project}] /webhook/xendit recibido pero falta XENDIT_CALLBACK_TOKEN — ignorado`); return res.sendStatus(503); }
+    const a = Buffer.from(token), b = Buffer.from(esperado);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) { log.warn(`[${project}] /webhook/xendit token inválido`); return res.sendStatus(403); }
     return next();
   };
 }

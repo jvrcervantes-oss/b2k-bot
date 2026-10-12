@@ -1,6 +1,6 @@
 // Cliente del bot de BBM contra el ERP (F8 pieza 7, parte segura, 9-oct-2026). Habla con la edge `reservas-bot` del ERP: catálogo, entrega
-// (km), cotización, reserva y cliente. NADA de esto se usa todavía en la conversación: el modo erp (texto, desglose, sombra, corte) viene
-// después. Con BBM_ERP_URL/BBM_RESERVAS_SECRET ausentes el módulo no hace nada y el bot se comporta EXACTAMENTE como antes.
+// (km), cotización, reserva y cliente; y con la edge `reservas-enlace` (F3 Entrega 2, 12-oct): el enlace de pago de la reserva, que crea el ERP.
+// Con BBM_ERP_URL/BBM_RESERVAS_SECRET ausentes el módulo no hace nada y el bot se comporta EXACTAMENTE como antes.
 //
 // Todo entra por createBbmErp(opciones): no toca el entorno ni la red por su cuenta, así se prueba con un fetch de mentira. Patrón de
 // botcat.js de la rama lawang (caché con último bueno, fail-closed), pero hablando con reservas-bot, NO con la edge bot-api de Lawang.
@@ -32,7 +32,12 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const ESTADOS_ENTREGA = new Set(["ok", "sin_resultado", "ambigua", "tope", "pausado", "ocupado", "error"]);
 // 409/429 con significado propio; cualquier otro 409 se devuelve como motivo 'datos'
-const MOTIVOS_409 = new Set(["entrega_a_confirmar", "entrega_no_configurada", "sin_disponibilidad"]);
+// sin_configurar (F3, 12-oct-2026): el negocio aún no ha terminado de configurar el ERP (moneda, impuesto, flota, cobros…). Lo dan `cotiza` y `reserva`
+// de reservas-bot y la edge reservas-enlace. NO es una caída: el ERP dice que no, y el bot deriva a una persona sin prometer nada.
+const MOTIVOS_409 = new Set(["entrega_a_confirmar", "entrega_no_configurada", "sin_disponibilidad", "sin_configurar"]);
+const PASO = /^[a-z_]{1,40}$/;   // `paso` de un sin_configurar (moneda, impuesto_pkp, precio_con_impuesto, flota, cobros…); otro valor = null (sin configurar genérico)
+export const ENLACE_TIMEOUT_MS = 20000;   // reservas-enlace espera a Xendit hasta 15 s
+export const ENLACE_REINTENTO_MS = 4000;  // tras un 409 en_curso (otra petición está creando el enlace; la marca dura 30 s)
 
 const KO = (motivo, extra = {}) => ({ ok: false, motivo, ...extra });
 const esObj = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
@@ -136,7 +141,7 @@ function leeCliente(r) {
 export function createBbmErp(o = {}) {
   const {
     url, secret, timeoutMs = TIMEOUT_MS, catalogoTtlMs = CATALOGO_TTL_MS, catalogoMaxStaleMs = CATALOGO_MAX_STALE_MS,
-    enviaClave = false, fetchImpl = globalThis.fetch, now = () => Date.now(), log = console, project = "bot",
+    enviaClave = false, fetchImpl = globalThis.fetch, now = () => Date.now(), log = console, project = "bot", enlaceTimeoutMs = ENLACE_TIMEOUT_MS,
   } = o;
   const base = typeof url === "string" ? url.trim().replace(/\/+$/, "") : "";
   const enabled = !!(base && secret);
@@ -146,15 +151,18 @@ export function createBbmErp(o = {}) {
   let inflight = null;
 
   // POST a reservas-bot. → {ok:true, status, r} | {ok:false, motivo, ...}. NUNCA lanza.
-  async function llamaErp(accion, cuerpo) {
+  const llamaErp = (accion, cuerpo) => llamaEdge("reservas-bot", accion, { accion, ...cuerpo }, timeoutMs);
+
+  // POST a una edge del ERP con el secreto del bot. `accion` solo sirve para el log; el cuerpo va tal cual.
+  async function llamaEdge(edge, accion, cuerpo, ms) {
     if (!enabled) return KO("no_configurado");
     let resp;
     try {
-      resp = await fetchImpl(`${base}/functions/v1/reservas-bot`, {
+      resp = await fetchImpl(`${base}/functions/v1/${edge}`, {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json", "x-bot-secret": secret },
-        body: JSON.stringify({ accion, ...cuerpo }),
-        signal: AbortSignal.timeout(timeoutMs),
+        body: JSON.stringify(cuerpo),
+        signal: AbortSignal.timeout(ms),
       });
     } catch (e) {
       log.warn(p(`${accion}: sin respuesta (${e && e.name === "TimeoutError" ? "tiempo" : "red"})`));
@@ -173,10 +181,13 @@ export function createBbmErp(o = {}) {
     if (st === 429) { log.warn(p(`${accion}: tope ${codigo || ""}`)); return KO(codigo === "tope_global" ? "tope_global" : "tope_telefono"); }
     if (st === 409) {
       log.log(p(`${accion}: 409 ${codigo || ""}`));
+      if (codigo === "sin_configurar") return KO("sin_configurar", { codigo, paso: str(json.paso) && PASO.test(json.paso) ? json.paso : null });
       return KO(MOTIVOS_409.has(codigo) ? codigo : "datos", { codigo });
     }
     if (st === 400 || st === 413) { log.error(p(`${accion}: la edge rechaza la petición (${st} ${codigo || ""})`)); return KO("peticion_invalida", { codigo }); }
-    log.warn(p(`${accion}: HTTP ${st}`));
+    log.warn(p(`${accion}: HTTP ${st}${codigo === "proveedor" ? " proveedor" : ""}`));
+    // 502 {error:'proveedor'} de reservas-enlace: Xendit no creó la factura (o no se sabe). NO es reintentable aquí: la edge deja la marca 30 s.
+    if (codigo === "proveedor") return KO("proveedor");
     return KO("no_disponible", { reintentable: st >= 500 });
   }
 
@@ -196,8 +207,8 @@ export function createBbmErp(o = {}) {
     if (!inflight) inflight = leeCatalogoErp().finally(() => { inflight = null; });
     const r = await inflight;
     if (r.ok) { catalogo = { at: now(), datos: r.datos }; return { ok: true, productos: r.datos, stale: false }; }
-    // un apagado explícito (módulo apagado, secreto roto) NO se tapa con la caché: el ERP dijo que no
-    if (r.motivo === "modulo_apagado" || r.motivo === "secreto_rechazado") { catalogo = null; return r; }
+    // un apagado explícito (módulo apagado, secreto roto, sin configurar) NO se tapa con la caché: el ERP dijo que no
+    if (r.motivo === "modulo_apagado" || r.motivo === "secreto_rechazado" || r.motivo === "sin_configurar") { catalogo = null; return r; }
     if (catalogo && now() - catalogo.at < catalogoMaxStaleMs) { log.warn(p("catalogo: ERP caído, se sirve el último bueno")); return { ok: true, productos: catalogo.datos, stale: true }; }
     return r;
   }
@@ -282,11 +293,43 @@ export function createBbmErp(o = {}) {
     return { ok: true, ...c };
   }
 
-  return { enabled, catalogo: getCatalogo, entrega, cotiza, reserva, cliente, _llamaErp: llamaErp };
+  // El enlace de pago de UNA reserva lo crea el ERP (F3 Entrega 2, camino B del owner, 12-oct-2026): edge reservas-enlace, cuerpo SOLO {reserva_id}.
+  // Importe, moneda, external_id y caducidad los pone la base; el bot ya no crea facturas en el modo erp. Idempotente: con un enlace vigente la edge
+  // devuelve el MISMO (repetido:true) sin ir a Xendit, así que también sirve para volver a pedirlo.
+  // → {ok:true, url, caduca_ms, external_id, repetido} | KO: sin_configurar{paso} · en_curso · no_pagable · proveedor · modulo_apagado · no_disponible…
+  // Con 409 en_curso (otra petición lo está creando) se espera `reintentoMs` y se reintenta UNA vez. Nunca se reintenta un 502: la edge no suelta la
+  // marca cuando no sabe si Xendit creó la factura, y un reintento inmediato solo daría en_curso.
+  async function enlace({ reserva_id, external_id }, { reintentoMs = ENLACE_REINTENTO_MS, espera = (ms) => new Promise((ok) => setTimeout(ok, ms)) } = {}) {
+    if (!str(reserva_id) || !UUID.test(reserva_id)) return KO("peticion_invalida", { codigo: "reserva_id" });
+    const id = reserva_id.toLowerCase();
+    const pide = () => llamaEdge("reservas-enlace", "enlace", { reserva_id: id }, enlaceTimeoutMs);
+    let r = await pide();
+    if (!r.ok && r.codigo === "en_curso") { log.warn(p("enlace: en curso en otra petición, reintento")); await espera(reintentoMs); r = await pide(); }
+    if (!r.ok) {
+      if (r.codigo === "en_curso" || r.codigo === "no_pagable") return KO(r.codigo);
+      return r;
+    }
+    const e = leeEnlace(r.r, `rsv:${id}`, now());
+    if (!e || (external_id !== undefined && e.external_id !== external_id)) { log.error(p("enlace: respuesta que no cumple el contrato")); return KO("no_disponible", { detalle: "respuesta_invalida" }); }
+    log.log(p(`enlace: ok reserva=${id}${e.repetido ? " (repetido)" : ""}`));
+    return { ok: true, ...e };
+  }
+
+  return { enabled, catalogo: getCatalogo, entrega, cotiza, reserva, cliente, enlace, _llamaErp: llamaErp };
+}
+
+// Respuesta de reservas-enlace: {url, caduca_en, external_id, repetido}. La URL es la del invoice de Xendit (https, sin espacios ni comillas); caduca_en es
+// la caducidad REAL de ese invoice (con repetido:true no casa con un cálculo local) y tiene que estar en el futuro.
+export function leeEnlace(r, externalEsperado, ahora = Date.now()) {
+  if (!esObj(r) || !str(r.url) || r.url.length > 500 || !/^https:\/\/[^\s"'<>]+$/.test(r.url)) return null;
+  if (r.external_id !== externalEsperado || !str(r.caduca_en)) return null;
+  const ms = Date.parse(r.caduca_en);
+  if (!Number.isFinite(ms) || ms <= ahora) return null;
+  return { url: r.url, caduca_ms: ms, external_id: r.external_id, repetido: r.repetido === true };
 }
 
 // ── Interruptor de backend (F8 pieza 7c, parte segura) ─────────────────────────────────────────────────────────────────────────────
-// `dion` (el sistema de hoy) o `erp`. Valor por defecto: Redis `bbm:backend` (lo edita el panel/CRM del bot, SIN redeploy) y, si no existe,
+// `dion` (el sistema de hoy) o `erp`. Valor por defecto: Redis `bbm:backend` (sin redeploy; ningún panel la escribe aún, medido 12-oct-2026) y, si no existe,
 // la variable BBM_BACKEND; si falta todo, `dion`. Valor desconocido ⇒ `dion` (la parte segura). Redis configurado pero caído ⇒ `dion`: el
 // interruptor existe para poder volver atrás, y sin poder leerlo no se arriesga a quedarse en erp.
 //

@@ -1,5 +1,5 @@
 {
-  "_": "Contrato CONGELADO entre bbmerp.js y las edges reservas-bot / reservas-pago del ERP (repo Agencia). Copiado a mano el 9-oct-2026 de erp/funciones/reservas-bot/index.ts (ultimo commit de esa edge en el repo Agencia: 4a498272) y de las migraciones 20261008136000_f8_totales_impuesto.sql, 20261008137000_f8_puerta_emision.sql y 20261008137500_f8_entrega_km.sql. Si una edge cambia de forma, cambia AQUI y en test-bbmerp.js a la vez: el test valida que el mock de la edge (los `ejemplos`) cumple la `forma` y que bbmerp.js interpreta cada uno. Tipos de `forma`: uuid, string, int, number, bool, date, timestamp, any; `?` al final = puede faltar o ser null; [x] = lista de x; {..} = objeto (se ignoran campos de más, que la base puede añadir).",
+  "_": "Contrato CONGELADO entre bbmerp.js y las edges reservas-bot / reservas-pago del ERP (repo Agencia). Copiado a mano el 9-oct-2026 de erp/funciones/reservas-bot/index.ts (ultimo commit de esa edge en el repo Agencia: 4a498272) y de las migraciones 20261008136000_f8_totales_impuesto.sql, 20261008137000_f8_puerta_emision.sql y 20261008137500_f8_entrega_km.sql. AMPLIADO el 12-oct-2026 (bbm-p25-bots) con el 409 sin_configurar de reservas-bot (copia de agencia 1012-1912-bbm-p21-backend, erp/funciones/reservas-bot/index.ts:159, S2 20261012170000_f3_e1_s2_guardas.sql) y la edge NUEVA reservas-enlace (copia 1012-1912-bbm-p23-cobros, erp/funciones/reservas-enlace/index.ts, migracion 20261012190000_f3_e2_cobros.sql). AMBAS FUENTES SIN ATERRIZAR ese dia: volver a comparar cuando aterricen p21 y p23. Si una edge cambia de forma, cambia AQUI y en test-bbmerp.js a la vez: el test valida que el mock de la edge (los `ejemplos`) cumple la `forma` y que bbmerp.js interpreta cada uno. Tipos de `forma`: uuid, string, int, number, bool, date, timestamp, any; `?` al final = puede faltar o ser null; [x] = lista de x; {..} = objeto (se ignoran campos de más, que la base puede añadir).",
   "peticion": {
     "cabecera": "x-bot-secret (variable BBM_RESERVAS_SECRET del bot)",
     "url": "${BBM_ERP_URL}/functions/v1/reservas-bot",
@@ -17,11 +17,12 @@
     "400": {"error": "json|accion|producto_id|fechas|campo_no_admitido|reserva_id|nombre|pais|direccion|contacto_telefono|..."},
     "401": {"error": "no_autorizado"},
     "404": {"error": "modulo_no_activo"},
-    "409": {"error": "entrega_a_confirmar|entrega_no_configurada|sin_disponibilidad|nombre|pais|telefono|no_aplica|datos", "mensaje": "string"},
+    "409": {"error": "entrega_a_confirmar|entrega_no_configurada|sin_disponibilidad|sin_configurar|nombre|pais|telefono|no_aplica|datos", "mensaje": "string", "paso": "string? (solo con sin_configurar: moneda|impuesto_pkp|precio_con_impuesto|flota|cobros...; regla ^[a-z_]{1,40}$, otro valor = generico)"},
     "413": {"error": "demasiado_grande"},
     "429": {"error": "tope_telefono|tope_global", "mensaje": "string"},
     "502": {"error": "base"}
   },
+  "sin_configurar": "409 {error:'sin_configurar', paso} lo dan SOLO `cotiza` y `reserva` (pasan por _exige_configurado; catalogo, entrega y cliente no). Sale el primer paso OBLIGATORIO sin hacer, en este orden: moneda, impuesto_pkp, precio_con_impuesto, flota; con la Entrega 2, `reserva` puede dar tambien `cobros` (y entonces la base aborta ENTERA: no deja bloqueo). Cualquier otro 55000 sigue siendo 502. El bot: no da precio, no promete plazo ni enlace y deriva a una persona.",
   "acciones": {
     "catalogo": {
       "forma": {"r": [{"id": "uuid", "numero_producto": "any?", "nombre": "string", "descripcion": "string?", "unidad": "string?", "tarifas": [{"dias": "int", "precio": "number", "moneda": "string", "etiqueta": "string?"}], "unidades": "int"}]},
@@ -66,6 +67,31 @@
         "nuevo": {"r": {"ok": true, "cliente_identificado": true, "creado": true, "motivo": null}},
         "ambiguo": {"r": {"ok": true, "cliente_identificado": false, "creado": false, "motivo": "telefono_ambiguo"}}
       }
+    }
+  },
+  "reservas_enlace": {
+    "_": "Edge NUEVA de la F3 Entrega 2 (12-oct-2026): el enlace de pago de UNA reserva del bot lo crea el ERP con la clave de Ajustes > Cobros (Vault). Se llama despues de `cliente`. Idempotente: con un enlace vigente devuelve el MISMO (repetido:true) sin ir a Xendit, asi que tambien sirve para volver a pedirlo.",
+    "peticion": {"url": "${BBM_ERP_URL}/functions/v1/reservas-enlace", "metodo": "POST", "cabecera": "x-bot-secret (el mismo BBM_RESERVAS_SECRET)", "campos_admitidos": ["reserva_id"], "tiempo": "~20 s en el bot (la edge espera a Xendit hasta 15 s)"},
+    "forma": {"r": {"url": "string", "caduca_en": "timestamp", "external_id": "string", "repetido": "bool"}},
+    "nota": "url = invoice_url de Xendit (https). caduca_en = expiry_date REAL del invoice: el bot la usa tal cual (con repetido:true no casa con un calculo local). external_id = 'rsv:' + reserva_id. Importe, moneda, descripcion y caducidad los pone la base: el bot no manda nada mas que el id.",
+    "errores": {
+      "400": {"error": "json|reserva_id|campo_no_admitido", "campos": "[string]?"},
+      "401": {"error": "no_autorizado"},
+      "404": {"error": "modulo_no_activo"},
+      "409": {"error": "sin_configurar|en_curso|no_pagable", "paso": "string? (con sin_configurar: cobros)"},
+      "413": {"error": "demasiado_grande"},
+      "502": {"error": "proveedor|base"}
+    },
+    "como_lo_trata_el_bot": {
+      "sin_configurar": "sin enlace; texto sin plazos ni promesas; deriva a una persona (la reserva, si la hay, caduca sola)",
+      "en_curso": "otra peticion lo esta creando (marca de 30 s): espera ~4 s y reintenta UNA vez; si sigue, fallo generico",
+      "no_pagable": "ya no es un bloqueo vivo del bot, le quedan < 5 min o importe IDR con decimales: borra cotizacion y reserva guardada, al equipo",
+      "proveedor": "Xendit no creo la factura (o no se sabe): fallo generico SIN reintento inmediato; la reserva queda para el siguiente [PAY]",
+      "base|404|401|caida": "fallo generico, al equipo"
+    },
+    "ejemplos": {
+      "nuevo": {"r": {"url": "https://checkout.xendit.co/web/6719abcd0123456789abcdef", "caduca_en": "2099-10-20T09:58:00.000Z", "external_id": "rsv:9a1e6c1a-0d52-4e0e-8a77-7f0b6f3a2222", "repetido": false}},
+      "repetido": {"r": {"url": "https://checkout.xendit.co/web/6719abcd0123456789abcdef", "caduca_en": "2099-10-20T09:58:00.000Z", "external_id": "rsv:9a1e6c1a-0d52-4e0e-8a77-7f0b6f3a2222", "repetido": true}}
     }
   },
   "reservas_pago": {

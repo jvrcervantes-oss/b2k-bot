@@ -53,7 +53,9 @@ for (const [accion, def] of Object.entries(CONTRATO.acciones)) {
   }
 }
 assert.deepEqual(Object.keys(CONTRATO.acciones).sort(), ["catalogo", "cliente", "cotiza", "entrega", "reserva"]);
-ok("los ejemplos de la edge cumplen la forma del contrato (5 acciones)");
+for (const [nombre, ej] of Object.entries(CONTRATO.reservas_enlace.ejemplos)) assert.deepEqual(valida(CONTRATO.reservas_enlace.forma, ej), [], `reservas_enlace.${nombre}`);
+assert.deepEqual(CONTRATO.reservas_enlace.peticion.campos_admitidos, ["reserva_id"]);
+ok("los ejemplos de la edge cumplen la forma del contrato (5 acciones de reservas-bot + reservas-enlace)");
 
 // ── harness ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 const SECRET = "bbm-reservas-secret-0123456789abcdef0123";
@@ -374,6 +376,104 @@ const RES = { fromVerificado: FROM, ...PEDIDO, mensajeId: "wamid.HBgLNjI4MTIzNDU
   for (const mal of [{ reserva_id: "x", nombre: "Ana", pais: "ES" }, { reserva_id: RESERVA.id, nombre: "A", pais: "España" }, { reserva_id: RESERVA.id, nombre: "Ana", pais: "" }, { reserva_id: RESERVA.id, nombre: 5, pais: "España" }]) assert.equal((await v.bbm.cliente(mal)).motivo, "peticion_invalida");
   assert.equal(v.llamadas.length, 0);
   ok("cliente: solo reserva_id, nombre y país; nombre saneado; ambiguo y no_aplica");
+}
+
+// ── 7b. sin_configurar (F3 S2, 12-oct-2026): 409 propio con su `paso`, distinto de una caída ──────────────────────────────────
+{
+  for (const [paso, esperado] of [["impuesto_pkp", "impuesto_pkp"], ["flota", "flota"], ["cobros", "cobros"], ["reservas-producto_sin_configurar", null], ["<b>", null], [undefined, null], [5, null]]) {
+    const m = mk(() => ({ status: 409, body: { error: "sin_configurar", ...(paso !== undefined ? { paso } : {}) } }));
+    const q = await m.bbm.cotiza(PEDIDO);
+    assert.deepEqual([q.ok, q.motivo, q.paso], [false, "sin_configurar", esperado], `cotiza paso=${paso}`);
+    const r = await m.bbm.reserva(RES);
+    assert.deepEqual([r.ok, r.motivo, r.paso], [false, "sin_configurar", esperado], `reserva paso=${paso}`);
+    assert.equal(m.llamadas.filter((c) => c.accion === "reserva").length, 1, "un sin_configurar no se reintenta");
+  }
+  // y no se confunde con una caída: una caída de verdad sigue siendo no_disponible
+  const c = mk(() => ({ status: 502, body: { error: "base" } }));
+  assert.equal((await c.bbm.cotiza(PEDIDO)).motivo, "no_disponible");
+  // el catálogo NO tapa un sin_configurar con el último bueno (el ERP dijo que no)
+  let modo = "ok";
+  const k = mk(() => (modo === "ok" ? E("catalogo", "ok") : { status: 409, body: { error: "sin_configurar", paso: "flota" } }));
+  assert.equal((await k.bbm.catalogo()).ok, true);
+  k.adv(10 * 60 * 1000); modo = "no";
+  assert.deepEqual([(await k.bbm.catalogo()).ok, (await k.bbm.catalogo()).motivo], [false, "sin_configurar"]);
+  ok("sin_configurar: motivo propio con `paso` validado (^[a-z_]{1,40}$), sin reintento, distinto de una caída; el catálogo no lo tapa con la caché");
+}
+
+// ── 7c. reservas-enlace (F3 Entrega 2): el enlace lo crea el ERP ──────────────────────────────────────────────────────────────
+{
+  const RID = RESERVA.id, EXT = `rsv:${RESERVA.id}`;
+  const ENL = CONTRATO.reservas_enlace;
+  function mkEnlace(respuestas) {
+    const llamadas = [];
+    const esperas = [];
+    const fetchImpl = async (url, init) => {
+      assert.equal(url, `${URL_ERP}/functions/v1/reservas-enlace`);
+      assert.equal(init.headers["x-bot-secret"], SECRET); assert.ok(init.signal instanceof AbortSignal);
+      const cuerpo = JSON.parse(init.body);
+      llamadas.push(cuerpo);
+      const extra = Object.keys(cuerpo).filter((x) => !ENL.peticion.campos_admitidos.includes(x));
+      if (extra.length) return { status: 400, json: async () => ({ error: "campo_no_admitido", campos: extra }) };
+      const r = respuestas(cuerpo, llamadas.length);
+      if (r instanceof Error) throw r;
+      return { status: r.status ?? 200, json: async () => r.body };
+    };
+    const bbm = createBbmErp({ url: URL_ERP, secret: SECRET, fetchImpl, now: () => Date.parse("2026-10-20T09:00:00Z"), log: silent, project: "T" });
+    return { bbm, llamadas, esperas, opts: { reintentoMs: 7, espera: async (ms) => { esperas.push(ms); } } };
+  }
+  const nuevo = () => ({ body: clon(ENL.ejemplos.nuevo) });
+  const m = mkEnlace(nuevo);
+  const r = await m.bbm.enlace({ reserva_id: RID.toUpperCase(), external_id: EXT }, m.opts);
+  assert.deepEqual(r, { ok: true, url: ENL.ejemplos.nuevo.r.url, caduca_ms: Date.parse(ENL.ejemplos.nuevo.r.caduca_en), external_id: EXT, repetido: false });
+  assert.deepEqual(m.llamadas, [{ reserva_id: RID }], "solo el id de la reserva (en minúsculas): ni importe, ni moneda, ni caducidad, ni `accion`");
+  const rep = mkEnlace(() => ({ body: clon(ENL.ejemplos.repetido) }));
+  assert.equal((await rep.bbm.enlace({ reserva_id: RID }, rep.opts)).repetido, true);
+  ok("enlace: POST a reservas-enlace con SOLO reserva_id; devuelve url, la caducidad REAL del ERP y repetido");
+
+  // respuestas que no cumplen: fail-closed
+  for (const [que, f] of [
+    ["url http", (x) => { x.r.url = "http://checkout.xendit.co/web/a"; }],
+    ["url con espacio", (x) => { x.r.url = "https://a b"; }],
+    ["otro external_id", (x) => { x.r.external_id = "rsv:00000000-0000-0000-0000-000000000000"; }],
+    ["caducada", (x) => { x.r.caduca_en = "2026-10-20T08:59:00Z"; }],
+    ["caduca_en ilegible", (x) => { x.r.caduca_en = "pronto"; }],
+    ["sin r", (x) => { delete x.r; }],
+  ]) {
+    const b = clon(ENL.ejemplos.nuevo); f(b);
+    const k = mkEnlace(() => ({ body: b }));
+    const rr = await k.bbm.enlace({ reserva_id: RID, external_id: EXT }, k.opts);
+    assert.deepEqual([rr.ok, rr.motivo], [false, "no_disponible"], que); assert.ok(!("url" in rr), que);
+  }
+  const otro = mkEnlace(nuevo);
+  assert.equal((await otro.bbm.enlace({ reserva_id: RID, external_id: "rsv:otro" }, otro.opts)).ok, false, "el external_id de la reserva que se cobra manda");
+  const mal = mkEnlace(nuevo);
+  assert.equal((await mal.bbm.enlace({ reserva_id: "x" }, mal.opts)).motivo, "peticion_invalida"); assert.equal(mal.llamadas.length, 0);
+  ok("enlace: url no https, otro external_id, caducidad pasada o ilegible ⇒ no_disponible (nunca se manda un enlace que no se entiende)");
+
+  // errores con significado
+  for (const [status, body, motivo, llamadas] of [
+    [409, { error: "sin_configurar", paso: "cobros" }, "sin_configurar", 1],
+    [409, { error: "no_pagable" }, "no_pagable", 1],
+    [502, { error: "proveedor" }, "proveedor", 1],
+    [502, { error: "base" }, "no_disponible", 1],
+    [404, { error: "modulo_no_activo" }, "modulo_apagado", 1],
+    [401, { error: "no_autorizado" }, "secreto_rechazado", 1],
+    [409, { error: "en_curso" }, "en_curso", 2],
+  ]) {
+    const k = mkEnlace(() => ({ status, body }));
+    const rr = await k.bbm.enlace({ reserva_id: RID }, k.opts);
+    assert.deepEqual([rr.ok, rr.motivo], [false, motivo], `${status} ${body.error}`);
+    assert.equal(k.llamadas.length, llamadas, `${status} ${body.error}: llamadas`);
+    if (motivo === "sin_configurar") assert.equal(rr.paso, "cobros");
+  }
+  // en_curso: espera y reintenta UNA vez; la segunda sale bien
+  const ec = mkEnlace((c, i) => (i === 1 ? { status: 409, body: { error: "en_curso" } } : nuevo()));
+  const rec = await ec.bbm.enlace({ reserva_id: RID }, ec.opts);
+  assert.equal(rec.ok, true); assert.deepEqual(ec.esperas, [7], "espera antes del reintento"); assert.equal(ec.llamadas.length, 2);
+  // caída de red: no_disponible, sin reintento (la edge deja su marca 30 s si no sabe si Xendit creó la factura)
+  const cr = mkEnlace(() => new TypeError("fetch failed"));
+  assert.equal((await cr.bbm.enlace({ reserva_id: RID }, cr.opts)).motivo, "no_disponible"); assert.equal(cr.llamadas.length, 1);
+  ok("enlace: sin_configurar (con paso), no_pagable, proveedor, base, 404, 401; en_curso → espera y UN reintento; caída sin reintento");
 }
 
 // ── 8. fail-closed por tiempo ───────────────────────────────────────────────────────────────────────────────────────────────────

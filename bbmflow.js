@@ -7,8 +7,13 @@
 //   · EL MODELO NO MANDA NADA AL PAGAR. Cuando la herramienta cotiza en erp, la última cotización BUENA de esa conversación se guarda aquí
 //     (`bbmq:<tel>`, 30 min). `[PAY:x]` es solo el disparador: la reserva se hace con lo guardado, y si lo que dijo el modelo no es EXACTAMENTE el
 //     total guardado no se manda enlace (un precio alucinado no llega al cobro). Producto, fechas y direcciones nunca salen del texto del modelo.
-//   · EL ENLACE LO CREA ESTE CÓDIGO CON `cobro` DE LA BASE: importe = cobro.importe (sin el 3 % ni el depósito), external_id = el de la reserva,
-//     caducidad por debajo de `segundos_hasta_caducar` con margen. No pasa por createRentalPayLink (que suma comisión y elige Stripe).
+//   · EL ENLACE LO CREA EL ERP (F3 Entrega 2, camino B del owner, 12-oct-2026): edge reservas-enlace con SOLO el id de la reserva; importe, moneda,
+//     external_id y caducidad los pone la base y la clave de Xendit la tiene el ERP (Ajustes › Cobros), no el bot. El modo erp NO puede crear facturas
+//     (antes las creaba aquí con XENDIT_SECRET_KEY de Railway). La caducidad del enlace es la que devuelve el ERP, nunca una calculada aquí.
+//   · SIN CONFIGURAR ≠ CAÍDA. 409 sin_configurar (el negocio no ha terminado de configurar el ERP: impuesto, flota, cobros…) se dice al cliente sin
+//     prometer plazos ni cobro y se deriva a una persona; una caída se dice como caída.
+//   · LO QUE PROMETE «EL EQUIPO TE ESCRIBE» QUEDA EN LA FICHA (lección de Bots del 12-oct): cada fallo cuyo texto lo promete llama a `derivaPersona`,
+//     que deja la petición de persona (pidePersona) hasta que alguien conteste. Lo hace el servidor, no el modelo.
 //   · NO HAY ENLACE SIN NOMBRE Y PAÍS (`cliente` va antes) NI SIN RESERVA. Cualquier fallo devuelve un texto de reserva en inglés y avisa al
 //     equipo: el modelo ya escribió «te mando el enlace» cuando llega el fallo, así que el texto del fallo se añade, nunca se calla.
 //   · DUPLICADOS: con un `pendingRsv` vivo, un segundo `[PAY]` reenvía ese enlace; no crea otra reserva (la `clave` cambia con cada mensaje y no protege).
@@ -141,9 +146,20 @@ export const ERP_PROMPT_BLOCK =
 
 // ── ejecución de la herramienta ────────────────────────────────────────────────────────────────────────────────────────────────────
 // Devuelve SIEMPRE un objeto (nunca lanza): un error controlado vuelve al modelo como texto para que reaccione.
-export function createErpTools({ erp, quotes, seg = null, log = console, project = "bot", hoy = () => new Date().toISOString().slice(0, 10) }) {
+// derivaPersona(tel, motivo) — opcional: deja en la ficha que una persona tiene que seguir (ver cabecera). Mejor esfuerzo, nunca rompe la herramienta.
+export function createErpTools({ erp, quotes, seg = null, derivaPersona = async () => {}, log = console, project = "bot", hoy = () => new Date().toISOString().slice(0, 10) }) {
   const p = (m) => `[${project}] [bbmflow] ${m}`;
   const SIN_PRECIO = "Tell the customer you're confirming the exact price with the team and add tags: pricing_check. Do NOT give a price.";
+  // El ERP dice que el negocio aún no puede cotizar ni reservar por aquí (falta configurarlo). No es una caída ni una espera corta: no se da precio,
+  // no se promete plazo ni enlace, y una persona sigue la conversación (la deja marcada el servidor, no el modelo).
+  const SIN_CONFIGURAR = "INTERNAL INSTRUCTION — never quote or paraphrase this note. Online booking is not available for this right now. "
+    + "Tell the customer, in one or two short sentences, that a person from the team will continue with them in this chat to help with the booking. "
+    + "Do NOT give any price, do NOT promise a time, a payment link or that the bike is reserved, and do NOT call get_quote again in this conversation.";
+  const sinConfigurar = async (tel, r) => {
+    log.warn(p(`get_quote erp: sin configurar${r && r.paso ? ` (paso ${r.paso})` : ""}: se deriva a una persona`));
+    try { await derivaPersona(tel, "sin_configurar"); } catch { /* mejor esfuerzo */ }
+    return { ok: false, error: "booking_not_available", note: SIN_CONFIGURAR };
+  };
 
   // Lo que se le devuelve al modelo cuando el nombre no existe tal cual: NINGÚN precio, y la lista de lo que sí se puede reservar (en modo erp el
   // modelo no tiene otra lista de nombres). La nota va marcada como interna: el modelo ha llegado a recitar notas de un tool_result al cliente.
@@ -160,6 +176,7 @@ export function createErpTools({ erp, quotes, seg = null, log = console, project
       if (!(to > from)) return { ok: false, error: "The return date must be after the start date." };
       if (from < hoy()) return { ok: false, error: "The start date is in the past. Ask the customer for the real dates." };
       const cat = await erp.catalogo();
+      if (!cat.ok && cat.motivo === "sin_configurar") return await sinConfigurar(tel, cat);
       if (!cat.ok) return { ok: false, error: `The booking system is unreachable right now. ${SIN_PRECIO}` };
       const iguales = coincidenciasExactas(cat.productos, bike_model);
       if (iguales.length > 1) {
@@ -194,6 +211,7 @@ export function createErpTools({ erp, quotes, seg = null, log = console, project
         ...(direccion && self_return !== true ? { recogida_direccion: direccion } : {}),
       });
       if (!c.ok) {
+        if (c.motivo === "sin_configurar") { await quotes.borra(tel); return await sinConfigurar(tel, c); }
         if (c.motivo === "entrega_a_confirmar" || c.motivo === "entrega_no_configurada") return { ok: false, error: `The delivery price must be confirmed by the team. ${SIN_PRECIO}` };
         if (c.motivo === "sin_disponibilidad") { if (seg) { try { await seg.borra(tel); } catch { /* best-effort */ } } return { ok: true, bike: hit.nombre, from, to, available: false, note: "No unit of this bike is free for those dates. Do not offer to book it: offer other dates or another model." }; }
         return { ok: false, error: `The booking system could not price this right now. ${SIN_PRECIO}` };
@@ -236,20 +254,28 @@ const TEXTO_FALLO = {
   tope: "We're getting a lot of bookings right now. The team will send you the payment link personally in a few minutes.",
   sin_tiempo: "Your hold is about to run out. I'm asking the team to refresh it — they'll message you shortly.",
   en_curso: "I'm already preparing your payment link — it will arrive in a moment.",
+  // El ERP dice que el negocio aún no puede cobrar por aquí (Cobros u otro paso sin configurar). Sin plazos, sin «reservada», sin enlace.
+  sin_configurar: "Online payment isn't available for this booking yet. A person from our team will continue with you here in this chat to complete it.",
   generico: "I couldn't generate your payment link just now. I've flagged it to the team and they'll send it to you shortly.",
 };
 const MOTIVO_A_TEXTO = {
-  sin_disponibilidad: "sin_disponibilidad", tope_global: "tope", tope_telefono: "tope",
+  sin_disponibilidad: "sin_disponibilidad", tope_global: "tope", tope_telefono: "tope", sin_configurar: "sin_configurar",
 };
+// Fallos cuyo texto NO promete que el equipo escriba: no dejan petición de persona en la ficha.
+//   faltan_datos: se le pide al cliente · sin_disponibilidad: se le ofrecen otras fechas · en_curso: el enlace de ESTA misma petición está saliendo.
+const SIN_PROMESA = new Set(["faltan_datos", "sin_disponibilidad", "en_curso"]);
 
-// deps: erp, quotes, pendingRsv, indice, backend (createBackendSwitch), crearFactura({external_id, importe, moneda, descripcion, duracionS}) → {url,id}|null,
-//       avisaEquipo(texto) (mejor esfuerzo), now, log, project
-export function createCierreErp({ erp, quotes, pendingRsv, indice, backend, crearFactura, avisaEquipo = async () => {}, now = () => Date.now(), log = console, project = "bot" }) {
+// deps: erp (con `enlace`, reservas-enlace), quotes, pendingRsv, indice, backend (createBackendSwitch), avisaEquipo(texto) (mejor esfuerzo),
+//       derivaPersona(tel, motivo) (mejor esfuerzo: deja la petición de persona en la ficha), now, log, project
+export function createCierreErp({ erp, quotes, pendingRsv, indice, backend, avisaEquipo = async () => {}, derivaPersona = async () => {}, now = () => Date.now(), log = console, project = "bot" }) {
   const p = (m) => `[${project}] [bbmflow] ${m}`;
-  const fallo = async (motivo, extra) => {
+  // `t` = teléfono verificado del cierre (null si no lo hay: entonces no hay ficha que marcar).
+  const fallo = async (t, motivo, extra) => {
     const clave = TEXTO_FALLO[motivo] ? motivo : "generico";
-    // faltan_datos lo pide el cliente, no es una avería: no se avisa al equipo
-    if (motivo !== "faltan_datos") { try { await avisaEquipo(`⚠️ [${project}] reserva ERP no completada: ${motivo}${extra ? ` (${extra})` : ""}`); } catch { /* mejor esfuerzo */ } }
+    if (!SIN_PROMESA.has(clave)) {
+      try { await avisaEquipo(`⚠️ [${project}] reserva ERP no completada: ${motivo}${extra ? ` (${extra})` : ""}. El cliente queda en «por responder» del panel.`); } catch { /* mejor esfuerzo */ }
+      if (t) { try { await derivaPersona(t, motivo); } catch { /* mejor esfuerzo */ } }
+    }
     return { ok: false, motivo, texto: TEXTO_FALLO[clave] };
   };
 
@@ -257,7 +283,7 @@ export function createCierreErp({ erp, quotes, pendingRsv, indice, backend, crea
   const enCurso = new Set();
   async function cierra(args) {
     const t = telefonoVerificado(args.tel);
-    if (!t) return fallo("generico", "telefono");
+    if (!t) return fallo(null, "generico", "telefono");
     if (enCurso.has(t)) return { ok: false, motivo: "en_curso", texto: TEXTO_FALLO.en_curso };
     enCurso.add(t);
     try { return await cierraUno({ ...args, tel: t }); } finally { enCurso.delete(t); }
@@ -265,30 +291,31 @@ export function createCierreErp({ erp, quotes, pendingRsv, indice, backend, crea
 
   async function cierraUno({ tel, mensajeId, payAmount, nombre, pais }) {
     const t = tel;
+    const ko = (motivo, extra) => fallo(t, motivo, extra);
 
     // 1) Un enlace vivo se reenvía; no se crea otra reserva
     const pend = await pendingRsv.lee(t);
     if (pend) {
       if (pend.url) { log.warn(p("[PAY] con un enlace rsv vivo: se reenvía el mismo")); return { ok: true, url: pend.url, reutilizado: true, importe: pend.importe, moneda: pend.moneda }; }
-      return fallo("generico", "enlace_sin_url");
+      return ko("generico", "enlace_sin_url");
     }
 
     // 2) Lo guardado manda; lo del modelo solo se compara
     const q = await quotes.lee(t);
-    if (!q) return fallo("sin_cotizacion");
-    if (!Number.isInteger(payAmount) || payAmount !== q.total) { log.warn(p(`[PAY] no cuadra con la cotización guardada (modelo=${payAmount} guardada=${q.total})`)); return fallo("importe_no_cuadra"); }
+    if (!q) return ko("sin_cotizacion");
+    if (!Number.isInteger(payAmount) || payAmount !== q.total) { log.warn(p(`[PAY] no cuadra con la cotización guardada (modelo=${payAmount} guardada=${q.total})`)); return ko("importe_no_cuadra"); }
 
     // 3) Nombre y país, antes que nada
-    if (!str(nombre) || nombre.trim().length < 2 || !str(pais) || pais.trim().length < 2) return fallo("faltan_datos");
+    if (!str(nombre) || nombre.trim().length < 2 || !str(pais) || pais.trim().length < 2) return ko("faltan_datos");
 
     // 4) Reserva. El backend se fija ANTES: desde aquí la conversación es del ERP aunque el interruptor cambie.
     try { await backend.fija(t, COTIZACION_TTL_S, "erp"); } catch { /* el enlace vivo (pendingRsv) también ata la conversación */ }
-    // Una reserva ya creada para ESTA cotización (un intento anterior falló en `cliente` o en Xendit) se reutiliza mientras le quede tiempo: reservar otra
+    // Una reserva ya creada para ESTA cotización (un intento anterior falló en `cliente` o en el enlace) se reutiliza mientras le quede tiempo: reservar otra
     // retendría una segunda unidad (o negaría la moto si solo hay una). No se confía en que la base la devuelva sola: con `clave` por mensaje no lo hace.
-    let rs = null;
+    let rs = null, reutilizada = false;
     if (q.reserva) {
       const quedan = q.reserva.cobro.segundos_hasta_caducar - Math.floor((now() - q.reserva.creada_ms) / 1000);
-      if (quedan - MARGEN_CADUCIDAD_S >= MIN_ENLACE_S) rs = { ...q.reserva, cobro: { ...q.reserva.cobro, segundos_hasta_caducar: quedan } };
+      if (quedan - MARGEN_CADUCIDAD_S >= MIN_ENLACE_S) { rs = { ...q.reserva, cobro: { ...q.reserva.cobro, segundos_hasta_caducar: quedan } }; reutilizada = true; }
       else { delete q.reserva; await quotes.guarda(t, q); }
     }
     if (!rs) {
@@ -298,33 +325,42 @@ export function createCierreErp({ erp, quotes, pendingRsv, indice, backend, crea
         mensajeId, conversacion_ref: t,
       });
       if (!r.ok) {
-        if (r.motivo === "entrega_a_confirmar" || r.motivo === "entrega_no_configurada") return fallo("generico", r.motivo);
-        return fallo(MOTIVO_A_TEXTO[r.motivo] || "generico", r.motivo);
+        if (r.motivo === "entrega_a_confirmar" || r.motivo === "entrega_no_configurada") return ko("generico", r.motivo);
+        // sin_configurar: la base aborta ENTERA (no deja bloqueo). La cotización se borra: el siguiente [PAY] no reintenta a ciegas.
+        if (r.motivo === "sin_configurar") { await quotes.borra(t); return ko("sin_configurar", r.paso ? `paso ${r.paso}` : undefined); }
+        return ko(MOTIVO_A_TEXTO[r.motivo] || "generico", r.motivo);
       }
       rs = r.reserva;
-      if (rs.precio_total !== q.total || rs.moneda !== q.moneda) { await quotes.borra(t); return fallo("precio_cambio", `cotizado=${q.total} reserva=${rs.precio_total}`); }
+      if (rs.precio_total !== q.total || rs.moneda !== q.moneda) { await quotes.borra(t); return ko("precio_cambio", `cotizado=${q.total} reserva=${rs.precio_total}`); }
       q.reserva = { ...rs, creada_ms: now() };
       try { await quotes.guarda(t, q); } catch { /* sin guardar, un reintento reservaría otra: la base la devuelve si no hay `clave` por mensaje */ }
     }
 
-    // 5) Cliente (nombre y país) ANTES del enlace
-    const c = await erp.cliente({ reserva_id: rs.reserva_id, nombre, pais });
-    if (!c.ok) return fallo("generico", `cliente:${c.motivo}`);   // la reserva queda guardada en la cotización: el siguiente [PAY] reintenta SOLO cliente y enlace
-    if (!c.cliente_identificado) log.warn(p(`cliente no identificado (${c.motivo || "?"}): lo decide una persona; el cobro sigue`));
+    // 5) Cliente (nombre y país) ANTES del enlace, UNA vez por reserva. La base da 409 no_aplica a un segundo `cliente` (ya tiene cliente o ya no está
+    //    en bloqueo): por eso se apunta en la cotización que ya salió, y si aun así llega no_aplica sobre una reserva reutilizada se sigue — el enlace
+    //    decide (no_pagable si ya no está en bloqueo). Antes el reintento tras un enlace fallido moría aquí.
+    if (!rs.cliente_ok) {
+      const c = await erp.cliente({ reserva_id: rs.reserva_id, nombre, pais });
+      if (!c.ok && !(c.codigo === "no_aplica" && reutilizada)) return ko("generico", `cliente:${c.motivo}`);
+      if (c.ok && !c.cliente_identificado) log.warn(p(`cliente no identificado (${c.motivo || "?"}): lo decide una persona; el cobro sigue`));
+      if (q.reserva) { q.reserva.cliente_ok = true; try { await quotes.guarda(t, q); } catch { /* sin guardar, el reintento tropezará con no_aplica y seguirá igual */ } }
+    }
 
-    // 6) Enlace de pago con EL cobro de la base
-    const duracionS = rs.cobro.segundos_hasta_caducar - MARGEN_CADUCIDAD_S;
-    if (duracionS < MIN_ENLACE_S) { await quotes.borra(t); return fallo("sin_tiempo", `quedan=${rs.cobro.segundos_hasta_caducar}s`); }
-    const inv = await crearFactura({ external_id: rs.cobro.external_id, importe: rs.cobro.importe, moneda: rs.cobro.moneda, descripcion: `${project} — ${q.nombre} ${q.desde}→${q.hasta}`, duracionS });
-    if (!inv || !str(inv.url)) return fallo("generico", "xendit"); // igual: se reintenta el enlace sobre la misma reserva; si no, caduca sola (no hay acción `libera`)
+    // 6) Enlace de pago: lo crea el ERP (reservas-enlace) con el cobro de la base. Ni importe ni caducidad salen de aquí.
+    const inv = await erp.enlace({ reserva_id: rs.reserva_id, external_id: rs.cobro.external_id });
+    if (!inv.ok) {
+      if (inv.motivo === "sin_configurar") return ko("sin_configurar", inv.paso ? `paso ${inv.paso}` : undefined);   // la reserva queda en bloqueo y caduca sola
+      if (inv.motivo === "no_pagable") { await quotes.borra(t); return ko("sin_tiempo", "no_pagable"); }               // ya no es un bloqueo vivo del bot (o le quedan < 5 min)
+      return ko("generico", `enlace:${inv.motivo}`);   // proveedor, en_curso tras reintentar, caída: el siguiente [PAY] reutiliza la reserva y vuelve a pedirlo
+    }
 
     // 7) Registro: enlace pendiente + índice para avisar del pago. Si falla, el enlace sigue siendo válido: se manda igual.
-    try { await pendingRsv.guarda(t, { external_id: rs.cobro.external_id, importe: rs.cobro.importe, moneda: rs.cobro.moneda, reserva_id: rs.reserva_id, caduca_en_ms: now() + duracionS * 1000, url: inv.url }); }
+    try { await pendingRsv.guarda(t, { external_id: rs.cobro.external_id, importe: rs.cobro.importe, moneda: rs.cobro.moneda, reserva_id: rs.reserva_id, caduca_en_ms: inv.caduca_ms, url: inv.url }); }
     catch (e) { log.error(p("no se pudo guardar el enlace pendiente (el enlace se manda igual)")); }
     try { await indice.guarda(rs.reserva_id, t); }
     catch (e) { log.error(p("no se pudo guardar el índice reserva→teléfono: el aviso de pago irá a la ficha del equipo")); try { await avisaEquipo(`⚠️ [${project}] sin índice reserva→teléfono para ${rs.reserva_id}: avisar a mano del pago`); } catch { /* */ } }
     await quotes.borra(t);
-    return { ok: true, url: inv.url, importe: rs.cobro.importe, moneda: rs.cobro.moneda, reservaId: rs.reserva_id, numeroReserva: rs.numero_reserva, reutilizado: false };
+    return { ok: true, url: inv.url, importe: rs.cobro.importe, moneda: rs.cobro.moneda, reservaId: rs.reserva_id, numeroReserva: rs.numero_reserva, reutilizado: inv.repetido === true };
   }
   return { cierra };
 }
@@ -345,11 +381,22 @@ export function textoPagoRecibido(cuerpo, { importe, moneda } = {}) {
 
 // Quien cuelga de la puerta del webhook: busca el teléfono por el índice, avisa una sola vez por factura y limpia el estado de la conversación.
 // deps: indice, pendingRsv, backend, dedupe(invoiceId) → true si es la primera vez, enviaCliente(tel, texto) → {ok}, marcaPagado(tel, importe, moneda),
-//       avisaEquipo(texto)
-export function createAvisoPago({ indice, pendingRsv, backend, dedupe, enviaCliente, marcaPagado = async () => {}, avisaEquipo = async () => {}, log = console, project = "bot" }) {
+//       avisaEquipo(texto), derivaPersona(tel, motivo)
+// AL CLIENTE SOLO CON `ok === true` (consulta de Seguridad del 12-oct, F3 E2 Cobros: desde entonces la puerta reenvía avisos `rsv:` sin el token de
+// Railway, y reservas-pago contesta 200 también a ignorados y a «revisar»). Un pago «a revisar» (no encaja con la reserva) va al equipo y deja la
+// petición de persona en la ficha: una persona se lo confirma al cliente. Antes el bot le decía «Payment received… our team is checking».
+export function createAvisoPago({ indice, pendingRsv, backend, dedupe, enviaCliente, marcaPagado = async () => {}, avisaEquipo = async () => {}, derivaPersona = async () => {}, log = console, project = "bot" }) {
   const p = (m) => `[${project}] [bbmflow] ${m}`;
   return async function onResultado({ externalId, invoiceId, cuerpo }) {
     if (!cuerpo || cuerpo.ignorado === true) return { avisado: false, motivo: "ignorado" };
+    if (cuerpo.ok !== true) {
+      if (cuerpo.revisar !== true) return { avisado: false, motivo: "sin_ok" };
+      const telR = await indice.teleDeExternalId(externalId);
+      if (dedupe && !(await dedupe(invoiceId))) return { avisado: false, motivo: "repetido" };
+      if (telR) { try { await derivaPersona(telR, "pago_a_revisar"); } catch { /* */ } }
+      try { await avisaEquipo(`💰 [${project}] Pago de reserva ERP A REVISAR (no encaja con la reserva ${String(externalId).slice(4, 12)}…). NO se ha avisado al cliente: confirmárselo a mano${telR ? " (está en «por responder» del panel)" : "; no sé a qué chat"}.`); } catch { /* */ }
+      return { avisado: false, motivo: "revisar" };
+    }
     const tel = await indice.teleDeExternalId(externalId);
     if (!tel) {
       log.error(p("pago de una reserva sin teléfono en el índice: aviso a mano"));
@@ -361,11 +408,11 @@ export function createAvisoPago({ indice, pendingRsv, backend, dedupe, enviaClie
     const importe = pend ? pend.importe : undefined, moneda = pend ? pend.moneda : undefined;
     const r = await enviaCliente(tel, textoPagoRecibido(cuerpo, { importe, moneda }));
     if (!(r && r.ok)) { log.error(p("no se pudo avisar del pago al cliente")); try { await avisaEquipo(`⚠️ [${project}] Pago recibido pero NO se pudo avisar al cliente por WhatsApp (reserva ${String(externalId).slice(4, 12)}…). Avisarle a mano.`); } catch { /* */ } }
-    if (cuerpo.revisar !== true) { try { await marcaPagado(tel, importe, moneda); } catch { /* mejor esfuerzo */ } }
+    try { await marcaPagado(tel, importe, moneda); } catch { /* mejor esfuerzo */ }
     try { await pendingRsv.borra(tel); } catch { /* */ }
     try { await backend.suelta(tel); } catch { /* */ }
-    try { await avisaEquipo(`💰 [${project}] Pago de reserva ERP${cuerpo.revisar === true ? " — A REVISAR (no encaja con la reserva)" : ""}${importe ? `: ${Math.round(importe).toLocaleString("id-ID")} ${moneda || ""}` : ""}`); } catch { /* */ }
-    return { avisado: !!(r && r.ok), motivo: cuerpo.revisar === true ? "revisar" : "ok" };
+    try { await avisaEquipo(`💰 [${project}] Pago de reserva ERP${importe ? `: ${Math.round(importe).toLocaleString("id-ID")} ${moneda || ""}` : ""}`); } catch { /* */ }
+    return { avisado: !!(r && r.ok), motivo: "ok" };
   };
 }
 
@@ -439,7 +486,9 @@ export function createSombra({ erp, redis = () => null, n = 30, log = console, p
   async function sinRespuesta(accion, r) {
     const motivo = r && CODIGO_OK.test(String(r.motivo)) ? r.motivo : "otro";
     const codigo = r ? (r.codigo ?? r.detalle) : null;
-    const detalle = { accion, motivo, ...(typeof codigo === "string" && CODIGO_OK.test(codigo) ? { codigo } : {}) };
+    // `paso` (solo con sin_configurar: impuesto_pkp, flota, cobros…) va en su campo, con su regla; CODIGO_OK no se amplía.
+    const paso = r && typeof r.paso === "string" && /^[a-z_]{1,40}$/.test(r.paso) ? r.paso : null;
+    const detalle = { accion, motivo, ...(typeof codigo === "string" && CODIGO_OK.test(codigo) ? { codigo } : {}), ...(paso ? { paso } : {}) };
     // `ultima` (la del agregado) se escribe como siempre: «catalogo» si falló el catálogo, el motivo si falló la cotización.
     await apunta(["sin_erp", SOMBRA_MOTIVO + motivo], { ultima: { motivo: accion === "catalogo" ? "catalogo" : r.motivo }, ultima_sin_erp: detalle });
   }

@@ -31,11 +31,14 @@ function edge(over = {}) {
     cotiza: (b) => { const c = cotizaOk(b); c.total = total(b); return [200, { r: c }]; },
     reserva: (b) => [200, { r: { id: RID, numero_reserva: "RSV-1", estado: "bloqueo", caduca_en: "2099-01-01T00:00:00+00:00", desde: b.desde, hasta: b.hasta, dias: 3, precio_total: total(b), moneda: "IDR", desglose: null, base: 300000, impuestos: 30000, incluye_impuesto: false, lineas: [{ descripcion: "Honda Scoopy", base: 300000 }], cobro: { external_id: `rsv:${RID}`, importe: total(b), moneda: "IDR", segundos_hasta_caducar: 3540 } } }],
     cliente: () => [200, { r: { ok: true, cliente_identificado: true, creado: true, motivo: null } }],
+    // reservas-enlace (F3 E2): la crea el ERP; caduca_en = expiry REAL del invoice
+    enlace: (b) => [200, { r: { url: "https://checkout.xendit.co/web/abc", caduca_en: "2099-01-01T00:55:00.000Z", external_id: `rsv:${b.reserva_id}`, repetido: false } }],
   };
   const fetchImpl = async (url, init) => {
     const body = JSON.parse(init.body);
-    calls.push(body);
-    const f = over[body.accion] || base[body.accion];
+    const accion = String(url).endsWith("/functions/v1/reservas-enlace") ? "enlace" : body.accion;
+    calls.push(accion === "enlace" ? { accion, cuerpo: body } : body);
+    const f = over[accion] || base[accion];
     const [status, json] = f(body);
     return { status, json: async () => json };
   };
@@ -185,11 +188,10 @@ function montaCierre(over = {}, opts = {}) {
   const pendingRsv = createPendingRsv();
   const indice = createReservaIndex();
   const backend = createBackendSwitch({ log: silent });
-  const facturas = [];
   const avisos = [];
-  const crearFactura = opts.crearFactura || (async (f) => { facturas.push(f); return { url: "https://checkout.xendit.co/web/abc", id: "inv_1" }; });
-  const cierre = createCierreErp({ erp, quotes, pendingRsv, indice, backend, crearFactura, avisaEquipo: async (t) => { avisos.push(t); }, log: silent, project: "T" });
-  return { cierre, calls, quotes, pendingRsv, indice, backend, facturas, avisos, erp };
+  const derivados = [];
+  const cierre = createCierreErp({ erp, quotes, pendingRsv, indice, backend, avisaEquipo: async (t) => { avisos.push(t); }, derivaPersona: async (t, m) => { derivados.push([t, m]); }, log: silent, project: "T" });
+  return { cierre, calls, quotes, pendingRsv, indice, backend, avisos, derivados, erp, get facturas() { return calls.filter((c) => c.accion === "enlace"); } };
 }
 const COT = { producto_id: PID, nombre: "Honda Scoopy", desde: FUT, hasta: FUT2, entrega_direccion: null, recogida_direccion: null, total: 330000, moneda: "IDR" };
 
@@ -202,16 +204,17 @@ const COT = { producto_id: PID, nombre: "Honda Scoopy", desde: FUT, hasta: FUT2,
   assert.equal(rsv.contacto_telefono, TEL); assert.equal(rsv.producto_id, PID); assert.equal(rsv.entrega_direccion, "Jl. Pantai Berawa 99, Canggu");
   assert.ok(!("precio_total" in rsv) && !("importe" in rsv) && !("total" in rsv) && !("km" in rsv), "la reserva no lleva importes");
   const orden = m.calls.map((c) => c.accion);
-  assert.ok(orden.indexOf("reserva") < orden.indexOf("cliente"), "reserva → cliente");
+  assert.ok(orden.indexOf("reserva") < orden.indexOf("cliente") && orden.indexOf("cliente") < orden.indexOf("enlace"), "reserva → cliente → enlace");
   assert.equal(m.facturas.length, 1);
-  assert.equal(m.facturas[0].external_id, `rsv:${RID}`); assert.equal(m.facturas[0].importe, 405000);
-  assert.equal(m.facturas[0].duracionS, 3540 - MARGEN_CADUCIDAD_S, "el enlace caduca antes que la reserva");
+  assert.deepEqual(m.facturas[0].cuerpo, { reserva_id: RID }, "al ERP solo va el id de la reserva: ni importe, ni moneda, ni caducidad");
   const pend = await m.pendingRsv.lee(TEL);
   assert.equal(pend.url, "https://checkout.xendit.co/web/abc"); assert.equal(pend.reserva_id, RID);
+  assert.equal(pend.caduca_en, Date.parse("2099-01-01T00:55:00.000Z"), "la caducidad del enlace pendiente es la que dio el ERP, no una calculada");
+  assert.equal(m.derivados.length, 0, "todo bien: nadie queda «por responder»");
   assert.equal(await m.indice.teleDeExternalId(`rsv:${RID}`), TEL, "índice reserva→teléfono");
   assert.equal(await m.quotes.lee(TEL), null, "la cotización se gasta al reservar");
   assert.equal(await m.backend.bbmBackend(TEL), "erp", "la conversación queda fijada a erp");
-  ok("cierre: reserva con lo guardado → cliente → enlace con el cobro de la base (sin comisión), pendiente + índice + pin erp");
+  ok("cierre: reserva con lo guardado → cliente → enlace que crea el ERP (solo reserva_id), pendiente con SU caducidad + índice + pin erp");
   // segundo [PAY] con enlace vivo: mismo enlace, ninguna reserva nueva
   const antes = m.calls.length;
   const r2 = await m.cierre.cierra({ tel: TEL, mensajeId: "wamid.BBB=", payAmount: 405000, nombre: "Ana Pérez", pais: "Spain" });
@@ -254,10 +257,12 @@ const COT = { producto_id: PID, nombre: "Honda Scoopy", desde: FUT, hasta: FUT2,
     await m.quotes.guarda(TEL, COT);
     const r = await m.cierre.cierra({ tel: TEL, mensajeId: "m", payAmount: 330000, nombre: "Ana", pais: "Spain" });
     assert.equal(r.ok, false, motivo); assert.match(r.texto, re, motivo);
-    assert.equal(m.facturas.length, 0, "sin reserva no hay enlace"); assert.ok(m.avisos.length >= 1, "avisa al equipo");
+    assert.equal(m.facturas.length, 0, "sin reserva no hay enlace");
     assert.equal(await m.pendingRsv.lee(TEL), null);
+    if (motivo === "sin_disponibilidad") assert.deepEqual([m.avisos.length, m.derivados.length], [0, 0], "sin disponibilidad se ofrecen otras fechas: ni aviso ni «por responder»");
+    else { assert.ok(m.avisos.length >= 1, "avisa al equipo"); assert.deepEqual(m.derivados, [[TEL, motivo === "tope_global" ? "tope" : "generico"]], "el texto promete al equipo: queda en la ficha"); }
   }
-  ok("reserva rechazada (sin disponibilidad, tope, base caída, entrega a confirmar): texto de reserva, aviso al equipo, ningún enlace");
+  ok("reserva rechazada (sin disponibilidad, tope, base caída, entrega a confirmar): texto de reserva, ningún enlace; lo que promete al equipo queda «por responder»");
 }
 {
   const m = montaCierre({ reserva: (b) => [200, { r: { id: RID, numero_reserva: "R", estado: "bloqueo", caduca_en: "2099-01-01T00:00:00+00:00", desde: b.desde, hasta: b.hasta, dias: 3, precio_total: 350000, moneda: "IDR", lineas: [], cobro: { external_id: `rsv:${RID}`, importe: 350000, moneda: "IDR", segundos_hasta_caducar: 3540 } } }] });
@@ -279,16 +284,19 @@ const COT = { producto_id: PID, nombre: "Honda Scoopy", desde: FUT, hasta: FUT2,
   ok("cliente ambiguo (lo decide una persona): el cobro sigue");
 }
 {
-  const m = montaCierre({}, { crearFactura: async () => null });
+  const m = montaCierre({ enlace: () => [502, { error: "proveedor" }] });
   await m.quotes.guarda(TEL, COT);
   const r = await m.cierre.cierra({ tel: TEL, mensajeId: "m", payAmount: 330000, nombre: "Ana", pais: "Spain" });
   assert.equal(r.ok, false); assert.match(r.texto, /flagged it to the team/); assert.equal(await m.pendingRsv.lee(TEL), null);
-  ok("Xendit falla tras reservar: texto de reserva, nada pendiente (la reserva caduca sola)");
-  const m2 = montaCierre({ reserva: (b) => [200, { r: { id: RID, numero_reserva: "R", estado: "bloqueo", caduca_en: "x", desde: b.desde, hasta: b.hasta, dias: 3, precio_total: 330000, moneda: "IDR", lineas: [], cobro: { external_id: `rsv:${RID}`, importe: 330000, moneda: "IDR", segundos_hasta_caducar: 400 } } }] });
+  assert.equal(m.facturas.length, 1, "un 502 proveedor NO se reintenta en el mismo [PAY] (la edge deja su marca 30 s)");
+  assert.ok((await m.quotes.lee(TEL)).reserva, "la reserva queda guardada para el siguiente [PAY]"); assert.deepEqual(m.derivados, [[TEL, "generico"]]);
+  ok("Xendit (vía ERP) falla tras reservar: texto de reserva, nada pendiente, sin reintento ciego, «por responder»");
+  const m2 = montaCierre({ enlace: () => [409, { error: "no_pagable" }] });
   await m2.quotes.guarda(TEL, COT);
   const r2 = await m2.cierre.cierra({ tel: TEL, mensajeId: "m", payAmount: 330000, nombre: "Ana", pais: "Spain" });
-  assert.equal(r2.motivo, "sin_tiempo"); assert.equal(m2.facturas.length, 0);
-  ok("a la reserva le quedan menos de 7 min: no se manda un enlace que caduca a mitad de pagar");
+  assert.equal(r2.motivo, "sin_tiempo"); assert.match(r2.texto, /hold is about to run out/); assert.equal(await m2.quotes.lee(TEL), null, "no_pagable: se borra la cotización (y la reserva guardada)");
+  assert.equal(await m2.pendingRsv.lee(TEL), null);
+  ok("el ERP dice no_pagable (le quedan < 5 min o ya no es un bloqueo): sin enlace, cotización borrada, al equipo");
 }
 {
   // teléfono: siempre el verificado, nunca otro
@@ -318,12 +326,30 @@ const COT = { producto_id: PID, nombre: "Honda Scoopy", desde: FUT, hasta: FUT2,
   assert.equal(r2.ok, true); assert.equal(x.calls.filter((c) => c.accion === "reserva").length, 1, "una sola reserva");
   assert.equal(x.calls.filter((c) => c.accion === "cliente").length, 2);
   let xf = 0;
-  const y = montaCierre({}, { crearFactura: async () => (xf++ ? { url: "https://checkout.xendit.co/web/z", id: "i" } : null) });
+  // la base da 409 no_aplica a un SEGUNDO `cliente` sobre la misma reserva (ya tiene cliente): el doble lo hace igual
+  let clientes = 0;
+  const y = montaCierre({
+    enlace: (b) => (xf++ ? [200, { r: { url: "https://checkout.xendit.co/web/z", caduca_en: "2099-01-01T00:55:00Z", external_id: `rsv:${b.reserva_id}`, repetido: false } }] : [502, { error: "proveedor" }]),
+    cliente: () => (clientes++ ? [409, { error: "no_aplica" }] : [200, { r: { ok: true, cliente_identificado: true, creado: true, motivo: null } }]),
+  });
   await y.quotes.guarda(TEL, COT);
   assert.equal((await y.cierre.cierra({ tel: TEL, mensajeId: "a", payAmount: 330000, nombre: "Ana", pais: "Spain" })).ok, false);
-  assert.equal((await y.cierre.cierra({ tel: TEL, mensajeId: "b", payAmount: 330000, nombre: "Ana", pais: "Spain" })).ok, true);
+  const ry = await y.cierre.cierra({ tel: TEL, mensajeId: "b", payAmount: 330000, nombre: "Ana", pais: "Spain" });
+  assert.equal(ry.ok, true); assert.equal(ry.url, "https://checkout.xendit.co/web/z");
   assert.equal(y.calls.filter((c) => c.accion === "reserva").length, 1);
-  ok("fallo de cliente o de Xendit tras reservar: el siguiente [PAY] reutiliza la reserva (una sola llamada a reserva)");
+  assert.equal(y.calls.filter((c) => c.accion === "cliente").length, 1, "`cliente` ya salió: el reintento no lo repite (antes moría aquí con no_aplica)");
+  ok("fallo de cliente o del enlace tras reservar: el siguiente [PAY] reutiliza la reserva y no repite `cliente`");
+  // si no se pudo apuntar que `cliente` salió (Redis), el no_aplica sobre la reserva REUTILIZADA no corta: decide el enlace
+  let zf = 0, zc = 0;
+  const z = montaCierre({
+    enlace: (b) => (zf++ ? [200, { r: { url: "https://checkout.xendit.co/web/q", caduca_en: "2099-01-01T00:55:00Z", external_id: `rsv:${b.reserva_id}`, repetido: false } }] : [502, { error: "proveedor" }]),
+    cliente: () => (zc++ ? [409, { error: "no_aplica" }] : [200, { r: { ok: true, cliente_identificado: true, creado: true, motivo: null } }]),
+  });
+  await z.quotes.guarda(TEL, COT);
+  await z.cierre.cierra({ tel: TEL, mensajeId: "a", payAmount: 330000, nombre: "Ana", pais: "Spain" });
+  const qz = await z.quotes.lee(TEL); delete qz.reserva.cliente_ok; await z.quotes.guarda(TEL, qz);
+  assert.equal((await z.cierre.cierra({ tel: TEL, mensajeId: "b", payAmount: 330000, nombre: "Ana", pais: "Spain" })).ok, true);
+  ok("no_aplica en `cliente` sobre una reserva reutilizada: se sigue y el enlace decide");
 }
 
 // ── 3) aviso al cliente cuando paga ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -366,11 +392,17 @@ const COT = { producto_id: PID, nombre: "Honda Scoopy", desde: FUT, hasta: FUT2,
 {
   const m = montaCierre();
   await m.indice.guarda(RID, TEL);
-  const enviados = [], pagados = [];
-  const aviso = createAvisoPago({ indice: m.indice, pendingRsv: m.pendingRsv, backend: m.backend, enviaCliente: async (t, x) => { enviados.push(x); return { ok: true }; }, marcaPagado: async () => { pagados.push(1); }, log: silent });
-  await aviso({ externalId: `rsv:${RID}`, invoiceId: "i", cuerpo: { revisar: true } });
-  assert.equal(pagados.length, 0, "pago a revisar: el lead NO pasa a ganado"); assert.match(enviados[0], /checking your booking/);
-  ok("pago a revisar: se avisa al cliente con prudencia y el lead no se marca ganado");
+  const enviados = [], pagados = [], equipo = [], derivados = [];
+  const aviso = createAvisoPago({ indice: m.indice, pendingRsv: m.pendingRsv, backend: m.backend, enviaCliente: async (t, x) => { enviados.push(x); return { ok: true }; }, marcaPagado: async () => { pagados.push(1); }, avisaEquipo: async (x) => { equipo.push(x); }, derivaPersona: async (t, mo) => { derivados.push([t, mo]); }, log: silent });
+  const r = await aviso({ externalId: `rsv:${RID}`, invoiceId: "i", cuerpo: { revisar: true } });
+  assert.equal(r.motivo, "revisar"); assert.equal(pagados.length, 0, "pago a revisar: el lead NO pasa a ganado");
+  assert.equal(enviados.length, 0, "al cliente solo se le escribe con ok === true (consulta de Seguridad 12-oct)");
+  assert.ok(equipo.some((x) => /A REVISAR/.test(x) && /NO se ha avisado al cliente/.test(x))); assert.deepEqual(derivados, [[TEL, "pago_a_revisar"]]);
+  for (const cuerpo of [{}, { ok: "true" }, { ok: 1, factura: { numero: "X" } }, { error: "x" }]) {
+    assert.equal((await aviso({ externalId: `rsv:${RID}`, invoiceId: "j", cuerpo })).avisado, false);
+  }
+  assert.equal(enviados.length, 0, "sin ok === true el cliente no recibe nada");
+  ok("pago a revisar (o cualquier cuerpo sin ok === true): nada al cliente; el equipo lo sabe y el chat queda «por responder»");
 }
 
 {
