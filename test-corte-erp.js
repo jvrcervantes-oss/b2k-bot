@@ -116,8 +116,15 @@ function monta(cfg) {
   const indice = createReservaIndex({ now: () => ahora });
   const backend = createBackendSwitch({ log: silent, now: () => ahora, enlaceVivo: async (t) => !!(await pendingRsv.lee(t)) });
   const ficha = new Map();                 // lead:<tel> → { pidePersona, intent }, como updateLeadFields
-  const equipo = [], alCliente = [], pagados = [];
-  const derivaPersona = async (t, motivo) => { const l = ficha.get(t) || {}; if (!l.pidePersona) ficha.set(t, { ...l, pidePersona: ahora, intent: "human", motivo }); };
+  const equipo = [], alCliente = [], pagados = [], personas = [];
+  // como derivaPersonaBbm: abre la petición y avisa UNA vez (true); con una ya abierta no avisa (false)
+  const derivaPersona = async (t, motivo, detalle) => {
+    const l = ficha.get(t) || {};
+    if (l.pidePersona) return false;
+    ficha.set(t, { ...l, pidePersona: ahora, intent: "human", motivo });
+    personas.push([t, motivo, detalle ?? null]);
+    return true;
+  };
   const avisaEquipo = async (x) => { equipo.push(x); };
   const tools = createErpTools({ erp, quotes, derivaPersona, log: silent, project: "T", hoy: () => "2099-10-20" });
   const cierre = createCierreErp({ erp, quotes, pendingRsv, indice, backend, avisaEquipo, derivaPersona, now: () => ahora, log: silent, project: "T" });
@@ -139,7 +146,7 @@ function monta(cfg) {
   };
   const cotiza = (extra = {}) => tools.runGetQuote(TEL, { bike_model: "Honda Scoopy", from: "2099-11-01", to: "2099-11-04", ...extra });
   const paga = (monto = 330000, extra = {}) => cierre.cierra({ tel: TEL, mensajeId: "wamid.X", payAmount: monto, nombre: "Ana Pérez", pais: "Spain", ...extra });
-  return { d, st: d.st, ficha, equipo, alCliente, pagados, cotiza, paga, xendit, pendingRsv, backend, quotes };
+  return { d, st: d.st, ficha, equipo, personas, alCliente, pagados, cotiza, paga, xendit, pendingRsv, backend, quotes };
 }
 
 // ── 1. el camino completo ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -194,10 +201,13 @@ function monta(cfg) {
   assert.equal(q.ok, false); assert.equal(q.error, "booking_not_available"); assert.ok(!("total" in q), "ningún precio");
   assert.match(q.note, /person from the team will continue/); assert.match(q.note, /do NOT promise a time, a payment link/);
   assert.equal(a.ficha.get(TEL).pidePersona, ahora); assert.equal(a.ficha.get(TEL).intent, "human");
-  // el turno siguiente: el cliente insiste en pagar con un [PAY] alucinado → nada, y la petición de persona sigue ahí
+  assert.deepEqual(a.personas, [[TEL, "sin_configurar", "falta configurar «impuesto_pkp» en el ERP"]], "el equipo se entera UNA vez y sabe qué falta (revisor 12-oct)");
+  // el turno siguiente: el modelo se inventa un [PAY] → el MISMO texto honesto (no «te mando el enlace enseguida»), sin reserva, sin otro aviso de persona
   const p = await a.paga();
-  assert.equal(p.ok, false); assert.equal(p.motivo, "sin_cotizacion"); assert.equal(a.st.reservas.size, 0);
+  assert.deepEqual([p.ok, p.motivo], [false, "sin_configurar"]); assert.equal(a.st.reservas.size, 0);
+  assert.ok(!/shortly|moment|link/i.test(p.texto.replace("Online payment", "")), "sin promesas de enlace");
   assert.ok(a.ficha.get(TEL).pidePersona, "la petición de persona no se pierde en el turno siguiente");
+  assert.equal(a.personas.length, 1, "con la petición ya abierta no se abre otra");
   // (b) Cobros sin configurar: la reserva se aborta ENTERA (no queda bloqueo) y el texto no promete cobro
   const b = monta({ cobros: false });
   assert.equal((await b.cotiza()).ok, true);
@@ -205,7 +215,7 @@ function monta(cfg) {
   assert.deepEqual([pb.ok, pb.motivo], [false, "sin_configurar"]); assert.equal(b.st.reservas.size, 0, "sin bloqueo");
   assert.equal(pb.texto, "Online payment isn't available for this booking yet. A person from our team will continue with you here in this chat to complete it.");
   assert.ok(!/minute|shortly|link|reserved|held/i.test(pb.texto), "sin plazos, sin enlace, sin «reservada»");
-  assert.ok(b.equipo.some((e) => /sin_configurar \(paso cobros\)/.test(e))); assert.equal(b.ficha.get(TEL).motivo, "sin_configurar");
+  assert.deepEqual(b.personas, [[TEL, "sin_configurar", "paso cobros"]], "un aviso de persona con el paso que falta"); assert.equal(b.equipo.length, 0, "y no además el técnico");
   // (c) la clave de Cobros desaparece DESPUÉS de reservar: sin enlace, la reserva caduca sola, «por responder»
   const c = monta();
   await c.cotiza(); c.st.cobrosSeBorra = true;

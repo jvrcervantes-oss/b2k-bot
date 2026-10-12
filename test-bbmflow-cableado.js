@@ -59,6 +59,8 @@ const trozo = (ini, fin) => { const i = src.indexOf(ini); assert.ok(i >= 0, `no 
   assert.ok(/derivaPersona: derivaPersonaBbm/.test(sinComentarios(trozo("const bbmErpTools = createErpTools(", "\n"))), "también la herramienta (sin configurar)");
   const d = sinComentarios(trozo("async function derivaPersonaBbm(", "\n}\n"));
   assert.ok(/pidePersona: Date\.now\(\), intent: "human"/.test(d) && /setWaiting\(tel, true\)/.test(d), "derivar = la misma petición de persona de BBM-50");
+  assert.ok(/if \(lead && lead\.pidePersona\) return false;/.test(d), "una petición ya abierta no se vuelve a avisar");
+  assert.ok(/notifyTelegram\(/.test(d) && /escPush\(tel, nombre, que\)/.test(d) && /escmap:\$\{rNotif\.id\}/.test(d) && /return true;/.test(d), "avisa como BBM-50: Telegram + WhatsApp al owner con enrutado por cita (revisor 12-oct)");
   ok("el enlace del erp lo crea el ERP; el cierre no toca Xendit; derivar a una persona usa pidePersona (BBM-50)");
 }
 // 6) interruptores

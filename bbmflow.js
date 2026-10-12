@@ -12,8 +12,11 @@
 //     (antes las creaba aquí con XENDIT_SECRET_KEY de Railway). La caducidad del enlace es la que devuelve el ERP, nunca una calculada aquí.
 //   · SIN CONFIGURAR ≠ CAÍDA. 409 sin_configurar (el negocio no ha terminado de configurar el ERP: impuesto, flota, cobros…) se dice al cliente sin
 //     prometer plazos ni cobro y se deriva a una persona; una caída se dice como caída.
-//   · LO QUE PROMETE «EL EQUIPO TE ESCRIBE» QUEDA EN LA FICHA (lección de Bots del 12-oct): cada fallo cuyo texto lo promete llama a `derivaPersona`,
-//     que deja la petición de persona (pidePersona) hasta que alguien conteste. Lo hace el servidor, no el modelo.
+//   · LO QUE PROMETE «EL EQUIPO TE ESCRIBE» QUEDA EN LA FICHA Y LLEGA A ALGUIEN (lección de Bots del 12-oct; revisor 12-oct): cada fallo cuyo texto lo
+//     promete llama a `derivaPersona(tel, motivo, detalle)` → true si abrió una petición de persona NUEVA y avisó al equipo (una vez por petición);
+//     false si ya había una abierta. Solo con false se manda además el aviso técnico (avisaEquipo): nunca dos avisos por el mismo hecho.
+//   · SIN CONFIGURAR DEJA MARCA en la cotización (`{sin_configurar:true}`, 30 min): un [PAY] inventado después recibe el MISMO texto honesto, no uno
+//     que promete el enlace «enseguida».
 //   · NO HAY ENLACE SIN NOMBRE Y PAÍS (`cliente` va antes) NI SIN RESERVA. Cualquier fallo devuelve un texto de reserva en inglés y avisa al
 //     equipo: el modelo ya escribió «te mando el enlace» cuando llega el fallo, así que el texto del fallo se añade, nunca se calla.
 //   · DUPLICADOS: con un `pendingRsv` vivo, un segundo `[PAY]` reenvía ese enlace; no crea otra reserva (la `clave` cambia con cada mensaje y no protege).
@@ -156,8 +159,10 @@ export function createErpTools({ erp, quotes, seg = null, derivaPersona = async 
     + "Tell the customer, in one or two short sentences, that a person from the team will continue with them in this chat to help with the booking. "
     + "Do NOT give any price, do NOT promise a time, a payment link or that the bike is reserved, and do NOT call get_quote again in this conversation.";
   const sinConfigurar = async (tel, r) => {
-    log.warn(p(`get_quote erp: sin configurar${r && r.paso ? ` (paso ${r.paso})` : ""}: se deriva a una persona`));
-    try { await derivaPersona(tel, "sin_configurar"); } catch { /* mejor esfuerzo */ }
+    const paso = r && r.paso ? r.paso : null;
+    log.warn(p(`get_quote erp: sin configurar${paso ? ` (paso ${paso})` : ""}: se deriva a una persona`));
+    try { await quotes.guarda(tel, { sin_configurar: true, paso }); } catch { /* sin marca, un [PAY] inventado da sin_cotizacion */ }
+    try { await derivaPersona(tel, "sin_configurar", paso ? `falta configurar «${paso}» en el ERP` : "falta configurar el ERP"); } catch { /* mejor esfuerzo */ }
     return { ok: false, error: "booking_not_available", note: SIN_CONFIGURAR };
   };
 
@@ -211,7 +216,7 @@ export function createErpTools({ erp, quotes, seg = null, derivaPersona = async 
         ...(direccion && self_return !== true ? { recogida_direccion: direccion } : {}),
       });
       if (!c.ok) {
-        if (c.motivo === "sin_configurar") { await quotes.borra(tel); return await sinConfigurar(tel, c); }
+        if (c.motivo === "sin_configurar") return await sinConfigurar(tel, c);
         if (c.motivo === "entrega_a_confirmar" || c.motivo === "entrega_no_configurada") return { ok: false, error: `The delivery price must be confirmed by the team. ${SIN_PRECIO}` };
         if (c.motivo === "sin_disponibilidad") { if (seg) { try { await seg.borra(tel); } catch { /* best-effort */ } } return { ok: true, bike: hit.nombre, from, to, available: false, note: "No unit of this bike is free for those dates. Do not offer to book it: offer other dates or another model." }; }
         return { ok: false, error: `The booking system could not price this right now. ${SIN_PRECIO}` };
@@ -273,8 +278,9 @@ export function createCierreErp({ erp, quotes, pendingRsv, indice, backend, avis
   const fallo = async (t, motivo, extra) => {
     const clave = TEXTO_FALLO[motivo] ? motivo : "generico";
     if (!SIN_PROMESA.has(clave)) {
-      try { await avisaEquipo(`⚠️ [${project}] reserva ERP no completada: ${motivo}${extra ? ` (${extra})` : ""}. El cliente queda en «por responder» del panel.`); } catch { /* mejor esfuerzo */ }
-      if (t) { try { await derivaPersona(t, motivo); } catch { /* mejor esfuerzo */ } }
+      let avisado = false;
+      if (t) { try { avisado = (await derivaPersona(t, motivo, extra)) === true; } catch { /* mejor esfuerzo */ } }
+      if (!avisado) { try { await avisaEquipo(`⚠️ [${project}] reserva ERP no completada: ${motivo}${extra ? ` (${extra})` : ""}. El cliente está en «por responder» del panel.`); } catch { /* mejor esfuerzo */ } }
     }
     return { ok: false, motivo, texto: TEXTO_FALLO[clave] };
   };
@@ -303,6 +309,7 @@ export function createCierreErp({ erp, quotes, pendingRsv, indice, backend, avis
     // 2) Lo guardado manda; lo del modelo solo se compara
     const q = await quotes.lee(t);
     if (!q) return ko("sin_cotizacion");
+    if (q.sin_configurar === true) return ko("sin_configurar", q.paso ? `paso ${q.paso}` : undefined);   // el ERP ya dijo que no: mismo texto honesto
     if (!Number.isInteger(payAmount) || payAmount !== q.total) { log.warn(p(`[PAY] no cuadra con la cotización guardada (modelo=${payAmount} guardada=${q.total})`)); return ko("importe_no_cuadra"); }
 
     // 3) Nombre y país, antes que nada
@@ -326,11 +333,12 @@ export function createCierreErp({ erp, quotes, pendingRsv, indice, backend, avis
       });
       if (!r.ok) {
         if (r.motivo === "entrega_a_confirmar" || r.motivo === "entrega_no_configurada") return ko("generico", r.motivo);
-        // sin_configurar: la base aborta ENTERA (no deja bloqueo). La cotización se borra: el siguiente [PAY] no reintenta a ciegas.
-        if (r.motivo === "sin_configurar") { await quotes.borra(t); return ko("sin_configurar", r.paso ? `paso ${r.paso}` : undefined); }
+        // sin_configurar: la base aborta ENTERA (no deja bloqueo). La cotización se cambia por la marca: el siguiente [PAY] no reintenta a ciegas.
+        if (r.motivo === "sin_configurar") { try { await quotes.guarda(t, { sin_configurar: true, paso: r.paso || null }); } catch { /* */ } return ko("sin_configurar", r.paso ? `paso ${r.paso}` : undefined); }
         return ko(MOTIVO_A_TEXTO[r.motivo] || "generico", r.motivo);
       }
       rs = r.reserva;
+      if (rs.repetida === true) reutilizada = true;   // la base devolvió una reserva que ya existía: puede que `cliente` ya saliera (Redis falló al apuntarlo)
       if (rs.precio_total !== q.total || rs.moneda !== q.moneda) { await quotes.borra(t); return ko("precio_cambio", `cotizado=${q.total} reserva=${rs.precio_total}`); }
       q.reserva = { ...rs, creada_ms: now() };
       try { await quotes.guarda(t, q); } catch { /* sin guardar, un reintento reservaría otra: la base la devuelve si no hay `clave` por mensaje */ }
@@ -391,19 +399,27 @@ export function createAvisoPago({ indice, pendingRsv, backend, dedupe, enviaClie
     if (!cuerpo || cuerpo.ignorado === true) return { avisado: false, motivo: "ignorado" };
     if (cuerpo.ok !== true) {
       if (cuerpo.revisar !== true) return { avisado: false, motivo: "sin_ok" };
-      const telR = await indice.teleDeExternalId(externalId);
       if (dedupe && !(await dedupe(invoiceId))) return { avisado: false, motivo: "repetido" };
-      if (telR) { try { await derivaPersona(telR, "pago_a_revisar"); } catch { /* */ } }
-      try { await avisaEquipo(`💰 [${project}] Pago de reserva ERP A REVISAR (no encaja con la reserva ${String(externalId).slice(4, 12)}…). NO se ha avisado al cliente: confirmárselo a mano${telR ? " (está en «por responder» del panel)" : "; no sé a qué chat"}.`); } catch { /* */ }
+      const telR = await indice.teleDeExternalId(externalId);
+      const texto = `💰 Pago de reserva ERP A REVISAR (no encaja con la reserva ${String(externalId).slice(4, 12)}…). NO se ha avisado al cliente: confirmárselo a mano`;
+      let avisado = false;
+      if (telR) {
+        // pagado: ni el enlace pendiente ni el pin a erp siguen vivos (un [PAY] o [RESEND_LINK] reenviaría el enlace de una factura ya pagada)
+        try { await pendingRsv.borra(telR); } catch { /* */ }
+        try { await backend.suelta(telR); } catch { /* */ }
+        try { avisado = (await derivaPersona(telR, "pago_a_revisar", texto)) === true; } catch { /* */ }
+      }
+      if (!avisado) { try { await avisaEquipo(`[${project}] ${texto}${telR ? " (está en «por responder» del panel)" : "; no sé a qué chat"}.`); } catch { /* */ } }
       return { avisado: false, motivo: "revisar" };
     }
+    // Deduplicar ANTES de buscar el chat: un reintento de Xendit de un pago sin índice no repite el aviso al equipo.
+    if (dedupe && !(await dedupe(invoiceId))) return { avisado: false, motivo: "repetido" };
     const tel = await indice.teleDeExternalId(externalId);
     if (!tel) {
       log.error(p("pago de una reserva sin teléfono en el índice: aviso a mano"));
       try { await avisaEquipo(`⚠️ [${project}] Pago recibido de la reserva ${String(externalId).slice(0, 44)} pero no sé a qué chat avisar. Comprobar en el ERP.`); } catch { /* */ }
       return { avisado: false, motivo: "sin_telefono" };
     }
-    if (dedupe && !(await dedupe(invoiceId))) return { avisado: false, motivo: "repetido" };
     const pend = await pendingRsv.lee(tel);
     const importe = pend ? pend.importe : undefined, moneda = pend ? pend.moneda : undefined;
     const r = await enviaCliente(tel, textoPagoRecibido(cuerpo, { importe, moneda }));

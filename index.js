@@ -2774,14 +2774,27 @@ const bbmViva = bbmErp.enabled ? createCotizacionViva({ erp: bbmErp, redis: () =
 const bbmErpTools = createErpTools({ erp: bbmErp, quotes: bbmQuotes, seg: bbmViva, derivaPersona: derivaPersonaBbm, project: PROJECT_NAME });
 const bbmSombraN = Math.max(1, parseInt(process.env.BBM_SOMBRA_N || "30", 10) || 30);
 const bbmSombra = process.env.BBM_SOMBRA === "1" && bbmErp.enabled ? createSombra({ erp: bbmErp, redis: () => redisClient, n: bbmSombraN, project: PROJECT_NAME }) : null;
-// El flujo del ERP le dijo al cliente que una persona del equipo seguirá (sin configurar, enlace fallido, precio a confirmar…): la petición queda en la ficha
-// (`pidePersona`, BBM-50) hasta que alguien le conteste de verdad (atendidoPorPersona), y el lead sale en «por responder» del panel. El aviso al equipo
-// ya lo manda bbmflow (avisaEquipoBbm). Lo hace el servidor, nunca el modelo (lección de Bots del 12-oct).
-async function derivaPersonaBbm(tel, motivo) {
+// El flujo del ERP le dijo al cliente que una persona del equipo seguirá (sin configurar, enlace fallido, precio a confirmar, pago a revisar…): la petición
+// queda en la ficha (`pidePersona`, BBM-50) hasta que alguien le conteste de verdad (atendidoPorPersona), el lead sale en «por responder» del panel y el
+// equipo recibe UN aviso por petición, igual que BBM-50: Telegram (sin datos si PRIV_TELEGRAM_SIN_DATOS=1) + WhatsApp al owner con el enrutado por cita.
+// Devuelve true si abrió la petición y avisó; false si ya había una abierta (entonces bbmflow manda solo el aviso técnico). Lo hace el servidor, nunca
+// el modelo (lección de Bots del 12-oct; revisor 12-oct: antes el «sin configurar» de la cotización no avisaba a nadie).
+async function derivaPersonaBbm(tel, motivo, detalle) {
   const lead = await getLead(tel);
-  if (!(lead && lead.pidePersona)) await updateLeadFields(tel, { pidePersona: Date.now(), intent: "human" });
   await setWaiting(tel, true);
+  if (lead && lead.pidePersona) return false;
+  await updateLeadFields(tel, { pidePersona: Date.now(), intent: "human" });
+  const nombre = (lead && lead.name) || "";
+  const que = `reserva por el ERP no completada (${String(motivo).slice(0, 40)})${detalle ? `: ${String(detalle).slice(0, 200)}` : ""}`;
+  await notifyTelegram(`🙋 HAY QUE ATENDER A UN CLIENTE\n${nombre || tel} (+${tel})\n${que}\n\nEl bot le ha dicho que alguien del equipo le contestará en este chat. Contéstale desde el panel o la app.`, "🙋 Un cliente de reservas necesita a una persona: lo tienes arriba en «por responder» del panel");
+  if (OWNER_PHONE) {
+    const entry = await escPush(tel, nombre, que);
+    const rNotif = await sendWhatsAppResult(OWNER_PHONE, `🙋 ${PROJECT_NAME} — ${que}\n\n*${nombre || tel}*\n\nResponde CITANDO este mensaje (mantén pulsado → Responder) y se lo reenviaré, o contéstale desde el panel.`);
+    if (rNotif.ok && rNotif.id && redisClient) await redisClient.setEx(`escmap:${rNotif.id}`, 7 * 86400, entry);
+    if (!rNotif.ok) console.error(`[${PROJECT_NAME}] Error avisando al owner de una reserva derivada: ${rNotif.error}`);
+  }
   console.log(`[${PROJECT_NAME}] [bbmflow] derivado a una persona (${String(motivo).slice(0, 40)})`);
+  return true;
 }
 async function avisaEquipoBbm(texto) {
   await notifyTelegram(texto, "⚠️ Aviso del flujo de reservas del ERP (el detalle va al WhatsApp del responsable)");

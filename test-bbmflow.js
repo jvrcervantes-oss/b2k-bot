@@ -350,6 +350,17 @@ const COT = { producto_id: PID, nombre: "Honda Scoopy", desde: FUT, hasta: FUT2,
   const qz = await z.quotes.lee(TEL); delete qz.reserva.cliente_ok; await z.quotes.guarda(TEL, qz);
   assert.equal((await z.cierre.cierra({ tel: TEL, mensajeId: "b", payAmount: 330000, nombre: "Ana", pais: "Spain" })).ok, true);
   ok("no_aplica en `cliente` sobre una reserva reutilizada: se sigue y el enlace decide");
+  // la base devuelve una reserva que YA existía (repetida:true) y `cliente` ya había salido: se sigue igual (revisor 12-oct)
+  const rp = montaCierre({
+    reserva: (b) => [200, { r: { id: RID, numero_reserva: "R", estado: "bloqueo", caduca_en: "2099-01-01T00:00:00+00:00", desde: b.desde, hasta: b.hasta, dias: 3, precio_total: 330000, moneda: "IDR", lineas: [], cobro: { external_id: `rsv:${RID}`, importe: 330000, moneda: "IDR", segundos_hasta_caducar: 3000 }, repetida: true } }],
+    cliente: () => [409, { error: "no_aplica" }],
+  });
+  await rp.quotes.guarda(TEL, COT);
+  assert.equal((await rp.cierre.cierra({ tel: TEL, mensajeId: "c", payAmount: 330000, nombre: "Ana", pais: "Spain" })).ok, true);
+  const nr = montaCierre({ cliente: () => [409, { error: "no_aplica" }] });
+  await nr.quotes.guarda(TEL, COT);
+  assert.equal((await nr.cierre.cierra({ tel: TEL, mensajeId: "c", payAmount: 330000, nombre: "Ana", pais: "Spain" })).ok, false, "una reserva NUEVA con no_aplica sí corta");
+  ok("reserva repetida (ya existía) + no_aplica en `cliente`: se sigue; en una reserva nueva, no");
 }
 
 // ── 3) aviso al cliente cuando paga ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -403,6 +414,32 @@ const COT = { producto_id: PID, nombre: "Honda Scoopy", desde: FUT, hasta: FUT2,
   }
   assert.equal(enviados.length, 0, "sin ok === true el cliente no recibe nada");
   ok("pago a revisar (o cualquier cuerpo sin ok === true): nada al cliente; el equipo lo sabe y el chat queda «por responder»");
+}
+{
+  // pago a revisar: la factura está pagada, así que el enlace pendiente y el pin a erp se limpian (un [PAY]/[RESEND_LINK] no lo reenvía)
+  const m = montaCierre();
+  await m.quotes.guarda(TEL, COT);
+  assert.equal((await m.cierre.cierra({ tel: TEL, mensajeId: "m", payAmount: 330000, nombre: "Ana", pais: "Spain" })).ok, true);
+  assert.ok(await m.pendingRsv.lee(TEL)); assert.equal(await m.backend.bbmBackend(TEL), "erp");
+  const equipo = [];
+  const vistos = new Set();
+  const aviso = createAvisoPago({ indice: m.indice, pendingRsv: m.pendingRsv, backend: m.backend, dedupe: async (id) => { if (vistos.has(id)) return false; vistos.add(id); return true; },
+    enviaCliente: async () => ({ ok: true }), avisaEquipo: async (x) => { equipo.push(x); }, derivaPersona: async () => true, log: silent });
+  await aviso({ externalId: `rsv:${RID}`, invoiceId: "inv_r", cuerpo: { revisar: true } });
+  assert.equal(await m.pendingRsv.lee(TEL), null, "sin enlace pendiente"); assert.equal(await m.backend.bbmBackend(TEL), "dion", "pin suelto");
+  assert.equal(equipo.length, 0, "derivaPersona ya avisó (true): no se manda además el técnico");
+  await aviso({ externalId: `rsv:${RID}`, invoiceId: "inv_r", cuerpo: { revisar: true } });
+  assert.equal(equipo.length, 0, "el reintento de Xendit no repite nada");
+  // pago sin índice: el reintento de Xendit no repite el aviso al equipo (se deduplica ANTES de buscar el chat)
+  const e2 = [];
+  const v2 = new Set();
+  const a2 = createAvisoPago({ indice: m.indice, pendingRsv: m.pendingRsv, backend: m.backend, dedupe: async (id) => { if (v2.has(id)) return false; v2.add(id); return true; },
+    enviaCliente: async () => ({ ok: true }), avisaEquipo: async (x) => { e2.push(x); }, log: silent });
+  const sinIdx = `rsv:9a1e6c1a-0d52-4e0e-8a77-7f0b6f3a9999`;
+  await a2({ externalId: sinIdx, invoiceId: "inv_x", cuerpo: { ok: true } });
+  await a2({ externalId: sinIdx, invoiceId: "inv_x", cuerpo: { ok: true } });
+  assert.equal(e2.filter((x) => /no sé a qué chat/.test(x)).length, 1);
+  ok("pago a revisar limpia enlace pendiente y pin, un solo aviso; pago sin índice: un solo aviso aunque Xendit reintente");
 }
 
 {
