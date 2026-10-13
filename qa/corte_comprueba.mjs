@@ -1,28 +1,33 @@
 // Comprobación previa del corte del bot de BBM al ERP (E1.10, 13-oct-2026, bbm-corte-bot). SOLO LEE: no cambia variables, no despliega,
 // no escribe en Redis ni manda nada. Es el `--comprueba` del guion (bbm_corte_bot_13oct.md, punto 4); se lanza antes de cada paso.
 //
-//   node qa/corte_comprueba.mjs --fase <desplegado|prueba|corte|vuelta> [--sha <commit esperado en producción>]
+//   node qa/corte_comprueba.mjs --fase <desplegado|prueba|precorte|corte|vuelta> [--sha <commit esperado en producción>]
 //   BBM_ADMIN_KEY=<clave del panel> por el entorno (opcional): sin ella, el health queda NO MEDIDO y se dice. La clave nunca se escribe.
 //
 // Fases (qué tiene que ser verdad ANTES de seguir):
 //   desplegado: el código nuevo corre (sha) con BBM_BACKEND=dion, BBM_ERP_CLAVE=1, sin teléfonos de prueba, backend efectivo dion.
 //   prueba:     lo mismo, y BBM_ERP_TELEFONOS con 1 a 3 teléfonos (el del estudio) para el cobro de prueba de E1.6.
-//   corte:      BBM_BACKEND=erp y backend efectivo erp (después del cambio).
+//   precorte:   lo mismo que desplegado, y el código desplegado ya no dice «sin comisión» (requisito I): se lanza justo ANTES de BBM_BACKEND=erp.
+//   corte:      BBM_BACKEND=erp y backend efectivo erp (después del cambio), y lo mismo de la comisión.
 //   vuelta:     BBM_BACKEND=dion y backend efectivo dion (después de volver atrás).
 // Salida: una línea por comprobación (OK / ROJO / NO MEDIDO) y código 0 solo si no hay ningún ROJO.
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const RAIZ = fileURLToPath(new URL("..", import.meta.url));   // el repo del bot, para leer el código del sha desplegado
 
 const PROYECTO = "bcd4b2a6-792f-4074-8f38-06aedb5782c2", SERVICIO = "bbm-bot", ENTORNO = "production";
 const URL_BOT = "https://b2k-bot-production-5498.up.railway.app";
 const arg = (k) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : undefined; };
 const fase = arg("--fase"), shaEsperado = arg("--sha");
-if (!["desplegado", "prueba", "corte", "vuelta"].includes(fase)) { console.error("uso: node qa/corte_comprueba.mjs --fase desplegado|prueba|corte|vuelta [--sha <commit>]"); process.exit(2); }
+if (!["desplegado", "prueba", "precorte", "corte", "vuelta"].includes(fase)) { console.error("uso: node qa/corte_comprueba.mjs --fase desplegado|prueba|precorte|corte|vuelta [--sha <commit>]"); process.exit(2); }
 
 const filas = [];
 const fila = (estado, que, detalle = "") => { filas.push(estado); console.log(`${estado.padEnd(9)} ${que}${detalle ? ` — ${detalle}` : ""}`); };
 const railway = (args) => execFileSync("railway", [...args, "--project", PROYECTO, "-e", ENTORNO, "-s", SERVICIO], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], shell: process.platform === "win32" });
 
 // 1. despliegue
+let shaVivo = "";
 try {
   const lista = JSON.parse(railway(["deployment", "list", "--json"]));
   const a = (Array.isArray(lista) ? lista : lista.deployments || []);
@@ -34,7 +39,21 @@ try {
   else if (shaEsperado && !sha.startsWith(shaEsperado)) fila("ROJO", "commit en producción", `${sha.slice(0, 7)} (rama ${ok.meta?.branch}); se esperaba ${shaEsperado}`);
   else fila("OK", "commit en producción", `${sha.slice(0, 7)} de ${ok.meta?.branch}, ${ok.createdAt}`);
   if (ok && ok.meta?.branch !== "balibest") fila("ROJO", "rama desplegada", `${ok.meta?.branch} (bbm-bot despliega de balibest)`);
+  shaVivo = sha;
 } catch (e) { fila("ROJO", "despliegue", `no se pudo leer (${String(e.message).split("\n")[0].slice(0, 80)})`); }
+
+// 1b. comisión de la pasarela (requisito I, owner 13-oct: «Se suma como hace Dion»). Mientras el ERP no la sume, el modo erp le dice al modelo
+// que NO hay comisión; cuando el ERP la sume, esa frase tiene que haber salido del código desplegado, o el cliente oye «sin comisión» y paga más.
+// Solo mira que la frase vieja ya no esté (el campo de la comisión del ERP aún no existe: cuando exista, se comprueba aquí también).
+if (fase === "precorte" || fase === "corte") {
+  const FRASE = "there is NO extra payment fee";
+  try {
+    const fuente = execFileSync("git", ["show", `${shaVivo}:bbmflow.js`], { cwd: RAIZ, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    fila(fuente.includes(FRASE) ? "ROJO" : "OK", "comisión de la pasarela (requisito I)", fuente.includes(FRASE)
+      ? `el código desplegado (${shaVivo.slice(0, 7)}) aún dice «${FRASE}»: el ERP tiene que sumar la comisión y la línea cambiar en el mismo paso`
+      : "el código desplegado ya no dice que no hay comisión; Backend confirma que cotiza y factura la llevan");
+  } catch { fila("ROJO", "comisión de la pasarela (requisito I)", `no se pudo leer bbmflow.js en ${shaVivo.slice(0, 7) || "(sin sha)"}: git fetch origin balibest y repetir`); }
+}
 
 // 2. variables: solo se miran las que no son secretas; de las secretas, solo si existen
 let v = {};
@@ -42,7 +61,7 @@ try {
   for (const l of railway(["variables", "--kv"]).split(/\r?\n/)) { const i = l.indexOf("="); if (i > 0) v[l.slice(0, i)] = l.slice(i + 1); }
 } catch (e) { fila("ROJO", "variables", "no se pudieron leer"); }
 const leidas = Object.keys(v).length > 0;
-const quiere = { desplegado: "dion", prueba: "dion", corte: "erp", vuelta: "dion" }[fase];
+const quiere = { desplegado: "dion", prueba: "dion", precorte: "dion", corte: "erp", vuelta: "dion" }[fase];
 if (leidas) {
   for (const k of ["BBM_ERP_URL", "BBM_RESERVAS_SECRET", "XENDIT_CALLBACK_TOKEN", "REDIS_URL"]) fila(v[k] ? "OK" : "ROJO", `${k} existe`);
   fila(v.BBM_BACKEND === quiere ? "OK" : "ROJO", "BBM_BACKEND", `${v.BBM_BACKEND ?? "(no está)"}; en esta fase tiene que ser ${quiere}`);

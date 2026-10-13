@@ -286,7 +286,8 @@ const TEXTO_FALLO = {
 };
 // Los mismos textos en indonesio y español (13-oct-2026, E1.10): hasta hoy salían solo en inglés también a quien escribe en indonesio.
 // Idioma = el de `idiomaAviso` (aviso-ia.js) sobre el mensaje del cliente y la respuesta del modelo; otro idioma o la duda, inglés.
-// PENDIENTE DE APROBAR por el orquestador antes de desplegar, como el aviso de IA de BBM-50 (los textos al cliente los aprueba él).
+// APROBADOS el 13-oct-2026 por el orquestador (agencia-81, CEO por defecto, reversible): fila de Decisiones de encargos/20261010_bbm_carga_datos_reales.md
+// (repo de la agencia). El indonesio lo repasa el equipo de Dion antes del corte (owner, 13-oct: «Dion se encargará del indonesio»). Revertir: quitar id/es.
 const TEXTO_FALLO_ID = {
   sin_cotizacion: "Saya perlu mengecek ulang harga untuk tanggal Anda sebelum mengirim link pembayaran — sebentar, saya tanyakan ke tim kami.",
   importe_no_cuadra: "Saya ingin memastikan harga akhirnya dengan tim kami sebelum mengirim link pembayaran — mereka akan segera menghubungi Anda.",
@@ -431,7 +432,7 @@ export function createCierreErp({ erp, quotes, pendingRsv, indice, backend, avis
 
 // ── aviso al cliente cuando paga ───────────────────────────────────────────────────────────────────────────────────────────────────
 // `cuerpo` es lo que contestó la edge reservas-pago: {ok,factura:{numero,total,moneda}} | {ok,factura_espera} | {revisar:true} | {ignorado} | null.
-// `idioma` = el que se guardó con el enlace (pendingRsv, cierre): «en» | «id» | «es»; otro valor, inglés. Textos id/es PENDIENTES DE APROBAR (ver TEXTOS_FALLO).
+// `idioma` = el que se guardó con el enlace (pendingRsv, cierre): «en» | «id» | «es»; otro valor, inglés. Textos id/es aprobados el 13-oct (ver TEXTOS_FALLO).
 const TEXTO_PAGO = {
   en: { revisar: (c) => `✅ Payment received${c}. Thank you! Our team is checking your booking and will message you shortly to confirm it.`,
         num: (n) => ` Your invoice number is ${n}.`, sinNum: " Your invoice is on its way.",

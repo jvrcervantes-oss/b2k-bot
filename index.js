@@ -2759,7 +2759,8 @@ async function markLeadPaid(phone, provider, amountIDR, receiptUrl) {
 }
 
 // Interruptor de backend de BBM (F8-7c, parte segura): `dion` (hoy) o `erp`. Por defecto Redis `bbm:backend` > BBM_BACKEND > dion. (Ningún panel escribe aún `bbm:backend`, medido 12-oct: se cambia con la variable.)
-// Todavía NO lo lee ninguna rama de la conversación: solo está cableado y visible en /admin/api/health. Con `dion` (o sin variables) nada cambia.
+// Lo lee el turno de la conversación (bbmBackendSw.bbmBackend(tel)) para elegir entre Dion y el ERP, y se ve en /admin/api/health. Con `dion` (o sin variables) y sin
+// BBM_ERP_TELEFONOS todo va a Dion como antes del corte.
 // BBM_ERP_TELEFONOS (E1.10, 13-oct-2026): teléfonos de prueba que van al ERP con el interruptor en dion (cobro de prueba antes del corte). Ver leeTelefonosErp.
 const bbmTelefonosErp = leeTelefonosErp(process.env.BBM_ERP_TELEFONOS, console, PROJECT_NAME);
 if (bbmTelefonosErp.size) console.log(`[${PROJECT_NAME}] [bbm-backend] ${bbmTelefonosErp.size} teléfono(s) de prueba van al ERP aunque el interruptor diga otra cosa (BBM_ERP_TELEFONOS)`);
