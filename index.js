@@ -10,7 +10,7 @@ import Stripe from "stripe";
 import crypto from "crypto";
 // S8 (10-oct-2026): quita el razonamiento del modelo que se cuela en el texto (se llama desde cleanReply).
 import { quitaRazonamiento, idiomaCliente, textoDelTurno } from "./razonamiento.js";
-import { conAviso, configAviso, conservaMarca } from "./aviso-ia.js";
+import { conAviso, configAviso, conservaMarca, idiomaAviso } from "./aviso-ia.js";
 import { createSeguimientoConfig } from "./seguimiento-config.js";
 import { createFollowupRunner } from "./seguimiento-tick.js";
 import { createCotizacionViva } from "./seguimiento-viva.js";
@@ -3246,7 +3246,8 @@ app.post("/webhook", async (req, res) => {
     } else if (payMatch && BOT_VERTICAL === "rental" && backendTurno === "erp") {
       // Modo erp (bbmflow.js): [PAY] solo dispara. La reserva sale de la cotización GUARDADA; el importe del modelo se compara, nunca se usa.
       const lf = leadFields || {}, leadActual = await getLead(from);
-      const cierre = await cierreErp.cierra({ tel: from, mensajeId: message.id, payAmount, nombre: lf.name || (leadActual && leadActual.name), pais: lf.country || (leadActual && leadActual.country) });
+      // idioma de los textos fijos del cierre y del aviso de pago (se guarda con el enlace): el mismo criterio que el aviso de IA
+      const cierre = await cierreErp.cierra({ tel: from, mensajeId: message.id, payAmount, nombre: lf.name || (leadActual && leadActual.name), pais: lf.country || (leadActual && leadActual.country), idioma: idiomaAviso(text, reply) });
       if (cierre.ok) { enlace = cierre.url; await setLastLink(from, cierre.url); }
       else reply = reply + "\n\n" + cierre.texto;
     } else if (payMatch && BOT_VERTICAL === "rental") {

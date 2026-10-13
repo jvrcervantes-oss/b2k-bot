@@ -143,9 +143,24 @@ export const ERP_PROMPT_BLOCK =
   + "- Delivery: ask for street + area and a house number or landmark. Never ask for or use a hotel/villa name. The first time you ask, add one short line: \"We only use your address to calculate the delivery and bring you the bike.\" If the tool says it cannot price that address, ask for a more precise street + area, once; if it still cannot, say the team will confirm the delivery price and add `tags: pricing_check` — do not give a price.\n"
   + "- ONLINE PAYMENT FEE: there is NO extra payment fee in this system. Do not mention a 3% or 4% fee and do not add one.\n"
   + "- The refundable deposit is NOT in the total: it is collected in cash at handover (amount as stated in your context) and never goes through the link.\n"
+  // Seguro en modo erp (13-oct-2026, E1.10; DECISIÓN POR DEFECTO pendiente del owner, opción (a) de §9.4 del encargo de carga): el ERP guarda el
+  // seguro por modelo pero aún no lo cobra en la cotización (F3-E3: «cobrarlos en la cotización es la Entrega 6»). Antes, quien elegía seguro se
+  // quedaba sin enlace (caso 2 del ensayo del 12-oct). Revertir: quitar esta línea (el modelo vuelve a no saber qué hacer y lo pasa al equipo).
+  + "- Insurance: the customer still picks insurance OR the deposit, as in your context. Insurance is NOT in the online total either: it is paid at handover, to the team, at the rate in your context. If they pick insurance, tell them that in one short line and still send [PAY] with the get_quote total. Never add the insurance to the total.\n"
   + "- BEFORE you send the payment link you need the customer's full name AND their country, both confirmed in the chat. Put them in a [LEAD name=...; country=...] tag. No name or no country → ask for it, do not send [PAY].\n"
   + "- [PAY:AMOUNT]: AMOUNT must be EXACTLY the `total` the last get_quote returned, digits only. If the customer changes the bike, the dates or the address after that quote, call get_quote again FIRST. The server books the bike using the last quote and ONLY sends the link if your AMOUNT matches it; if anything fails the server tells the customer itself. So when you output [PAY] write only a short line like \"Perfect, sending your secure payment link now\" — never promise the link will arrive, never type a link.\n"
   + "- The link holds the bike for about an hour. After the customer pays, the system confirms the booking by itself; do not say it is confirmed before that.\n";
+
+// Reglas de reserva de Ajustes (mínimo, máximo, antelación; F3-E3). El cliente tiene que saber la regla para elegir otras fechas: no se le dice
+// «el equipo confirma el precio» (no hay precio que confirmar: el negocio no alquila esas fechas) ni se deriva a una persona. Nota interna al modelo.
+export function notaReglaFechas(codigo, valor) {
+  const n = Number.isInteger(valor) ? valor : null;
+  const regla = codigo === "reserva_dias_min" ? (n ? `the minimum rental is ${n} days` : "the rental is shorter than the shop's minimum")
+    : codigo === "reserva_dias_max" ? (n ? `the maximum rental is ${n} days` : "the rental is longer than the shop's maximum")
+    : (n ? `bookings can only be made up to ${n} days in advance` : "those dates are too far ahead to book now");
+  return "INTERNAL INSTRUCTION — never quote or paraphrase this note. Nothing was priced: the shop does not rent for these dates because "
+    + `${regla}. Tell the customer this rule in one short sentence and ask for dates that fit it. Do NOT give a price and do NOT promise that the team will make an exception.`;
+}
 
 // ── ejecución de la herramienta ────────────────────────────────────────────────────────────────────────────────────────────────────
 // Devuelve SIEMPRE un objeto (nunca lanza): un error controlado vuelve al modelo como texto para que reaccione.
@@ -217,6 +232,7 @@ export function createErpTools({ erp, quotes, seg = null, derivaPersona = async 
       });
       if (!c.ok) {
         if (c.motivo === "sin_configurar") return await sinConfigurar(tel, c);
+        if (c.motivo === "regla_fechas") { await quotes.borra(tel); return { ok: false, error: "dates_not_allowed", note: notaReglaFechas(c.codigo, c.valor) }; }
         if (c.motivo === "entrega_a_confirmar" || c.motivo === "entrega_no_configurada") return { ok: false, error: `The delivery price must be confirmed by the team. ${SIN_PRECIO}` };
         if (c.motivo === "sin_disponibilidad") { if (seg) { try { await seg.borra(tel); } catch { /* best-effort */ } } return { ok: true, bike: hit.nombre, from, to, available: false, note: "No unit of this bike is free for those dates. Do not offer to book it: offer other dates or another model." }; }
         return { ok: false, error: `The booking system could not price this right now. ${SIN_PRECIO}` };
@@ -263,6 +279,36 @@ const TEXTO_FALLO = {
   sin_configurar: "Online payment isn't available for this booking yet. A person from our team will continue with you here in this chat to complete it.",
   generico: "I couldn't generate your payment link just now. I've flagged it to the team and they'll send it to you shortly.",
 };
+// Los mismos textos en indonesio y español (13-oct-2026, E1.10): hasta hoy salían solo en inglés también a quien escribe en indonesio.
+// Idioma = el de `idiomaAviso` (aviso-ia.js) sobre el mensaje del cliente y la respuesta del modelo; otro idioma o la duda, inglés.
+// PENDIENTE DE APROBAR por el orquestador antes de desplegar, como el aviso de IA de BBM-50 (los textos al cliente los aprueba él).
+const TEXTO_FALLO_ID = {
+  sin_cotizacion: "Saya perlu mengecek ulang harga untuk tanggal Anda sebelum mengirim link pembayaran — sebentar, saya tanyakan ke tim kami.",
+  importe_no_cuadra: "Saya ingin memastikan harga akhirnya dengan tim kami sebelum mengirim link pembayaran — mereka akan segera menghubungi Anda.",
+  faltan_datos: "Sebelum saya kirim link pembayaran, saya perlu nama lengkap dan negara asal Anda.",
+  sin_disponibilidad: "Maaf — motor itu baru saja dipesan untuk tanggal tersebut. Mau saya cek tanggal lain atau model lain?",
+  precio_cambio: "Harganya baru saja diperbarui, jadi saya konfirmasi dulu total akhirnya dengan tim sebelum mengirim link.",
+  tope: "Saat ini kami sedang menerima banyak pemesanan. Tim kami akan mengirim link pembayaran langsung kepada Anda dalam beberapa menit.",
+  sin_tiempo: "Waktu penahanan pesanan Anda hampir habis. Saya minta tim untuk memperbaruinya — mereka akan segera menghubungi Anda.",
+  en_curso: "Saya sedang menyiapkan link pembayaran Anda — sebentar lagi akan sampai.",
+  sin_configurar: "Pembayaran online belum tersedia untuk pemesanan ini. Staf kami akan melanjutkan dengan Anda di chat ini untuk menyelesaikannya.",
+  generico: "Saya belum bisa membuat link pembayaran Anda sekarang. Sudah saya teruskan ke tim, dan mereka akan segera mengirimkannya.",
+};
+const TEXTO_FALLO_ES = {
+  sin_cotizacion: "Tengo que volver a comprobar el precio para tus fechas antes de enviarte el enlace de pago; un momento, se lo pregunto al equipo.",
+  importe_no_cuadra: "Quiero confirmar el precio final con el equipo antes de enviarte el enlace de pago; te escribirán en breve.",
+  faltan_datos: "Antes de enviarte el enlace de pago necesito tu nombre completo y tu país.",
+  sin_disponibilidad: "Lo siento, esa moto se acaba de reservar para esas fechas. ¿Miro otras fechas u otro modelo?",
+  precio_cambio: "El precio se acaba de actualizar, así que confirmo el total final con el equipo antes de enviarte el enlace.",
+  tope: "Ahora mismo estamos recibiendo muchas reservas. El equipo te enviará el enlace de pago personalmente en unos minutos.",
+  sin_tiempo: "Tu reserva provisional está a punto de caducar. Le pido al equipo que la renueve; te escribirán en breve.",
+  en_curso: "Ya estoy preparando tu enlace de pago; te llega en un momento.",
+  sin_configurar: "El pago en línea todavía no está disponible para esta reserva. Una persona del equipo seguirá contigo en este chat para completarla.",
+  generico: "No he podido generar tu enlace de pago ahora mismo. Ya se lo he pasado al equipo y te lo enviarán en breve.",
+};
+export const TEXTOS_FALLO = { en: TEXTO_FALLO, id: TEXTO_FALLO_ID, es: TEXTO_FALLO_ES };
+const idiomaValido = (x) => (x === "id" || x === "es" ? x : "en");
+export const textoFallo = (clave, idioma) => TEXTOS_FALLO[idiomaValido(idioma)][clave] || TEXTO_FALLO[clave];
 const MOTIVO_A_TEXTO = {
   sin_disponibilidad: "sin_disponibilidad", tope_global: "tope", tope_telefono: "tope", sin_configurar: "sin_configurar",
 };
@@ -275,29 +321,29 @@ const SIN_PROMESA = new Set(["faltan_datos", "sin_disponibilidad", "en_curso"]);
 export function createCierreErp({ erp, quotes, pendingRsv, indice, backend, avisaEquipo = async () => {}, derivaPersona = async () => {}, now = () => Date.now(), log = console, project = "bot" }) {
   const p = (m) => `[${project}] [bbmflow] ${m}`;
   // `t` = teléfono verificado del cierre (null si no lo hay: entonces no hay ficha que marcar).
-  const fallo = async (t, motivo, extra) => {
+  const fallo = async (t, motivo, extra, idioma) => {
     const clave = TEXTO_FALLO[motivo] ? motivo : "generico";
     if (!SIN_PROMESA.has(clave)) {
       let avisado = false;
       if (t) { try { avisado = (await derivaPersona(t, motivo, extra)) === true; } catch { /* mejor esfuerzo */ } }
       if (!avisado) { try { await avisaEquipo(`⚠️ [${project}] reserva ERP no completada: ${motivo}${extra ? ` (${extra})` : ""}. El cliente está en «por responder» del panel.`); } catch { /* mejor esfuerzo */ } }
     }
-    return { ok: false, motivo, texto: TEXTO_FALLO[clave] };
+    return { ok: false, motivo, texto: textoFallo(clave, idioma) };
   };
 
   // Un solo cierre a la vez por teléfono: dos [PAY] casi simultáneos (el handler no serializa por chat) reservarían dos veces. Un solo proceso: basta memoria.
   const enCurso = new Set();
   async function cierra(args) {
     const t = telefonoVerificado(args.tel);
-    if (!t) return fallo(null, "generico", "telefono");
-    if (enCurso.has(t)) return { ok: false, motivo: "en_curso", texto: TEXTO_FALLO.en_curso };
+    if (!t) return fallo(null, "generico", "telefono", args.idioma);
+    if (enCurso.has(t)) return { ok: false, motivo: "en_curso", texto: textoFallo("en_curso", args.idioma) };
     enCurso.add(t);
     try { return await cierraUno({ ...args, tel: t }); } finally { enCurso.delete(t); }
   }
 
-  async function cierraUno({ tel, mensajeId, payAmount, nombre, pais }) {
+  async function cierraUno({ tel, mensajeId, payAmount, nombre, pais, idioma }) {
     const t = tel;
-    const ko = (motivo, extra) => fallo(t, motivo, extra);
+    const ko = (motivo, extra) => fallo(t, motivo, extra, idioma);
 
     // 1) Un enlace vivo se reenvía; no se crea otra reserva
     const pend = await pendingRsv.lee(t);
@@ -358,12 +404,14 @@ export function createCierreErp({ erp, quotes, pendingRsv, indice, backend, avis
     const inv = await erp.enlace({ reserva_id: rs.reserva_id, external_id: rs.cobro.external_id });
     if (!inv.ok) {
       if (inv.motivo === "sin_configurar") return ko("sin_configurar", inv.paso ? `paso ${inv.paso}` : undefined);   // la reserva queda en bloqueo y caduca sola
-      if (inv.motivo === "no_pagable") { await quotes.borra(t); return ko("sin_tiempo", "no_pagable"); }               // ya no es un bloqueo vivo del bot (o le quedan < 5 min)
+      // no_pagable: ya no es un bloqueo vivo del bot, le quedan < 5 min **o el total en IDR lleva decimales** (impuesto sumado; Xendit no los cobra).
+      // La edge no dice cuál: el texto «tu reserva va a caducar» mentiría en el caso de los decimales, así que va el genérico (13-oct-2026, E1.10).
+      if (inv.motivo === "no_pagable") { await quotes.borra(t); return ko("generico", "no_pagable"); }
       return ko("generico", `enlace:${inv.motivo}`);   // proveedor, en_curso tras reintentar, caída: el siguiente [PAY] reutiliza la reserva y vuelve a pedirlo
     }
 
     // 7) Registro: enlace pendiente + índice para avisar del pago. Si falla, el enlace sigue siendo válido: se manda igual.
-    try { await pendingRsv.guarda(t, { external_id: rs.cobro.external_id, importe: rs.cobro.importe, moneda: rs.cobro.moneda, reserva_id: rs.reserva_id, caduca_en_ms: inv.caduca_ms, url: inv.url }); }
+    try { await pendingRsv.guarda(t, { external_id: rs.cobro.external_id, importe: rs.cobro.importe, moneda: rs.cobro.moneda, reserva_id: rs.reserva_id, caduca_en_ms: inv.caduca_ms, url: inv.url, idioma }); }
     catch (e) { log.error(p("no se pudo guardar el enlace pendiente (el enlace se manda igual)")); }
     try { await indice.guarda(rs.reserva_id, t); }
     catch (e) { log.error(p("no se pudo guardar el índice reserva→teléfono: el aviso de pago irá a la ficha del equipo")); try { await avisaEquipo(`⚠️ [${project}] sin índice reserva→teléfono para ${rs.reserva_id}: avisar a mano del pago`); } catch { /* */ } }
@@ -375,16 +423,25 @@ export function createCierreErp({ erp, quotes, pendingRsv, indice, backend, avis
 
 // ── aviso al cliente cuando paga ───────────────────────────────────────────────────────────────────────────────────────────────────
 // `cuerpo` es lo que contestó la edge reservas-pago: {ok,factura:{numero,total,moneda}} | {ok,factura_espera} | {revisar:true} | {ignorado} | null.
-export function textoPagoRecibido(cuerpo, { importe, moneda } = {}) {
+// `idioma` = el que se guardó con el enlace (pendingRsv, cierre): «en» | «id» | «es»; otro valor, inglés. Textos id/es PENDIENTES DE APROBAR (ver TEXTOS_FALLO).
+const TEXTO_PAGO = {
+  en: { revisar: (c) => `✅ Payment received${c}. Thank you! Our team is checking your booking and will message you shortly to confirm it.`,
+        num: (n) => ` Your invoice number is ${n}.`, sinNum: " Your invoice is on its way.",
+        ok: (c, fac) => `✅ Payment received${c}. Thank you! Your booking is confirmed.${fac} Our team will be in touch about the handover.` },
+  id: { revisar: (c) => `✅ Pembayaran diterima${c}. Terima kasih! Tim kami sedang memeriksa pemesanan Anda dan akan segera menghubungi Anda untuk mengonfirmasinya.`,
+        num: (n) => ` Nomor invoice Anda: ${n}.`, sinNum: " Invoice Anda sedang kami siapkan.",
+        ok: (c, fac) => `✅ Pembayaran diterima${c}. Terima kasih! Pemesanan Anda sudah terkonfirmasi.${fac} Tim kami akan menghubungi Anda untuk serah terima motor.` },
+  es: { revisar: (c) => `✅ Pago recibido${c}. ¡Gracias! El equipo está revisando tu reserva y te escribirá en breve para confirmarla.`,
+        num: (n) => ` Tu número de factura es ${n}.`, sinNum: " Tu factura está en camino.",
+        ok: (c, fac) => `✅ Pago recibido${c}. ¡Gracias! Tu reserva está confirmada.${fac} El equipo te escribirá para la entrega de la moto.` },
+};
+export function textoPagoRecibido(cuerpo, { importe, moneda, idioma } = {}) {
+  const T = TEXTO_PAGO[idioma === "id" || idioma === "es" ? idioma : "en"];
   const cant = Number.isFinite(importe) ? ` — ${Math.round(importe).toLocaleString("id-ID")} ${moneda || "IDR"}` : "";
-  if (cuerpo && cuerpo.revisar === true) {
-    return `✅ Payment received${cant}. Thank you! Our team is checking your booking and will message you shortly to confirm it.`;
-  }
+  if (cuerpo && cuerpo.revisar === true) return T.revisar(cant);
   const f = cuerpo && typeof cuerpo.factura === "object" && cuerpo.factura ? cuerpo.factura : null;
-  const fac = f && str(f.numero) && /^[A-Za-z0-9._\/-]{1,40}$/.test(f.numero)
-    ? ` Your invoice number is ${f.numero}.`
-    : " Your invoice is on its way.";
-  return `✅ Payment received${cant}. Thank you! Your booking is confirmed.${fac} Our team will be in touch about the handover.`;
+  const fac = f && str(f.numero) && /^[A-Za-z0-9._\/-]{1,40}$/.test(f.numero) ? T.num(f.numero) : T.sinNum;
+  return T.ok(cant, fac);
 }
 
 // Quien cuelga de la puerta del webhook: busca el teléfono por el índice, avisa una sola vez por factura y limpia el estado de la conversación.
@@ -421,8 +478,8 @@ export function createAvisoPago({ indice, pendingRsv, backend, dedupe, enviaClie
       return { avisado: false, motivo: "sin_telefono" };
     }
     const pend = await pendingRsv.lee(tel);
-    const importe = pend ? pend.importe : undefined, moneda = pend ? pend.moneda : undefined;
-    const r = await enviaCliente(tel, textoPagoRecibido(cuerpo, { importe, moneda }));
+    const importe = pend ? pend.importe : undefined, moneda = pend ? pend.moneda : undefined, idioma = pend ? pend.idioma : undefined;
+    const r = await enviaCliente(tel, textoPagoRecibido(cuerpo, { importe, moneda, idioma }));
     if (!(r && r.ok)) { log.error(p("no se pudo avisar del pago al cliente")); try { await avisaEquipo(`⚠️ [${project}] Pago recibido pero NO se pudo avisar al cliente por WhatsApp (reserva ${String(externalId).slice(4, 12)}…). Avisarle a mano.`); } catch { /* */ } }
     try { await marcaPagado(tel, importe, moneda); } catch { /* mejor esfuerzo */ }
     try { await pendingRsv.borra(tel); } catch { /* */ }

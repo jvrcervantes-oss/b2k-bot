@@ -285,7 +285,7 @@ function monta(cfg) {
   b.st.reservas.get(rid).estado = "cancelada";                  // el equipo la anula desde el ERP
   b.st.xenditCaido = false;
   const p = await b.paga();
-  assert.deepEqual([p.ok, p.motivo], [false, "sin_tiempo"]); assert.match(p.texto, /hold is about to run out/);
+  assert.deepEqual([p.ok, p.motivo], [false, "generico"]); assert.match(p.texto, /couldn't generate your payment link/);
   assert.equal(await b.quotes.lee(TEL), null, "no_pagable: cotización y reserva guardada se borran (hay que recotizar)");
   assert.equal(await b.pendingRsv.lee(TEL), null);
   // y recotizar abre una reserva nueva con su enlace

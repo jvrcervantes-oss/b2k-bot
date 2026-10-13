@@ -94,7 +94,7 @@ test("motor compartido: activo solo en Bali Best por defecto, nombre y marca por
 });
 
 test("webhook: el aviso se compone tras textoDelTurno, se marca en el historial y va antes del envío; también en la respuesta a media", () => {
-  assert.match(src, /^import \{ conAviso, configAviso, conservaMarca \} from "\.\/aviso-ia\.js";$/m);
+  assert.match(src, /^import \{ conAviso, configAviso, conservaMarca, idiomaAviso \} from "\.\/aviso-ia\.js";$/m);
   assert.match(src, /const AVISO = configAviso\(process\.env, PERSONA_NAME\);/);
   const iTurno = src.indexOf("reply = textoDelTurno({ texto: reply, enlace, idioma, hayMedia: toSend.length > 0, hayEmail: false });");
   const iAviso = src.indexOf("const aviso = conAviso({ texto: reply, history, textoCliente: text, textos: AVISO.textos, activo: AVISO.activo });");

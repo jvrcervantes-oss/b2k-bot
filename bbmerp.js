@@ -18,8 +18,8 @@
 //     entrega; el bot lo mostrará aparte). Si no es un entero positivo igual a `precio_total`, la reserva se trata como respuesta inválida.
 //   · Idempotencia de `reserva`: los webhooks de Meta se reentregan. La clave sale del id del mensaje de WhatsApp (hash corto, porque el
 //     wamid lleva `=` y `/` y la base solo admite [A-Za-z0-9@:._+-]). Si la respuesta se pierde se reintenta UNA vez con la misma clave.
-//     ⚠ La edge reservas-bot de hoy NO admite el campo `clave` (lo rechazaría con campo_no_admitido): se manda solo con enviaClave=true (opción del constructor; ninguna variable la lee aún: createBbmErp no se instancia en index.js hasta la pieza del flujo),
-//     cuando la edge lo acepte. Mientras tanto la base deduplica por teléfono + moto + fechas (md5) mientras la reserva siga en bloqueo.
+//     La edge reservas-bot admite `clave` desde c241a65f (9-oct-2026; comprobado contra main el 13-oct). Se manda solo con enviaClave=true, que index.js
+//     lee de BBM_ERP_CLAVE=1 (el guion del corte lo comprueba). Sin ella la base deduplica por teléfono + moto + fechas (md5) mientras la reserva siga en bloqueo.
 //   · Logs sin PII: acción, resultado, ids, importes. Nunca teléfonos, nombres, direcciones, mensajes de la base ni el secreto.
 
 import crypto from "crypto";
@@ -36,6 +36,16 @@ const ESTADOS_ENTREGA = new Set(["ok", "sin_resultado", "ambigua", "tope", "paus
 // de reservas-bot y la edge reservas-enlace. NO es una caída: el ERP dice que no, y el bot deriva a una persona sin prometer nada.
 const MOTIVOS_409 = new Set(["entrega_a_confirmar", "entrega_no_configurada", "sin_disponibilidad", "sin_configurar"]);
 const PASO = /^[a-z_]{1,40}$/;   // `paso` de un sin_configurar (moneda, impuesto_pkp, precio_con_impuesto, flota, cobros…); otro valor = null (sin configurar genérico)
+// Reglas de reserva de Ajustes (F3-E3, 20261012210000, `_reserva_producto_valida_fechas`): días mínimo, máximo y antelación máxima. La edge las
+// devuelve como 409 con el hint de la base y su texto en español («El alquiler más corto es de 3 días»); el número no viaja aparte (el `detail`
+// de la base se queda en la edge), así que se saca el PRIMER entero del texto. Sin número creíble → null y el bot dice la regla sin cifra.
+// No es una caída ni «precio a confirmar»: el negocio no alquila esas fechas, y el cliente tiene que saberlo para elegir otras (13-oct-2026, E1.10).
+export const REGLAS_FECHAS = new Set(["reserva_dias_min", "reserva_dias_max", "reserva_horizonte"]);
+export function valorRegla(mensaje) {
+  const m = str(mensaje) ? mensaje.match(/\d{1,4}/) : null;
+  const n = m ? Number(m[0]) : NaN;
+  return Number.isInteger(n) && n >= 1 && n <= 3660 ? n : null;
+}
 export const ENLACE_TIMEOUT_MS = 20000;   // reservas-enlace espera a Xendit hasta 15 s
 export const ENLACE_REINTENTO_MS = 4000;  // tras un 409 en_curso (otra petición está creando el enlace; la marca dura 30 s)
 
@@ -182,6 +192,7 @@ export function createBbmErp(o = {}) {
     if (st === 409) {
       log.log(p(`${accion}: 409 ${codigo || ""}`));
       if (codigo === "sin_configurar") return KO("sin_configurar", { codigo, paso: str(json.paso) && PASO.test(json.paso) ? json.paso : null });
+      if (REGLAS_FECHAS.has(codigo)) return KO("regla_fechas", { codigo, valor: valorRegla(json.mensaje) });
       return KO(MOTIVOS_409.has(codigo) ? codigo : "datos", { codigo });
     }
     if (st === 400 || st === 413) { log.error(p(`${accion}: la edge rechaza la petición (${st} ${codigo || ""})`)); return KO("peticion_invalida", { codigo }); }
@@ -429,12 +440,12 @@ export function createPendingRsv(o = {}) {
   const mem = new Map();
   const key = (tel) => `pendingrsv:${String(tel).replace(/\D/g, "")}`;
 
-  async function guarda(tel, { external_id, importe, moneda, reserva_id, caduca_en_ms, url }) {
+  async function guarda(tel, { external_id, importe, moneda, reserva_id, caduca_en_ms, url, idioma }) {
     if (!telefonoVerificado(tel)) throw new Error("pendingRsv: teléfono inválido");
     if (!str(external_id) || !external_id.startsWith("rsv:")) throw new Error("pendingRsv: external_id debe empezar por rsv:");
     if (!entero(importe) || importe <= 0) throw new Error("pendingRsv: importe entero positivo");
     if (!Number.isFinite(caduca_en_ms) || caduca_en_ms <= now()) throw new Error("pendingRsv: caducidad en el futuro");
-    const reg = { external_id, importe, moneda: str(moneda) ? moneda : null, reserva_id: str(reserva_id) ? reserva_id : null, url: str(url) && /^https:\/\//.test(url) && url.length <= 500 ? url : null, creado_en: now(), caduca_en: caduca_en_ms };
+    const reg = { external_id, importe, moneda: str(moneda) ? moneda : null, reserva_id: str(reserva_id) ? reserva_id : null, url: str(url) && /^https:\/\//.test(url) && url.length <= 500 ? url : null, idioma: idioma === "id" || idioma === "es" ? idioma : "en", creado_en: now(), caduca_en: caduca_en_ms };
     const ttl = Math.max(1, Math.ceil((caduca_en_ms - now()) / 1000));
     const r = redis();
     if (r) await r.setEx(key(tel), ttl, JSON.stringify(reg));

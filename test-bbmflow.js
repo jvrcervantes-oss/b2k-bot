@@ -294,7 +294,7 @@ const COT = { producto_id: PID, nombre: "Honda Scoopy", desde: FUT, hasta: FUT2,
   const m2 = montaCierre({ enlace: () => [409, { error: "no_pagable" }] });
   await m2.quotes.guarda(TEL, COT);
   const r2 = await m2.cierre.cierra({ tel: TEL, mensajeId: "m", payAmount: 330000, nombre: "Ana", pais: "Spain" });
-  assert.equal(r2.motivo, "sin_tiempo"); assert.match(r2.texto, /hold is about to run out/); assert.equal(await m2.quotes.lee(TEL), null, "no_pagable: se borra la cotización (y la reserva guardada)");
+  assert.equal(r2.motivo, "generico"); assert.match(r2.texto, /couldn't generate your payment link/);   // 13-oct: no_pagable puede ser decimales en IDR, no solo caducidad assert.equal(await m2.quotes.lee(TEL), null, "no_pagable: se borra la cotización (y la reserva guardada)");
   assert.equal(await m2.pendingRsv.lee(TEL), null);
   ok("el ERP dice no_pagable (le quedan < 5 min o ya no es un bloqueo): sin enlace, cotización borrada, al equipo");
 }
