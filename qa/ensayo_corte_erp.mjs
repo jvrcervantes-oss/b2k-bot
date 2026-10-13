@@ -1,7 +1,7 @@
 // Ensayo del corte de BBM al ERP con el index.js REAL (E1.10, 13-oct-2026, bbm-corte-bot). No es una prueba del gate: se lanza a mano.
 //
 //   node --import ./qa/ensayo_corte_erp.mjs index.js            (desde la raíz del repo, con node_modules instalado)
-//   ENSAYO_CASO=en|id|id_sin_cobros|regla   ENSAYO_FIXTURES=<json capturado de una rama de bbm>   (opcionales)
+//   ENSAYO_CASO=en|id|id_sin_cobros|regla|telefono_prueba (este: BBM_BACKEND=dion + BBM_ERP_TELEFONOS con el teléfono del ensayo, el ensayo de E1.6)   ENSAYO_FIXTURES=<json capturado de una rama de bbm>   (opcionales)
 //
 // Qué es de verdad y qué no:
 //   · DE VERDAD: index.js entero (webhook de Meta, turno, herramienta get_quote del modo erp, cierre [PAY], puerta de Xendit, aviso de pago),
@@ -30,7 +30,7 @@ Object.assign(process.env, {
   PORT, PROJECT_NAME: "BaliBest", BOT_VERTICAL: "rental", CONTEXT_FILE: "context-balibest.md", PANEL_FILE: "panel-rental.html",
   BOT_MODEL: "ensayo-guion", ANTHROPIC_API_KEY: "ensayo-sin-clave", WHATSAPP_TOKEN: "ensayo", WHATSAPP_PHONE_ID: "100000000000000", WHATSAPP_VERIFY_TOKEN: "ensayo",
   OWNER_PHONE: OWNER, ADMIN_PASSWORD: "ensayo-admin-0123456789", XENDIT_CALLBACK_TOKEN: "tok-railway-viejo-9876543210",
-  BBM_BACKEND: "erp", BBM_ERP_URL: URL_ERP, BBM_RESERVAS_SECRET: SECRETO, BBM_ERP_CLAVE: "1",
+  BBM_BACKEND: CASO === "telefono_prueba" ? "dion" : "erp", ...(CASO === "telefono_prueba" ? { BBM_ERP_TELEFONOS: TEL } : {}), BBM_ERP_URL: URL_ERP, BBM_RESERVAS_SECRET: SECRETO, BBM_ERP_CLAVE: "1",
 });
 
 // ── informe ────────────────────────────────────────────────────────────────────────────────────────────

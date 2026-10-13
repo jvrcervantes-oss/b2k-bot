@@ -6,7 +6,7 @@
 //   4. El seguro: en modo erp se paga en la entrega (decisión por defecto, pendiente del owner) y nunca se suma al total del enlace.
 // Ejecutar: node --test test-corte-e110.js
 import assert from "node:assert";
-import { createBbmErp, createPendingRsv, valorRegla, REGLAS_FECHAS } from "./bbmerp.js";
+import { createBbmErp, createPendingRsv, valorRegla, REGLAS_FECHAS, leeTelefonosErp } from "./bbmerp.js";
 import { createQuoteStore, createReservaIndex, createErpTools, createCierreErp, createAvisoPago, textoPagoRecibido, textoFallo, TEXTOS_FALLO, notaReglaFechas, ERP_PROMPT_BLOCK } from "./bbmflow.js";
 import { createBackendSwitch } from "./bbmerp.js";
 
@@ -134,6 +134,29 @@ function monta({ cotiza, enlace } = {}) {
   assert.doesNotMatch(ERP_PROMPT_BLOCK, /sending your secure payment link/);
   assert.match(ERP_PROMPT_BLOCK, /never say the link is here or is being sent/);
   ok("la línea del modelo con [PAY] es neutra: el resultado (enlace o fallo) lo dice el servidor");
+}
+
+// ── 5. teléfonos de prueba (BBM_ERP_TELEFONOS): el del estudio va al ERP con el interruptor en dion ──────────────────────────────────
+{
+  const errores = [];
+  const lg = { error: (m) => errores.push(m), warn() {}, log() {} };
+  const set = leeTelefonosErp(" 62800000001, +62800000002 ,0811234567, 1234, abc, ", lg, "T");
+  assert.deepEqual([...set].sort(), ["62800000001", "62800000002"]);
+  assert.equal(errores.length, 1); assert.match(errores[0], /3 número\(s\) no válidos descartados/);
+  assert.doesNotMatch(errores[0], /0811234567|1234/, "el arranque no escribe los números enteros");
+  assert.equal(leeTelefonosErp(undefined, lg).size, 0); assert.equal(leeTelefonosErp("", lg).size, 0);
+  assert.equal(leeTelefonosErp("+0811234567", lg).size, 0, "formato local con + delante: descartado");
+  const sw = createBackendSwitch({ envValue: "dion", telefonosErp: set, log: silent, now: () => ahora });
+  assert.equal(await sw.bbmBackend("62800000001"), "erp");
+  assert.equal(await sw.bbmBackend("+62 800 000 002"), "erp", "se comparan los dígitos");
+  assert.equal(await sw.bbmBackend("34800000001"), "dion", "mismos últimos 9 dígitos, otro país: dion (comparación exacta)");
+  assert.equal(await sw.bbmBackend("628000000011"), "dion");
+  assert.equal(await sw.porDefecto(), "dion", "el interruptor general no cambia");
+  await sw.fija("62800000001", 1800, "dion");
+  assert.equal(await sw.bbmBackend("62800000001"), "dion", "un pin vivo manda antes que la lista: no se cambia de sistema a media reserva");
+  const sinLista = createBackendSwitch({ envValue: "dion", log: silent, now: () => ahora });
+  assert.equal(await sinLista.bbmBackend("62800000001"), "dion", "sin la variable, como siempre");
+  ok("BBM_ERP_TELEFONOS: solo esos teléfonos (dígitos exactos) van al ERP con el interruptor en dion; un pin vivo manda; mal escritos, descartados sin enseñarlos");
 }
 
 console.log(`\n${n} bloques en verde`);

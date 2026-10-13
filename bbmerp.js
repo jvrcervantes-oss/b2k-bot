@@ -352,10 +352,27 @@ export const normalizaBackend = (v) => {
   return BACKENDS.includes(x) ? x : "dion";
 };
 
+// TELÉFONOS DE PRUEBA (13-oct-2026, E1.10): `BBM_ERP_TELEFONOS` = teléfonos (solo dígitos, separados por comas) cuyas conversaciones van al ERP aunque
+// el valor por defecto siga en `dion`. Para el cobro de prueba de punta a punta con el teléfono del estudio (E1.6) ANTES del corte, sin que cambie ningún
+// cliente real. Antes la lista de corte decía «fijar bbm:pin:<tel> en Redis» y no había forma de hacerlo sin escribir en Redis a mano.
+//   · Comparación EXACTA de dígitos (nunca «últimos 9», lección de BOT_ALLOWLIST: dos móviles de países distintos los comparten). Un número escrito en
+//     formato local o con menos de 8 dígitos no se adivina: se descarta y se grita en el arranque. Descartar es lo seguro (esa persona sigue en dion).
+//   · Ausente o vacía = como siempre. Un pin vivo o un enlace pendiente siguen mandando antes que la lista (no se cambia de sistema a media reserva).
+export function leeTelefonosErp(valor, log = console, project = "bot") {
+  const set = new Set(), malos = [];
+  for (const x of String(valor ?? "").split(",").map((t) => t.trim()).filter(Boolean)) {
+    const d = x.replace(/^\+/, "");
+    if (/^\d{8,15}$/.test(d) && !d.startsWith("0")) set.add(d);
+    else malos.push(x.length > 4 ? `…${x.slice(-2)}` : "?");
+  }
+  if (malos.length) log.error(`[${project}] [bbm-backend] BBM_ERP_TELEFONOS: ${malos.length} número(s) no válidos descartados (${malos.join(", ")}): van en formato internacional, solo dígitos`);
+  return set;
+}
+
 export function createBackendSwitch(o = {}) {
   // enlaceVivo(tel) → true si esa conversación tiene un enlace de pago `rsv:` aún pagable (createPendingRsv.lee). Ese enlace ATA la conversación
   // a erp aunque el pin haya caducado: si no, el interruptor la pasaría a dion con un pago en vuelo.
-  const { redis = () => null, envValue, enlaceVivo = async () => false, now = () => Date.now(), log = console, project = "bot" } = o;
+  const { redis = () => null, envValue, enlaceVivo = async () => false, telefonosErp = new Set(), now = () => Date.now(), log = console, project = "bot" } = o;
   const p = (m) => `[${project}] [bbm-backend] ${m}`;
   const mem = new Map();   // sin Redis (modo RAM): mismas reglas en memoria
   const memConf = { valor: undefined };
@@ -402,6 +419,7 @@ export function createBackendSwitch(o = {}) {
       let vivo = false;
       try { vivo = await enlaceVivo(String(tel)); } catch { /* sin poder saberlo, manda el valor por defecto */ }
       if (vivo) return "erp";
+      if (telefonosErp.has(String(tel).replace(/\D/g, ""))) return "erp";   // teléfono de prueba (ver leeTelefonosErp)
     }
     return porDefecto();
   }
