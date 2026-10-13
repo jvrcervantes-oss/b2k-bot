@@ -6,7 +6,7 @@
 //
 // Fases (qué tiene que ser verdad ANTES de seguir):
 //   desplegado: el código nuevo corre (sha) con BBM_BACKEND=dion, BBM_ERP_CLAVE=1, sin teléfonos de prueba, backend efectivo dion.
-//   prueba:     lo mismo, y BBM_ERP_TELEFONOS con 1 a 3 teléfonos (el del estudio) para el cobro de prueba de E1.6.
+//   prueba:     lo mismo, y BBM_ERP_TELEFONOS con 1 a 3 teléfonos (el del estudio) para el cobro de prueba de E1.6, y lo de la comisión de precorte.
 //   precorte:   lo mismo que desplegado, y el código desplegado ya no dice «sin comisión» (requisito I): se lanza justo ANTES de BBM_BACKEND=erp.
 //   corte:      BBM_BACKEND=erp y backend efectivo erp (después del cambio), y lo mismo de la comisión.
 //   vuelta:     BBM_BACKEND=dion y backend efectivo dion (después de volver atrás).
@@ -45,7 +45,7 @@ try {
 // 1b. comisión de la pasarela (requisito I, owner 13-oct: «Se suma como hace Dion»). Mientras el ERP no la sume, el modo erp le dice al modelo
 // que NO hay comisión; cuando el ERP la sume, esa frase tiene que haber salido del código desplegado, o el cliente oye «sin comisión» y paga más.
 // Solo mira que la frase vieja ya no esté (el campo de la comisión del ERP aún no existe: cuando exista, se comprueba aquí también).
-if (fase === "precorte" || fase === "corte") {
+if (fase === "prueba" || fase === "precorte" || fase === "corte") {   // prueba también: sin la comisión habría que repetirla y quemar otro número de factura (Administración, 13-oct)
   const FRASE = "there is NO extra payment fee";
   try {
     const fuente = execFileSync("git", ["show", `${shaVivo}:bbmflow.js`], { cwd: RAIZ, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
