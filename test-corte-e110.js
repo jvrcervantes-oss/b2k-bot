@@ -130,6 +130,10 @@ function monta({ cotiza, enlace } = {}) {
   assert.match(ERP_PROMPT_BLOCK, /paid at handover, to the team/);
   assert.match(ERP_PROMPT_BLOCK, /Never add the insurance to the total/);
   ok("seguro (decisión por defecto, pendiente del owner): se paga en la entrega y nunca se suma al total del enlace");
+  // la frase que acompaña a [PAY] no anuncia el enlace: si falla, el cliente leería «aquí tienes el enlace» y luego «no está disponible»
+  assert.doesNotMatch(ERP_PROMPT_BLOCK, /sending your secure payment link/);
+  assert.match(ERP_PROMPT_BLOCK, /never say the link is here or is being sent/);
+  ok("la línea del modelo con [PAY] es neutra: el resultado (enlace o fallo) lo dice el servidor");
 }
 
 console.log(`\n${n} bloques en verde`);
