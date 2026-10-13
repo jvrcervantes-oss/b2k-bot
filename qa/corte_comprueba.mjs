@@ -47,7 +47,9 @@ try {
 // Solo mira que la frase vieja ya no esté (el campo de la comisión del ERP aún no existe: cuando exista, se comprueba aquí también).
 if (fase === "prueba" || fase === "precorte" || fase === "corte") {   // prueba también: sin la comisión habría que repetirla y quemar otro número de factura (Administración, 13-oct)
   const FRASE = "there is NO extra payment fee";
-  try {
+  // Sin sha del despliegue no hay nada que mirar: `git show :bbmflow.js` leería el índice local y podría dar un OK falso.
+  if (!/^[0-9a-f]{7,40}$/i.test(shaVivo)) fila("ROJO", "comisión de la pasarela (requisito I)", "sin sha del despliegue: no se ha podido mirar el código que corre");
+  else try {
     const fuente = execFileSync("git", ["show", `${shaVivo}:bbmflow.js`], { cwd: RAIZ, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     fila(fuente.includes(FRASE) ? "ROJO" : "OK", "comisión de la pasarela (requisito I)", fuente.includes(FRASE)
       ? `el código desplegado (${shaVivo.slice(0, 7)}) aún dice «${FRASE}»: el ERP tiene que sumar la comisión y la línea cambiar en el mismo paso`

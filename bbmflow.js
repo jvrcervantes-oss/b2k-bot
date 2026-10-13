@@ -17,7 +17,7 @@
 //     false si ya había una abierta. Solo con false se manda además el aviso técnico (avisaEquipo): nunca dos avisos por el mismo hecho.
 //   · SIN CONFIGURAR DEJA MARCA en la cotización (`{sin_configurar:true}`, 30 min): un [PAY] inventado después recibe el MISMO texto honesto, no uno
 //     que promete el enlace «enseguida».
-//   · NO HAY ENLACE SIN NOMBRE Y PAÍS (`cliente` va antes) NI SIN RESERVA. Cualquier fallo devuelve un texto de reserva en inglés y avisa al
+//   · NO HAY ENLACE SIN NOMBRE Y PAÍS (`cliente` va antes) NI SIN RESERVA. Cualquier fallo devuelve un texto de reserva (en, id o es, ver TEXTOS_FALLO) y avisa al
 //     equipo: el modelo ya escribió «te mando el enlace» cuando llega el fallo, así que el texto del fallo se añade, nunca se calla.
 //   · DUPLICADOS: con un `pendingRsv` vivo, un segundo `[PAY]` reenvía ese enlace; no crea otra reserva (la `clave` cambia con cada mensaje y no protege).
 //   · EL AVISO DE PAGO ES POR RESERVA, NO POR TELÉFONO: el external_id `rsv:<uuid>` no lleva teléfono, así que al crear la reserva se guarda el
@@ -528,7 +528,8 @@ export function createSombra({ erp, redis = () => null, n = 30, log = console, p
 
   // Qué salió de comparar UNA cotización de Dion con la del ERP, cosa por cosa.
   function clasifica(dion, q) {
-    // OJO: el total del ERP lleva impuesto, seguro y entrega; el de Dion no. Se compara lo comparable: el alquiler.
+    // OJO: el total del ERP lleva impuesto (según AXW-189) y entrega, y el seguro no (owner, 13-oct: se paga en la entrega); el de Dion es otra suma.
+    // Se compara lo comparable: el alquiler.
     const precio = q.precio_alquiler != null && Number.isFinite(Number(dion.rental_rate))
       ? (Math.round(q.precio_alquiler) !== Math.round(Number(dion.rental_rate)) ? "dif" : "ok") : "sin_dato";
     const dias = Number.isInteger(dion.duration_days) ? (q.dias !== dion.duration_days ? "dif" : "ok") : "sin_dato";
