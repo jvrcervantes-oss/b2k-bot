@@ -143,10 +143,9 @@ export const ERP_PROMPT_BLOCK =
   + "- Delivery: ask for street + area and a house number or landmark. Never ask for or use a hotel/villa name. The first time you ask, add one short line: \"We only use your address to calculate the delivery and bring you the bike.\" If the tool says it cannot price that address, ask for a more precise street + area, once; if it still cannot, say the team will confirm the delivery price and add `tags: pricing_check` — do not give a price.\n"
   + "- ONLINE PAYMENT FEE: there is NO extra payment fee in this system. Do not mention a 3% or 4% fee and do not add one.\n"
   + "- The refundable deposit is NOT in the total: it is collected in cash at handover (amount as stated in your context) and never goes through the link.\n"
-  // Seguro en modo erp (13-oct-2026, E1.10; DECISIÓN POR DEFECTO pendiente del owner, opción (a) de §9.4 del encargo de carga): el ERP guarda el
-  // seguro por modelo pero aún no lo cobra en la cotización (F3-E3: «cobrarlos en la cotización es la Entrega 6»). Antes, quien elegía seguro se
-  // quedaba sin enlace (caso 2 del ensayo del 12-oct). Revertir: quitar esta línea (el modelo vuelve a no saber qué hacer y lo pasa al equipo).
-  + "- Insurance: the customer still picks insurance OR the deposit, as in your context. Insurance is NOT in the online total either: it is paid at handover, to the team, at the rate in your context. If they pick insurance, tell them that in one short line and still send [PAY] with the get_quote total. Never add the insurance to the total.\n"
+  // Seguro en modo erp (13-oct-2026, E1.10): SIN línea propia hasta que decida el owner (pregunta 1 de bbm_corte_bot_13oct.md). Es dinero, no cabe como
+  // decisión por defecto (revisor, 13-oct). Hoy el ERP no lo cobra en la cotización (F3-E3: «cobrarlo es la Entrega 6»); si el modelo lo suma al total, el
+  // [PAY] no cuadra con la cotización guardada → importe_no_cuadra → sigue una persona (derivaPersona + aviso al equipo). Nadie paga de más ni de menos.
   + "- BEFORE you send the payment link you need the customer's full name AND their country, both confirmed in the chat. Put them in a [LEAD name=...; country=...] tag. No name or no country → ask for it, do not send [PAY].\n"
   // 13-oct-2026 (E1.10, ensayo con el index.js real): el ejemplo decía «sending your secure payment link now» y, si el enlace fallaba, el cliente leía
   // «aquí tienes el enlace» y después «el pago en línea no está disponible». Frase neutra: el resultado lo dice el servidor.
@@ -280,6 +279,8 @@ const TEXTO_FALLO = {
   // El ERP dice que el negocio aún no puede cobrar por aquí (Cobros u otro paso sin configurar). Sin plazos, sin «reservada», sin enlace.
   sin_configurar: "Online payment isn't available for this booking yet. A person from our team will continue with you here in this chat to complete it.",
   generico: "I couldn't generate your payment link just now. I've flagged it to the team and they'll send it to you shortly.",
+  // Las reglas de reserva de Ajustes cambiaron entre cotizar y pagar (mínimo, máximo, antelación): no se promete nada, se piden otras fechas (13-oct-2026).
+  regla_fechas: "Those dates no longer fit our booking rules, so I can't book them. Could you choose other dates?",
 };
 // Los mismos textos en indonesio y español (13-oct-2026, E1.10): hasta hoy salían solo en inglés también a quien escribe en indonesio.
 // Idioma = el de `idiomaAviso` (aviso-ia.js) sobre el mensaje del cliente y la respuesta del modelo; otro idioma o la duda, inglés.
@@ -295,6 +296,7 @@ const TEXTO_FALLO_ID = {
   en_curso: "Saya sedang menyiapkan link pembayaran Anda — sebentar lagi akan sampai.",
   sin_configurar: "Pembayaran online belum tersedia untuk pemesanan ini. Staf kami akan melanjutkan dengan Anda di chat ini untuk menyelesaikannya.",
   generico: "Saya belum bisa membuat link pembayaran Anda sekarang. Sudah saya teruskan ke tim, dan mereka akan segera mengirimkannya.",
+  regla_fechas: "Tanggal tersebut sudah tidak sesuai dengan aturan pemesanan kami, jadi belum bisa saya pesankan. Boleh pilih tanggal lain?",
 };
 const TEXTO_FALLO_ES = {
   sin_cotizacion: "Tengo que volver a comprobar el precio para tus fechas antes de enviarte el enlace de pago; un momento, se lo pregunto al equipo.",
@@ -307,6 +309,7 @@ const TEXTO_FALLO_ES = {
   en_curso: "Ya estoy preparando tu enlace de pago; te llega en un momento.",
   sin_configurar: "El pago en línea todavía no está disponible para esta reserva. Una persona del equipo seguirá contigo en este chat para completarla.",
   generico: "No he podido generar tu enlace de pago ahora mismo. Ya se lo he pasado al equipo y te lo enviarán en breve.",
+  regla_fechas: "Esas fechas ya no encajan con nuestras normas de reserva, así que no puedo reservarlas. ¿Puedes elegir otras fechas?",
 };
 export const TEXTOS_FALLO = { en: TEXTO_FALLO, id: TEXTO_FALLO_ID, es: TEXTO_FALLO_ES };
 const idiomaValido = (x) => (x === "id" || x === "es" ? x : "en");
@@ -315,8 +318,8 @@ const MOTIVO_A_TEXTO = {
   sin_disponibilidad: "sin_disponibilidad", tope_global: "tope", tope_telefono: "tope", sin_configurar: "sin_configurar",
 };
 // Fallos cuyo texto NO promete que el equipo escriba: no dejan petición de persona en la ficha.
-//   faltan_datos: se le pide al cliente · sin_disponibilidad: se le ofrecen otras fechas · en_curso: el enlace de ESTA misma petición está saliendo.
-const SIN_PROMESA = new Set(["faltan_datos", "sin_disponibilidad", "en_curso"]);
+//   faltan_datos: se le pide al cliente · sin_disponibilidad: se le ofrecen otras fechas · en_curso: el enlace de ESTA misma petición está saliendo · regla_fechas: se le piden otras fechas.
+const SIN_PROMESA = new Set(["faltan_datos", "sin_disponibilidad", "en_curso", "regla_fechas"]);
 
 // deps: erp (con `enlace`, reservas-enlace), quotes, pendingRsv, indice, backend (createBackendSwitch), avisaEquipo(texto) (mejor esfuerzo),
 //       derivaPersona(tel, motivo) (mejor esfuerzo: deja la petición de persona en la ficha), now, log, project
@@ -383,6 +386,7 @@ export function createCierreErp({ erp, quotes, pendingRsv, indice, backend, avis
         if (r.motivo === "entrega_a_confirmar" || r.motivo === "entrega_no_configurada") return ko("generico", r.motivo);
         // sin_configurar: la base aborta ENTERA (no deja bloqueo). La cotización se cambia por la marca: el siguiente [PAY] no reintenta a ciegas.
         if (r.motivo === "sin_configurar") { try { await quotes.guarda(t, { sin_configurar: true, paso: r.paso || null }); } catch { /* */ } return ko("sin_configurar", r.paso ? `paso ${r.paso}` : undefined); }
+        if (r.motivo === "regla_fechas") { await quotes.borra(t); return ko("regla_fechas", r.codigo); }   // las reglas cambiaron entre cotizar y pagar
         return ko(MOTIVO_A_TEXTO[r.motivo] || "generico", r.motivo);
       }
       rs = r.reserva;

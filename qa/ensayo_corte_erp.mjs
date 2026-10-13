@@ -12,6 +12,8 @@
 //   · RED: bloqueada. fetch, axios, http y https solo llegan a 127.0.0.1/localhost; cualquier otro destino lanza y queda en el informe.
 //     Sin REDIS_URL (memoria del proceso). Nunca se lanza con `railway run`: inyectaría el Redis y el token de WhatsApp de producción.
 import http from "node:http";
+import net from "node:net";
+import tls from "node:tls";
 import https from "node:https";
 import fs from "node:fs";
 import axios from "axios";
@@ -25,6 +27,10 @@ const TEL = "62800000001";            // teléfono de mentira: no sale nada del 
 const OWNER = "62899999999";
 const PORT = String(39000 + Math.floor(Math.random() * 900));
 const CASO = process.env.ENSAYO_CASO || "en";
+// Lanzado con el entorno de un servicio (p. ej. `railway run`) se NIEGA en vez de limpiar: una lista de nombres para borrar siempre se queda corta
+// (REDIS_PRIVATE_URL, REDISHOST…). Revisor, 13-oct-2026.
+const sospechosas = Object.keys(process.env).filter((k) => /^(RAILWAY_|REDIS|WHATSAPP_|META_APP_SECRET$|XENDIT_|STRIPE_SECRET|ANTHROPIC_API_KEY$|BBM_RESERVAS_SECRET$|TELEGRAM_BOT_TOKEN$)/.test(k));
+if (sospechosas.length) { console.error(`ensayo: el entorno trae variables de un servicio (${sospechosas.join(", ")}): no se lanza. Nunca con railway run.`); process.exit(3); }
 for (const k of Object.keys(process.env)) if (/^(REDIS_URL|WHATSAPP_|META_|TELEGRAM_|XENDIT_|STRIPE_|BBM_|SUPABASE_|GOOGLE_|BREVO_|ANTHROPIC_|OPENAI_|SHEET_|CRM_|PANEL_|PRIV_|ERP_|RAILWAY_)/.test(k)) delete process.env[k];
 Object.assign(process.env, {
   PORT, PROJECT_NAME: "BaliBest", BOT_VERTICAL: "rental", CONTEXT_FILE: "context-balibest.md", PANEL_FILE: "panel-rental.html",
@@ -44,6 +50,18 @@ for (const mod of [http, https]) {
   const host = (a) => (typeof a === "string" ? new URL(a).hostname : a instanceof URL ? a.hostname : (a && (a.hostname || a.host)) || "");
   mod.request = (a, ...r) => { const h = host(a); if (!LOCAL(h)) { inf.bloqueado.push(`${mod === https ? "https" : "http"}:${h}`); throw new Error(`ensayo: red bloqueada (${h})`); } return orig(a, ...r); };
   mod.get = (a, ...r) => { const h = host(a); if (!LOCAL(h)) { inf.bloqueado.push(`get:${h}`); throw new Error(`ensayo: red bloqueada (${h})`); } return origGet(a, ...r); };
+}
+
+// net/tls (por ahí iría un cliente de Redis o cualquier socket a mano): solo a localhost
+for (const [mod, nombre] of [[net, "net"], [tls, "tls"]]) {
+  for (const fn of nombre === "net" ? ["connect", "createConnection"] : ["connect"]) {
+    const orig = mod[fn].bind(mod);
+    mod[fn] = (...a) => {
+      const o = a[0], h = typeof o === "object" && o ? (o.host || o.hostname || "localhost") : (typeof a[1] === "string" ? a[1] : "localhost");
+      if (!LOCAL(String(h))) { inf.bloqueado.push(`${nombre}:${h}`); throw new Error(`ensayo: red bloqueada (${h})`); }
+      return orig(...a);
+    };
+  }
 }
 
 // ── doble del ERP (reservas-bot, reservas-enlace, reservas-pago) ──────────────────────────────────────────────────────────────

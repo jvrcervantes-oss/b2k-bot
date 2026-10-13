@@ -3,7 +3,7 @@
 //      español; el bot le dice la REGLA al cliente (sin precio, sin «el equipo confirma», sin derivar a una persona).
 //   2. Los textos fijos del cierre y del aviso de pago salen en el idioma del cliente (id, es; otro, inglés), y el idioma viaja con el enlace.
 //   3. no_pagable (que también es «total con decimales en IDR») ya no le dice al cliente que su reserva va a caducar.
-//   4. El seguro: en modo erp se paga en la entrega (decisión por defecto, pendiente del owner) y nunca se suma al total del enlace.
+//   4. El seguro: sin instrucción propia en modo erp hasta que decida el owner (es dinero).
 // Ejecutar: node --test test-corte-e110.js
 import assert from "node:assert";
 import { createBbmErp, createPendingRsv, valorRegla, REGLAS_FECHAS, leeTelefonosErp } from "./bbmerp.js";
@@ -78,6 +78,31 @@ function monta({ cotiza, enlace } = {}) {
   assert.match((await b.cotizaBot()).error, /could not price this right now/);
   assert.match(notaReglaFechas("reserva_dias_max", null), /longer than the shop's maximum/);
   ok("reglas de fechas de Ajustes: el bot dice la regla con su cifra (sacada del texto de la base), sin precio, sin derivar y sin cotización guardada");
+  // las reglas cambian ENTRE cotizar y pagar: el 409 llega en la reserva, y se lee igual
+  const erpReglas = createBbmErp({ url: URL_ERP, secret: SECRET, fetchImpl: async () => r(409, { error: "reserva_horizonte", mensaje: "Solo se reserva con 90 días de antelación como mucho" }), now: () => ahora, log: silent, project: "T" });
+  const rk = await erpReglas.reserva({ producto_id: PID, desde: "2099-11-01", hasta: "2099-11-04", fromVerificado: TEL });
+  assert.equal(rk.motivo, "regla_fechas"); assert.equal(rk.valor, 90);
+  ok("una regla de fechas al reservar también se lee como regla_fechas, con su cifra");
+}
+{
+  // cierre: el 409 de regla llega al reservar → texto «otras fechas» (es), sin persona, sin aviso, cotización borrada
+  const llamadas = [];
+  const fetchImpl = async (url, init) => {
+    const b = JSON.parse(init.body); llamadas.push(b.accion);
+    if (b.accion === "reserva") return r(409, { error: "reserva_dias_max", mensaje: "El alquiler más largo es de 30 días" });
+    return r(404, {});
+  };
+  const erp = createBbmErp({ url: URL_ERP, secret: SECRET, fetchImpl, now: () => ahora, log: silent, project: "T" });
+  const quotes = createQuoteStore({ now: () => ahora });
+  await quotes.guarda(TEL, { producto_id: PID, nombre: "Honda Scoopy", desde: "2099-11-01", hasta: "2099-11-04", entrega_direccion: null, recogida_direccion: null, total: 330000, moneda: "IDR" });
+  const personas = [], equipo = [];
+  const cierre = createCierreErp({ erp, quotes, pendingRsv: createPendingRsv({ now: () => ahora }), indice: createReservaIndex({ now: () => ahora }), backend: createBackendSwitch({ log: silent, now: () => ahora }),
+    avisaEquipo: async (x) => { equipo.push(x); }, derivaPersona: async (t, m) => { personas.push(m); return true; }, now: () => ahora, log: silent, project: "T" });
+  const p = await cierre.cierra({ tel: TEL, mensajeId: "m", payAmount: 330000, nombre: "Ana Pérez", pais: "Spain", idioma: "es" });
+  assert.equal(p.motivo, "regla_fechas"); assert.equal(p.texto, TEXTOS_FALLO.es.regla_fechas);
+  assert.equal(personas.length + equipo.length, 0, "no promete persona: ni petición ni aviso");
+  assert.equal(await quotes.lee(TEL), null, "cotización borrada: un reintento no repite la reserva con fechas prohibidas");
+  ok("regla de fechas al pagar: «elige otras fechas» en su idioma, sin promesa del equipo y sin cotización guardada");
 }
 
 // ── 2. textos del cierre en el idioma del cliente ──────────────────────────────────────────────────────────
@@ -126,10 +151,9 @@ function monta({ cotiza, enlace } = {}) {
 
 // ── 4. el seguro en modo erp ─────────────────────────────────────────────────────────────────────
 {
-  assert.match(ERP_PROMPT_BLOCK, /Insurance is NOT in the online total/);
-  assert.match(ERP_PROMPT_BLOCK, /paid at handover, to the team/);
-  assert.match(ERP_PROMPT_BLOCK, /Never add the insurance to the total/);
-  ok("seguro (decisión por defecto, pendiente del owner): se paga en la entrega y nunca se suma al total del enlace");
+  // el seguro NO lleva instrucción propia en modo erp hasta que decida el owner (es dinero: no cabe como decisión por defecto; revisor 13-oct)
+  assert.doesNotMatch(ERP_PROMPT_BLOCK, /paid at handover, to the team/);
+  ok("seguro: sin instrucción propia en modo erp hasta la decisión del owner");
   // la frase que acompaña a [PAY] no anuncia el enlace: si falla, el cliente leería «aquí tienes el enlace» y luego «no está disponible»
   assert.doesNotMatch(ERP_PROMPT_BLOCK, /sending your secure payment link/);
   assert.match(ERP_PROMPT_BLOCK, /never say the link is here or is being sent/);
