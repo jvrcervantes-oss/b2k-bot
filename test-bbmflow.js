@@ -645,10 +645,44 @@ const CERO = { coincide: 0, diverge: 0, sin_dato: 0, ultima_divergencia: null };
 {
   assert.equal(ERP_QUOTE_TOOL.name, "get_quote");
   assert.ok(!/hotel name/i.test(ERP_QUOTE_TOOL.description.replace(/Do NOT use the name of a hotel[^.]*\./i, "")), "la herramienta no sugiere nombres de alojamiento");
-  assert.match(ERP_PROMPT_BLOCK, /NO extra payment fee/); assert.match(ERP_PROMPT_BLOCK, /EXACTLY the `total`/); assert.match(ERP_PROMPT_BLOCK, /name AND their country/);
+  assert.doesNotMatch(ERP_PROMPT_BLOCK, /NO extra payment fee/); assert.match(ERP_PROMPT_BLOCK, /ALREADY INSIDE the get_quote total/); assert.match(ERP_PROMPT_BLOCK, /online_payment_fee/);
+  assert.match(ERP_PROMPT_BLOCK, /never add it on top of the total/); assert.match(ERP_PROMPT_BLOCK, /amount_for_these_dates/);
+  assert.match(ERP_PROMPT_BLOCK, /EXACTLY the `total`/); assert.match(ERP_PROMPT_BLOCK, /name AND their country/);
   assert.match(ERP_PROMPT_BLOCK, /only use your address|only use your address to calculate/i);
   assert.ok(!/https?:\/\//.test(ERP_PROMPT_BLOCK));
-  ok("prompt/herramienta erp: sin comisión, [PAY] = total exacto, nombre y país, frase de privacidad, sin nombres de alojamiento");
+  ok("prompt/herramienta erp: comisión del ERP (dentro del total, solo se dice), seguro del ERP, [PAY] = total exacto, nombre y país, frase de privacidad, sin nombres de alojamiento");
+}
+
+// ── 5b) comisión de pago en línea y seguro del ERP (requisitos I y J, 13-oct-2026) ─────────────────────────────────────────────────────────
+{
+  const conComision = (b) => [200, { r: { dias: 3, precio: 370800, total: 370800, moneda: "IDR", precio_alquiler: 360000, desglose: null, base: 370800, impuestos: 0,
+    incluye_impuesto: false, impuesto: null, lineas: [{ descripcion: "Honda Scoopy", concepto: "alquiler", base: 360000, cuota: 0, bruto: 360000 },
+      { descripcion: "Online payment fee (3 %)", concepto: "comision_pago", base: 10800, cuota: 0, bruto: 10800 }],
+    comision: { porcentaje: 3, concepto: "comision_pago", importe: 10800 },
+    seguro: { se_paga: "entrega", moneda: "IDR", obligatorio: false, fianza: 1000000, fianza_con_seguro: false, tramos: [{ dias: 1, precio: 30000 }, { dias: 30, precio: 600000 }], importe: null },
+    producto_id: b.producto_id, desde: b.desde, hasta: b.hasta, disponibles: 2 } }];
+  const { erp } = mkErp({ cotiza: conComision });
+  const quotes = createQuoteStore();
+  const r = await createErpTools({ erp, quotes, log: silent }).runGetQuote(TEL, { bike_model: "Honda Scoopy", from: FUT, to: FUT2 });
+  assert.equal(r.ok, true); assert.equal(r.total, 370800);
+  assert.deepEqual(r.online_payment_fee, { percent: 3, amount: 10800, already_in_total: true });
+  assert.equal(r.breakdown.length, 2, "la comisión es una línea más del desglose");
+  assert.equal(r.insurance.amount_for_these_dates, null); assert.deepEqual(r.insurance.rates, [{ days: 1, price: 30000 }, { days: 30, price: 600000 }]);
+  assert.equal(r.insurance.deposit, 1000000);
+  assert.equal((await quotes.lee(TEL)).total, 370800, "el [PAY] se compara con el total que YA lleva la comisión");
+  // sin comisión ni seguro (0 en Ajustes, modelo sin seguro): null, sin inventar nada
+  const r0 = await createErpTools({ erp: mkErp().erp, quotes: createQuoteStore(), log: silent }).runGetQuote(TEL, { bike_model: "Honda Scoopy", from: FUT, to: FUT2 });
+  assert.equal(r0.online_payment_fee, null); assert.equal(r0.insurance, null);
+  // desglose que no cuadra con su línea, o línea de comisión sin desglose: la cotización no se usa
+  for (const roto of [
+    (b) => { const x = conComision(b); x[1].r.comision.importe = 10801; return x; },
+    (b) => { const x = conComision(b); x[1].r.comision = null; return x; },
+    (b) => { const x = conComision(b); x[1].r.lineas = x[1].r.lineas.slice(0, 1); return x; },
+  ]) {
+    const rr = await createErpTools({ erp: mkErp({ cotiza: roto }).erp, quotes: createQuoteStore(), log: silent }).runGetQuote(TEL, { bike_model: "Honda Scoopy", from: FUT, to: FUT2 });
+    assert.equal(rr.ok, false);
+  }
+  ok("get_quote: comisión del ERP desglosada (dentro del total) y seguro informativo; si el desglose no cuadra con su línea, no hay precio");
 }
 
 console.log(`\n${n} bloques OK`);

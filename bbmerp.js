@@ -118,11 +118,32 @@ function leeCotizacion(r) {
     if (!esObj(r.impuesto) || !str(r.impuesto.nombre) || !num(Number(r.impuesto.porcentaje))) return null;
     impuesto = { nombre: r.impuesto.nombre, porcentaje: Number(r.impuesto.porcentaje) };
   }
+  // Comisión de pago en línea (requisito I del corte, ERP 20261014010000): YA va dentro de `total` y es una de las `lineas` (concepto comision_pago);
+  // aquí solo se lee para decírsela al cliente. Si el desglose no cuadra con su línea, la cotización no se usa (el bot no inventa una cifra).
+  let comision = null;
+  if (r.comision !== null && r.comision !== undefined) {
+    if (!esObj(r.comision) || !num(Number(r.comision.porcentaje)) || !num(Number(r.comision.importe)) || Number(r.comision.importe) <= 0) return null;
+    const lc = lineas.filter((x) => x.concepto === "comision_pago");
+    if (lc.length !== 1 || lc[0].bruto !== Number(r.comision.importe)) return null;
+    comision = { porcentaje: Number(r.comision.porcentaje), importe: Number(r.comision.importe) };
+  } else if (lineas.some((x) => x.concepto === "comision_pago")) return null;
+  // Seguro y fianza del modelo (requisito J): informativos, FUERA del total (owner 13-oct: el seguro se paga en la entrega). importe null = no hay
+  // tarifa exacta para esos días: el bot da las tarifas por periodo y el equipo confirma la cifra al entregar. Si viene mal formado se ignora (no es dinero del enlace).
+  let seguro = null;
+  if (esObj(r.seguro) && Array.isArray(r.seguro.tramos)) {
+    const tramos = r.seguro.tramos.filter((t) => esObj(t) && entero(t.dias) && num(Number(t.precio))).map((t) => ({ dias: t.dias, precio: Number(t.precio) }));
+    seguro = {
+      importe: num(Number(r.seguro.importe)) && r.seguro.importe !== null ? Number(r.seguro.importe) : null,
+      tramos, obligatorio: r.seguro.obligatorio === true,
+      fianza: num(Number(r.seguro.fianza)) && r.seguro.fianza !== null ? Number(r.seguro.fianza) : null,
+      fianza_con_seguro: r.seguro.fianza_con_seguro === true,
+    };
+  }
   return {
     producto_id: r.producto_id, desde: r.desde, hasta: r.hasta, dias: r.dias, disponibles: r.disponibles,
     total: r.total, moneda: r.moneda, base: num(r.base) ? r.base : null, impuestos: num(r.impuestos) ? r.impuestos : null,
     incluye_impuesto: r.incluye_impuesto === true, impuesto, precio_alquiler: num(r.precio_alquiler) ? r.precio_alquiler : null,
-    desglose: r.desglose ?? null, lineas,
+    desglose: r.desglose ?? null, lineas, comision, seguro,
   };
 }
 

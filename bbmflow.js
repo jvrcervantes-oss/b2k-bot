@@ -141,13 +141,17 @@ export const ERP_PROMPT_BLOCK =
   + "- Prices and availability come ONLY from the get_quote tool. There is no price list, stock list or offers list in this conversation: never quote, estimate or recall a price, a discount or a free-unit count from memory.\n"
   + "- Show the customer the breakdown the tool returns (each line) and the total, and only then ask if they want to book. The total already includes any tax and the delivery/pickup lines.\n"
   + "- Delivery: ask for street + area and a house number or landmark. Never ask for or use a hotel/villa name. The first time you ask, add one short line: \"We only use your address to calculate the delivery and bring you the bike.\" If the tool says it cannot price that address, ask for a more precise street + area, once; if it still cannot, say the team will confirm the delivery price and add `tags: pricing_check` — do not give a price.\n"
-  + "- ONLINE PAYMENT FEE: there is NO extra payment fee in this system. Do not mention a 3% or 4% fee and do not add one.\n"
+  // Comisión de la pasarela (requisito I del corte; owner 13-oct: «Se suma como hace Dion», «3 % para todos»): la suma el ERP (20261014010000),
+  // dentro del total y como una línea más; get_quote la devuelve en online_payment_fee. El modelo solo la DICE, nunca la calcula ni la vuelve a sumar.
+  // Revertir: volver a la línea «sin comisión» de la rama e110-corte-bot (75d4397) y poner 0 en Ajustes del ERP. (No copiar aquí esa frase en inglés:
+// qa/corte_comprueba.mjs la busca en el código desplegado y daría ROJO.)
+  + "- ONLINE PAYMENT FEE (overrides the earlier rule about a 3%/4% gateway fee and the GATEWAY FEE line): in this system the fee is ALREADY INSIDE the get_quote total and is one of its breakdown lines. Read it from online_payment_fee (percent and amount) and say it plainly before closing, e.g. \"this includes the 3% online payment fee (21,000)\". Never work it out yourself, never add it on top of the total, never use the phone prefix. If online_payment_fee is null there is no fee: do not mention one.\n"
   + "- The refundable deposit is NOT in the total: it is collected in cash at handover (amount as stated in your context) and never goes through the link.\n"
   // Seguro en modo erp: DECISIÓN DEL OWNER (13-oct-2026, por opciones vía agencia-81, literal: «Se paga en la entrega (Recomendada)»): el asistente lo ofrece,
   // el enlace cobra solo el alquiler y el seguro se paga al equipo al recoger. El ERP aún no lo cobra en la cotización (F3-E3: «cobrarlo es la Entrega 6»).
   // Va DESPUÉS de la regla base de index.js («INSURANCE: always goes straight into the online total») y la anula en modo erp, como la comisión.
   // Revertir: quitar esta línea (el [PAY] con seguro deja de cuadrar y sigue una persona).
-  + "- INSURANCE (overrides the earlier rule that puts insurance in the online total): the customer still picks insurance OR the deposit, as in your context. In this system insurance is NOT in the online total: it is paid at handover, to the team, at the rate in your context. If they pick insurance, tell them that in one short line and still send [PAY] with the get_quote total. Never add the insurance to the total.\n"
+  + "- INSURANCE (overrides the earlier rule that puts insurance in the online total): the customer still picks insurance OR the deposit, as in your context. In this system insurance is NOT in the online total: it is paid at handover, to the team. Its price comes from the insurance block of get_quote: amount_for_these_dates if it is a number; if it is null, give the rates per period from that block and say the team confirms the exact amount at handover; only if get_quote has no insurance block, use the rate in your context. If they pick insurance, tell them that in one short line and still send [PAY] with the get_quote total. Never add the insurance to the total.\n"
   + "- BEFORE you send the payment link you need the customer's full name AND their country, both confirmed in the chat. Put them in a [LEAD name=...; country=...] tag. No name or no country → ask for it, do not send [PAY].\n"
   // 13-oct-2026 (E1.10, ensayo con el index.js real): el ejemplo decía «sending your secure payment link now» y, si el enlace fallaba, el cliente leía
   // «aquí tienes el enlace» y después «el pago en línea no está disponible». Frase neutra: el resultado lo dice el servidor.
@@ -258,7 +262,12 @@ export function createErpTools({ erp, quotes, seg = null, derivaPersona = async 
         ok: true, bike: hit.nombre, from, to, available: true, days: q.dias, total: q.total, currency: q.moneda,
         tax_included_in_total: !!q.impuesto, tax: q.impuesto ? `${q.impuesto.nombre} ${q.impuesto.porcentaje}%` : null,
         breakdown: q.lineas.map((l) => ({ line: l.descripcion, amount: l.bruto })),
-        note: "total is what the customer pays online. The refundable deposit is NOT included (cash at handover).",
+        // Requisito I: ya dentro de total y del breakdown; solo para decirla. Requisito J: fuera del total, se paga en la entrega.
+        online_payment_fee: q.comision ? { percent: q.comision.porcentaje, amount: q.comision.importe, already_in_total: true } : null,
+        insurance: q.seguro ? { paid: "at handover, to the team (NOT in the online total)", amount_for_these_dates: q.seguro.importe,
+          rates: q.seguro.tramos.map((t) => ({ days: t.dias, price: t.precio })), mandatory: q.seguro.obligatorio,
+          deposit: q.seguro.fianza, deposit_also_with_insurance: q.seguro.fianza_con_seguro } : null,
+        note: "total is what the customer pays online (online payment fee included when there is one). The refundable deposit and the insurance are NOT included (paid at handover).",
       };
     } catch (e) {
       log.error(p(`get_quote erp fallo: ${e && e.message ? e.message.slice(0, 120) : "?"}`));

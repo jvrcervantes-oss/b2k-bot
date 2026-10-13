@@ -44,16 +44,20 @@ try {
 
 // 1b. comisión de la pasarela (requisito I, owner 13-oct: «Se suma como hace Dion»). Mientras el ERP no la sume, el modo erp le dice al modelo
 // que NO hay comisión; cuando el ERP la sume, esa frase tiene que haber salido del código desplegado, o el cliente oye «sin comisión» y paga más.
-// Solo mira que la frase vieja ya no esté (el campo de la comisión del ERP aún no existe: cuando exista, se comprueba aquí también).
+// Mira que la frase vieja ya no esté Y que el código lea el campo de la comisión del ERP (`comision` de cotiza → online_payment_fee, 13-oct).
+// Que la base de bbm la sume (20261014010000 aplicada) no lo ve este script (no tiene la clave del ERP): lo dice el abanico de Backend.
 if (fase === "prueba" || fase === "precorte" || fase === "corte") {   // prueba también: sin la comisión habría que repetirla y quemar otro número de factura (Administración, 13-oct)
   const FRASE = "there is NO extra payment fee";
   // Sin sha del despliegue no hay nada que mirar: `git show :bbmflow.js` leería el índice local y podría dar un OK falso.
   if (!/^[0-9a-f]{7,40}$/i.test(shaVivo)) fila("ROJO", "comisión de la pasarela (requisito I)", "sin sha del despliegue: no se ha podido mirar el código que corre");
   else try {
     const fuente = execFileSync("git", ["show", `${shaVivo}:bbmflow.js`], { cwd: RAIZ, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-    fila(fuente.includes(FRASE) ? "ROJO" : "OK", "comisión de la pasarela (requisito I)", fuente.includes(FRASE)
+    // 13-oct (bbm-bot-erp): además el código desplegado tiene que LEER la comisión que devuelve el ERP (online_payment_fee de get_quote, desde e110-comision)
+    const lee = fuente.includes("online_payment_fee");
+    fila(!fuente.includes(FRASE) && lee ? "OK" : "ROJO", "comisión de la pasarela (requisito I)", fuente.includes(FRASE)
       ? `el código desplegado (${shaVivo.slice(0, 7)}) aún dice «${FRASE}»: el ERP tiene que sumar la comisión y la línea cambiar en el mismo paso`
-      : "el código desplegado ya no dice que no hay comisión; Backend confirma que cotiza y factura la llevan");
+      : !lee ? `el código desplegado (${shaVivo.slice(0, 7)}) no lee la comisión del ERP (online_payment_fee): desplegar e110-comision`
+      : "el código desplegado lee la comisión del ERP; la base la suma desde 20261014010000 (comprobar que está aplicada en bbm: erp/abanico.py --solo bbm)");
   } catch { fila("ROJO", "comisión de la pasarela (requisito I)", `no se pudo leer bbmflow.js en ${shaVivo.slice(0, 7) || "(sin sha)"}: git fetch origin balibest y repetir`); }
 }
 
