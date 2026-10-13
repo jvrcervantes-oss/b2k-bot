@@ -143,9 +143,11 @@ export const ERP_PROMPT_BLOCK =
   + "- Delivery: ask for street + area and a house number or landmark. Never ask for or use a hotel/villa name. The first time you ask, add one short line: \"We only use your address to calculate the delivery and bring you the bike.\" If the tool says it cannot price that address, ask for a more precise street + area, once; if it still cannot, say the team will confirm the delivery price and add `tags: pricing_check` — do not give a price.\n"
   + "- ONLINE PAYMENT FEE: there is NO extra payment fee in this system. Do not mention a 3% or 4% fee and do not add one.\n"
   + "- The refundable deposit is NOT in the total: it is collected in cash at handover (amount as stated in your context) and never goes through the link.\n"
-  // Seguro en modo erp (13-oct-2026, E1.10): SIN línea propia hasta que decida el owner (pregunta 1 de bbm_corte_bot_13oct.md). Es dinero, no cabe como
-  // decisión por defecto (revisor, 13-oct). Hoy el ERP no lo cobra en la cotización (F3-E3: «cobrarlo es la Entrega 6»); si el modelo lo suma al total, el
-  // [PAY] no cuadra con la cotización guardada → importe_no_cuadra → sigue una persona (derivaPersona + aviso al equipo). Nadie paga de más ni de menos.
+  // Seguro en modo erp: DECISIÓN DEL OWNER (13-oct-2026, por opciones vía agencia-81, literal: «Se paga en la entrega (Recomendada)»): el asistente lo ofrece,
+  // el enlace cobra solo el alquiler y el seguro se paga al equipo al recoger. El ERP aún no lo cobra en la cotización (F3-E3: «cobrarlo es la Entrega 6»).
+  // Va DESPUÉS de la regla base de index.js («INSURANCE: always goes straight into the online total») y la anula en modo erp, como la comisión.
+  // Revertir: quitar esta línea (el [PAY] con seguro deja de cuadrar y sigue una persona).
+  + "- INSURANCE (overrides the earlier rule that puts insurance in the online total): the customer still picks insurance OR the deposit, as in your context. In this system insurance is NOT in the online total: it is paid at handover, to the team, at the rate in your context. If they pick insurance, tell them that in one short line and still send [PAY] with the get_quote total. Never add the insurance to the total.\n"
   + "- BEFORE you send the payment link you need the customer's full name AND their country, both confirmed in the chat. Put them in a [LEAD name=...; country=...] tag. No name or no country → ask for it, do not send [PAY].\n"
   // 13-oct-2026 (E1.10, ensayo con el index.js real): el ejemplo decía «sending your secure payment link now» y, si el enlace fallaba, el cliente leía
   // «aquí tienes el enlace» y después «el pago en línea no está disponible». Frase neutra: el resultado lo dice el servidor.

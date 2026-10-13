@@ -3,7 +3,7 @@
 //      español; el bot le dice la REGLA al cliente (sin precio, sin «el equipo confirma», sin derivar a una persona).
 //   2. Los textos fijos del cierre y del aviso de pago salen en el idioma del cliente (id, es; otro, inglés), y el idioma viaja con el enlace.
 //   3. no_pagable (que también es «total con decimales en IDR») ya no le dice al cliente que su reserva va a caducar.
-//   4. El seguro: sin instrucción propia en modo erp hasta que decida el owner (es dinero).
+//   4. El seguro: decisión del owner (13-oct), se paga en la entrega y nunca en el total del enlace.
 // Ejecutar: node --test test-corte-e110.js
 import assert from "node:assert";
 import { createBbmErp, createPendingRsv, valorRegla, REGLAS_FECHAS, leeTelefonosErp } from "./bbmerp.js";
@@ -151,9 +151,11 @@ function monta({ cotiza, enlace } = {}) {
 
 // ── 4. el seguro en modo erp ─────────────────────────────────────────────────────────────────────
 {
-  // el seguro NO lleva instrucción propia en modo erp hasta que decida el owner (es dinero: no cabe como decisión por defecto; revisor 13-oct)
-  assert.doesNotMatch(ERP_PROMPT_BLOCK, /paid at handover, to the team/);
-  ok("seguro: sin instrucción propia en modo erp hasta la decisión del owner");
+  // decisión del owner (13-oct): el seguro se paga en la entrega; el bloque erp anula la regla base que lo metía en el total
+  assert.match(ERP_PROMPT_BLOCK, /overrides the earlier rule that puts insurance in the online total/);
+  assert.match(ERP_PROMPT_BLOCK, /paid at handover, to the team/);
+  assert.match(ERP_PROMPT_BLOCK, /Never add the insurance to the total/);
+  ok("seguro (decisión del owner, 13-oct): se paga en la entrega, nunca en el total del enlace; anula la regla base");
   // la frase que acompaña a [PAY] no anuncia el enlace: si falla, el cliente leería «aquí tienes el enlace» y luego «no está disponible»
   assert.doesNotMatch(ERP_PROMPT_BLOCK, /sending your secure payment link/);
   assert.match(ERP_PROMPT_BLOCK, /never say the link is here or is being sent/);
