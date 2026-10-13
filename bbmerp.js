@@ -14,8 +14,8 @@
 //     argumento del modelo. Este módulo NO se expone al modelo como herramienta: lo llama código del bot.
 //   · El secreto es BBM_RESERVAS_SECRET, propio de esta edge (NO BOT_ERP_SECRET, que hoy comparten crm-bot y reservas-bot: separarlo es una
 //     decisión pendiente del owner). Nunca se loguea.
-//   · `cobro.importe` es el entero que cobra Xendit: SIN la comisión del 3 % de la pasarela y SIN el depósito (el depósito se paga en la
-//     entrega; el bot lo mostrará aparte). Si no es un entero positivo igual a `precio_total`, la reserva se trata como respuesta inválida.
+//   · `cobro.importe` es el entero que cobra Xendit = `precio_total`: CON la comisión de pago en línea cuando el ERP la cobra (es una línea más
+//     de la reserva, 20261014010000; nunca la suma el bot) y SIN el depósito (el depósito se paga en la entrega; el bot lo muestra aparte). Si no es un entero positivo igual a `precio_total`, la reserva se trata como respuesta inválida.
 //   · Idempotencia de `reserva`: los webhooks de Meta se reentregan. La clave sale del id del mensaje de WhatsApp (hash corto, porque el
 //     wamid lleva `=` y `/` y la base solo admite [A-Za-z0-9@:._+-]). Si la respuesta se pierde se reintenta UNA vez con la misma clave.
 //     La edge reservas-bot admite `clave` desde c241a65f (9-oct-2026; comprobado contra main el 13-oct). Se manda solo con enviaClave=true, que index.js

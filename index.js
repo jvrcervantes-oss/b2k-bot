@@ -1827,7 +1827,8 @@ async function buildOfferHint() {
 // to confirm the weekly rate" porque, en el simulador, era verdad que no lo tenía.
 async function buildSystemBlocks(mediaLib, phone, backend = "dion") {
   const mediaHint = buildMediaHint(mediaLib);
-  // Modo erp: el inventario, las tarifas, las ofertas y la comisión de pasarela son de Dion y NO existen en el ERP; el modelo solo ve el bloque del ERP.
+  // Modo erp: el inventario, las tarifas y las ofertas de Dion NO existen en el ERP y la pista de comisión de Dion (GATEWAY FEE) no se inyecta: la comisión
+  // de pago en línea la suma el ERP dentro del total (20261014010000) y el modelo la lee de get_quote (ERP_PROMPT_BLOCK). El modelo solo ve el bloque del ERP.
   if (backend === "erp") return [{ type: "text", text: buildSystemPrompt(), cache_control: { type: "ephemeral" } }, { type: "text", text: dateHint() }, ...[mediaHint, ERP_PROMPT_BLOCK].filter(Boolean).map((text) => ({ type: "text", text }))];
   // % de pasarela real para ESTE teléfono — ver activeGatewayFor arriba. Solo rental (tour usa
   // otro flujo de pago) y solo si se conoce el teléfono (el simulador del panel puede no pasarlo).

@@ -53,7 +53,7 @@ if (fase === "prueba" || fase === "precorte" || fase === "corte") {   // prueba 
   else try {
     const fuente = execFileSync("git", ["show", `${shaVivo}:bbmflow.js`], { cwd: RAIZ, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     // 13-oct (bbm-bot-erp): además el código desplegado tiene que LEER la comisión que devuelve el ERP (online_payment_fee de get_quote, desde e110-comision)
-    const lee = fuente.includes("online_payment_fee");
+    const lee = /online_payment_fee:\s*q\.comision\b/.test(fuente);   // la clave de código de get_quote, no la palabra (un comentario daba OK; revisor 13-oct)
     fila(!fuente.includes(FRASE) && lee ? "OK" : "ROJO", "comisión de la pasarela (requisito I)", fuente.includes(FRASE)
       ? `el código desplegado (${shaVivo.slice(0, 7)}) aún dice «${FRASE}»: el ERP tiene que sumar la comisión y la línea cambiar en el mismo paso`
       : !lee ? `el código desplegado (${shaVivo.slice(0, 7)}) no lee la comisión del ERP (online_payment_fee): desplegar e110-comision`

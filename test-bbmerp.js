@@ -258,9 +258,9 @@ const RES = { fromVerificado: FROM, ...PEDIDO, mensajeId: "wamid.HBgLNjI4MTIzNDU
   assert.equal(x.cobro.importe, x.precio_total, "lo que cobra el enlace = lo cotizado y congelado");
   assert.equal(x.cobro.segundos_hasta_caducar, 3540);
   assert.ok(!JSON.stringify(x).toLowerCase().includes("deposito"), "el depósito no está en el cobro");
-  assert.ok(!JSON.stringify(x).toLowerCase().includes("comision"), "ni la comisión del 3 % de la pasarela");
+  assert.ok(!JSON.stringify(x).toLowerCase().includes("comision"), "el cobro no trae la comisión como campo aparte: si la hay, ya va dentro de precio_total (una línea de la reserva)");
   assert.deepEqual(llamadas[0], { accion: "reserva", ...PEDIDO, contacto_telefono: "6281234567890" });
-  ok("reserva: cobro.importe es el entero igual a precio_total, sin comisión ni depósito; teléfono = solo dígitos del from");
+  ok("reserva: cobro.importe es el entero igual a precio_total (comisión, si la hay, dentro), sin depósito; teléfono = solo dígitos del from");
 }
 {
   const { bbm } = mk(() => E("reserva", "repetida"));

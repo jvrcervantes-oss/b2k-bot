@@ -646,6 +646,9 @@ const CERO = { coincide: 0, diverge: 0, sin_dato: 0, ultima_divergencia: null };
   assert.equal(ERP_QUOTE_TOOL.name, "get_quote");
   assert.ok(!/hotel name/i.test(ERP_QUOTE_TOOL.description.replace(/Do NOT use the name of a hotel[^.]*\./i, "")), "la herramienta no sugiere nombres de alojamiento");
   assert.doesNotMatch(ERP_PROMPT_BLOCK, /NO extra payment fee/); assert.match(ERP_PROMPT_BLOCK, /ALREADY INSIDE the get_quote total/); assert.match(ERP_PROMPT_BLOCK, /online_payment_fee/);
+  // revisor 13-oct: fianza y seguro con UNA fuente (el bloque insurance de get_quote) y sin cifras fijas en el ejemplo
+  assert.match(ERP_PROMPT_BLOCK, /insurance\.deposit from get_quote/); assert.match(ERP_PROMPT_BLOCK, /deposit_also_with_insurance is true/); assert.match(ERP_PROMPT_BLOCK, /If mandatory is true/);
+  assert.doesNotMatch(ERP_PROMPT_BLOCK, /21,000|amount as stated in your context/);
   assert.match(ERP_PROMPT_BLOCK, /never add it on top of the total/); assert.match(ERP_PROMPT_BLOCK, /amount_for_these_dates/);
   assert.match(ERP_PROMPT_BLOCK, /EXACTLY the `total`/); assert.match(ERP_PROMPT_BLOCK, /name AND their country/);
   assert.match(ERP_PROMPT_BLOCK, /only use your address|only use your address to calculate/i);
