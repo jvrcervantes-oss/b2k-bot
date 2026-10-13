@@ -158,6 +158,9 @@ function modelo(params) {
   const ultimo = params.messages[params.messages.length - 1];
   if (Array.isArray(ultimo.content) && ultimo.content.some((b) => b.type === "tool_result")) {
     const out = JSON.parse(ultimo.content.find((b) => b.type === "tool_result").content);
+    // E110-I/J: lo que el modelo recibe del ERP (comisión ya dentro del total, seguro aparte) queda en el informe
+    inf.al_modelo = { total: out.total ?? null, online_payment_fee: out.online_payment_fee ?? null, insurance: out.insurance ?? null };
+    if (fx?.cotiza?.comision && !(out.online_payment_fee && out.online_payment_fee.amount === fx.cotiza.comision.importe && out.total === fx.cotiza.total)) inf.errores.push("la comisión del ERP no llega al modelo dentro del total");
     if (out.ok && out.available) { ultimoTotal = out.total; return fin(g.precio(out.total)); }
     return fin(`[sin precio: ${out.error || "?"}] ${out.note ? out.note.slice(0, 160) : ""}`);
   }
