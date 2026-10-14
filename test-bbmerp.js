@@ -600,6 +600,13 @@ function erpDoble() {
   assert.deepEqual(await lento.estado(), { ok: false, clase: "transitorio", codigo: "tiempo" });
   assert.ok(Date.now() - t0 < 1000);
   clearTimeout(keep);
+  // un 2xx que no es 200 es una forma inesperada (no un 4xx), y el cuerpo de una respuesta no-200 se cancela (no retiene la conexión)
+  for (const [st, cod, clase] of [[204, "forma", "definitivo"], [201, "forma", "definitivo"], [401, "401", "definitivo"], [503, "5xx", "transitorio"]]) {
+    let cancelado = false;
+    const r = createBbmErp({ url: URL_ERP, secret: SECRET, log: silent, fetchImpl: async () => ({ status: st, body: { cancel: async () => { cancelado = true; } }, json: async () => ({ r: { backend: "erp" } }) }) });
+    assert.deepEqual(await r.estado(), { ok: false, clase, codigo: cod }, `estado con ${st}`);
+    assert.equal(cancelado, true, `${st}: cuerpo cancelado`);
+  }
   ok("estado(): cuerpo {accion:'estado'}, solo {r:{backend}} exacto es bueno, 400/401/403/404/forma definitivos, tiempo/red/5xx/429 transitorios, sin log");
 }
 
@@ -699,7 +706,7 @@ function erpDoble() {
     assert.equal(await sw.bbmBackend("1"), "erp");
     d.modo = "tiempo";
     t = t0 + 2 * 60_000;
-    assert.equal(await sw.bbmBackend("1"), "erp", "con un valor bueno de 2 min el turno contesta al momento");
+    assert.equal(await sw.bbmBackend("1"), "erp", "con un erp bueno de 2 min y el ERP sin contestar: lee, falla (transitorio) y vale el último bueno");
     await sw.refresca();
     assert.equal(await sw.bbmBackend("1"), "erp");
     let s = await sw.salud();
@@ -767,7 +774,8 @@ function erpDoble() {
     ok("una respuesta 200 con otra forma que {r:{backend}} exacto ⇒ dion (backend_error forma)");
   }
 
-  // 10i. inflight: N turnos a la vez = 1 petición. Caché caducada: el turno NO espera (devuelve el valor viejo y refresca detrás).
+  // 10i. inflight: N turnos a la vez = 1 petición. Caché caducada: con erp en memoria el turno ESPERA la lectura (volver a dion en Ajustes se nota
+  //      en ≤ 30 s, revisor 14-oct); con dion NO espera (devuelve dion y refresca detrás).
   {
     const d = erpDoble(); d.modo = "cuelga";
     const { sw } = mkSw({ erp: d.erp });
@@ -777,19 +785,30 @@ function erpDoble() {
     assert.equal(d.llamadas, 1, "13 lecturas simultáneas en frío = 1 petición");
     d.suelta("erp");
     assert.deepEqual(await Promise.all(turnos), Array(13).fill("erp"));
-    // caducada a los 30 s: el turno contesta YA con el valor viejo y la petición nueva queda en vuelo
+    // caducada a los 30 s con erp en memoria: el turno ESPERA la lectura, y la vuelta a dion de Ajustes llega a ESE turno
     t += 31_000; d.modo = "cuelga";
     let resuelto = false;
     const p = sw.bbmBackend("1").then((b) => { resuelto = true; return b; });
     await new Promise((r) => setImmediate(r));
-    assert.equal(resuelto, true, "con la caché caducada el turno no espera a la red");
-    assert.equal(await p, "erp");
+    assert.equal(resuelto, false, "con erp en memoria y la caché caducada el turno espera la lectura");
     assert.equal(d.llamadas, 2);
-    await Promise.all([sw.bbmBackend("2"), sw.bbmBackend("3")]);
+    const otros = Promise.all([sw.bbmBackend("2"), sw.bbmBackend("3")]);
+    await new Promise((r) => setImmediate(r));
     assert.equal(d.llamadas, 2, "mientras hay una en vuelo no sale otra");
-    d.suelta("dion"); await sw.refresca();
-    assert.equal(await sw.bbmBackend("1"), "dion", "el refresco de fondo trae el valor nuevo");
-    ok("inflight: N turnos simultáneos = 1 petición; caché caducada ⇒ el turno contesta al momento y refresca en segundo plano");
+    d.suelta("dion");
+    assert.equal(await p, "dion", "Ajustes pasó a dion: el primer turno pasados 30 s ya contesta dion (nunca un erp de hasta 5 min)");
+    assert.deepEqual(await otros, ["dion", "dion"]);
+    // caducada con dion en memoria: el turno contesta YA (lado seguro) y la petición nueva queda en vuelo
+    t += 31_000; d.modo = "cuelga";
+    resuelto = false;
+    const q = sw.bbmBackend("1").then((b) => { resuelto = true; return b; });
+    await new Promise((r) => setImmediate(r));
+    assert.equal(resuelto, true, "con dion en memoria y la caché caducada el turno no espera a la red");
+    assert.equal(await q, "dion");
+    assert.equal(d.llamadas, 3);
+    d.suelta("erp"); await sw.refresca();
+    assert.equal(await sw.bbmBackend("1"), "erp", "el refresco de fondo trae el valor nuevo");
+    ok("inflight: N turnos simultáneos = 1 petición; caché caducada ⇒ con erp espera la lectura (vuelta a dion ≤ 30 s), con dion refresca detrás");
   }
 
   // 10j. un pin vivo NO cambia aunque el ERP cambie; fija() sin backend usa el valor por defecto nuevo

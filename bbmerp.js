@@ -49,7 +49,7 @@ export function valorRegla(mensaje) {
 }
 export const ENLACE_TIMEOUT_MS = 20000;   // reservas-enlace espera a Xendit hasta 15 s
 export const ENLACE_REINTENTO_MS = 4000;  // tras un 409 en_curso (otra petición está creando el enlace; la marca dura 30 s)
-export const ESTADO_TIMEOUT_MS = 1500;    // `estado` (B10): como mucho esto espera un turno, y solo cuando no hay ningún valor válido (ver createBackendSwitch)
+export const ESTADO_TIMEOUT_MS = 1500;    // `estado` (B10): como mucho esto espera un turno: sin ningún valor válido, o con erp en memoria y la caché caducada (ver createBackendSwitch)
 
 const KO = (motivo, extra = {}) => ({ ok: false, motivo, ...extra });
 const esObj = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
@@ -370,6 +370,9 @@ export function createBbmErp(o = {}) {
       });
     } catch (e) { return transitorio(e); }
     const st = resp.status;
+    // sin leer el cuerpo de un error, la conexión queda retenida hasta el GC: se cancela (best-effort)
+    if (st !== 200) { try { await resp.body?.cancel?.(); } catch { /* best-effort */ } }
+    if (st >= 200 && st < 300 && st !== 200) return { ok: false, clase: "definitivo", codigo: "forma" };   // 2xx inesperado: no es un 4xx
     if (st === 200) {
       let json;
       try { json = await resp.json(); } catch (e) { if (e && (e.name === "TimeoutError" || e.name === "AbortError")) return transitorio(e); json = undefined; }
@@ -414,8 +417,8 @@ export function leeEnlace(r, externalEsperado, ahora = Date.now()) {
 // DEJAN DE MANDAR (B10): la variable BBM_BACKEND (hoy `dion` en Railway: como freno anularía el gesto del ERP el día del despliegue) y la clave Redis
 // `bbm:backend` (dos fuentes del mismo dato = la del 12-oct que nadie veía). Si existen, el arranque y /admin/api/health lo dicen como obsoletas.
 // LECTURA DEL ERP, sin coste en el turno (revisión previa de Bots #332 y de Seguridad, 14-oct):
-//   · Caché de 30 s y UNA petición en vuelo. Con valor válido el turno contesta al momento y, si la lectura tiene ≥ 30 s, refresca en segundo plano.
-//     Sin ningún valor válido (recién arrancado, o > 5 min sin tráfico) el turno ESPERA la lectura, como mucho ESTADO_TIMEOUT_MS (1,5 s): contestar dion
+//   · Caché de 30 s y UNA petición en vuelo. Con valor válido el turno contesta al momento; si la lectura tiene ≥ 30 s refresca en segundo plano
+//     cuando lo que hay es dion, y ESPERA la lectura cuando es erp (volver a dion en Ajustes se nota en ≤ 30 s). Sin ningún valor válido (recién arrancado, o > 5 min sin tráfico) el turno ESPERA la lectura, como mucho ESTADO_TIMEOUT_MS (1,5 s): contestar dion
 //     sin leer mandaría a Dion el primer cliente de cada mañana y, si cotiza, lo ataría a dion 30 min.
 //   · Fallo definitivo (400 de una edge vieja, 401/403, 404, forma mala, otro 4xx) ⇒ dion al momento y se OLVIDA el último bueno (el ERP dijo que no).
 //     Fallo transitorio (tiempo, red, 5xx, 429) ⇒ el último valor bueno si tiene < 5 min; si no, dion. Nunca erp sin una lectura buena de < 5 min.
@@ -451,7 +454,7 @@ export const BACKEND_TTL_MS = 30 * 1000;            // caché de la lectura del 
 export const BACKEND_MAX_STALE_MS = 5 * 60 * 1000;   // vida del último valor bueno ante un fallo TRANSITORIO
 export const FUENTES_BACKEND = ["erp", "erp_cache", "freno_variable", "defecto_por_fallo", "sin_erp"];
 
-// BBM_FRENO_DION: "1" = freno puesto; ausente, vacía o "0" = sin freno. Cualquier otro valor ("true", "si", "1 ") se trata como freno PUESTO y se grita:
+// BBM_FRENO_DION: "1" = freno puesto; ausente, vacía o "0" = sin freno. Cualquier otro valor ("true", "si", "2") se trata como freno PUESTO y se grita:
 // quien la escribe quiere frenar, y una errata no puede dejarle sin freno (la misma idea que BOT_MODE=testing con lista ilegible).
 export function leeFreno(valor, log = console, project = "bot") {
   if (valor === true) return true;
@@ -536,7 +539,12 @@ export function createBackendSwitch(o = {}) {
     let t = now();
     if (!frenoPuesto && erpDe()) {
       if (!hayRespuesta(t)) { await refresca(); t = now(); }
-      else if (!lectura || t - lectura.at >= ttlMs) refresca();   // segundo plano: refresca() nunca rechaza
+      else if (!lectura || t - lectura.at >= ttlMs) {
+        // Caché caducada. Con erp en memoria se ESPERA la lectura (≤ ESTADO_TIMEOUT_MS): volver a dion desde Ajustes tiene que notarse en ≤ 30 s, no
+        // cotizar con un erp de hace 5 min y fijar la conversación 30 min en él (revisor 14-oct). Con dion, el lado seguro, en segundo plano.
+        if (resuelve(t).backend === "erp") { await refresca(); t = now(); }
+        else refresca();   // segundo plano: refresca() nunca rechaza
+      }
     }
     const res = resuelve(t);
     anota(res);
