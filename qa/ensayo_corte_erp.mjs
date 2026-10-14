@@ -1,11 +1,12 @@
 // Ensayo del corte de BBM al ERP con el index.js REAL (E1.10, 13-oct-2026, bbm-corte-bot). No es una prueba del gate: se lanza a mano.
 //
 //   node --import ./qa/ensayo_corte_erp.mjs index.js            (desde la raíz del repo, con node_modules instalado)
-//   ENSAYO_CASO=en|id|id_sin_cobros|regla|telefono_prueba (este: BBM_BACKEND=dion + BBM_ERP_TELEFONOS con el teléfono del ensayo, el ensayo de E1.6)   ENSAYO_FIXTURES=<json capturado de una rama de bbm>   (opcionales)
+//   ENSAYO_CASO=en|id|id_sin_cobros|regla|telefono_prueba (este: el ERP dice dion + BBM_ERP_TELEFONOS con el teléfono del ensayo, el ensayo de E1.6)   ENSAYO_FIXTURES=<json capturado de una rama de bbm>   (opcionales)
 //
 // Qué es de verdad y qué no:
 //   · DE VERDAD: index.js entero (webhook de Meta, turno, herramienta get_quote del modo erp, cierre [PAY], puerta de Xendit, aviso de pago),
-//     bbmerp.js, bbmflow.js, xendit-rsv.js, aviso-ia.js, con BBM_BACKEND=erp.
+//     bbmerp.js, bbmflow.js, xendit-rsv.js, aviso-ia.js, con el interruptor del ERP en erp (B10: el doble contesta `estado`; BBM_BACKEND ya no manda
+//     y el ensayo no la pone). Antes del primer mensaje se comprueba en /admin/api/health que el backend efectivo es el del caso; si no, ROJO.
 //   · DE MENTIRA: el modelo (un guion que llama a get_quote y emite [LEAD]/[PAY] como lo haría Haiku; NO prueba cómo obedece el modelo),
 //     WhatsApp y Telegram (se apuntan, no salen) y las tres edges del ERP (un doble con estado que contesta como bbmerp.contract.json; con
 //     ENSAYO_FIXTURES, con las salidas reales de las funciones de la base capturadas en una rama efímera de bbm).
@@ -36,7 +37,7 @@ Object.assign(process.env, {
   PORT, PROJECT_NAME: "BaliBest", BOT_VERTICAL: "rental", CONTEXT_FILE: "context-balibest.md", PANEL_FILE: "panel-rental.html",
   BOT_MODEL: "ensayo-guion", ANTHROPIC_API_KEY: "ensayo-sin-clave", WHATSAPP_TOKEN: "ensayo", WHATSAPP_PHONE_ID: "100000000000000", WHATSAPP_VERIFY_TOKEN: "ensayo",
   OWNER_PHONE: OWNER, ADMIN_PASSWORD: "ensayo-admin-0123456789", XENDIT_CALLBACK_TOKEN: "tok-railway-viejo-9876543210",
-  BBM_BACKEND: CASO === "telefono_prueba" ? "dion" : "erp", ...(CASO === "telefono_prueba" ? { BBM_ERP_TELEFONOS: TEL } : {}), BBM_ERP_URL: URL_ERP, BBM_RESERVAS_SECRET: SECRETO, BBM_ERP_CLAVE: "1",
+  ...(CASO === "telefono_prueba" ? { BBM_ERP_TELEFONOS: TEL } : {}), BBM_ERP_URL: URL_ERP, BBM_RESERVAS_SECRET: SECRETO, BBM_ERP_CLAVE: "1",
 });
 
 // ── informe ────────────────────────────────────────────────────────────────────────────────────────────
@@ -70,7 +71,10 @@ const PID = fx?.producto_id || "3f0c1b1e-7b1a-4c53-9a53-2a6f0f5c1111";
 const st = { reservas: new Map(), invoices: new Map(), facturas: [], seq: 0, cobros: CASO !== "id_sin_cobros" };
 const res = (status, body) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const uuid = () => `9a1e6c1a-0d52-4e0e-8a77-${String(++st.seq).padStart(12, "0")}`;
+// B10: el interruptor de Ajustes › Cobros. erp en el ensayo del corte; dion en el del teléfono de prueba (E1.6). Forma EXACTA del contrato.
+const BACKEND_ERP = CASO === "telefono_prueba" ? "dion" : "erp";
 function edgeReservasBot(b) {
+  if (b.accion === "estado") return Object.keys(b).length === 1 ? res(200, { r: { backend: BACKEND_ERP } }) : res(400, { error: "campo_no_admitido" });
   if (b.accion === "catalogo") return res(200, { r: fx?.catalogo || [{ id: PID, numero_producto: "P-1", nombre: "Honda Scoopy", descripcion: "Automatic 110cc", unidad: "moto", tarifas: [{ dias: 1, precio: 110000, moneda: "IDR", etiqueta: null }], unidades: 2 }] });
   if (b.accion === "cotiza") {
     if (CASO === "regla") return res(409, { error: "reserva_dias_min", mensaje: "El alquiler más corto es de 7 días" });
@@ -193,6 +197,22 @@ async function esperaCliente(pred, ms = 90000, visto = inf.whatsapp.length) {
 const esUrlPago = (t) => /https:\/\/checkout[-a-z]*\.xendit\.co\//.test(t);
 async function guion() {
   for (let i = 0; i < 80; i++) { try { const r = await fetchReal(`http://127.0.0.1:${PORT}/`); if (r.status) break; } catch { /* aún no escucha */ } await espera(250); }
+  // B10: antes de empezar, el backend efectivo tiene que ser el del caso y leído del ERP (fuente erp). Si no, el ensayo no prueba lo que dice: ROJO.
+  const backendBien = () => !!(inf.backend_antes && inf.backend_antes.backend === BACKEND_ERP && inf.backend_antes.backend_fuente === "erp");
+  inf.backend_antes = null;
+  for (let i = 0; i < 40 && !backendBien(); i++) {
+    try {
+      const h = await fetchReal(`http://127.0.0.1:${PORT}/admin/api/health`, { headers: { "x-admin-key": process.env.ADMIN_PASSWORD } });
+      const j = h.status === 200 ? await h.json() : null;
+      inf.backend_antes = j && j.bbm ? { backend: j.bbm.backend, backend_fuente: j.bbm.backend_fuente, backend_error: j.bbm.backend_error } : { http: h.status };
+    } catch { /* aún no contesta */ }
+    if (!backendBien()) await espera(250);
+  }
+  if (!backendBien()) {
+    inf.errores.push(`backend efectivo antes de empezar: ${JSON.stringify(inf.backend_antes)}; se esperaba ${BACKEND_ERP} leído del ERP`);
+    console.log("\n=== INFORME DEL ENSAYO (ROJO antes de empezar) ===\n" + JSON.stringify(inf, null, 1));
+    process.exit(1);
+  }
   await mensaje(g.pide);
   if (!(await esperaCliente((t) => /Rp |\[sin precio/.test(t)))) inf.errores.push("sin respuesta a la consulta");
   if (CASO !== "regla") {

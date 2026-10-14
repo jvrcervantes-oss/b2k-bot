@@ -1,5 +1,6 @@
 // Cliente del bot de BBM contra el ERP (F8 pieza 7, parte segura, 9-oct-2026). Habla con la edge `reservas-bot` del ERP: catálogo, entrega
 // (km), cotización, reserva y cliente; y con la edge `reservas-enlace` (F3 Entrega 2, 12-oct): el enlace de pago de la reserva, que crea el ERP.
+// Desde B10 (14-oct-2026) también el interruptor «quién atiende las reservas» (acción `estado`), que vive en el ERP: ver createBackendSwitch.
 // Con BBM_ERP_URL/BBM_RESERVAS_SECRET ausentes el módulo no hace nada y el bot se comporta EXACTAMENTE como antes.
 //
 // Todo entra por createBbmErp(opciones): no toca el entorno ni la red por su cuenta, así se prueba con un fetch de mentira. Patrón de
@@ -48,6 +49,7 @@ export function valorRegla(mensaje) {
 }
 export const ENLACE_TIMEOUT_MS = 20000;   // reservas-enlace espera a Xendit hasta 15 s
 export const ENLACE_REINTENTO_MS = 4000;  // tras un 409 en_curso (otra petición está creando el enlace; la marca dura 30 s)
+export const ESTADO_TIMEOUT_MS = 1500;    // `estado` (B10): como mucho esto espera un turno, y solo cuando no hay ningún valor válido (ver createBackendSwitch)
 
 const KO = (motivo, extra = {}) => ({ ok: false, motivo, ...extra });
 const esObj = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
@@ -173,6 +175,7 @@ export function createBbmErp(o = {}) {
   const {
     url, secret, timeoutMs = TIMEOUT_MS, catalogoTtlMs = CATALOGO_TTL_MS, catalogoMaxStaleMs = CATALOGO_MAX_STALE_MS,
     enviaClave = false, fetchImpl = globalThis.fetch, now = () => Date.now(), log = console, project = "bot", enlaceTimeoutMs = ENLACE_TIMEOUT_MS,
+    estadoTimeoutMs = ESTADO_TIMEOUT_MS,
   } = o;
   const base = typeof url === "string" ? url.trim().replace(/\/+$/, "") : "";
   const enabled = !!(base && secret);
@@ -347,7 +350,48 @@ export function createBbmErp(o = {}) {
     return { ok: true, ...e };
   }
 
-  return { enabled, catalogo: getCatalogo, entrega, cotiza, reserva, cliente, enlace, _llamaErp: llamaErp };
+  // Interruptor del ERP (B10, 14-oct-2026): quién atiende las reservas del bot lo decide Ajustes › Cobros del ERP, y la edge lo da con la acción
+  // `estado` de reservas-bot. Cuerpo EXACTO {accion:"estado"}; respuesta buena SOLO {r:{backend:"dion"|"erp"}}, sin ninguna clave más (cualquier
+  // otra forma es un fallo, nunca se interpreta). Sin caché y SIN LOG: la caché, el último valor bueno y el log de cambios son de createBackendSwitch,
+  // que lo llama como mucho una vez cada 30 s (con llamaEdge, una edge vieja escribiría un error cada 30 s para siempre). Timeout propio, corto.
+  // → {ok:true, backend} | {ok:false, clase:"definitivo"|"transitorio", codigo} con `codigo` de una lista cerrada (CODIGOS_ESTADO). Nunca lanza.
+  //   definitivo (el ERP dijo que no o no se entiende; dion al momento): 400 (edge vieja sin `estado`), 401/403 (secreto), 404 (módulo apagado),
+  //   forma (200 con otra forma), otro_4xx. transitorio (puede valer el último bueno < 5 min): tiempo, red, 5xx, 429.
+  async function estado() {
+    if (!enabled) return { ok: false, clase: "definitivo", codigo: "no_configurado" };
+    const transitorio = (e) => ({ ok: false, clase: "transitorio", codigo: e && (e.name === "TimeoutError" || e.name === "AbortError") ? "tiempo" : "red" });
+    let resp;
+    try {
+      resp = await fetchImpl(`${base}/functions/v1/reservas-bot`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json", "x-bot-secret": secret },
+        body: JSON.stringify({ accion: "estado" }),
+        signal: AbortSignal.timeout(estadoTimeoutMs),
+      });
+    } catch (e) { return transitorio(e); }
+    const st = resp.status;
+    if (st === 200) {
+      let json;
+      try { json = await resp.json(); } catch (e) { if (e && (e.name === "TimeoutError" || e.name === "AbortError")) return transitorio(e); json = undefined; }
+      const b = leeEstado(json);
+      return b ? { ok: true, backend: b } : { ok: false, clase: "definitivo", codigo: "forma" };
+    }
+    if (st === 400 || st === 401 || st === 403 || st === 404) return { ok: false, clase: "definitivo", codigo: String(st) };
+    if (st === 429) return { ok: false, clase: "transitorio", codigo: "429" };
+    if (st >= 500) return { ok: false, clase: "transitorio", codigo: "5xx" };
+    return { ok: false, clase: "definitivo", codigo: "otro_4xx" };
+  }
+
+  return { enabled, catalogo: getCatalogo, entrega, cotiza, reserva, cliente, enlace, estado, _llamaErp: llamaErp };
+}
+
+// Forma EXACTA de la respuesta de `estado`: {r:{backend:"dion"|"erp"}} y nada más (ni arriba ni dentro de r). Otro valor, mayúsculas o espacios = null.
+export const CODIGOS_ESTADO = ["400", "401", "403", "404", "forma", "otro_4xx", "tiempo", "red", "5xx", "429", "no_configurado"];
+export function leeEstado(json) {
+  if (!esObj(json) || Object.keys(json).length !== 1 || !esObj(json.r)) return null;
+  const k = Object.keys(json.r);
+  if (k.length !== 1 || k[0] !== "backend") return null;
+  return json.r.backend === "dion" || json.r.backend === "erp" ? json.r.backend : null;
 }
 
 // Respuesta de reservas-enlace: {url, caduca_en, external_id, repetido}. La URL es la del invoice de Xendit (https, sin espacios ni comillas); caduca_en es
@@ -360,10 +404,23 @@ export function leeEnlace(r, externalEsperado, ahora = Date.now()) {
   return { url: r.url, caduca_ms: ms, external_id: r.external_id, repetido: r.repetido === true };
 }
 
-// ── Interruptor de backend (F8 pieza 7c, parte segura) ─────────────────────────────────────────────────────────────────────────────
-// `dion` (el sistema de hoy) o `erp`. Valor por defecto: Redis `bbm:backend` (sin redeploy; ningún panel la escribe aún, medido 12-oct-2026) y, si no existe,
-// la variable BBM_BACKEND; si falta todo, `dion`. Valor desconocido ⇒ `dion` (la parte segura). Redis configurado pero caído ⇒ `dion`: el
-// interruptor existe para poder volver atrás, y sin poder leerlo no se arriesga a quedarse en erp.
+// ── Interruptor de backend (F8 pieza 7c; desde B10, 14-oct-2026, vive en el ERP) ─────────────────────────────────────────────────────────
+// `dion` (el sistema de siempre) o `erp`. Quién atiende las reservas del bot lo cambian el owner o Dion en el ERP (Ajustes › Cobros); el bot lo lee con
+// la acción `estado` de reservas-bot (createBbmErp().estado). ORDEN FIJO de decisión para una conversación (bbmBackend):
+//   1. pin `bbm:pin:<tel>` vivo › 2. enlace `rsv:` pagable › 3. teléfono de prueba (BBM_ERP_TELEFONOS)   ← los tres, como antes de B10
+//   4. freno BBM_FRENO_DION=1 ⇒ dion › 5. lo que dice el ERP › 6. dion                                   ← el VALOR POR DEFECTO
+// El freno y el ERP solo sustituyen al valor por defecto: con el freno puesto, una conversación con pin, enlace vivo o teléfono de prueba en erp SIGUE
+// en erp (no se cambia de sistema a media reserva); todas las demás van a dion sin leer nada del ERP.
+// DEJAN DE MANDAR (B10): la variable BBM_BACKEND (hoy `dion` en Railway: como freno anularía el gesto del ERP el día del despliegue) y la clave Redis
+// `bbm:backend` (dos fuentes del mismo dato = la del 12-oct que nadie veía). Si existen, el arranque y /admin/api/health lo dicen como obsoletas.
+// LECTURA DEL ERP, sin coste en el turno (revisión previa de Bots #332 y de Seguridad, 14-oct):
+//   · Caché de 30 s y UNA petición en vuelo. Con valor válido el turno contesta al momento y, si la lectura tiene ≥ 30 s, refresca en segundo plano.
+//     Sin ningún valor válido (recién arrancado, o > 5 min sin tráfico) el turno ESPERA la lectura, como mucho ESTADO_TIMEOUT_MS (1,5 s): contestar dion
+//     sin leer mandaría a Dion el primer cliente de cada mañana y, si cotiza, lo ataría a dion 30 min.
+//   · Fallo definitivo (400 de una edge vieja, 401/403, 404, forma mala, otro 4xx) ⇒ dion al momento y se OLVIDA el último bueno (el ERP dijo que no).
+//     Fallo transitorio (tiempo, red, 5xx, 429) ⇒ el último valor bueno si tiene < 5 min; si no, dion. Nunca erp sin una lectura buena de < 5 min.
+//   · Los fallos también se guardan 30 s (caché negativa): una edge vieja no recibe una petición por turno. El log, solo cuando cambia el resultado.
+//   · Con el freno puesto, o sin ERP configurado, no se lee nada.
 //
 // FIJADO POR CONVERSACIÓN: al iniciar un flujo de reserva se fija el backend (clave `bbm:pin:<tel>` con caducidad) y no cambia hasta que la
 // cotización muera: nada de cotizar en Dion y pagar en el ERP. Un cambio del interruptor solo afecta a conversaciones nuevas o sin cotización viva.
@@ -390,32 +447,136 @@ export function leeTelefonosErp(valor, log = console, project = "bot") {
   return set;
 }
 
+export const BACKEND_TTL_MS = 30 * 1000;            // caché de la lectura del ERP (buena o mala)
+export const BACKEND_MAX_STALE_MS = 5 * 60 * 1000;   // vida del último valor bueno ante un fallo TRANSITORIO
+export const FUENTES_BACKEND = ["erp", "erp_cache", "freno_variable", "defecto_por_fallo", "sin_erp"];
+
+// BBM_FRENO_DION: "1" = freno puesto; ausente, vacía o "0" = sin freno. Cualquier otro valor ("true", "si", "1 ") se trata como freno PUESTO y se grita:
+// quien la escribe quiere frenar, y una errata no puede dejarle sin freno (la misma idea que BOT_MODE=testing con lista ilegible).
+export function leeFreno(valor, log = console, project = "bot") {
+  if (valor === true) return true;
+  const v = valor === undefined || valor === null || valor === false ? "" : String(valor).trim();
+  if (v === "" || v === "0") return false;
+  if (v !== "1") log.error(`[${project}] [bbm-backend] BBM_FRENO_DION no vale 1 ni 0: se trata como freno PUESTO (todo lo nuevo a dion). Ponla a 1 o quítala.`);
+  return true;
+}
+
 export function createBackendSwitch(o = {}) {
   // enlaceVivo(tel) → true si esa conversación tiene un enlace de pago `rsv:` aún pagable (createPendingRsv.lee). Ese enlace ATA la conversación
   // a erp aunque el pin haya caducado: si no, el interruptor la pasaría a dion con un pago en vuelo.
-  const { redis = () => null, envValue, enlaceVivo = async () => false, telefonosErp = new Set(), now = () => Date.now(), log = console, project = "bot" } = o;
+  // erp: el cliente de createBbmErp (o una función que lo devuelve: en index.js se crea DESPUÉS del interruptor). Sin él, o con enabled=false: dion.
+  // freno: el valor de BBM_FRENO_DION (ver leeFreno). bbmBackendObsoleta: el valor de BBM_BACKEND, solo para decir que ya no se usa.
+  const {
+    redis = () => null, erp = null, freno, bbmBackendObsoleta, enlaceVivo = async () => false, telefonosErp = new Set(),
+    now = () => Date.now(), log = console, project = "bot", ttlMs = BACKEND_TTL_MS, maxStaleMs = BACKEND_MAX_STALE_MS,
+  } = o;
   const p = (m) => `[${project}] [bbm-backend] ${m}`;
   const mem = new Map();   // sin Redis (modo RAM): mismas reglas en memoria
-  const memConf = { valor: undefined };
+  const frenoPuesto = leeFreno(freno, log, project);
+  const obsoletaEnv = bbmBackendObsoleta !== undefined && bbmBackendObsoleta !== null;
+  const erpDe = () => { const e = typeof erp === "function" ? erp() : erp; return e && e.enabled && typeof e.estado === "function" ? e : null; };
+  if (obsoletaEnv) log.warn(p("BBM_BACKEND está puesta y YA NO SE USA (B10): quién atiende lo decide el ERP (Ajustes › Cobros); el freno de emergencia es BBM_FRENO_DION=1. Quítala."));
+  if (frenoPuesto) log.warn(p("FRENO PUESTO (BBM_FRENO_DION): toda conversación nueva va a dion y no se lee el ERP; las que tienen pin, enlace vivo o teléfono de prueba en erp siguen en erp."));
 
-  async function porDefecto() {
-    const r = redis();
-    if (r) {
-      try {
-        const v = await r.get("bbm:backend");
-        if (v !== null && v !== undefined) {
-          const n = normalizaBackend(v);
-          if (n === "dion" && String(v).trim().toLowerCase() !== "dion") log.warn(p("bbm:backend con un valor desconocido: se usa dion"));
-          return n;
-        }
-      } catch (e) {
-        log.error(p("no se pudo leer bbm:backend de Redis: se usa dion"));
-        return "dion";
+  let lectura = null;   // última lectura del ERP, buena o mala: { at, ok, backend } | { at, ok:false, clase, codigo }
+  let bueno = null;     // último valor BUENO { at, backend }; un fallo definitivo lo borra
+  let inflight = null;
+  let ultimoLog = null;
+  let claveVieja = { at: null, existe: false };   // ¿existe todavía `bbm:backend` en Redis? Solo lo mira el health/arranque, nunca el turno
+  const CODIGOS = new Set(CODIGOS_ESTADO);
+
+  // Lo que se contesta AHORA con lo que hay en memoria (sin red).
+  function resuelve(t) {
+    if (frenoPuesto) return { backend: "dion", fuente: "freno_variable", erp_dice: null, error: null };
+    if (!erpDe()) return { backend: "dion", fuente: "sin_erp", erp_dice: null, error: null };
+    if (lectura && lectura.ok) {
+      if (t - lectura.at < maxStaleMs) return { backend: lectura.backend, fuente: "erp", erp_dice: lectura.backend, error: null };
+      return { backend: "dion", fuente: "defecto_por_fallo", erp_dice: null, error: null };   // no pasa si se respeta hayRespuesta; por si acaso
+    }
+    if (lectura && lectura.clase === "transitorio" && bueno && t - bueno.at < maxStaleMs) return { backend: bueno.backend, fuente: "erp_cache", erp_dice: bueno.backend, error: lectura.codigo };
+    return { backend: "dion", fuente: "defecto_por_fallo", erp_dice: null, error: lectura ? lectura.codigo : null };
+  }
+  // ¿Hay un valor que se pueda usar sin esperar? Una lectura de < 30 s (buena o mala: la mala es la caché negativa), o un último bueno de < 5 min.
+  function hayRespuesta(t) {
+    if (lectura && t - lectura.at < ttlMs) return true;
+    return !!(bueno && t - bueno.at < maxStaleMs);
+  }
+  function anota(res) {
+    const k = `${res.backend}|${res.fuente}|${res.error}`;
+    if (k === ultimoLog) return;
+    ultimoLog = k;
+    const m = p(`quién atiende por defecto: ${res.backend} (fuente ${res.fuente}${res.error ? `, error ${res.error}` : ""})`);
+    if (res.fuente === "defecto_por_fallo" || res.fuente === "erp_cache") log.warn(m); else log.log(m);
+  }
+
+  // Lee el ERP. Una sola petición en vuelo; NUNCA rechaza (se lanza en segundo plano y un rechazo sin catch tumba Node).
+  function refresca() {
+    if (inflight) return inflight;
+    const e = frenoPuesto ? null : erpDe();
+    if (!e) return Promise.resolve();
+    inflight = (async () => {
+      let r;
+      try { r = await e.estado(); } catch { r = { ok: false, clase: "transitorio", codigo: "red" }; }
+      const t = now();
+      if (r && r.ok === true && BACKENDS.includes(r.backend)) {
+        lectura = { at: t, ok: true, backend: r.backend };
+        bueno = { at: t, backend: r.backend };
+      } else {
+        const clase = r && r.clase === "transitorio" ? "transitorio" : "definitivo";
+        lectura = { at: t, ok: false, clase, codigo: r && CODIGOS.has(r.codigo) ? r.codigo : "otro_4xx" };
+        if (clase === "definitivo") bueno = null;   // el ERP dijo que no: un timeout de después no puede resucitar un erp viejo
       }
-    } else if (memConf.valor !== undefined) return normalizaBackend(memConf.valor);
-    const e = envValue === undefined ? undefined : String(envValue);
-    if (e && !BACKENDS.includes(e.trim().toLowerCase())) log.warn(p("BBM_BACKEND con un valor desconocido: se usa dion"));
-    return normalizaBackend(e);
+      anota(resuelve(t));
+    })().catch(() => {}).finally(() => { inflight = null; });
+    return inflight;
+  }
+
+  // El valor por defecto con su fuente. Espera la lectura solo si no hay ningún valor válido (como mucho el timeout de `estado`).
+  async function decide() {
+    let t = now();
+    if (!frenoPuesto && erpDe()) {
+      if (!hayRespuesta(t)) { await refresca(); t = now(); }
+      else if (!lectura || t - lectura.at >= ttlMs) refresca();   // segundo plano: refresca() nunca rechaza
+    }
+    const res = resuelve(t);
+    anota(res);
+    return res;
+  }
+  async function porDefecto() { return (await decide()).backend; }
+
+  async function existeClaveVieja() {
+    const t = now();
+    if (claveVieja.at !== null && t - claveVieja.at < ttlMs) return claveVieja.existe;
+    const r = redis();
+    let existe = false;
+    if (r) { try { existe = Number(await r.exists("bbm:backend")) > 0; } catch { existe = claveVieja.existe; } }
+    claveVieja = { at: t, existe };
+    return existe;
+  }
+
+  // Bloque `bbm` de /admin/api/health (lo esparce index.js). Solo valores de lista cerrada, booleanos y segundos: nunca el cuerpo de un error,
+  // la URL, el secreto ni el VALOR de `bbm:backend` (solo si existe). Usa la misma caché de 30 s que el turno.
+  // backend_leido_hace_s = edad de la lectura que respalda la respuesta: la del valor usado (erp, erp_cache) o la del último intento (defecto_por_fallo).
+  async function salud() {
+    const d = await decide();
+    const t = now();
+    const ref = d.fuente === "erp" ? lectura : d.fuente === "erp_cache" ? bueno : d.fuente === "defecto_por_fallo" ? lectura : null;
+    return {
+      backend: d.backend,
+      backend_fuente: d.fuente,
+      erp_dice: d.erp_dice,
+      freno: frenoPuesto,
+      backend_error: d.error,
+      backend_leido_hace_s: ref ? Math.max(0, Math.floor((t - ref.at) / 1000)) : null,
+      obsoletas: { BBM_BACKEND: obsoletaEnv, redis_bbm_backend: await existeClaveVieja() },
+    };
+  }
+
+  // Al arrancar: primera lectura (el primer turno la encuentra hecha o en vuelo) y aviso si la clave vieja sigue en Redis.
+  async function arranca() {
+    await refresca();
+    if (!lectura && !frenoPuesto) anota(resuelve(now()));
+    if (await existeClaveVieja()) log.warn(p("la clave Redis bbm:backend existe y YA NO SE USA (B10): borrarla (Deploy, con el OK del orquestador)."));
   }
 
   async function leePin(tel) {
@@ -465,10 +626,7 @@ export function createBackendSwitch(o = {}) {
     else mem.delete(String(tel));
   }
 
-  // Para el panel/CRM y para los tests sin Redis.
-  function ponPorDefectoEnMemoria(v) { memConf.valor = v; }
-
-  return { bbmBackend, fija, suelta, porDefecto, _ponPorDefectoEnMemoria: ponPorDefectoEnMemoria };
+  return { bbmBackend, fija, suelta, porDefecto, salud, arranca, refresca };
 }
 
 // ── Registro de enlace pendiente PROPIO de las reservas del ERP ───────────────────────────────────────────────────────────────────

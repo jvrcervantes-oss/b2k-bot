@@ -172,7 +172,7 @@ function monta({ cotiza, enlace } = {}) {
   assert.doesNotMatch(errores[0], /0811234567|1234/, "el arranque no escribe los números enteros");
   assert.equal(leeTelefonosErp(undefined, lg).size, 0); assert.equal(leeTelefonosErp("", lg).size, 0);
   assert.equal(leeTelefonosErp("+0811234567", lg).size, 0, "formato local con + delante: descartado");
-  const sw = createBackendSwitch({ envValue: "dion", telefonosErp: set, log: silent, now: () => ahora });
+  const sw = createBackendSwitch({ telefonosErp: set, log: silent, now: () => ahora });   // sin ERP: el valor por defecto es dion (sin_erp)
   assert.equal(await sw.bbmBackend("62800000001"), "erp");
   assert.equal(await sw.bbmBackend("+62 800 000 002"), "erp", "se comparan los dígitos");
   assert.equal(await sw.bbmBackend("34800000001"), "dion", "mismos últimos 9 dígitos, otro país: dion (comparación exacta)");
@@ -180,9 +180,41 @@ function monta({ cotiza, enlace } = {}) {
   assert.equal(await sw.porDefecto(), "dion", "el interruptor general no cambia");
   await sw.fija("62800000001", 1800, "dion");
   assert.equal(await sw.bbmBackend("62800000001"), "dion", "un pin vivo manda antes que la lista: no se cambia de sistema a media reserva");
-  const sinLista = createBackendSwitch({ envValue: "dion", log: silent, now: () => ahora });
+  const sinLista = createBackendSwitch({ log: silent, now: () => ahora });
   assert.equal(await sinLista.bbmBackend("62800000001"), "dion", "sin la variable, como siempre");
   ok("BBM_ERP_TELEFONOS: solo esos teléfonos (dígitos exactos) van al ERP con el interruptor en dion; un pin vivo manda; mal escritos, descartados sin enseñarlos");
+}
+
+// ── 6. B10 (14-oct-2026): el interruptor vive en el ERP. El ensayo de E1.6 (teléfono de prueba con el ERP en dion), el corte (el ERP pasa a erp sin
+//       tocar Railway) y el freno de emergencia, con el bbmerp.js real contra un doble de reservas-bot que contesta `estado`.
+{
+  let backend = "dion"; let llamadas = 0;
+  const fetchImpl = async (url, init) => {
+    const b = JSON.parse(init.body);
+    if (b.accion !== "estado") return r(400, { error: "accion" });
+    assert.deepEqual(b, { accion: "estado" });
+    llamadas++;
+    return r(200, { r: { backend } });
+  };
+  const erp = createBbmErp({ url: URL_ERP, secret: SECRET, fetchImpl, now: () => ahora, log: silent, project: "T" });
+  const tels = leeTelefonosErp("62800000001", silent, "T");
+  const sw = createBackendSwitch({ erp: () => erp, telefonosErp: tels, bbmBackendObsoleta: "dion", log: silent, now: () => ahora });
+  assert.equal(await sw.bbmBackend("62800000001"), "erp", "ensayo E1.6: el teléfono de prueba va al ERP con el ERP en dion");
+  assert.equal(await sw.bbmBackend(TEL), "dion", "los clientes reales siguen en Dion");
+  assert.equal((await sw.salud()).backend_fuente, "erp");
+  // el corte: el owner o Dion lo cambian en Ajustes; BBM_BACKEND=dion (lo que hay hoy en Railway) ya no lo frena
+  backend = "erp"; ahora += 31_000;
+  await sw.bbmBackend(TEL); await sw.refresca();
+  assert.equal(await sw.bbmBackend(TEL), "erp", "corte sin tocar Railway");
+  const s = await sw.salud();
+  assert.deepEqual([s.backend, s.backend_fuente, s.erp_dice, s.obsoletas.BBM_BACKEND], ["erp", "erp", "erp", true]);
+  // freno de emergencia que no depende del ERP
+  const frenado = createBackendSwitch({ erp: () => erp, freno: "1", telefonosErp: tels, log: silent, now: () => ahora });
+  const n = llamadas;
+  assert.equal(await frenado.bbmBackend(TEL), "dion", "freno: todo lo nuevo a dion");
+  assert.equal(await frenado.bbmBackend("62800000001"), "erp", "el teléfono de prueba va antes que el freno");
+  assert.equal(llamadas, n, "con el freno no se lee el ERP");
+  ok("B10: teléfono de prueba con el ERP en dion; el corte se hace en el ERP (BBM_BACKEND=dion ya no lo frena); BBM_FRENO_DION=1 frena sin leer el ERP");
 }
 
 console.log(`\n${n} bloques en verde`);

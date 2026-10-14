@@ -4,13 +4,18 @@
 //   node qa/corte_comprueba.mjs --fase <desplegado|prueba|precorte|corte|vuelta> [--sha <commit esperado en producción>]
 //   BBM_ADMIN_KEY=<clave del panel> por el entorno (opcional): sin ella, el health queda NO MEDIDO y se dice. La clave nunca se escribe.
 //
+// B10 (14-oct-2026): el corte ya NO es una variable de Railway. Quién atiende lo cambian el owner o Dion en el ERP (Ajustes › Cobros) y el bot lo lee
+// con la acción `estado` de reservas-bot; health enseña backend, backend_fuente, erp_dice, freno, backend_error y obsoletas. BBM_FRENO_DION=1 es el freno de
+// emergencia (todo lo nuevo a dion sin leer el ERP). BBM_BACKEND y la clave Redis `bbm:backend` ya no mandan: si siguen ahí, salen como AVISO
+// (y en la fase corte, la clave de Redis como ROJO: el guion dice que Deploy la borra al desplegar).
 // Fases (qué tiene que ser verdad ANTES de seguir):
-//   desplegado: el código nuevo corre (sha) con BBM_BACKEND=dion, BBM_ERP_CLAVE=1, sin teléfonos de prueba, backend efectivo dion.
+//   desplegado: el código nuevo corre (sha) con BBM_ERP_CLAVE=1, sin teléfonos de prueba, sin freno, y health dice dion LEÍDO DEL ERP (backend_fuente erp):
+//               prueba de que la edge ya contesta `estado`. Un 400 aquí = la edge de bbm aún no tiene `estado`.
 //   prueba:     lo mismo, y BBM_ERP_TELEFONOS con 1 a 3 teléfonos (el del estudio) para el cobro de prueba de E1.6, y lo de la comisión de precorte.
-//   precorte:   lo mismo que desplegado, y el código desplegado ya no dice «sin comisión» (requisito I): se lanza justo ANTES de BBM_BACKEND=erp.
-//   corte:      BBM_BACKEND=erp y backend efectivo erp (después del cambio), y lo mismo de la comisión.
-//   vuelta:     BBM_BACKEND=dion y backend efectivo dion (después de volver atrás).
-// Salida: una línea por comprobación (OK / ROJO / NO MEDIDO) y código 0 solo si no hay ningún ROJO.
+//   precorte:   lo mismo que desplegado, y el código desplegado ya no dice «sin comisión» (requisito I): se lanza justo ANTES del gesto en Ajustes.
+//   corte:      después del gesto en Ajustes: sin freno, health dice erp leído del ERP (backend erp, backend_fuente erp), y lo mismo de la comisión.
+//   vuelta:     después de volver atrás (en Ajustes, o con el freno BBM_FRENO_DION=1): health dice dion.
+// Salida: una línea por comprobación (OK / ROJO / AVISO / NO MEDIDO) y código 0 solo si no hay ningún ROJO.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -70,7 +75,12 @@ const leidas = Object.keys(v).length > 0;
 const quiere = { desplegado: "dion", prueba: "dion", precorte: "dion", corte: "erp", vuelta: "dion" }[fase];
 if (leidas) {
   for (const k of ["BBM_ERP_URL", "BBM_RESERVAS_SECRET", "XENDIT_CALLBACK_TOKEN", "REDIS_URL"]) fila(v[k] ? "OK" : "ROJO", `${k} existe`);
-  fila(v.BBM_BACKEND === quiere ? "OK" : "ROJO", "BBM_BACKEND", `${v.BBM_BACKEND ?? "(no está)"}; en esta fase tiene que ser ${quiere}`);
+  // B10: BBM_BACKEND ya no manda; si sigue puesta solo confunde a quien lea Railway. El freno sí manda: en las fases antes del corte y en el corte
+  // tiene que estar quitado (con el freno, el gesto de Ajustes no haría nada); en la vuelta vale de las dos maneras.
+  fila(v.BBM_BACKEND === undefined ? "OK" : "AVISO", "BBM_BACKEND (obsoleta desde B10)", v.BBM_BACKEND === undefined ? "no está" : "sigue puesta y ya no se usa: quitarla (Deploy)");
+  const freno = v.BBM_FRENO_DION !== undefined && !["", "0"].includes(String(v.BBM_FRENO_DION).trim());
+  if (fase === "vuelta") fila("OK", "BBM_FRENO_DION", freno ? "puesto (vuelta por el freno)" : "sin freno (vuelta por Ajustes)");
+  else fila(freno ? "ROJO" : "OK", "BBM_FRENO_DION", freno ? "freno PUESTO: todo va a dion y el gesto de Ajustes no hace nada; quitarlo antes de seguir" : "sin freno");
   fila(v.BBM_ERP_CLAVE === "1" ? "OK" : "ROJO", "BBM_ERP_CLAVE=1 (anti-duplicado al reservar)", v.BBM_ERP_CLAVE === "1" ? "" : `vale «${String(v.BBM_ERP_CLAVE ?? "").slice(0, 3)}»: ponerla a 1 antes de cobrar`);
   const tels = String(v.BBM_ERP_TELEFONOS || "").split(",").map((t) => t.trim()).filter(Boolean).length;
   if (fase === "prueba") fila(tels >= 1 && tels <= 3 ? "OK" : "ROJO", "BBM_ERP_TELEFONOS", `${tels} teléfono(s); para la prueba, el del estudio (1 a 3)`);
@@ -82,9 +92,9 @@ v = null;   // nada de lo leído sale de aquí
 try { const r = await fetch(`${URL_BOT}/`, { signal: AbortSignal.timeout(10000) }); fila(r.status === 200 ? "OK" : "ROJO", "raíz del bot", `HTTP ${r.status}`); }
 catch { fila("ROJO", "raíz del bot", "sin respuesta"); }
 
-// 4. health (backend EFECTIVO: una clave bbm:backend en Redis manda sobre la variable)
+// 4. health: el backend EFECTIVO (lo que decide de verdad, B10) y de dónde sale
 const clave = process.env.BBM_ADMIN_KEY;
-if (!clave) fila("NO MEDIDO", "health", "sin BBM_ADMIN_KEY en el entorno: el backend efectivo no se ha visto (una clave bbm:backend en Redis manda sobre la variable)");
+if (!clave) fila("NO MEDIDO", "health", "sin BBM_ADMIN_KEY en el entorno: el backend efectivo no se ha visto (desde B10 lo decide el ERP, no una variable: sin health no hay prueba)");
 else {
   try {
     const r = await fetch(`${URL_BOT}/admin/api/health`, { headers: { "x-admin-key": clave }, signal: AbortSignal.timeout(15000) });
@@ -92,7 +102,17 @@ else {
     const b = j && j.bbm;
     if (!b) fila("ROJO", "health", `HTTP ${r.status} sin bloque bbm`);
     else {
-      fila(b.backend === quiere ? "OK" : "ROJO", "backend efectivo", `${b.backend}${b.backend !== quiere ? " — si la variable dice otra cosa, hay una clave bbm:backend en Redis: parar y pasárselo a Deploy" : ""}`);
+      if (!("backend_fuente" in b)) fila("ROJO", "health sin backend_fuente", "el código desplegado no es el de B10 (interruptor en el ERP)");
+      else {
+        // vuelta: dion vale de cualquier fuente (Ajustes o freno); el resto exige la lectura buena del ERP (fuente erp), no una caché ni un fallo
+        const fuenteOk = fase === "vuelta" ? ["erp", "freno_variable"].includes(b.backend_fuente) : b.backend_fuente === "erp";
+        fila(b.backend === quiere && fuenteOk ? "OK" : "ROJO", "backend efectivo", `${b.backend} (fuente ${b.backend_fuente}, el ERP dice ${b.erp_dice ?? "—"}${b.backend_error ? `, error ${b.backend_error}` : ""}); en esta fase tiene que ser ${quiere}${fase === "vuelta" ? "" : " leído del ERP"}`
+          + (b.backend_error === "400" ? " — 400: la edge reservas-bot de bbm aún no tiene la acción estado (Backend)" : b.backend_error === "401" || b.backend_error === "403" ? " — secreto rechazado: BBM_RESERVAS_SECRET (Backend)" : ""));
+        if (b.freno && fase !== "vuelta") fila("ROJO", "freno (health)", "BBM_FRENO_DION puesto");
+        const obs = b.obsoletas || {};
+        if (obs.BBM_BACKEND) fila("AVISO", "BBM_BACKEND (health)", "obsoleta: el bot la ignora");
+        if (obs.redis_bbm_backend) fila(fase === "corte" ? "ROJO" : "AVISO", "clave Redis bbm:backend (health)", "obsoleta: el bot la ignora; el guion dice que Deploy la borra al desplegar");
+      }
       fila(b.erp_configurado ? "OK" : "ROJO", "erp_configurado");
       if ("clave_reserva" in b) fila(b.clave_reserva ? "OK" : "ROJO", "clave_reserva (health)");
       else fila("ROJO", "health sin clave_reserva", "el código desplegado no es el de e110-corte-bot");
@@ -101,6 +121,6 @@ else {
   } catch { fila("ROJO", "health", "sin respuesta"); }
 }
 
-const rojos = filas.filter((x) => x === "ROJO").length, sin = filas.filter((x) => x === "NO MEDIDO").length;
-console.log(`\n${rojos ? "ROJO" : "VERDE"}: ${rojos} en rojo, ${sin} sin medir (fase ${fase}).`);
+const rojos = filas.filter((x) => x === "ROJO").length, sin = filas.filter((x) => x === "NO MEDIDO").length, avisos = filas.filter((x) => x === "AVISO").length;
+console.log(`\n${rojos ? "ROJO" : "VERDE"}: ${rojos} en rojo, ${avisos} aviso(s), ${sin} sin medir (fase ${fase}).`);
 process.exit(rojos ? 1 : 0);

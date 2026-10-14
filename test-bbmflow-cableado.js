@@ -1,5 +1,6 @@
 // Comprobación ESTÁTICA del cableado de bbmflow.js en index.js (F8 pieza 7). index.js no se puede importar en un test (arranca Express + Redis), así que se
-// comprueba el texto: lo que garantiza que con BBM_BACKEND vacío o `dion` el bot hace exactamente lo de antes, y que el modo erp no se cuela por otro sitio.
+// comprueba el texto: lo que garantiza que con el interruptor en `dion` (el ERP dice dion, sin ERP configurado o con BBM_FRENO_DION=1) el bot hace
+// exactamente lo de antes, y que el modo erp no se cuela por otro sitio.
 // Ejecutar: node test-bbmflow-cableado.js
 import assert from "node:assert";
 import fs from "node:fs";
@@ -90,5 +91,25 @@ const trozo = (ini, fin) => { const i = src.indexOf(ini); assert.ok(i >= 0, `no 
 // 9) salud
 assert.ok(/if \(bbmSombra\) \{ try \{ bbm\.sombra = await bbmSombra\.estado\(\)/.test(src));
 ok("/admin/api/health enseña el avance de la sombra");
+// 10) B10 (14-oct-2026): el interruptor vive en el ERP; BBM_BACKEND y `bbm:backend` ya no mandan
+{
+  const sc = sinComentarios(src);
+  const lib = sinComentarios(fs.readFileSync(new URL("./bbmerp.js", import.meta.url), "utf8"));
+  const sw = sinComentarios(trozo("const bbmBackendSw = createBackendSwitch({", "});"));
+  assert.ok(/erp: \(\) => \(BOT_VERTICAL === "rental" \? bbmErp : null\)/.test(sw), "el interruptor lee el ERP solo en rental, por un cierre perezoso");
+  assert.ok(/freno: process\.env\.BBM_FRENO_DION/.test(sw), "el freno de emergencia es BBM_FRENO_DION");
+  assert.ok(/bbmBackendObsoleta: process\.env\.BBM_BACKEND/.test(sw), "BBM_BACKEND solo llega para avisar de que está obsoleta");
+  assert.ok(!/envValue/.test(sc) && !/envValue/.test(lib), "BBM_BACKEND ya no es un valor por defecto");
+  assert.ok(!/\.get\("bbm:backend"\)/.test(sc) && !/\.get\("bbm:backend"\)/.test(lib), "nadie LEE el valor de bbm:backend (solo exists, para el health)");
+  assert.ok(/\.exists\("bbm:backend"\)/.test(lib));
+  const iErp = src.indexOf("const bbmErp = createBbmErp("), iPend = src.indexOf("const bbmPendingRsv = createPendingRsv("), iSw = src.indexOf("const bbmBackendSw = createBackendSwitch(");
+  const iArr = src.indexOf("if (BOT_VERTICAL === \"rental\" && bbmErp.enabled) bbmBackendSw.arranca().catch(() => {});");
+  assert.ok(iErp > 0 && iPend > iErp && iSw > iPend && iArr > iSw, "orden de declaración: bbmErp y bbmPendingRsv antes del interruptor, y la lectura de arranque después");
+  assert.equal((sc.match(/bbmBackendSw\.arranca\(/g) || []).length, 1, "una sola lectura de arranque, detrás de rental + ERP configurado");
+  const h = sinComentarios(trozo('app.get("/admin/api/health"', "\n});\n"));
+  assert.ok(/bbmSalud = await bbmBackendSw\.salud\(\)/.test(h) && /const bbm = \{ \.\.\.bbmSalud,/.test(h), "el health usa salud() (misma caché de 30 s que el turno)");
+  assert.ok(!/porDefecto/.test(sc), "index.js ya no lee porDefecto (el health va por salud(), el turno por bbmBackend)");
+  ok("B10: interruptor del ERP con freno BBM_FRENO_DION; BBM_BACKEND y bbm:backend solo como obsoletas; orden de declaración; health por salud()");
+}
 
 console.log(`\n${n} comprobaciones OK`);

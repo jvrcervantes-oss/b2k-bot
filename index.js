@@ -2759,18 +2759,26 @@ async function markLeadPaid(phone, provider, amountIDR, receiptUrl) {
   }
 }
 
-// Interruptor de backend de BBM (F8-7c, parte segura): `dion` (hoy) o `erp`. Por defecto Redis `bbm:backend` > BBM_BACKEND > dion. (Ningún panel escribe aún `bbm:backend`, medido 12-oct: se cambia con la variable.)
-// Lo lee el turno de la conversación (bbmBackendSw.bbmBackend(tel)) para elegir entre Dion y el ERP, y se ve en /admin/api/health. Con `dion` (o sin variables) y sin
-// BBM_ERP_TELEFONOS todo va a Dion como antes del corte.
+// Interruptor de backend de BBM (F8-7c; B10, 14-oct-2026): `dion` o `erp`. El valor por defecto lo decide el ERP (Ajustes › Cobros, acción `estado` de
+// reservas-bot, caché 30 s); BBM_FRENO_DION=1 es el freno de emergencia que no depende del ERP (todo lo nuevo a dion). BBM_BACKEND y la clave Redis
+// `bbm:backend` YA NO MANDAN: si existen, el arranque y /admin/api/health las enseñan como obsoletas. Orden completo en bbmerp.js (createBackendSwitch).
+// Lo lee el turno de la conversación (bbmBackendSw.bbmBackend(tel)) para elegir entre Dion y el ERP, y se ve en /admin/api/health. Con el ERP diciendo
+// `dion` (o sin ERP configurado, o con el freno) y sin BBM_ERP_TELEFONOS todo va a Dion como antes del corte.
 // BBM_ERP_TELEFONOS (E1.10, 13-oct-2026): teléfonos de prueba que van al ERP con el interruptor en dion (cobro de prueba antes del corte). Ver leeTelefonosErp.
 const bbmTelefonosErp = leeTelefonosErp(process.env.BBM_ERP_TELEFONOS, console, PROJECT_NAME);
 if (bbmTelefonosErp.size) console.log(`[${PROJECT_NAME}] [bbm-backend] ${bbmTelefonosErp.size} teléfono(s) de prueba van al ERP aunque el interruptor diga otra cosa (BBM_ERP_TELEFONOS)`);
-const bbmBackendSw = createBackendSwitch({ redis: () => redisClient, envValue: process.env.BBM_BACKEND, telefonosErp: bbmTelefonosErp, project: PROJECT_NAME, enlaceVivo: async (tel) => !!(await bbmPendingRsv.lee(tel)) }); // un enlace rsv: vivo ata la conversación a erp aunque caduque el pin
 // ── F8-7 (7a sombra + 7c modo erp): cliente de reservas-bot y piezas de bbmflow.js ──────────────────────────────────────────────────
 // Sin BBM_ERP_URL + BBM_RESERVAS_SECRET `bbmErp.enabled` es false y NADA de esto se ejecuta. `clave` de idempotencia solo con BBM_ERP_CLAVE=1 (cuando la edge
 // con `clave` esté desplegada; con la edge vieja la rechazaría con campo_no_admitido y rompería todas las reservas).
 const bbmErp = createBbmErp({ url: process.env.BBM_ERP_URL, secret: process.env.BBM_RESERVAS_SECRET, enviaClave: process.env.BBM_ERP_CLAVE === "1", project: PROJECT_NAME });
 const bbmPendingRsv = createPendingRsv({ redis: () => redisClient });
+// Fuera de rental el interruptor no lee el ERP (sin_erp): el turno ya es dion en bbmBackendTurno, y el health lo dice igual.
+const bbmBackendSw = createBackendSwitch({
+  redis: () => redisClient, erp: () => (BOT_VERTICAL === "rental" ? bbmErp : null), freno: process.env.BBM_FRENO_DION, bbmBackendObsoleta: process.env.BBM_BACKEND,
+  telefonosErp: bbmTelefonosErp, project: PROJECT_NAME, enlaceVivo: async (tel) => !!(await bbmPendingRsv.lee(tel)), // un enlace rsv: vivo ata la conversación a erp aunque caduque el pin
+});
+// Primera lectura del ERP al arrancar: el primer turno tras un despliegue la encuentra hecha o en vuelo. Nunca rechaza; sin ERP o con el freno, no lee nada.
+if (BOT_VERTICAL === "rental" && bbmErp.enabled) bbmBackendSw.arranca().catch(() => {});
 const bbmQuotes = createQuoteStore({ redis: () => redisClient });
 const bbmIndiceRsv = createReservaIndex({ redis: () => redisClient });
 // «Solo seguir cotizaciones aún vendibles» (F8 pieza 6): `bbmseg:<tel>` guarda producto+fechas de la última cotización del ERP y el tick pregunta a `cotiza` antes de cada envío.
@@ -2847,7 +2855,7 @@ const avisoPagoRsv = createAvisoPago({
   marcaPagado: marcaLeadPagadoErp, avisaEquipo: avisaEquipoBbm, derivaPersona: derivaPersonaBbm, project: PROJECT_NAME,
 });
 // Puerta del webhook (xendit-rsv.js): un aviso de una reserva del ERP (`rsv:`) pasa un filtro de forma y un límite por IP y se reenvía a la edge
-// reservas-pago, que valida el token (el de Ajustes › Cobros, F3 E2) y ACABA ahí (F8-7b, independiente de BBM_BACKEND). El resto valida el token de
+// reservas-pago, que valida el token (el de Ajustes › Cobros, F3 E2) y ACABA ahí (F8-7b, independiente del interruptor Dion/ERP). El resto valida el token de
 // Railway (503 si falta, 403 si no coincide, tiempo constante) y sigue a la rama `paylink_` de siempre. Sin BBM_ERP_URL un `rsv:` recibe 503 (Xendit reintenta).
 const xenditGate = createXenditGate({
   token: XENDIT_CALLBACK_TOKEN, forwarder: createRsvForwarder({ erpUrl: process.env.BBM_ERP_URL, project: PROJECT_NAME }), onResultado: avisoPagoRsv,
@@ -3988,9 +3996,11 @@ app.get("/admin/api/health", async (req, res) => {
   // Seguimiento: con variables del ERP, health fuerza una lectura (caché 30 s) para que el estado sea visible sin esperar al primer tick (30 min).
   if (seguimientoCfg.enabled) { try { await seguimientoCfg.resolve(); } catch (e) { /* best-effort */ } }
   // F8-7: estado visible del puente al ERP (un freno mudo es la forma exacta del fallo de LAW-106). Sin secretos ni URLs.
-  let bbmBackend = "dion";
-  try { bbmBackend = await bbmBackendSw.porDefecto(); } catch (e) { /* best-effort */ }
-  const bbm = { backend: bbmBackend, erp_configurado: !!(process.env.BBM_ERP_URL && process.env.BBM_RESERVAS_SECRET), webhook_rsv: !!process.env.BBM_ERP_URL, telefonos_prueba_erp: bbmTelefonosErp.size, clave_reserva: process.env.BBM_ERP_CLAVE === "1" };
+  // B10: backend efectivo por defecto, de dónde sale (erp, erp_cache, freno_variable, defecto_por_fallo, sin_erp), qué dice el ERP, freno, código del
+  // último fallo, edad de la lectura y variables obsoletas (BBM_BACKEND, `bbm:backend`: solo si existen). Misma caché de 30 s que el turno.
+  let bbmSalud = { backend: "dion", backend_fuente: "defecto_por_fallo", erp_dice: null, freno: !["", "0"].includes(String(process.env.BBM_FRENO_DION ?? "").trim()), backend_error: null, backend_leido_hace_s: null, obsoletas: { BBM_BACKEND: process.env.BBM_BACKEND !== undefined, redis_bbm_backend: false } };
+  try { bbmSalud = await bbmBackendSw.salud(); } catch (e) { /* best-effort */ }
+  const bbm = { ...bbmSalud, erp_configurado: !!(process.env.BBM_ERP_URL && process.env.BBM_RESERVAS_SECRET), webhook_rsv: !!process.env.BBM_ERP_URL, telefonos_prueba_erp: bbmTelefonosErp.size, clave_reserva: process.env.BBM_ERP_CLAVE === "1" };
   if (bbmSombra) { try { bbm.sombra = await bbmSombra.estado(); } catch (e) { /* best-effort */ } }
   const priv = privacidadEstado();
   res.json({ storage: redisClient ? "redis" : "ram", leads: count, bbm, ...(priv ? { privacidad: priv } : {}), seguimiento: seguimientoCfg.enabled ? { ...seguimientoCfg.status(), vendible: process.env.ERP_SEGUIMIENTO_VIVA !== "0" ? (bbmViva ? "on" : "sin_verificador") : "off", ultima_pasada: followupRunner.last() } : { enabled: false, source: "env (FOLLOWUP_*)" } });

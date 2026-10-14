@@ -7,7 +7,7 @@
 // Reglas (cada una con su porqué):
 //   · Se reenvía el cuerpo EXACTO (req.rawBody) y el `x-callback-token` tal cual. Nunca JSON.stringify(req.body): re-serializar cambia
 //     bytes y rompe cualquier comprobación futura sobre el cuerpo original.
-//   · Independiente de BBM_BACKEND: un pago `rsv:` llegado con el interruptor en `dion` (vuelta atrás) no puede perderse.
+//   · Independiente del interruptor (el del ERP desde B10, o el freno BBM_FRENO_DION): un pago `rsv:` llegado con el interruptor en `dion` (vuelta atrás) no puede perderse.
 //   · El token de un `rsv:` lo valida la EDGE, no el bot (ver createXenditGate); el bot solo filtra la forma y limita por IP.
 //   · La idempotencia es de la EDGE. Aquí no se deduplica: dos avisos iguales se reenvían los dos.
 //   · Respuesta a Xendit (Xendit reintenta todo lo que no sea 2xx):

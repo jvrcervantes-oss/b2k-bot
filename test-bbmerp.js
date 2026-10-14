@@ -3,7 +3,7 @@
 // Ejecutar: node test-bbmerp.js
 import assert from "node:assert";
 import fs from "node:fs";
-import { createBbmErp, createBackendSwitch, createPendingRsv, claveReserva, telefonoVerificado, normalizaBackend } from "./bbmerp.js";
+import { createBbmErp, createBackendSwitch, createPendingRsv, claveReserva, telefonoVerificado, normalizaBackend, leeEstado, leeFreno, ESTADO_TIMEOUT_MS, BACKEND_TTL_MS, BACKEND_MAX_STALE_MS, FUENTES_BACKEND, CODIGOS_ESTADO } from "./bbmerp.js";
 
 const CONTRATO = JSON.parse(fs.readFileSync(new URL("./bbmerp.contract.json", import.meta.url), "utf8"));
 const silent = { warn() {}, error() {}, log() {} };
@@ -52,10 +52,17 @@ for (const [accion, def] of Object.entries(CONTRATO.acciones)) {
     assert.deepEqual(valida(forma, ej), [], `${accion}.${nombre}`);
   }
 }
-assert.deepEqual(Object.keys(CONTRATO.acciones).sort(), ["catalogo", "cliente", "cotiza", "entrega", "reserva"]);
+assert.deepEqual(Object.keys(CONTRATO.acciones).sort(), ["catalogo", "cliente", "cotiza", "entrega", "estado", "reserva"]);
 for (const [nombre, ej] of Object.entries(CONTRATO.reservas_enlace.ejemplos)) assert.deepEqual(valida(CONTRATO.reservas_enlace.forma, ej), [], `reservas_enlace.${nombre}`);
 assert.deepEqual(CONTRATO.reservas_enlace.peticion.campos_admitidos, ["reserva_id"]);
-ok("los ejemplos de la edge cumplen la forma del contrato (5 acciones de reservas-bot + reservas-enlace)");
+// `estado` (B10): forma EXACTA. El validador de arriba ignora claves de más, así que la exactitud la fija leeEstado, contra los ejemplos y las formas malas del contrato.
+assert.deepEqual(CONTRATO.peticion.campos_admitidos.estado, ["accion"], "estado no lleva ningún campo más");
+assert.equal(CONTRATO.acciones.estado.exacta, true);
+assert.deepEqual(CONTRATO.acciones.estado.valores.backend, ["dion", "erp"]);
+for (const [nombre, ej] of Object.entries(CONTRATO.acciones.estado.ejemplos)) assert.equal(leeEstado(ej), nombre, `estado.${nombre}`);
+assert.ok(CONTRATO.acciones.estado.formas_malas.length >= 8);
+for (const mala of [...CONTRATO.acciones.estado.formas_malas, null, undefined, "erp", [], { r: { backend: "erp" }, error: null }]) assert.equal(leeEstado(mala), null, `forma mala ${JSON.stringify(mala)}`);
+ok("los ejemplos de la edge cumplen la forma del contrato (6 acciones de reservas-bot, `estado` con forma exacta, + reservas-enlace)");
 
 // ── harness ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 const SECRET = "bbm-reservas-secret-0123456789abcdef0123";
@@ -515,13 +522,15 @@ const RES = { fromVerificado: FROM, ...PEDIDO, mensajeId: "wamid.HBgLNjI4MTIzNDU
   ok("logs: ids e importes, nunca teléfono, nombre, dirección, mensaje de la base, wamid ni secreto");
 }
 
-// ── 10. interruptor de backend ──────────────────────────────────────────────────────────────────────────────────────────────────
+// ── 10. interruptor de backend (B10, 14-oct-2026: el valor por defecto lo da el ERP) ─────────────────────────────────────────────────────
 function fakeRedis(reloj) {
-  const m = new Map(); let rompe = false;
+  const m = new Map(); let rompe = false; let exists = 0;
   const vivo = (k) => { const e = m.get(k); if (!e) return null; if (e.hasta && e.hasta <= reloj()) { m.delete(k); return null; } return e; };
   const c = {
     keys: () => [...m.keys()],
+    get existsLlamadas() { return exists; },
     async get(k) { if (rompe) throw new Error("redis caído"); const e = vivo(k); return e ? e.v : null; },
+    async exists(k) { exists++; if (rompe) throw new Error("redis caído"); return vivo(k) ? 1 : 0; },
     async set(k, v) { if (rompe) throw new Error("redis caído"); m.set(k, { v }); },
     async setEx(k, ttl, v) { if (rompe) throw new Error("redis caído"); m.set(k, { v, hasta: reloj() + ttl * 1000 }); },
     async del(k) { m.delete(k); },
@@ -529,85 +538,395 @@ function fakeRedis(reloj) {
   };
   return c;
 }
+
+// Doble de reservas-bot para `estado`, con el bbmerp.js REAL delante. `d.modo` lo cambia el test:
+//   "dion" | "erp" (200 buena) · número (ese HTTP con el cuerpo de error del contrato) · "tiempo" · "red" · {body} (200 con ese cuerpo) · "cuelga" (hasta d.suelta)
+function erpDoble() {
+  const d = { modo: "dion", llamadas: 0, pendientes: [] };
+  const cuerpoError = { 400: { error: "accion" }, 401: { error: "no_autorizado" }, 403: { error: "no_autorizado" }, 404: { error: "modulo_no_activo" } };
+  const fetchImpl = async (url, init) => {
+    assert.equal(url, `${URL_ERP}/functions/v1/reservas-bot`);
+    assert.equal(init.method, "POST");
+    assert.equal(init.headers["x-bot-secret"], SECRET);
+    assert.ok(init.signal instanceof AbortSignal, "siempre con tiempo máximo");
+    assert.deepEqual(JSON.parse(init.body), { accion: "estado" }, "cuerpo EXACTO {accion:'estado'}");
+    d.llamadas++;
+    const m = d.modo;
+    if (m === "cuelga") return new Promise((ok) => d.pendientes.push(ok));
+    if (m === "tiempo") { const e = new Error("tiempo"); e.name = "TimeoutError"; throw e; }
+    if (m === "red") throw new TypeError("fetch failed");
+    if (typeof m === "number") return { status: m, json: async () => cuerpoError[m] || { error: "base" } };
+    if (m === "dion" || m === "erp") return { status: 200, json: async () => ({ r: { backend: m } }) };
+    return { status: 200, json: async () => m.body };
+  };
+  const logsErp = [];
+  d.erp = createBbmErp({ url: URL_ERP, secret: SECRET, fetchImpl, log: { warn: (x) => logsErp.push(x), error: (x) => logsErp.push(x), log: (x) => logsErp.push(x) }, project: "T" });
+  d.logsErp = logsErp;
+  d.suelta = (b) => { for (const ok of d.pendientes.splice(0)) ok({ status: 200, json: async () => ({ r: { backend: b } }) }); };
+  return d;
+}
+
+// ── 10a. estado(): forma exacta, códigos de una lista cerrada, sin log, timeout propio ───────────────────────────────────────────────
+{
+  assert.equal(ESTADO_TIMEOUT_MS, 1500, "timeout de `estado` ≤ 1,5 s");
+  assert.equal(BACKEND_TTL_MS, 30000); assert.equal(BACKEND_MAX_STALE_MS, 300000);
+  const d = erpDoble();
+  const tabla = [
+    ["erp", { ok: true, backend: "erp" }], ["dion", { ok: true, backend: "dion" }],
+    [400, { ok: false, clase: "definitivo", codigo: "400" }], [401, { ok: false, clase: "definitivo", codigo: "401" }],
+    [403, { ok: false, clase: "definitivo", codigo: "403" }], [404, { ok: false, clase: "definitivo", codigo: "404" }],
+    [409, { ok: false, clase: "definitivo", codigo: "otro_4xx" }], [413, { ok: false, clase: "definitivo", codigo: "otro_4xx" }],
+    [429, { ok: false, clase: "transitorio", codigo: "429" }], [500, { ok: false, clase: "transitorio", codigo: "5xx" }],
+    [502, { ok: false, clase: "transitorio", codigo: "5xx" }], [503, { ok: false, clase: "transitorio", codigo: "5xx" }],
+    ["tiempo", { ok: false, clase: "transitorio", codigo: "tiempo" }], ["red", { ok: false, clase: "transitorio", codigo: "red" }],
+    [{ body: { r: { backend: "ERP" } } }, { ok: false, clase: "definitivo", codigo: "forma" }],
+    [{ body: { r: { backend: "erp", x: 1 } } }, { ok: false, clase: "definitivo", codigo: "forma" }],
+    [{ body: { r: { backend: "erp" }, x: 1 } }, { ok: false, clase: "definitivo", codigo: "forma" }],
+    [{ body: undefined }, { ok: false, clase: "definitivo", codigo: "forma" }],
+  ];
+  for (const [modo, esperado] of tabla) { d.modo = modo; assert.deepEqual(await d.erp.estado(), esperado, `estado con ${JSON.stringify(modo)}`); }
+  for (const [, r] of tabla) if (!r.ok) assert.ok(CODIGOS_ESTADO.includes(r.codigo), `código de lista cerrada: ${r.codigo}`);
+  assert.equal(d.llamadas, tabla.length);
+  assert.deepEqual(d.logsErp, [], "estado() no escribe NADA en el log (el log de cambios es del interruptor)");
+  // sin variables: no llama
+  let llamado = false;
+  const sinCfg = createBbmErp({ fetchImpl: async () => { llamado = true; }, log: silent });
+  assert.deepEqual(await sinCfg.estado(), { ok: false, clase: "definitivo", codigo: "no_configurado" }); assert.equal(llamado, false);
+  // timeout propio (aquí 40 ms) con una edge colgada que respeta la señal
+  const colgado = (url, init) => new Promise((_, rej) => init.signal.addEventListener("abort", () => rej(init.signal.reason)));
+  const lento = createBbmErp({ url: URL_ERP, secret: SECRET, fetchImpl: colgado, estadoTimeoutMs: 40, log: silent });
+  const keep = setTimeout(() => {}, 10000);
+  const t0 = Date.now();
+  assert.deepEqual(await lento.estado(), { ok: false, clase: "transitorio", codigo: "tiempo" });
+  assert.ok(Date.now() - t0 < 1000);
+  clearTimeout(keep);
+  ok("estado(): cuerpo {accion:'estado'}, solo {r:{backend}} exacto es bueno, 400/401/403/404/forma definitivos, tiempo/red/5xx/429 transitorios, sin log");
+}
+
 {
   let t = 5_000_000; const now = () => t;
-  const redis = fakeRedis(now);
-  const mkSw = (envValue, r = redis) => createBackendSwitch({ redis: () => r, envValue, now, log: silent, project: "T" });
+  const mkSw = (o = {}) => {
+    const logs = [];
+    const lg = { warn: (m) => logs.push(m), error: (m) => logs.push(m), log: (m) => logs.push(m) };
+    const sw = createBackendSwitch({ redis: () => o.redis ?? null, erp: o.erp, freno: o.freno, bbmBackendObsoleta: o.obsoleta, enlaceVivo: o.enlaceVivo, telefonosErp: o.telefonosErp, now, log: lg, project: "T" });
+    return { sw, logs, cambios: () => logs.filter((x) => x.includes("quién atiende por defecto")) };
+  };
+  const CLAVES_SALUD = ["backend", "backend_error", "backend_fuente", "backend_leido_hace_s", "erp_dice", "freno", "obsoletas"];
 
-  assert.equal(await mkSw(undefined).bbmBackend("1"), "dion", "sin nada ⇒ dion");
-  assert.equal(await mkSw("erp").bbmBackend("1"), "erp");
-  assert.equal(await mkSw(" ERP ").bbmBackend("1"), "erp");
-  assert.equal(await mkSw("dion").bbmBackend("1"), "dion");
-  for (const raro of ["", "ERP2", "true", "1", "erp;dion", "null"]) assert.equal(await mkSw(raro).bbmBackend("1"), "dion", `env ${raro}`);
-  assert.equal(normalizaBackend(undefined), "dion"); assert.equal(normalizaBackend(7), "dion");
-
-  // Redis manda sobre la variable, SIN redeploy
-  await redis.set("bbm:backend", "dion");
-  assert.equal(await mkSw("erp").bbmBackend("1"), "dion", "Redis dion gana a env erp (vuelta atrás sin redeploy)");
-  await redis.set("bbm:backend", "erp");
-  assert.equal(await mkSw("dion").bbmBackend("1"), "erp", "Redis erp gana a env dion");
-  await redis.set("bbm:backend", "quiensabe");
-  assert.equal(await mkSw("erp").bbmBackend("1"), "dion", "valor desconocido en Redis ⇒ dion (no cae a env)");
-  await redis.del("bbm:backend");
-  assert.equal(await mkSw("erp").bbmBackend("1"), "erp", "sin clave en Redis ⇒ env");
-  redis.caer(true);
-  assert.equal(await mkSw("erp").bbmBackend("1"), "dion", "Redis caído ⇒ dion");
-  redis.caer(false);
-  ok("backend por defecto: Redis bbm:backend > BBM_BACKEND > dion; desconocido o Redis caído ⇒ dion");
-
-  // fijado por conversación
-  const sw = mkSw("erp");
-  assert.equal(await sw.bbmBackend("111"), "erp");
-  assert.equal(await sw.fija("111", 3600), "erp", "fija el valor por defecto de ese momento");
-  await redis.set("bbm:backend", "dion");                       // el owner vuelve atrás mientras hay una cotización viva
-  assert.equal(await sw.bbmBackend("111"), "erp", "la conversación con cotización viva SIGUE en erp");
-  assert.equal(await sw.bbmBackend("222"), "dion", "una conversación nueva ya va a dion");
-  assert.equal(await sw.fija("111", 3600), "erp", "fija no pisa un backend vivo");
-  assert.equal(await sw.fija("111", 3600, "dion"), "erp", "ni siquiera pidiéndolo");
-  t += 3601 * 1000;                                              // la cotización muere
-  assert.equal(await sw.bbmBackend("111"), "dion", "sin cotización viva, cambia");
-  assert.equal(await sw.fija("111", 3600), "dion");
-  await sw.suelta("111");
-  await redis.del("bbm:backend");
-  assert.equal(await sw.bbmBackend("111"), "erp");
-  assert.ok(redis.keys().every((k) => k === "bbm:backend" || k.startsWith("bbm:pin:")), "claves propias");
-  // pin ilegible = sin pin
-  await redis.set("bbm:pin:333", "{no json");
-  assert.equal(await sw.bbmBackend("333"), "erp");
-  await redis.set("bbm:pin:333", JSON.stringify({ backend: "raro", hasta: t + 99999 }));
-  assert.equal(await sw.bbmBackend("333"), "erp", "pin con backend desconocido = sin pin");
-  // Redis cae al leer el pin: no se sabe si había cotización viva ⇒ dion
-  redis.caer(true);
-  assert.equal(await sw.bbmBackend("111"), "dion");
-  assert.equal(await sw.bbmBackend(null), "dion");
-  redis.caer(false);
-  ok("backend fijado por conversación: no cambia con cotización viva, sí en conversaciones nuevas o al caducar");
-
-  // un enlace de pago rsv: vivo ata la conversación a erp aunque el pin haya caducado y el interruptor diga dion
+  // 10b. Sin ERP configurado (o fuera de rental): dion sin leer nada. Ni BBM_BACKEND ni `bbm:backend` cambian nada.
   {
+    const redis = fakeRedis(now);
+    await redis.set("bbm:backend", "erp-valor-viejo-7");
+    const d = erpDoble(); d.modo = "erp";
+    for (const erp of [undefined, null, createBbmErp({ log: silent }), () => null]) {
+      const { sw } = mkSw({ erp, redis, obsoleta: "erp" });
+      assert.equal(await sw.bbmBackend("1"), "dion");
+      const s = await sw.salud();
+      assert.deepEqual(s, { backend: "dion", backend_fuente: "sin_erp", erp_dice: null, freno: false, backend_error: null, backend_leido_hace_s: null, obsoletas: { BBM_BACKEND: true, redis_bbm_backend: true } });
+      assert.ok(!JSON.stringify(s).includes("erp-valor-viejo-7"), "health dice SI existe bbm:backend, nunca su valor");
+    }
+    assert.equal(d.llamadas, 0);
+    ok("sin ERP configurado: dion (sin_erp), sin leer; BBM_BACKEND=erp y bbm:backend=erp NO mandan, solo salen como obsoletas");
+  }
+
+  // 10c. LA EVIDENCIA DEL CRITERIO: el ERP dice erp y no hay NINGUNA variable ⇒ health backend erp, fuente erp. Arranque en frío: 1 petición, el turno la espera.
+  {
+    const d = erpDoble(); d.modo = "erp";
+    const { sw, logs } = mkSw({ erp: () => d.erp });
+    assert.equal(await sw.bbmBackend("62811111111"), "erp", "primer turno en frío: espera la lectura (≤ 1,5 s) y va al ERP");
+    assert.equal(d.llamadas, 1);
+    const s = await sw.salud();
+    assert.deepEqual(Object.keys(s).sort(), CLAVES_SALUD, "health: solo estas claves");
+    assert.deepEqual(s, { backend: "erp", backend_fuente: "erp", erp_dice: "erp", freno: false, backend_error: null, backend_leido_hace_s: 0, obsoletas: { BBM_BACKEND: false, redis_bbm_backend: false } });
+    assert.equal(d.llamadas, 1, "health NO se salta la caché de 30 s");
+    t += 12_000;
+    assert.equal((await sw.salud()).backend_leido_hace_s, 12);
+    assert.ok(FUENTES_BACKEND.includes(s.backend_fuente));
+    assert.ok(!logs.some((x) => x.includes(SECRET) || x.includes(URL_ERP)), "el log no lleva secreto ni URL");
+    // y con el ERP diciendo dion: dion, fuente erp
+    const d2 = erpDoble(); d2.modo = "dion";
+    const { sw: sw2 } = mkSw({ erp: d2.erp });
+    assert.deepEqual(await sw2.salud(), { backend: "dion", backend_fuente: "erp", erp_dice: "dion", freno: false, backend_error: null, backend_leido_hace_s: 0, obsoletas: { BBM_BACKEND: false, redis_bbm_backend: false } });
+    ok("CRITERIO: ERP dice erp y ninguna variable ⇒ health {backend:'erp', backend_fuente:'erp'}; con dion ⇒ dion/erp; health respeta la caché");
+  }
+
+  // 10d. ORDEN FIJO: pin › enlace vivo › teléfono de prueba › freno › ERP › dion. Un test por cada lado.
+  {
+    const d = erpDoble();
+    const redis = fakeRedis(now);
+    const vivos = new Set(["62820000002"]);
+    const tels = new Set(["62830000003"]);
+    const base = { erp: d.erp, redis, enlaceVivo: async (x) => vivos.has(x), telefonosErp: tels };
+    // ERP › dion por defecto
+    d.modo = "erp"; assert.equal(await mkSw(base).sw.bbmBackend("62899999999"), "erp", "ERP erp gana al dion por defecto");
+    d.modo = "dion"; assert.equal(await mkSw(base).sw.bbmBackend("62899999999"), "dion", "ERP dion ⇒ dion");
+    // freno › ERP (y con el freno no se lee nada)
+    d.modo = "erp"; const antes = d.llamadas;
+    const fr = mkSw({ ...base, freno: "1" });
+    assert.equal(await fr.sw.bbmBackend("62899999999"), "dion", "freno gana al ERP");
+    assert.equal((await fr.sw.salud()).backend_fuente, "freno_variable");
+    assert.equal(d.llamadas, antes, "con el freno puesto NO hay petición");
+    // teléfono de prueba › freno
+    assert.equal(await fr.sw.bbmBackend("62830000003"), "erp", "teléfono de prueba gana al freno");
+    // enlace vivo › freno, y › ERP dion
+    assert.equal(await fr.sw.bbmBackend("62820000002"), "erp", "enlace vivo gana al freno");
+    d.modo = "dion"; assert.equal(await mkSw(base).sw.bbmBackend("62820000002"), "erp", "enlace vivo gana al ERP dion");
+    // pin › enlace vivo, › teléfono de prueba, › ERP, y un pin erp › freno
+    const sp = mkSw(base);
+    d.modo = "erp";
+    await sp.sw.fija("62820000002", 1800, "dion"); assert.equal(await sp.sw.bbmBackend("62820000002"), "dion", "pin dion gana al enlace vivo");
+    await sp.sw.fija("62830000003", 1800, "dion"); assert.equal(await sp.sw.bbmBackend("62830000003"), "dion", "pin dion gana al teléfono de prueba");
+    await sp.sw.fija("62840000004", 1800, "dion"); assert.equal(await sp.sw.bbmBackend("62840000004"), "dion", "pin dion gana al ERP erp");
+    await sp.sw.fija("62850000005", 1800, "erp");
+    assert.equal(await mkSw({ ...base, freno: "1" }).sw.bbmBackend("62850000005"), "erp", "pin erp gana al freno (no se cambia de sistema a media reserva)");
+    assert.equal(await mkSw({ ...base, freno: "1" }).sw.bbmBackend("62860000006"), "dion");
+    ok("orden fijo: pin › enlace vivo › teléfono de prueba › freno › ERP › dion (un test por cada lado; el freno no lee el ERP)");
+  }
+
+  // 10e. ERP caído desde el arranque ⇒ dion; caído DESPUÉS de leer erp ⇒ erp (erp_cache) hasta 5 min y luego dion.
+  {
+    for (const caida of ["tiempo", "red", 500, 503]) {
+      const d = erpDoble(); d.modo = caida;
+      const { sw } = mkSw({ erp: d.erp });
+      assert.equal(await sw.bbmBackend("1"), "dion", `caído desde el arranque (${caida}) ⇒ dion`);
+      const s = await sw.salud();
+      assert.equal(s.backend_fuente, "defecto_por_fallo"); assert.equal(s.erp_dice, null);
+      assert.equal(s.backend_error, typeof caida === "number" ? "5xx" : caida);
+    }
+    const d = erpDoble(); d.modo = "erp";
+    const { sw } = mkSw({ erp: d.erp });
+    const t0 = t;
+    assert.equal(await sw.bbmBackend("1"), "erp");
+    d.modo = "tiempo";
+    t = t0 + 2 * 60_000;
+    assert.equal(await sw.bbmBackend("1"), "erp", "con un valor bueno de 2 min el turno contesta al momento");
+    await sw.refresca();
+    assert.equal(await sw.bbmBackend("1"), "erp");
+    let s = await sw.salud();
+    assert.deepEqual([s.backend, s.backend_fuente, s.erp_dice, s.backend_error, s.backend_leido_hace_s], ["erp", "erp_cache", "erp", "tiempo", 120], "erp_cache: edad del valor bueno");
+    t = t0 + 4 * 60_000 + 59_000;
+    assert.equal(await sw.bbmBackend("1"), "erp", "a los 4:59 sigue el último bueno");
+    await sw.refresca();
+    t = t0 + 5 * 60_000 + 1000;
+    assert.equal(await sw.bbmBackend("1"), "dion", "pasados 5 min del último bueno ⇒ dion");
+    s = await sw.salud();
+    assert.deepEqual([s.backend, s.backend_fuente, s.erp_dice, s.backend_error], ["dion", "defecto_por_fallo", null, "tiempo"]);
+    // el ERP vuelve: en cuanto se refresca, erp otra vez
+    d.modo = "erp"; t += 31_000;
+    await sw.bbmBackend("1"); await sw.refresca();
+    assert.equal(await sw.bbmBackend("1"), "erp");
+    ok("ERP caído desde el arranque ⇒ dion; caído tras leer erp ⇒ erp_cache hasta 5 min y luego dion; al volver, erp");
+  }
+
+  // 10f. > 5 min sin tráfico: el turno ESPERA una lectura (no contesta dion por no haber leído) y, si el ERP está caído, dion.
+  {
+    const d = erpDoble(); d.modo = "erp";
+    const { sw } = mkSw({ erp: d.erp });
+    assert.equal(await sw.bbmBackend("1"), "erp");
+    t += 6 * 60_000;
+    const n = d.llamadas;
+    assert.equal(await sw.bbmBackend("1"), "erp", "6 min sin tráfico y el ERP dice erp ⇒ espera y lee: erp (no el primer cliente de la mañana a Dion)");
+    assert.equal(d.llamadas, n + 1);
+    t += 6 * 60_000; d.modo = 503;
+    assert.equal(await sw.bbmBackend("1"), "dion", "6 min sin tráfico y el ERP caído ⇒ dion");
+    ok("tras > 5 min sin tráfico el turno lee el ERP antes de contestar; con el ERP caído, dion");
+  }
+
+  // 10g. 401 y 400 (y 403/404) ⇒ dion AL MOMENTO, caché negativa 30 s, y se olvida el último bueno (un timeout de después no resucita erp).
+  {
+    for (const cod of [400, 401, 403, 404]) {
+      const d = erpDoble(); d.modo = "erp";
+      const { sw } = mkSw({ erp: d.erp });
+      assert.equal(await sw.bbmBackend("1"), "erp");
+      d.modo = cod; t += 31_000;
+      await sw.bbmBackend("1"); await sw.refresca();
+      assert.equal(await sw.bbmBackend("1"), "dion", `${cod} con un erp de hace 31 s ⇒ dion al momento`);
+      const s = await sw.salud();
+      assert.deepEqual([s.backend, s.backend_fuente, s.backend_error, s.erp_dice], ["dion", "defecto_por_fallo", String(cod), null]);
+      const n = d.llamadas;
+      for (let i = 0; i < 10; i++) { t += 2_000; assert.equal(await sw.bbmBackend("1"), "dion"); }
+      assert.equal(d.llamadas, n, `${cod}: caché negativa de 30 s, ninguna petición más`);
+      d.modo = "tiempo"; t += 11_000;   // un minuto después del último erp bueno, el ERP pasa a no contestar
+      assert.equal(await sw.bbmBackend("1"), "dion", `${cod} y luego tiempo agotado: NO resucita el erp viejo`);
+      await sw.refresca();
+      assert.equal(await sw.bbmBackend("1"), "dion", `${cod} y luego tiempo agotado (ya leído): NO resucita el erp viejo`);
+      const s2 = await sw.salud();
+      assert.deepEqual([s2.backend, s2.backend_fuente, s2.erp_dice, s2.backend_error], ["dion", "defecto_por_fallo", null, "tiempo"]);
+    }
+    ok("400/401/403/404 ⇒ dion al momento con caché negativa de 30 s; el último bueno se olvida");
+  }
+
+  // 10h. forma mala ⇒ dion
+  {
+    for (const mala of CONTRATO.acciones.estado.formas_malas) {
+      const d = erpDoble(); d.modo = { body: mala };
+      const { sw } = mkSw({ erp: d.erp });
+      assert.equal(await sw.bbmBackend("1"), "dion", `forma mala ${JSON.stringify(mala)} ⇒ dion`);
+      assert.equal((await sw.salud()).backend_error, "forma");
+    }
+    ok("una respuesta 200 con otra forma que {r:{backend}} exacto ⇒ dion (backend_error forma)");
+  }
+
+  // 10i. inflight: N turnos a la vez = 1 petición. Caché caducada: el turno NO espera (devuelve el valor viejo y refresca detrás).
+  {
+    const d = erpDoble(); d.modo = "cuelga";
+    const { sw } = mkSw({ erp: d.erp });
+    const turnos = Array.from({ length: 12 }, (_, i) => sw.bbmBackend(`6281000000${String(i).padStart(2, "0")}`));
+    turnos.push(sw.salud().then((s) => s.backend));
+    await new Promise((r) => setImmediate(r));
+    assert.equal(d.llamadas, 1, "13 lecturas simultáneas en frío = 1 petición");
+    d.suelta("erp");
+    assert.deepEqual(await Promise.all(turnos), Array(13).fill("erp"));
+    // caducada a los 30 s: el turno contesta YA con el valor viejo y la petición nueva queda en vuelo
+    t += 31_000; d.modo = "cuelga";
+    let resuelto = false;
+    const p = sw.bbmBackend("1").then((b) => { resuelto = true; return b; });
+    await new Promise((r) => setImmediate(r));
+    assert.equal(resuelto, true, "con la caché caducada el turno no espera a la red");
+    assert.equal(await p, "erp");
+    assert.equal(d.llamadas, 2);
+    await Promise.all([sw.bbmBackend("2"), sw.bbmBackend("3")]);
+    assert.equal(d.llamadas, 2, "mientras hay una en vuelo no sale otra");
+    d.suelta("dion"); await sw.refresca();
+    assert.equal(await sw.bbmBackend("1"), "dion", "el refresco de fondo trae el valor nuevo");
+    ok("inflight: N turnos simultáneos = 1 petición; caché caducada ⇒ el turno contesta al momento y refresca en segundo plano");
+  }
+
+  // 10j. un pin vivo NO cambia aunque el ERP cambie; fija() sin backend usa el valor por defecto nuevo
+  {
+    const d = erpDoble(); d.modo = "erp";
+    const redis = fakeRedis(now);
+    const { sw } = mkSw({ erp: d.erp, redis });
+    assert.equal(await sw.fija("111", 1800), "erp", "fija() sin backend toma el valor del ERP");
+    d.modo = "dion"; t += 31_000; await sw.bbmBackend("x"); await sw.refresca();
+    assert.equal(await sw.bbmBackend("222"), "dion", "conversación nueva: lo que dice el ERP ahora");
+    assert.equal(await sw.bbmBackend("111"), "erp", "la conversación con cotización viva SIGUE en erp");
+    assert.equal(await sw.fija("111", 1800, "dion"), "erp", "fija no pisa un backend vivo");
+    assert.equal(await sw.fija("333", 1800), "dion", "fija() sin backend: dion, lo que dice ahora el ERP");
+    d.modo = "erp"; t += 31_000; await sw.bbmBackend("x"); await sw.refresca();
+    assert.equal(await sw.bbmBackend("333"), "dion", "y el pin dion no se mueve a erp");
+    t += 1801 * 1000;                                              // las cotizaciones mueren
+    assert.equal(await sw.bbmBackend("333"), "erp", "sin cotización viva, cambia");
+    await sw.suelta("111");
+    assert.ok(redis.keys().every((k) => k.startsWith("bbm:pin:")), "solo claves propias bbm:pin: (ya no se lee ni escribe bbm:backend)");
+    // pin ilegible o con backend desconocido = sin pin
+    await redis.set("bbm:pin:444", "{no json");
+    assert.equal(await sw.bbmBackend("444"), "erp");
+    await redis.set("bbm:pin:444", JSON.stringify({ backend: "raro", hasta: t + 99999 }));
+    assert.equal(await sw.bbmBackend("444"), "erp", "pin con backend desconocido = sin pin");
+    // Redis cae al leer el pin: no se sabe si había cotización viva ⇒ dion
+    redis.caer(true);
+    assert.equal(await sw.bbmBackend("444"), "dion");
+    redis.caer(false);
+    assert.equal(await sw.bbmBackend(null), "erp", "sin teléfono: el valor por defecto");
+    ok("pin vivo: no cambia aunque cambie el ERP; fija() sin backend usa el valor del ERP; pin ilegible = sin pin; Redis caído al leer el pin ⇒ dion");
+  }
+
+  // 10k. un enlace de pago rsv: vivo ata la conversación a erp aunque el pin haya caducado y el ERP diga dion
+  {
+    const d = erpDoble(); d.modo = "dion";
+    const redis = fakeRedis(now);
     const reg = createPendingRsv({ redis: () => redis, now });
-    const sw2 = createBackendSwitch({ redis: () => redis, envValue: "dion", enlaceVivo: (tel) => reg.lee(tel).then(Boolean), now, log: silent });
-    await redis.set("bbm:backend", "dion");
-    await sw2.fija("777", 600, "erp");
+    const { sw } = mkSw({ erp: d.erp, redis, enlaceVivo: (tel) => reg.lee(tel).then(Boolean) });
+    await sw.fija("777000", 600, "erp");
     await reg.guarda("777000", { external_id: `rsv:${RESERVA.id}`, importe: 330000, caduca_en_ms: t + 3000 * 1000 });
-    t += 601 * 1000;                                                   // el pin caducó; el enlace sigue pagable
-    assert.equal(await sw2.bbmBackend("777000"), "erp", "pin caducado + enlace vivo ⇒ erp");
-    assert.equal(await sw2.bbmBackend("888000"), "dion", "otra conversación ⇒ dion");
-    t += 3000 * 1000;                                                  // el enlace caducó
-    assert.equal(await sw2.bbmBackend("777000"), "dion");
-    const roto = createBackendSwitch({ redis: () => redis, envValue: "dion", enlaceVivo: async () => { throw new Error("x"); }, now, log: silent });
-    assert.equal(await roto.bbmBackend("777000"), "dion");
-    await redis.del("bbm:backend");
+    t += 601 * 1000;
+    assert.equal(await sw.bbmBackend("777000"), "erp", "pin caducado + enlace vivo ⇒ erp");
+    assert.equal(await sw.bbmBackend("888000"), "dion", "otra conversación ⇒ dion");
+    t += 3000 * 1000;
+    assert.equal(await sw.bbmBackend("777000"), "dion");
+    const roto = mkSw({ erp: d.erp, redis, enlaceVivo: async () => { throw new Error("x"); } });
+    assert.equal(await roto.sw.bbmBackend("777000"), "dion");
     ok("backend: un enlace rsv: pagable ata la conversación a erp aunque el pin haya caducado");
   }
 
-  // modo RAM (sin Redis): mismas reglas
-  const ram = createBackendSwitch({ redis: () => null, envValue: "erp", now, log: silent });
-  assert.equal(await ram.bbmBackend("9"), "erp");
-  assert.equal(await ram.fija("9", 600), "erp");
-  ram._ponPorDefectoEnMemoria("dion");
-  assert.equal(await ram.bbmBackend("9"), "erp"); assert.equal(await ram.bbmBackend("10"), "dion");
-  ok("backend sin Redis (RAM): mismas reglas");
+  // 10l. ORDEN DE DESPLIEGUE. (1) bot nuevo contra edge vieja: 400 ⇒ dion, caché negativa, una línea de log y no una por turno.
+  //      (2) llega la edge nueva: a los 30 s el bot la lee sola. (3) edge nueva desde el principio = 10c.
+  {
+    const d = erpDoble(); d.modo = 400;
+    const m = mkSw({ erp: d.erp });
+    for (let i = 0; i < 50; i++) { assert.equal(await m.sw.bbmBackend(`62870000${String(i).padStart(3, "0")}`), "dion"); t += 500; }   // 25 s de tráfico
+    assert.equal(d.llamadas, 1, "edge vieja: 1 petición en 25 s de tráfico");
+    assert.equal(m.cambios().length, 1, "edge vieja: UNA línea de log, no una por turno");
+    assert.match(m.cambios()[0], /dion \(fuente defecto_por_fallo, error 400\)/);
+    for (let i = 0; i < 40; i++) { await m.sw.bbmBackend("1"); t += 1_500; }                                                             // 60 s más
+    assert.ok(d.llamadas <= 4, `una petición cada 30 s como mucho (${d.llamadas})`);
+    assert.equal(m.cambios().length, 1, "mismo resultado ⇒ sin línea nueva");
+    assert.equal((await m.sw.salud()).backend_error, "400");
+    d.modo = "erp"; t += 31_000;                                                                                                        // (2) la edge nueva
+    assert.equal(await m.sw.bbmBackend("1"), "erp", "con la edge nueva el bot pasa a leerla sin redeploy");
+    assert.equal(m.cambios().length, 2, "y lo dice UNA vez");
+    assert.match(m.cambios()[1], /erp \(fuente erp\)/);
+    ok("despliegue bot→edge: 400 de la edge vieja ⇒ dion, 1 petición/30 s y una sola línea de log; al llegar la edge, erp solo");
+  }
+
+  // 10m. obsoletas: BBM_BACKEND con cualquier valor se avisa y NO manda; bbm:backend en Redis: solo si existe, exists cacheado 30 s, nunca en el turno.
+  {
+    const d = erpDoble(); d.modo = "dion";
+    for (const v of ["erp", "dion", "", "quiensabe"]) {
+      const m = mkSw({ erp: d.erp, obsoleta: v });
+      assert.ok(m.logs.some((x) => /BBM_BACKEND está puesta y YA NO SE USA/.test(x)), `aviso al arrancar con BBM_BACKEND=«${v}»`);
+      assert.equal(await m.sw.bbmBackend("1"), "dion", "BBM_BACKEND=erp no gana al ERP");
+      assert.equal((await m.sw.salud()).obsoletas.BBM_BACKEND, true);
+    }
+    d.modo = "erp";
+    assert.equal(await mkSw({ erp: d.erp, obsoleta: "dion" }).sw.bbmBackend("1"), "erp", "BBM_BACKEND=dion (lo que hay hoy en Railway) NO frena el gesto del ERP");
+    assert.equal(mkSw({ erp: d.erp }).logs.length, 0, "sin la variable, ningún aviso");
+    // la clave Redis vieja
+    const redis = fakeRedis(now);
+    await redis.set("bbm:backend", "dion");
+    const m = mkSw({ erp: d.erp, redis });
+    for (let i = 0; i < 5; i++) assert.equal(await m.sw.bbmBackend(`1${i}`), "erp", "bbm:backend=dion ya no manda");
+    assert.equal(redis.existsLlamadas, 0, "el turno no mira la clave vieja");
+    assert.equal((await m.sw.salud()).obsoletas.redis_bbm_backend, true);
+    await m.sw.salud(); await m.sw.salud();
+    assert.equal(redis.existsLlamadas, 1, "exists cacheado 30 s con el resto");
+    await redis.del("bbm:backend"); t += 31_000;
+    assert.equal((await m.sw.salud()).obsoletas.redis_bbm_backend, false);
+    redis.caer(true); t += 31_000;
+    assert.equal((await m.sw.salud()).obsoletas.redis_bbm_backend, false, "Redis caído: no rompe el health");
+    redis.caer(false);
+    // arranca(): primera lectura + aviso de la clave vieja
+    await redis.set("bbm:backend", "erp");
+    const a = mkSw({ erp: d.erp, redis });
+    const n = d.llamadas;
+    await a.sw.arranca();
+    assert.equal(d.llamadas, n + 1, "arranca() hace la primera lectura");
+    assert.ok(a.logs.some((x) => /bbm:backend existe y YA NO SE USA/.test(x)));
+    assert.equal(await a.sw.bbmBackend("1"), "erp"); assert.equal(d.llamadas, n + 1, "el primer turno la encuentra hecha");
+    const af = mkSw({ erp: d.erp, freno: "1" }); await af.sw.arranca();
+    assert.equal(d.llamadas, n + 1, "arranca() con el freno puesto no lee nada");
+    ok("BBM_BACKEND y bbm:backend: avisadas como obsoletas, no mandan; health solo dice si la clave existe (exists cacheado, fuera del turno)");
+  }
+
+  // 10n. el freno: 1 = puesto; ausente, vacío o 0 = sin freno; cualquier otro valor = puesto y se grita
+  {
+    const errs = [];
+    const lg = { error: (m) => errs.push(m), warn() {}, log() {} };
+    assert.equal(leeFreno("1", lg), true); assert.equal(leeFreno(" 1 ", lg), true); assert.equal(errs.length, 0);
+    for (const no of [undefined, null, "", "0", " 0 "]) assert.equal(leeFreno(no, lg), false, `sin freno con «${no}»`);
+    assert.equal(errs.length, 0);
+    for (const raro of ["true", "si", "yes", "2", "dion"]) assert.equal(leeFreno(raro, lg), true, `«${raro}» ⇒ freno puesto`);
+    assert.equal(errs.length, 5);
+    const d = erpDoble(); d.modo = "erp";
+    const m = mkSw({ erp: d.erp, freno: "true" });
+    assert.equal(await m.sw.bbmBackend("1"), "dion"); assert.equal(d.llamadas, 0);
+    assert.deepEqual(await m.sw.salud(), { backend: "dion", backend_fuente: "freno_variable", erp_dice: null, freno: true, backend_error: null, backend_leido_hace_s: null, obsoletas: { BBM_BACKEND: false, redis_bbm_backend: false } });
+    assert.ok(m.logs.some((x) => /FRENO PUESTO/.test(x)), "el freno se dice al arrancar");
+    ok("BBM_FRENO_DION: 1 = freno; vacío/0 = sin freno; otro valor = freno puesto y aviso (una errata no deja sin freno)");
+  }
+
+  // 10o. modo RAM (sin Redis): mismas reglas
+  {
+    const d = erpDoble(); d.modo = "erp";
+    const ram = mkSw({ erp: d.erp });
+    assert.equal(await ram.sw.bbmBackend("9"), "erp");
+    assert.equal(await ram.sw.fija("9", 600), "erp");
+    d.modo = "dion"; t += 31_000; await ram.sw.bbmBackend("x"); await ram.sw.refresca();
+    assert.equal(await ram.sw.bbmBackend("9"), "erp"); assert.equal(await ram.sw.bbmBackend("10"), "dion");
+    assert.equal(normalizaBackend(undefined), "dion"); assert.equal(normalizaBackend(7), "dion");
+    ok("backend sin Redis (RAM): mismas reglas");
+  }
 }
 
 // ── 11. registro de enlace pendiente propio ────────────────────────────────────────────────────────────────────────────────────

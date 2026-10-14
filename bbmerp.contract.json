@@ -1,5 +1,5 @@
 {
-  "_": "Contrato CONGELADO entre bbmerp.js y las edges reservas-bot / reservas-pago del ERP (repo Agencia). Copiado a mano el 9-oct-2026 de erp/funciones/reservas-bot/index.ts (ultimo commit de esa edge en el repo Agencia: 4a498272) y de las migraciones 20261008136000_f8_totales_impuesto.sql, 20261008137000_f8_puerta_emision.sql y 20261008137500_f8_entrega_km.sql. AMPLIADO el 12-oct-2026 (bbm-p25-bots) con el 409 sin_configurar de reservas-bot (copia de agencia 1012-1912-bbm-p21-backend, erp/funciones/reservas-bot/index.ts:159, S2 20261012170000_f3_e1_s2_guardas.sql) y la edge NUEVA reservas-enlace (copia 1012-1912-bbm-p23-cobros, erp/funciones/reservas-enlace/index.ts, migracion 20261012190000_f3_e2_cobros.sql). AMBAS FUENTES SIN ATERRIZAR ese dia. COMPARADO CON origin/main el 13-oct-2026 (bbm-corte-bot, E1.10): reservas-bot 0adf237f (S2) y c241a65f, reservas-enlace 37192676, reservas-pago 12483b53; mismas formas y codigos que aqui, mas: `clave` admitida en `reserva` (desde c241a65f, 9-oct), el secreto de la edge es RESERVAS_BOT_SECRET con caida a BOT_ERP_SECRET, las reglas de fechas de F3-E3 (20261012210000) como 409 y los 405/500 de reservas-enlace y 405 de reservas-pago (el bot los trata como caida). Si una edge cambia de forma, cambia AQUI y en test-bbmerp.js a la vez: el test valida que el mock de la edge (los `ejemplos`) cumple la `forma` y que bbmerp.js interpreta cada uno. Tipos de `forma`: uuid, string, int, number, bool, date, timestamp, any; `?` al final = puede faltar o ser null; [x] = lista de x; {..} = objeto (se ignoran campos de más, que la base puede añadir).",
+  "_": "Contrato CONGELADO entre bbmerp.js y las edges reservas-bot / reservas-pago del ERP (repo Agencia). Copiado a mano el 9-oct-2026 de erp/funciones/reservas-bot/index.ts (ultimo commit de esa edge en el repo Agencia: 4a498272) y de las migraciones 20261008136000_f8_totales_impuesto.sql, 20261008137000_f8_puerta_emision.sql y 20261008137500_f8_entrega_km.sql. AMPLIADO el 12-oct-2026 (bbm-p25-bots) con el 409 sin_configurar de reservas-bot (copia de agencia 1012-1912-bbm-p21-backend, erp/funciones/reservas-bot/index.ts:159, S2 20261012170000_f3_e1_s2_guardas.sql) y la edge NUEVA reservas-enlace (copia 1012-1912-bbm-p23-cobros, erp/funciones/reservas-enlace/index.ts, migracion 20261012190000_f3_e2_cobros.sql). AMBAS FUENTES SIN ATERRIZAR ese dia. COMPARADO CON origin/main el 13-oct-2026 (bbm-corte-bot, E1.10): reservas-bot 0adf237f (S2) y c241a65f, reservas-enlace 37192676, reservas-pago 12483b53; mismas formas y codigos que aqui, mas: `clave` admitida en `reserva` (desde c241a65f, 9-oct), el secreto de la edge es RESERVAS_BOT_SECRET con caida a BOT_ERP_SECRET, las reglas de fechas de F3-E3 (20261012210000) como 409 y los 405/500 de reservas-enlace y 405 de reservas-pago (el bot los trata como caida). AMPLIADO el 14-oct-2026 (B10) con la accion `estado` de reservas-bot (el interruptor Dion/ERP de Ajustes > Cobros): contrato fijo pactado con Backend ese dia, la edge aun sin aterrizar; su forma es EXACTA (ver acciones.estado.exacta). Si una edge cambia de forma, cambia AQUI y en test-bbmerp.js a la vez: el test valida que el mock de la edge (los `ejemplos`) cumple la `forma` y que bbmerp.js interpreta cada uno. Tipos de `forma`: uuid, string, int, number, bool, date, timestamp, any; `?` al final = puede faltar o ser null; [x] = lista de x; {..} = objeto (se ignoran campos de más, que la base puede añadir).",
   "peticion": {
     "cabecera": "x-bot-secret (variable BBM_RESERVAS_SECRET del bot)",
     "url": "${BBM_ERP_URL}/functions/v1/reservas-bot",
@@ -9,7 +9,8 @@
       "entrega": ["accion", "direccion"],
       "cotiza": ["accion", "producto_id", "desde", "hasta", "entrega_direccion", "recogida_direccion"],
       "reserva": ["accion", "producto_id", "desde", "hasta", "contacto_telefono", "contacto_nombre", "entrega_direccion", "recogida_direccion", "conversacion_ref", "notas"],
-      "cliente": ["accion", "reserva_id", "nombre", "pais"]
+      "cliente": ["accion", "reserva_id", "nombre", "pais"],
+      "estado": ["accion"]
     },
     "clave": "El campo `clave` (idempotencia por id de mensaje) ESTA en la lista TEXTOS de la edge desde c241a65f (9-oct-2026; forma ^[A-Za-z0-9@:._+-]{1,120}$). bbmerp.js lo manda solo con enviaClave=true, que index.js lee de BBM_ERP_CLAVE=1: el guion del corte comprueba esa variable antes de pasar a erp."
   },
@@ -69,6 +70,27 @@
         "nuevo": {"r": {"ok": true, "cliente_identificado": true, "creado": true, "motivo": null}},
         "ambiguo": {"r": {"ok": true, "cliente_identificado": false, "creado": false, "motivo": "telefono_ambiguo"}}
       }
+    },
+    "estado": {
+      "forma": {"r": {"backend": "string"}},
+      "exacta": true,
+      "valores": {"backend": ["dion", "erp"]},
+      "nota": "B10 (14-oct-2026, contrato FIJO entre bot y ERP): quien atiende las reservas del bot. Peticion SOLO {accion:'estado'} (un campo de mas = 400 campo_no_admitido). Respuesta 200 con la forma EXACTA {r:{backend:'dion'|'erp'}} y NINGUNA clave mas, ni arriba ni dentro de r (el bot no ignora campos de mas aqui, a diferencia del resto: cualquier otra forma es un fallo). `backend` es el valor EFECTIVO que calcula la base (_bot_backend): 'erp' solo si el valor guardado en config_instancia.bot_backend es 'erp', reservas-producto esta activo, _cobros_activo() no es null y el asistente esta en verde; en cualquier otro caso, o sin fila, 'dion'. Modulo apagado = 200 con 'dion', no un error. Errores: 401 no_autorizado (secreto), 400 accion (edge vieja que no conoce `estado`), 404 modulo_no_activo, 5xx o tiempo. Como lo trata el bot (createBackendSwitch): 400/401/403/404, forma mala u otro 4xx = dion AL MOMENTO y olvida el ultimo bueno; tiempo (1,5 s), red, 5xx o 429 = el ultimo bueno si tiene < 5 min, si no dion. Cache de 30 s (tambien de los fallos) y una sola peticion en vuelo.",
+      "ejemplos": {
+        "dion": {"r": {"backend": "dion"}},
+        "erp": {"r": {"backend": "erp"}}
+      },
+      "formas_malas": [
+        {"r": {"backend": "ERP"}},
+        {"r": {"backend": " erp"}},
+        {"r": {"backend": "erp", "extra": 1}},
+        {"r": {"backend": "erp"}, "extra": 1},
+        {"r": "erp"},
+        {"backend": "erp"},
+        {"r": {"backend": null}},
+        {"r": {}},
+        {"r": [{"backend": "erp"}]}
+      ]
     }
   },
   "reservas_enlace": {
