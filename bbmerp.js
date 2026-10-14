@@ -416,7 +416,7 @@ export function leeEnlace(r, externalEsperado, ahora = Date.now()) {
 // en erp (no se cambia de sistema a media reserva); todas las demás van a dion sin leer nada del ERP.
 // DEJAN DE MANDAR (B10): la variable BBM_BACKEND (hoy `dion` en Railway: como freno anularía el gesto del ERP el día del despliegue) y la clave Redis
 // `bbm:backend` (dos fuentes del mismo dato = la del 12-oct que nadie veía). Si existen, el arranque y /admin/api/health lo dicen como obsoletas.
-// LECTURA DEL ERP, sin coste en el turno (revisión previa de Bots #332 y de Seguridad, 14-oct):
+// LECTURA DEL ERP, con el coste en el turno acotado a ESTADO_TIMEOUT_MS y solo en los dos casos de abajo (revisión previa de Bots #332 y de Seguridad, 14-oct):
 //   · Caché de 30 s y UNA petición en vuelo. Con valor válido el turno contesta al momento; si la lectura tiene ≥ 30 s refresca en segundo plano
 //     cuando lo que hay es dion, y ESPERA la lectura cuando es erp (volver a dion en Ajustes se nota en ≤ 30 s). Sin ningún valor válido (recién arrancado, o > 5 min sin tráfico) el turno ESPERA la lectura, como mucho ESTADO_TIMEOUT_MS (1,5 s): contestar dion
 //     sin leer mandaría a Dion el primer cliente de cada mañana y, si cotiza, lo ataría a dion 30 min.
@@ -534,7 +534,8 @@ export function createBackendSwitch(o = {}) {
     return inflight;
   }
 
-  // El valor por defecto con su fuente. Espera la lectura solo si no hay ningún valor válido (como mucho el timeout de `estado`).
+  // El valor por defecto con su fuente. Espera la lectura (como mucho el timeout de `estado`) si no hay ningún valor válido, o si
+  // hay erp en memoria y la caché caducó; con dion caducado refresca en segundo plano.
   async function decide() {
     let t = now();
     if (!frenoPuesto && erpDe()) {
