@@ -20,6 +20,7 @@ import { createQuoteStore, createReservaIndex, createErpTools, createCierreErp, 
 // BBM-40 (11-oct-2026): privacidad antes de abrir. Todo apagado salvo que el owner ponga sus variables (ver privacidad.js).
 import { leeConfigPrivacidad, docKeysDeLead, textoTelegram, purgaPasada } from "./privacidad.js";
 import { leeConfigPanel, createPanelCuentas, igualSeguro, ipCliente, leeCookie, COOKIE as PANEL_COOKIE } from "./panel-cuentas.js";
+import { createAvisoResponsable } from "./avisos.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -1479,7 +1480,11 @@ async function followUpReminderTick() {
       if (l.fuReminded === fu) continue;                    // ya avisado para esta fecha
       const who = l.name || ("+" + l.phone);
       const extra = [l.package, l.owner ? "· " + l.owner : ""].filter(Boolean).join(" ");
-      await sendWhatsApp(OWNER_PHONE, `📅 ${PROJECT_NAME} — Seguimiento pendiente\n\n*${who}* ${extra}\nTel: +${l.phone}\nVencía: ${fu}\n\nToca contactarle 👇`);
+      const rFu = await avisoResponsable.avisa({
+        texto: `📅 ${PROJECT_NAME} — Seguimiento pendiente\n\n*${who}* ${extra}\nTel: +${l.phone}\nVencía: ${fu}\n\nToca contactarle 👇`,
+        etiqueta: "Follow-up due", quien: `${who} (+${l.phone})`, que: `follow-up was due ${fu}${extra ? ` (${extra})` : ""}`,
+      });
+      if (!rFu.ok) console.error(`[${PROJECT_NAME}] Error avisando al responsable del seguimiento: ${rFu.error}`);
       await notifyTelegram(`📅 Seguimiento pendiente\n${who} ${extra}\nTel: +${l.phone}\nVencía: ${fu}`, "📅 Seguimiento vencido de un contacto");
       await updateLeadFields(l.phone, { fuReminded: fu });
       await logEvent(l.phone, "fu_reminded", { date: fu });
@@ -2506,7 +2511,7 @@ async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams = [],
     ? [{ type: "body", parameters: bodyParams.map((t) => ({ type: "text", text: clean(t) || "-" })) }]
     : [];
   try {
-    await axios.post(
+    const resp = await axios.post(
       `https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/messages`,
       {
         messaging_product: "whatsapp",
@@ -2517,7 +2522,8 @@ async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams = [],
       { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" } }
     );
     console.log(`[${PROJECT_NAME}] Plantilla "${templateName}" enviada a ${who}`);
-    return { ok: true };
+    // id (wamid): el aviso al responsable por plantilla también enruta la respuesta-cita (escmap), como el de texto libre
+    return { ok: true, id: resp?.data?.messages?.[0]?.id };
   } catch (e) {
     const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
     console.error(`[${PROJECT_NAME}] Error enviando plantilla "${templateName}" a ${who}:`, detail);
@@ -2605,6 +2611,15 @@ async function notifyOwner(kind, lead) {
     );
   }
 }
+
+// Aviso al responsable que llega fuera de su ventana de 24 h (bbm-bot, 15-oct-2026; reglas en avisos.js): con la ventana abierta, texto libre (citable);
+// cerrada o desconocida, la plantilla aprobada ALERT_TEMPLATE_NAME. Lo usan los cuatro avisos que prometen al cliente que una persona seguirá.
+const avisoResponsable = createAvisoResponsable({
+  ownerPhone: OWNER_PHONE,
+  plantilla: ALERT_TEMPLATE_NAME ? { nombre: ALERT_TEMPLATE_NAME, idioma: ALERT_TEMPLATE_LANG, vars: ALERT_TEMPLATE_VARS != null ? parseInt(ALERT_TEMPLATE_VARS) : 2 } : null,
+  redis: () => redisClient, enviaTexto: (to, t) => sendWhatsAppResult(to, t), enviaPlantilla: (to, n, l, ps) => sendWhatsAppTemplate(to, n, l, ps),
+  project: PROJECT_NAME,
+});
 
 function normalizePhone(p) {
   return (p || "").replace(/\D/g, "");
@@ -2755,7 +2770,14 @@ async function markLeadPaid(phone, provider, amountIDR, receiptUrl) {
       + `\n\nMarcado como Ganado en el CRM automáticamente.`
       + (BOT_VERTICAL === "rental" ? `\n⚠️ Falta crear la reserva en el ERP (el bot no la crea).` : "");
     await notifyTelegram(textoPago, `💰 Pago recibido (${provider === "xendit" ? "Xendit" : "Stripe"})` + (BOT_VERTICAL === "rental" ? ". Falta crear la reserva en el ERP." : ""));
-    if (OWNER_PHONE) await sendWhatsApp(OWNER_PHONE, `${textoPago.replace("💰 PAGO", `💰 ${PROJECT_NAME} — PAGO`)}`);
+    if (OWNER_PHONE) {
+      const rPago = await avisoResponsable.avisa({
+        texto: `${textoPago.replace("💰 PAGO", `💰 ${PROJECT_NAME} — PAGO`)}`,
+        etiqueta: "Payment received", quien: `${(lead && lead.name) || phone} (+${phone})`,
+        que: `${Math.round(amountIDR).toLocaleString("id-ID")} IDR via ${provider === "xendit" ? "Xendit" : "Stripe"}${BOT_VERTICAL === "rental" ? ". Create the booking in the ERP" : ""}`,
+      });
+      if (!rPago.ok) console.error(`[${PROJECT_NAME}] Error avisando al responsable del pago: ${rPago.error}`);
+    }
   }
 }
 
@@ -2802,7 +2824,10 @@ async function derivaPersonaBbm(tel, motivo, detalle) {
   await notifyTelegram(`🙋 HAY QUE ATENDER A UN CLIENTE\n${nombre || tel} (+${tel})\n${que}\n\nEl bot le ha dicho que alguien del equipo le contestará en este chat. Contéstale desde el panel o la app.`, "🙋 Un cliente de reservas necesita a una persona: lo tienes arriba en «por responder» del panel");
   if (OWNER_PHONE) {
     const entry = await escPush(tel, nombre, que);
-    const rNotif = await sendWhatsAppResult(OWNER_PHONE, `🙋 ${PROJECT_NAME} — ${que}\n\n*${nombre || tel}*\n\nResponde CITANDO este mensaje (mantén pulsado → Responder) y se lo reenviaré, o contéstale desde el panel.`);
+    const rNotif = await avisoResponsable.avisa({
+      texto: `🙋 ${PROJECT_NAME} — ${que}\n\n*${nombre || tel}*\n\nResponde CITANDO este mensaje (mantén pulsado → Responder) y se lo reenviaré, o contéstale desde el panel.`,
+      etiqueta: "Needs a person", quien: `${nombre || tel} (+${tel})`, que,
+    });
     if (rNotif.ok && rNotif.id && redisClient) await redisClient.setEx(`escmap:${rNotif.id}`, 7 * 86400, entry);
     if (!rNotif.ok) console.error(`[${PROJECT_NAME}] Error avisando al owner de una reserva derivada: ${rNotif.error}`);
   }
@@ -2811,7 +2836,10 @@ async function derivaPersonaBbm(tel, motivo, detalle) {
 }
 async function avisaEquipoBbm(texto) {
   await notifyTelegram(texto, "⚠️ Aviso del flujo de reservas del ERP (el detalle va al WhatsApp del responsable)");
-  if (OWNER_PHONE) await sendWhatsApp(OWNER_PHONE, texto);
+  if (OWNER_PHONE) {
+    const r = await avisoResponsable.avisa({ texto, etiqueta: "ERP booking alert", quien: PROJECT_NAME, que: texto });
+    if (!r.ok) console.error(`[${PROJECT_NAME}] Error avisando al responsable (flujo ERP): ${r.error}`);
+  }
 }
 // El enlace de pago del modo erp lo crea el ERP (edge reservas-enlace, F3 Entrega 2, camino B del owner 12-oct-2026): el modo erp ya NO crea facturas con
 // XENDIT_SECRET_KEY (esa clave sigue en Railway para el camino de Dion y el panel; se revoca cuando Dion deje de usarla).
@@ -3134,6 +3162,7 @@ app.post("/webhook", async (req, res) => {
 
     // ── Mensaje del dueño: reenviar al cliente pendiente ──────────
     if (isOwner(from)) {
+      try { await avisoResponsable.marca(); } catch { /* sin marca, el siguiente aviso va por plantilla: llega igual */ }   // su ventana de 24 h queda abierta
       // Si el owner responde CITANDO el aviso de escalación (reply de WhatsApp), se enruta a ESE
       // cliente en concreto — con varias escalaciones abiertas ya no va a ciegas al más antiguo.
       let pending = null;
@@ -3400,10 +3429,10 @@ app.post("/webhook", async (req, res) => {
     // ── Escalación: notificar al dueño en silencio ────────────────
     if (intent === "escalate" && OWNER_PHONE) {
       const entry = await escPush(from, profileName, text);
-      const rNotif = await sendWhatsAppResult(
-        OWNER_PHONE,
-        `❓ ${PROJECT_NAME} — pregunta sin respuesta\n\n*${profileName || from}* pregunta:\n"${text}"\n\nResponde CITANDO este mensaje (mantén pulsado → Responder) y se lo reenviaré.`
-      );
+      const rNotif = await avisoResponsable.avisa({
+        texto: `❓ ${PROJECT_NAME} — pregunta sin respuesta\n\n*${profileName || from}* pregunta:\n"${text}"\n\nResponde CITANDO este mensaje (mantén pulsado → Responder) y se lo reenviaré.`,
+        etiqueta: "Unanswered question", quien: `${profileName || from} (+${from})`, que: text,
+      });
       // Mapa wamid→escalación: si el owner responde citando, se enruta a este cliente exacto.
       if (rNotif.ok && rNotif.id && redisClient) await redisClient.setEx(`escmap:${rNotif.id}`, 7 * 86400, entry);
       if (!rNotif.ok) console.error(`[${PROJECT_NAME}] Error enviando escalación al owner: ${rNotif.error}`);
@@ -3422,7 +3451,10 @@ app.post("/webhook", async (req, res) => {
       await notifyTelegram(`🙋 PIDE HABLAR CON UNA PERSONA\n${profileName || from} (+${from})\n"${text}"\n\nEl bot le ha dicho que alguien del equipo le contestará en este chat. Contéstale desde el panel o la app.`, "🙋 Un cliente pide hablar con una persona: lo tienes arriba en «por responder» del panel");
       if (OWNER_PHONE) {
         const entry = await escPush(from, profileName, text);
-        const rNotif = await sendWhatsAppResult(OWNER_PHONE, `🙋 ${PROJECT_NAME} — pide hablar con una persona\n\n*${profileName || from}* escribe:\n"${text}"\n\nResponde CITANDO este mensaje (mantén pulsado → Responder) y se lo reenviaré, o contéstale desde el panel.`);
+        const rNotif = await avisoResponsable.avisa({
+          texto: `🙋 ${PROJECT_NAME} — pide hablar con una persona\n\n*${profileName || from}* escribe:\n"${text}"\n\nResponde CITANDO este mensaje (mantén pulsado → Responder) y se lo reenviaré, o contéstale desde el panel.`,
+          etiqueta: "Asks for a person", quien: `${profileName || from} (+${from})`, que: text,
+        });
         if (rNotif.ok && rNotif.id && redisClient) await redisClient.setEx(`escmap:${rNotif.id}`, 7 * 86400, entry);
         if (!rNotif.ok) console.error(`[${PROJECT_NAME}] Error avisando al owner de petición de persona: ${rNotif.error}`);
       }
