@@ -3998,7 +3998,7 @@ app.get("/admin/api/health", async (req, res) => {
   // F8-7: estado visible del puente al ERP (un freno mudo es la forma exacta del fallo de LAW-106). Sin secretos ni URLs.
   // B10: backend efectivo por defecto, de dónde sale (erp, erp_cache, freno_variable, defecto_por_fallo, sin_erp), qué dice el ERP, freno, código del
   // último fallo, edad de la lectura y variables obsoletas (BBM_BACKEND, `bbm:backend`: solo si existen). Misma caché de 30 s que el turno.
-  let bbmSalud = { backend: "dion", backend_fuente: "defecto_por_fallo", erp_dice: null, freno: leeFreno(process.env.BBM_FRENO_DION, { error() {}, warn() {}, log() {} }), backend_error: null, backend_leido_hace_s: null, obsoletas: { BBM_BACKEND: process.env.BBM_BACKEND !== undefined, redis_bbm_backend: false } };
+  let bbmSalud = { backend: "dion", backend_fuente: "defecto_por_fallo", erp_dice: null, freno: leeFreno(process.env.BBM_FRENO_DION, { error() {}, warn() {}, log() {} }), backend_error: null, backend_leido_hace_s: null, backend_lectura_ms: null, obsoletas: { BBM_BACKEND: process.env.BBM_BACKEND !== undefined, redis_bbm_backend: false } };
   try { bbmSalud = await bbmBackendSw.salud(); } catch (e) { /* best-effort */ }
   const bbm = { ...bbmSalud, erp_configurado: !!(process.env.BBM_ERP_URL && process.env.BBM_RESERVAS_SECRET), webhook_rsv: !!process.env.BBM_ERP_URL, telefonos_prueba_erp: bbmTelefonosErp.size, clave_reserva: process.env.BBM_ERP_CLAVE === "1" };
   if (bbmSombra) { try { bbm.sombra = await bbmSombra.estado(); } catch (e) { /* best-effort */ } }

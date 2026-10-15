@@ -49,7 +49,13 @@ export function valorRegla(mensaje) {
 }
 export const ENLACE_TIMEOUT_MS = 20000;   // reservas-enlace espera a Xendit hasta 15 s
 export const ENLACE_REINTENTO_MS = 4000;  // tras un 409 en_curso (otra petición está creando el enlace; la marca dura 30 s)
-export const ESTADO_TIMEOUT_MS = 1500;    // `estado` (B10): como mucho esto espera un turno: sin ningún valor válido, o con erp en memoria y la caché caducada (ver createBackendSwitch)
+export const ESTADO_TIMEOUT_MS = 1500;    // `estado` (B10): como mucho esto espera un TURNO a la lectura: sin ningún valor válido, o con erp en memoria y la caché caducada (ver createBackendSwitch)
+// Tope de la LECTURA de `estado`, aparte del de arriba (bbm-bot, 15-oct-2026). Con un solo tope de 1,5 s la lectura no llegaba nunca: bbm-bot salía siempre
+// `defecto_por_fallo` / `tiempo` mientras la edge contesta en 0,35-0,7 s desde Bali. Causa: el bot corre en Railway EE. UU. y la base de bbm en ap-southeast-1
+// (erp/instancias.json); la edge se lanza junto a quien llama y cada consulta cruza el océano (~1,9 s por llamada medidos en Lawang, LAW-507; Deploy, 5-oct:
+// «en EE. UU. contra una base en Singapur el motor daba timeout a la edge todas las veces»). Ahora el turno sigue esperando como mucho 1,5 s, pero la lectura
+// continúa hasta 8 s y deja su valor en la caché, y un temporizador la refresca cada 20 s (BACKEND_REFRESCO_MS) para que ningún turno tenga que esperar.
+export const ESTADO_LECTURA_MS = 8000;
 
 const KO = (motivo, extra = {}) => ({ ok: false, motivo, ...extra });
 const esObj = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
@@ -175,7 +181,7 @@ export function createBbmErp(o = {}) {
   const {
     url, secret, timeoutMs = TIMEOUT_MS, catalogoTtlMs = CATALOGO_TTL_MS, catalogoMaxStaleMs = CATALOGO_MAX_STALE_MS,
     enviaClave = false, fetchImpl = globalThis.fetch, now = () => Date.now(), log = console, project = "bot", enlaceTimeoutMs = ENLACE_TIMEOUT_MS,
-    estadoTimeoutMs = ESTADO_TIMEOUT_MS,
+    estadoTimeoutMs = ESTADO_LECTURA_MS,
   } = o;
   const base = typeof url === "string" ? url.trim().replace(/\/+$/, "") : "";
   const enabled = !!(base && secret);
@@ -353,7 +359,8 @@ export function createBbmErp(o = {}) {
   // Interruptor del ERP (B10, 14-oct-2026): quién atiende las reservas del bot lo decide Ajustes › Cobros del ERP, y la edge lo da con la acción
   // `estado` de reservas-bot. Cuerpo EXACTO {accion:"estado"}; respuesta buena SOLO {r:{backend:"dion"|"erp"}}, sin ninguna clave más (cualquier
   // otra forma es un fallo, nunca se interpreta). Sin caché y SIN LOG: la caché, el último valor bueno y el log de cambios son de createBackendSwitch,
-  // que lo llama como mucho una vez cada 30 s (con llamaEdge, una edge vieja escribiría un error cada 30 s para siempre). Timeout propio, corto.
+  // que lo llama como mucho una vez cada 20-30 s (con llamaEdge, una edge vieja escribiría un error cada 30 s para siempre). Timeout propio (ESTADO_LECTURA_MS);
+  // lo que espera un turno lo acota createBackendSwitch (ESTADO_TIMEOUT_MS), no este timeout.
   // → {ok:true, backend} | {ok:false, clase:"definitivo"|"transitorio", codigo} con `codigo` de una lista cerrada (CODIGOS_ESTADO). Nunca lanza.
   //   definitivo (el ERP dijo que no o no se entiende; dion al momento): 400 (edge vieja sin `estado`), 401/403 (secreto), 404 (módulo apagado),
   //   forma (200 con otra forma), otro_4xx. transitorio (puede valer el último bueno < 5 min): tiempo, red, 5xx, 429.
@@ -389,7 +396,8 @@ export function createBbmErp(o = {}) {
 }
 
 // Forma EXACTA de la respuesta de `estado`: {r:{backend:"dion"|"erp"}} y nada más (ni arriba ni dentro de r). Otro valor, mayúsculas o espacios = null.
-export const CODIGOS_ESTADO = ["400", "401", "403", "404", "forma", "otro_4xx", "tiempo", "red", "5xx", "429", "no_configurado"];
+// `en_curso` no lo devuelve estado(): es el backend_error del health cuando el turno dejó de esperar y la PRIMERA lectura sigue en vuelo.
+export const CODIGOS_ESTADO = ["400", "401", "403", "404", "forma", "otro_4xx", "tiempo", "red", "5xx", "429", "no_configurado", "en_curso"];
 export function leeEstado(json) {
   if (!esObj(json) || Object.keys(json).length !== 1 || !esObj(json.r)) return null;
   const k = Object.keys(json.r);
@@ -416,7 +424,10 @@ export function leeEnlace(r, externalEsperado, ahora = Date.now()) {
 // en erp (no se cambia de sistema a media reserva); todas las demás van a dion sin leer nada del ERP.
 // DEJAN DE MANDAR (B10): la variable BBM_BACKEND (hoy `dion` en Railway: como freno anularía el gesto del ERP el día del despliegue) y la clave Redis
 // `bbm:backend` (dos fuentes del mismo dato = la del 12-oct que nadie veía). Si existen, el arranque y /admin/api/health lo dicen como obsoletas.
-// LECTURA DEL ERP, con el coste en el turno acotado a ESTADO_TIMEOUT_MS y solo en los dos casos de abajo (revisión previa de Bots #332 y de Seguridad, 14-oct):
+// LECTURA DEL ERP, con el coste en el turno acotado a ESTADO_TIMEOUT_MS y solo en los dos casos de abajo (revisión previa de Bots #332 y de Seguridad, 14-oct).
+// Desde el 15-oct el turno deja de esperar a los 1,5 s pero la lectura NO se corta (dura hasta ESTADO_LECTURA_MS) y su valor queda para el turno siguiente;
+// y `arranca()` pone un temporizador que refresca cada BACKEND_REFRESCO_MS (< los 30 s de la caché): con tráfico o sin él, el valor está siempre fresco y
+// ningún turno espera (ni el primer cliente de la mañana va a Dion por una caché vieja). Con el freno o sin ERP el temporizador no lee nada.
 //   · Caché de 30 s y UNA petición en vuelo. Con valor válido el turno contesta al momento; si la lectura tiene ≥ 30 s refresca en segundo plano
 //     cuando lo que hay es dion, y ESPERA la lectura cuando es erp (volver a dion en Ajustes se nota en ≤ 30 s). Sin ningún valor válido (recién arrancado, o > 5 min sin tráfico) el turno ESPERA la lectura, como mucho ESTADO_TIMEOUT_MS (1,5 s): contestar dion
 //     sin leer mandaría a Dion el primer cliente de cada mañana y, si cotiza, lo ataría a dion 30 min.
@@ -452,6 +463,7 @@ export function leeTelefonosErp(valor, log = console, project = "bot") {
 
 export const BACKEND_TTL_MS = 30 * 1000;            // caché de la lectura del ERP (buena o mala)
 export const BACKEND_MAX_STALE_MS = 5 * 60 * 1000;   // vida del último valor bueno ante un fallo TRANSITORIO
+export const BACKEND_REFRESCO_MS = 20 * 1000;        // temporizador de lectura (arranca): menos que BACKEND_TTL_MS, para que la caché no caduque nunca
 export const FUENTES_BACKEND = ["erp", "erp_cache", "freno_variable", "defecto_por_fallo", "sin_erp"];
 
 // BBM_FRENO_DION: "1" = freno puesto; ausente, vacía o "0" = sin freno. Cualquier otro valor ("true", "si", "2") se trata como freno PUESTO y se grita:
@@ -472,6 +484,7 @@ export function createBackendSwitch(o = {}) {
   const {
     redis = () => null, erp = null, freno, bbmBackendObsoleta, enlaceVivo = async () => false, telefonosErp = new Set(),
     now = () => Date.now(), log = console, project = "bot", ttlMs = BACKEND_TTL_MS, maxStaleMs = BACKEND_MAX_STALE_MS,
+    esperaMs = ESTADO_TIMEOUT_MS, refrescoMs = BACKEND_REFRESCO_MS, reloj = () => Date.now(),
   } = o;
   const p = (m) => `[${project}] [bbm-backend] ${m}`;
   const mem = new Map();   // sin Redis (modo RAM): mismas reglas en memoria
@@ -484,6 +497,8 @@ export function createBackendSwitch(o = {}) {
   let lectura = null;   // última lectura del ERP, buena o mala: { at, ok, backend } | { at, ok:false, clase, codigo }
   let bueno = null;     // último valor BUENO { at, backend }; un fallo definitivo lo borra
   let inflight = null;
+  let lecturaMs = null;   // lo que tardó la última lectura terminada (buena o mala), en ms de reloj real: sale en el health y en el log de cambios
+  let temporizador = null;
   let ultimoLog = null;
   let claveVieja = { at: null, existe: false };   // ¿existe todavía `bbm:backend` en Redis? Solo lo mira el health/arranque, nunca el turno
   const CODIGOS = new Set(CODIGOS_ESTADO);
@@ -497,7 +512,7 @@ export function createBackendSwitch(o = {}) {
       return { backend: "dion", fuente: "defecto_por_fallo", erp_dice: null, error: null };   // no pasa si se respeta hayRespuesta; por si acaso
     }
     if (lectura && lectura.clase === "transitorio" && bueno && t - bueno.at < maxStaleMs) return { backend: bueno.backend, fuente: "erp_cache", erp_dice: bueno.backend, error: lectura.codigo };
-    return { backend: "dion", fuente: "defecto_por_fallo", erp_dice: null, error: lectura ? lectura.codigo : null };
+    return { backend: "dion", fuente: "defecto_por_fallo", erp_dice: null, error: lectura ? lectura.codigo : inflight ? "en_curso" : null };
   }
   // ¿Hay un valor que se pueda usar sin esperar? Una lectura de < 30 s (buena o mala: la mala es la caché negativa), o un último bueno de < 5 min.
   function hayRespuesta(t) {
@@ -508,7 +523,7 @@ export function createBackendSwitch(o = {}) {
     const k = `${res.backend}|${res.fuente}|${res.error}`;
     if (k === ultimoLog) return;
     ultimoLog = k;
-    const m = p(`quién atiende por defecto: ${res.backend} (fuente ${res.fuente}${res.error ? `, error ${res.error}` : ""})`);
+    const m = p(`quién atiende por defecto: ${res.backend} (fuente ${res.fuente}${res.error ? `, error ${res.error}` : ""}${lecturaMs !== null ? `, lectura ${lecturaMs} ms` : ""})`);
     if (res.fuente === "defecto_por_fallo" || res.fuente === "erp_cache") log.warn(m); else log.log(m);
   }
 
@@ -519,7 +534,9 @@ export function createBackendSwitch(o = {}) {
     if (!e) return Promise.resolve();
     inflight = (async () => {
       let r;
+      const t0 = reloj();
       try { r = await e.estado(); } catch { r = { ok: false, clase: "transitorio", codigo: "red" }; }
+      lecturaMs = Math.max(0, Math.round(reloj() - t0));
       const t = now();
       if (r && r.ok === true && BACKENDS.includes(r.backend)) {
         lectura = { at: t, ok: true, backend: r.backend };
@@ -534,16 +551,24 @@ export function createBackendSwitch(o = {}) {
     return inflight;
   }
 
-  // El valor por defecto con su fuente. Espera la lectura (como mucho el timeout de `estado`) si no hay ningún valor válido, o si
+  // Espera la lectura como mucho `esperaMs` (1,5 s). Si no ha llegado, el turno sigue con lo que hay y la lectura continúa: su valor es para el siguiente.
+  async function esperaLectura() {
+    let tope;
+    const corte = new Promise((ok) => { tope = setTimeout(ok, esperaMs); });
+    try { await Promise.race([refresca(), corte]); } finally { clearTimeout(tope); }
+  }
+
+  // El valor por defecto con su fuente. Espera la lectura (como mucho `esperaMs`) si no hay ningún valor válido, o si
   // hay erp en memoria y la caché caducó; con dion caducado refresca en segundo plano.
   async function decide() {
     let t = now();
     if (!frenoPuesto && erpDe()) {
-      if (!hayRespuesta(t)) { await refresca(); t = now(); }
+      if (!hayRespuesta(t)) { await esperaLectura(); t = now(); }
       else if (!lectura || t - lectura.at >= ttlMs) {
         // Caché caducada. Con erp en memoria se ESPERA la lectura (≤ ESTADO_TIMEOUT_MS): volver a dion desde Ajustes tiene que notarse en ≤ 30 s, no
         // cotizar con un erp de hace 5 min y fijar la conversación 30 min en él (revisor 14-oct). Con dion, el lado seguro, en segundo plano.
-        if (resuelve(t).backend === "erp") { await refresca(); t = now(); }
+        // Con el temporizador de arranca() la caché no llega a caducar mientras las lecturas tarden < 10 s; esto queda para cuando una falla.
+        if (resuelve(t).backend === "erp") { await esperaLectura(); t = now(); }
         else refresca();   // segundo plano: refresca() nunca rechaza
       }
     }
@@ -577,12 +602,22 @@ export function createBackendSwitch(o = {}) {
       freno: frenoPuesto,
       backend_error: d.error,
       backend_leido_hace_s: ref ? Math.max(0, Math.floor((t - ref.at) / 1000)) : null,
+      backend_lectura_ms: lecturaMs,
       obsoletas: { BBM_BACKEND: obsoletaEnv, redis_bbm_backend: await existeClaveVieja() },
     };
   }
 
-  // Al arrancar: primera lectura (el primer turno la encuentra hecha o en vuelo) y aviso si la clave vieja sigue en Redis.
+  // Temporizador de lectura: refresca() cada refrescoMs. No retiene el proceso (unref), refresca() nunca rechaza y, con el freno o sin ERP, no lee nada.
+  function inicia() {
+    if (temporizador || !(refrescoMs > 0)) return;
+    temporizador = setInterval(() => { refresca(); }, refrescoMs);
+    if (typeof temporizador.unref === "function") temporizador.unref();
+  }
+  function para() { if (temporizador) { clearInterval(temporizador); temporizador = null; } }
+
+  // Al arrancar: el temporizador, la primera lectura (el primer turno la encuentra hecha o en vuelo) y aviso si la clave vieja sigue en Redis.
   async function arranca() {
+    inicia();
     await refresca();
     if (!lectura && !frenoPuesto) anota(resuelve(now()));
     if (await existeClaveVieja()) log.warn(p("la clave Redis bbm:backend existe y YA NO SE USA (B10): borrarla (Deploy, con el OK del orquestador)."));
@@ -635,7 +670,7 @@ export function createBackendSwitch(o = {}) {
     else mem.delete(String(tel));
   }
 
-  return { bbmBackend, fija, suelta, porDefecto, salud, arranca, refresca };
+  return { bbmBackend, fija, suelta, porDefecto, salud, arranca, refresca, para };
 }
 
 // ── Registro de enlace pendiente PROPIO de las reservas del ERP ───────────────────────────────────────────────────────────────────
