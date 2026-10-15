@@ -3418,10 +3418,11 @@ app.post("/webhook", async (req, res) => {
         console.log(`[${PROJECT_NAME}] Cita agendada por el bot: ${appt.when} — ${appt.title} (${from})`);
         // Avisar al owner en el momento para que llame (el panel/calendario es el respaldo)
         if (OWNER_PHONE) {
-          await sendWhatsApp(
-            OWNER_PHONE,
-            `📞 ${PROJECT_NAME} — LLAMADA AGENDADA\n\n*${profileName || from}*\nTel: ${from}\nCuándo: ${appt.when}\n${appt.title}\n\nLlámale por WhatsApp a esa hora.`
-          );
+          const rCita = await avisoResponsable.avisa({
+            texto: `📞 ${PROJECT_NAME} — LLAMADA AGENDADA\n\n*${profileName || from}*\nTel: ${from}\nCuándo: ${appt.when}\n${appt.title}\n\nLlámale por WhatsApp a esa hora.`,
+            etiqueta: "Call booked", quien: `${profileName || from} (+${from})`, que: `${appt.when}. ${appt.title}`,
+          });
+          if (!rCita.ok) console.error(`[${PROJECT_NAME}] Error avisando al responsable de la llamada agendada: ${rCita.error}`);
         }
       } catch (e) { console.error(`[${PROJECT_NAME}] Error creando cita:`, e.message); }
     }

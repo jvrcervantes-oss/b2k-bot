@@ -93,9 +93,14 @@ test("parámetros de la plantilla según ALERT_TEMPLATE_VARS (como notifyOwner),
 });
 
 test("CABLEADO en index.js: los avisos que prometen una persona (y sus hermanos) pasan por el embudo; ninguno manda texto libre suelto al responsable", () => {
-  assert.ok(!/sendWhatsApp(Result)?\(OWNER_PHONE/.test(src), "ningún sendWhatsApp(OWNER_PHONE…) fuera de notifyOwner/avisos.js");
+  // \s* también casa la llamada repartida en varias líneas (revisor de ed1e47f: «LLAMADA AGENDADA» se le escapaba a la versión de una línea).
+  const sueltos = [...src.matchAll(/sendWhatsApp(Result)?\(\s*OWNER_PHONE/g)];
+  assert.strictEqual(sueltos.length, 1, `solo queda el texto libre de notifyOwner cuando NO hay plantilla configurada: ${sueltos.length}`);
+  const iNotify = src.indexOf("async function notifyOwner(");
+  const iFin = src.indexOf("\n}\n", iNotify);
+  assert.ok(sueltos[0].index > iNotify && sueltos[0].index < iFin, "y ese único está dentro de notifyOwner (rama sin ALERT_TEMPLATE_NAME)");
   const usos = src.match(/avisoResponsable\.avisa\(/g) || [];
-  assert.ok(usos.length >= 6, `escalación, BBM-50, derivaPersonaBbm, avisaEquipoBbm, seguimiento y pago: ${usos.length}`);
+  assert.ok(usos.length >= 7, `escalación, BBM-50, derivaPersonaBbm, avisaEquipoBbm, seguimiento, pago y llamada agendada: ${usos.length}`);
   assert.ok(/if \(isOwner\(from\)\) \{\s*\n\s*try \{ await avisoResponsable\.marca\(\)/.test(src), "el responsable marca su ventana al escribir");
   assert.ok(/return \{ ok: true, id: resp\?\.data\?\.messages\?\.\[0\]\?\.id \};/.test(src), "la plantilla devuelve su id (escmap)");
 });
